@@ -1,77 +1,145 @@
-# Context dự án tốt nghiệp — Hệ thống gợi ý món ăn cá nhân hóa bằng Machine Learning
+# Context dự án tốt nghiệp — Hệ thống khuyến nghị thực đơn dinh dưỡng cá nhân hóa bằng Machine Learning
 
 ## 1. Tổng quan dự án
 
-Đây là đồ án tốt nghiệp đại học với mục tiêu xây dựng một **ứng dụng di động hỗ trợ gợi ý món ăn cá nhân hóa** dựa trên thông tin cá nhân, tình trạng sức khỏe, thông tin dinh dưỡng của món ăn và đặc biệt là lịch sử tương tác của người dùng.
+Đây là đồ án tốt nghiệp đại học với mục tiêu xây dựng một **ứng dụng di động khuyến nghị thực đơn dinh dưỡng cá nhân hóa** dựa trên thông tin cá nhân, tình trạng sức khỏe, thông tin dinh dưỡng của món ăn và đặc biệt là lịch sử tương tác của người dùng.
 
 Ý tưởng cốt lõi:
 
 > Hệ thống không chỉ dựa vào các luật cố định để gợi ý món ăn, mà sẽ thu thập phản hồi của người dùng, sử dụng dữ liệu đó để huấn luyện mô hình Machine Learning và dần cá nhân hóa các món ăn được đề xuất.
 
-Cơ chế tương tác ban đầu:
-- Vuốt phải → Thích
-- Vuốt trái → Không thích
-- Vuốt xuống → Không biết / Chưa có ý kiến
-- Vuốt lên → Bình thường / Không có cảm xúc đặc biệt
+Bài toán mà hệ thống phải giải:
 
-Cơ chế Feedback loop:
-- Gợi ý món ăn
-- Người dùng đánh giá
-- Hệ thống ghi nhận vào database
-- Huấn luyện lại mô hình bằng dataset
-- Gợi ý món ăn cá nhân hóa tốt hơn
+> Với người dùng này, dựa trên thông tin sức khỏe và những món họ từng thích/không thích, **tổ hợp món ăn nào** vừa hợp khẩu vị của họ, vừa thỏa mãn hạn mức năng lượng và tỷ lệ dinh dưỡng theo mục tiêu sức khỏe?
 
-
-Mục tiêu cuối cùng là tạo ra một vòng lặp:
-
-```text
-Thông tin người dùng
-        ↓
-Lọc các món có khả năng phù hợp
-        ↓
-Người dùng tương tác với món ăn
-        ↓
-Thu thập dữ liệu sở thích
-        ↓
-Machine Learning
-        ↓
-Gợi ý món ăn cá nhân hóa
-        ↓
-Người dùng sử dụng và đánh giá
-        ↓
-Thu thập phản hồi mới
-        ↓
-Cập nhật dữ liệu cho Machine Learning
-        ↓
-Gợi ý tốt hơn
-```
-
-## 2. Mục tiêu dự án
-
-Hệ thống hướng tới:
-
-> Với người dùng này, dựa trên thông tin sức khỏe và những món họ từng thích/không thích, món ăn nào có khả năng phù hợp hoặc được họ yêu thích?
+Điểm cần nhấn mạnh: đây **không phải bài toán xếp hạng món ăn đơn lẻ**. Đầu ra cuối cùng là một **thực đơn** — tập hợp món cho các bữa trong ngày, phải cân đối dinh dưỡng như một tổng thể. Xếp hạng chỉ là bước trung gian.
 
 ---
-### 2.1 Khía cạnh phần mềm
-- Ứng dụng di động
-- Backend
-- Cơ sở dữ liệu
-- API
-- Quản lý người dùng
-- Quản lý món ăn
-- Gợi ý món ăn
-- Thu thập tương tác
-- Thu thập đánh giá
-- Lập thực đơn
 
-### 2.2 Khía cạnh Machine Learning
-- Thu thập dữ liệu
-- Tiền xử lý dữ liệu
-- Xây dựng tập dữ liệu
-- Huấn luyện mô hình
-- Đánh giá mô hình
-- Dự đoán
-- Xếp hạng món ăn
-- Tích hợp mô hình vào hệ thống
-- Sử dụng dữ liệu phản hồi để cải thiện mô hình
+## 2. Hai vai trò của cơ chế vuốt
+
+Cơ chế tương tác vuốt thẻ món ăn:
+
+| Cử chỉ | Hành động | Ý nghĩa | Giá trị nhãn |
+|---|---|---|---|
+| Vuốt phải | `like` | Thích | 0.9 |
+| Vuốt trái | `dislike` | Không thích | 0.0 |
+| Vuốt lên | `neutral` | Bình thường, không cảm xúc đặc biệt | 0.5 |
+| Vuốt xuống | `unknown` | Chưa biết / chưa từng ăn | Loại khỏi tập huấn luyện |
+
+Cơ chế này phục vụ **hai mục đích khác nhau** ở hai thời điểm khác nhau:
+
+1. **Lúc mới đăng ký (onboarding)** — giải bài toán khởi đầu nguội. Người dùng vuốt một loạt món "thăm dò" ngay sau khi khai báo hồ sơ sức khỏe, để hệ thống nhận diện nhanh gu ăn uống của họ.
+2. **Trong quá trình sử dụng** — bổ sung tín hiệu sở thích liên tục, song song với phản hồi thực tế sau khi ăn.
+
+Vuốt là **cơ chế thu thập dữ liệu**, không phải sản phẩm chính. Sản phẩm chính vẫn là thực đơn hằng ngày.
+
+---
+
+## 3. Chiến lược khởi đầu nguội (Cold-start)
+
+Đây là điểm mới quan trọng của đề tài. Hệ thống hoạt động theo **ba giai đoạn** tương ứng với độ trưởng thành dữ liệu của từng người dùng.
+
+### Giai đoạn 0 — Vừa đăng ký, chưa có tín hiệu nào
+
+Người dùng khai báo hồ sơ sức khỏe: giới tính, ngày sinh, chiều cao, cân nặng, mức vận động, mục tiêu, bệnh lý và dị ứng.
+
+Từ đây hệ thống **đã tính được hạn mức dinh dưỡng** (BMI, BMR, TDEE) và **đã lọc được món an toàn** (ràng buộc cứng). Nhưng chưa biết gì về khẩu vị.
+
+### Giai đoạn 1 — Sau phiên vuốt onboarding (khoảng 30 tín hiệu)
+
+Hệ thống đưa ra một **tập món thăm dò** được chọn có chủ đích: phủ đều các nhóm món, phương pháp chế biến và khẩu vị khác nhau, chứ không chọn ngẫu nhiên. Mục tiêu là mỗi lần vuốt thu được lượng thông tin lớn nhất.
+
+Từ kết quả vuốt, hệ thống dựng **hồ sơ sở thích của người dùng dưới dạng vector trọng số** — trung bình có trọng số của các vector đặc trưng món ăn mà họ đã đánh giá. Món được chấm điểm bằng **độ tương đồng cosin** giữa vector sở thích và vector món.
+
+Ở giai đoạn này hệ thống đã trả lời được câu hỏi *"người dùng này thuộc nhóm ăn uống nào"* — thích món nước hay món khô, ăn cay được hay không, thiên về đạm hay tinh bột, chuộng món chiên rán hay hấp luộc.
+
+### Giai đoạn 2 — Sau một thời gian sử dụng (đủ tín hiệu tích lũy)
+
+Khi người dùng đã ăn thật, ghi nhật ký và đánh giá món, hệ thống chuyển sang **mô hình học máy có giám sát**, huấn luyện trên toàn bộ tín hiệu tích lũy: vuốt onboarding, vuốt trong quá trình dùng, món giữ lại hoặc bị thay thế trong thực đơn, món đã ăn thật, và điểm đánh giá sau khi ăn.
+
+Chuyển tiếp giữa hai giai đoạn là **chuyển dần**, không nhảy đột ngột:
+
+```text
+score = α · score_học_máy  +  (1 − α) · score_tương_đồng_nội_dung
+
+α tăng dần từ 0 → 1 theo số tín hiệu người dùng tích lũy được
+```
+
+---
+
+## 4. Vòng lặp phản hồi
+
+```text
+Khai báo hồ sơ sức khỏe
+        ↓
+Tính hạn mức năng lượng và dinh dưỡng  (BMI → BMR → TDEE)
+        ↓
+Vuốt thăm dò onboarding  ─────────────┐
+        ↓                             │
+Dựng hồ sơ sở thích ban đầu           │  Giai đoạn khởi đầu nguội
+        ↓                             │
+Lọc bỏ món vi phạm ràng buộc cứng  ───┘
+        ↓
+Chấm điểm mức độ phù hợp từng món
+        ↓
+Chọn tổ hợp món thỏa ràng buộc dinh dưỡng  →  THỰC ĐƠN
+        ↓
+Người dùng giữ / thay thế món trong thực đơn
+        ↓
+Người dùng ăn và ghi nhật ký
+        ↓
+Người dùng đánh giá món sau khi ăn
+        ↓
+Tích lũy dữ liệu phản hồi
+        ↓
+Huấn luyện lại mô hình học máy
+        ↓
+Thực đơn cá nhân hóa tốt hơn  ──► (quay lại bước chấm điểm)
+```
+
+---
+
+## 5. Mục tiêu dự án
+
+### 5.1 Khía cạnh phần mềm
+
+- Ứng dụng di động (Flutter, nền tảng Android)
+- Dịch vụ phía máy chủ (ASP.NET Core Web API)
+- Cơ sở dữ liệu quan hệ (MySQL)
+- Quản lý người dùng và hồ sơ sức khỏe
+- Quản lý món ăn và dữ liệu dinh dưỡng
+- Sinh thực đơn hằng ngày
+- Thu thập tương tác vuốt
+- Nhật ký ăn uống
+- Thu thập đánh giá sau khi ăn
+- Theo dõi tiến trình sức khỏe
+
+### 5.2 Khía cạnh Machine Learning
+
+| Hạng mục | Nội dung |
+|---|---|
+| **Thu thập dữ liệu** | Xây dựng tập dữ liệu 300–500 món ăn Việt Nam có đầy đủ thông tin dinh dưỡng |
+| **Tiền xử lý** | Làm sạch, xử lý dữ liệu khuyết, chuẩn hóa min-max hoặc z-score, mã hóa one-hot |
+| **Trích chọn đặc trưng** | Biểu diễn món ăn thành vector: thành phần dinh dưỡng, nhóm thực phẩm, phương pháp chế biến, khẩu vị |
+| **Hồ sơ sở thích** | Vector trọng số tổng hợp từ lịch sử tương tác của người dùng |
+| **Thống nhất nhãn** | Quy đổi 6 nguồn tín hiệu khác nhau về một thang điểm ưa thích chung |
+| **Huấn luyện** | Học có giám sát: hồi quy Logistic, Rừng ngẫu nhiên, Gradient Boosting |
+| **Đánh giá** | Precision@K, Recall@K, NDCG, MAE, RMSE; kiểm định chéo k-fold |
+| **Tối ưu tổ hợp** | Chọn tập món thỏa ràng buộc dinh dưỡng (bài toán cái túi, giải bằng tham lam + tìm kiếm cục bộ) |
+| **So sánh baseline** | Đối chiếu với phương án chỉ dùng quy tắc dinh dưỡng để chứng minh đóng góp của học máy |
+| **Học liên tục** | Huấn luyện lại định kỳ từ dữ liệu phản hồi tích lũy |
+
+---
+
+## 6. Phạm vi — những gì KHÔNG làm
+
+Ghi rõ để tránh mở rộng phạm vi ngoài tầm của một đồ án tốt nghiệp:
+
+| Không làm | Lý do |
+|---|---|
+| **Lọc cộng tác (Collaborative Filtering)** | Số người dùng thử nghiệm quá ít, ma trận người dùng–món ăn quá thưa. Xếp vào hướng phát triển tương lai |
+| **Học sâu / mạng nơ-ron** | Dữ liệu không đủ lớn; mô hình cây quyết định phù hợp hơn và giải thích được |
+| **Học tăng cường** | Hướng phát triển tương lai |
+| **Nhận diện món ăn từ ảnh** | Hướng phát triển tương lai |
+| **Kết nối thiết bị đeo** | Hướng phát triển tương lai |
