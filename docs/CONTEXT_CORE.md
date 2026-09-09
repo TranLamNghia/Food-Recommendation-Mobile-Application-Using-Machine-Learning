@@ -27,18 +27,57 @@ Cơ chế tương tác vuốt thẻ món ăn:
 | Vuốt lên | `neutral` | Bình thường, không cảm xúc đặc biệt | 0.5 |
 | Vuốt xuống | `unknown` | Chưa biết / chưa từng ăn | Loại khỏi tập huấn luyện |
 
-Cơ chế này phục vụ **hai mục đích khác nhau** ở hai thời điểm khác nhau:
-
-1. **Lúc mới đăng ký (onboarding)** — giải bài toán khởi đầu nguội. Người dùng vuốt một loạt món "thăm dò" ngay sau khi khai báo hồ sơ sức khỏe, để hệ thống nhận diện nhanh gu ăn uống của họ.
-2. **Trong quá trình sử dụng** — bổ sung tín hiệu sở thích liên tục, song song với phản hồi thực tế sau khi ăn.
-
 Vuốt là **cơ chế thu thập dữ liệu**, không phải sản phẩm chính. Sản phẩm chính vẫn là thực đơn hằng ngày.
+
+### Vuốt chỉ dùng ở đúng một chỗ bắt buộc
+
+| Thời điểm | Vai trò | Phạm vi |
+|---|---|---|
+| **Phiên khảo sát lúc đăng ký** | Giải bài toán khởi đầu nguội. Người dùng vuốt một gói khoảng 30 món ngay sau khi khai báo hồ sơ, để hệ thống nhận diện nhanh gu ăn uống | **Bắt buộc** |
+| **Sau đó** | Không còn màn hình vuốt nào. Hệ thống học từ hành vi thật: món giữ lại, món thay thế, món đã ăn, điểm đánh giá | — |
+
+Sở dĩ không cần vuốt thêm: sau khảo sát, tín hiệu sở thích đã đến từ ba nguồn khác, và hai trong số đó **đáng tin hơn vuốt**.
+
+| Nguồn tín hiệu | Trọng số nhãn |
+|---|---|
+| Đánh giá sao sau khi ăn | 1.0 |
+| Món đã ăn thật (nhật ký) | 0.9 |
+| *Vuốt khảo sát ban đầu* | *0.7* |
+| Giữ hoặc thay thế món trong thực đơn | 0.6 |
+
+Việc chống thực đơn một màu **không** giải quyết bằng cách cho vuốt thêm, mà bằng **cơ chế 70-30** ngay trong bước sinh thực đơn — xem `SYSTEM_ARCHITECTURE.md` mục 4.6.
 
 ---
 
 ## 3. Chiến lược khởi đầu nguội (Cold-start)
 
-Đây là điểm mới quan trọng của đề tài. Hệ thống hoạt động theo **ba giai đoạn** tương ứng với độ trưởng thành dữ liệu của từng người dùng.
+### Khởi đầu nguội là gì
+
+**Khởi đầu nguội** (cold-start) là tình huống hệ thống khuyến nghị **chưa có dữ liệu lịch sử nào** về một người dùng, nên không có căn cứ để cá nhân hóa.
+
+```
+Người dùng đã dùng 3 tháng          Người dùng vừa đăng ký 5 phút trước
+──────────────────────────          ───────────────────────────────────
+· 200 lượt vuốt                     · 0 lượt vuốt
+· 40 món đã ăn, có nhật ký          · 0 món đã ăn
+· 25 lượt đánh giá sao              · 0 đánh giá
+                                     
+→ Mô hình biết rõ gu ăn uống        → Mô hình KHÔNG biết gì về khẩu vị
+→ Gợi ý sát nhu cầu                 → Gợi ý dựa vào đâu?
+                                            ↑
+                                   đây chính là bài toán
+                                   khởi đầu nguội
+```
+
+Gọi là "nguội" vì hệ thống khởi động từ con số không, chưa có dữ liệu nào để "hâm nóng". Đây là **hạn chế cố hữu** của mọi hệ khuyến nghị dựa trên học máy: mô hình cần lịch sử để học, mà người dùng mới thì chưa có lịch sử.
+
+**Cách đề tài giải quyết:** thay vì chờ người dùng tích lũy dữ liệu một cách tự nhiên (mất hàng tuần), hệ thống **chủ động thu thập ngay** bằng một phiên khảo sát khẩu vị — cho người dùng vuốt khoảng 30 món ăn ngay sau khi đăng ký. Chỉ mất 2–3 phút nhưng đủ dựng được hồ sơ sở thích ban đầu.
+
+> Trong giao diện ứng dụng nên gọi là **"khảo sát khẩu vị"** cho thân thiện với người dùng. Trong báo cáo giữ nguyên thuật ngữ **"khởi đầu nguội (cold-start)"** vì đây là thuật ngữ chuẩn, trích dẫn được.
+
+### Ba giai đoạn
+
+Hệ thống hoạt động theo **ba giai đoạn** tương ứng với độ trưởng thành dữ liệu của từng người dùng.
 
 ### Giai đoạn 0 — Vừa đăng ký, chưa có tín hiệu nào
 
@@ -46,7 +85,7 @@ Người dùng khai báo hồ sơ sức khỏe: giới tính, ngày sinh, chiề
 
 Từ đây hệ thống **đã tính được hạn mức dinh dưỡng** (BMI, BMR, TDEE) và **đã lọc được món an toàn** (ràng buộc cứng). Nhưng chưa biết gì về khẩu vị.
 
-### Giai đoạn 1 — Sau phiên vuốt onboarding (khoảng 30 tín hiệu)
+### Giai đoạn 1 — Sau phiên khảo sát khẩu vị (khoảng 30 tín hiệu)
 
 Hệ thống đưa ra một **tập món thăm dò** được chọn có chủ đích: phủ đều các nhóm món, phương pháp chế biến và khẩu vị khác nhau, chứ không chọn ngẫu nhiên. Mục tiêu là mỗi lần vuốt thu được lượng thông tin lớn nhất.
 
@@ -56,7 +95,7 @@ Từ kết quả vuốt, hệ thống dựng **hồ sơ sở thích của ngư�
 
 ### Giai đoạn 2 — Sau một thời gian sử dụng (đủ tín hiệu tích lũy)
 
-Khi người dùng đã ăn thật, ghi nhật ký và đánh giá món, hệ thống chuyển sang **mô hình học máy có giám sát**, huấn luyện trên toàn bộ tín hiệu tích lũy: vuốt onboarding, vuốt trong quá trình dùng, món giữ lại hoặc bị thay thế trong thực đơn, món đã ăn thật, và điểm đánh giá sau khi ăn.
+Khi người dùng đã ăn thật, ghi nhật ký và đánh giá món, hệ thống chuyển sang **mô hình học máy có giám sát**, huấn luyện trên toàn bộ tín hiệu tích lũy: vuốt khảo sát ban đầu, món giữ lại hoặc bị thay thế trong thực đơn, món đã ăn thật, và điểm đánh giá sau khi ăn.
 
 Chuyển tiếp giữa hai giai đoạn là **chuyển dần**, không nhảy đột ngột:
 
@@ -110,7 +149,7 @@ Thực đơn cá nhân hóa tốt hơn  ──► (quay lại bước chấm đi
 - Quản lý người dùng và hồ sơ sức khỏe
 - Quản lý món ăn và dữ liệu dinh dưỡng
 - Sinh thực đơn hằng ngày
-- Thu thập tương tác vuốt
+- Khảo sát khẩu vị ban đầu bằng cơ chế vuốt
 - Nhật ký ăn uống
 - Thu thập đánh giá sau khi ăn
 - Theo dõi tiến trình sức khỏe

@@ -56,7 +56,7 @@ Hệ thống được xây dựng theo mô hình **3 tầng** (Three-tier Archit
 |---|---|
 | **Framework** | Flutter (nền tảng Android) |
 | **Khai báo hồ sơ** | Giới tính, ngày sinh, chiều cao, cân nặng, mức vận động, mục tiêu, bệnh lý, dị ứng |
-| **Vuốt onboarding** | Phiên vuốt thăm dò ngay sau khi khai báo hồ sơ, giải bài toán khởi đầu nguội |
+| **Khảo sát khẩu vị** | Vuốt một gói món cố định ngay sau khi khai báo hồ sơ, giải bài toán khởi đầu nguội. **Chỉ chạy một lần** |
 | **Cơ chế vuốt** | Phải (Thích), Trái (Không thích), Lên (Bình thường), Xuống (Chưa biết) |
 | **Thực đơn hằng ngày** | Hiển thị thực đơn sáng / trưa / tối / phụ kèm tổng năng lượng và tỷ lệ dinh dưỡng |
 | **Thay thế món** | Cho phép đổi một món trong thực đơn — hành động này là tín hiệu học quan trọng |
@@ -78,7 +78,7 @@ Tầng xử lý nghiệp vụ chính, đóng vai trò điều phối giữa Mobi
 | **Hạn mức dinh dưỡng** | Tính BMI, BMR (Mifflin-St Jeor), TDEE, hạn mức năng lượng và tỷ lệ macro theo mục tiêu |
 | **Món ăn & Dinh dưỡng** | CRUD món ăn, thông tin năng lượng, ba chất sinh năng lượng, vi chất |
 | **Bộ lọc F1 (Rule-based)** | Loại bỏ món vi phạm ràng buộc cứng trước khi đưa vào chấm điểm |
-| **Tương tác** | Ghi nhận hành động vuốt theo thời gian thực |
+| **Khảo sát khẩu vị** | Phát gói món khảo sát và nhận trọn gói kết quả vuốt, chỉ chạy một lần lúc tạo tài khoản |
 | **Nhật ký ăn uống** | Ghi nhận món đã ăn thực tế theo ngày và theo bữa |
 | **Phản hồi & Rating** | Thu thập đánh giá chi tiết sau khi dùng món |
 | **Sinh thực đơn** | Gọi ML Service chấm điểm, sau đó chạy thuật toán chọn tổ hợp món thỏa ràng buộc dinh dưỡng |
@@ -110,7 +110,7 @@ Dịch vụ học máy độc lập, chạy song song với Backend. Đọc dữ
 
 | Giai đoạn | Nội dung |
 |---|---|
-| **Thu thập dữ liệu** | Đọc lịch sử vuốt, nhật ký ăn uống, đánh giá và trạng thái món trong thực đơn |
+| **Thu thập dữ liệu** | Đọc kết quả khảo sát khẩu vị, nhật ký ăn uống, đánh giá và trạng thái món trong thực đơn |
 | **Thống nhất nhãn** | Quy đổi các nguồn tín hiệu khác nhau về một thang điểm ưa thích chung trong đoạn [0, 1] |
 | **Tiền xử lý** | Làm sạch, xử lý dữ liệu khuyết, chuẩn hóa min-max hoặc z-score, mã hóa one-hot |
 | **Trích chọn đặc trưng** | Dựng vector đặc trưng món ăn và vector đặc trưng người dùng |
@@ -409,6 +409,8 @@ Thực đơn sinh ra phải lưu kèm các chỉ số để phục vụ đánh g
 
 ### 4.1 Ba giai đoạn theo độ trưởng thành dữ liệu
 
+> **Cơ chế vuốt chỉ chạy đúng một lần**, ở phiên khảo sát lúc tạo tài khoản. Từ Giai đoạn 1 trở đi, tín hiệu sở thích đến từ chính thực đơn hằng ngày: món người dùng giữ lại, món họ thay thế, món họ ăn thật và điểm họ đánh giá. Việc chống thực đơn một màu do **cơ chế 70-30** ở mục 4.6 đảm nhiệm, không phải bằng cách cho vuốt thêm.
+
 ```
      Số tín hiệu tích lũy của người dùng
      0                    ~30                    ~50+
@@ -439,6 +441,16 @@ Ngay sau khi khai báo hồ sơ, hệ thống **đã đủ dữ liệu để ch�
 **Chọn tập món thăm dò.** Đây là bước dễ bị làm sai. Nếu chọn ngẫu nhiên 30 món, rất có thể cả 30 món đều rơi vào vài nhóm phổ biến, và hệ thống không học được gì về những vùng khẩu vị còn lại.
 
 Tập món thăm dò phải được chọn theo nguyên tắc **cực đại hóa độ đa dạng**: phủ đều các nhóm thực phẩm, các phương pháp chế biến và các kiểu khẩu vị, sao cho mỗi lần vuốt mang lại lượng thông tin lớn nhất. Tập này vẫn phải đi qua Bộ lọc F1 trước — không hiển thị món mà người dùng dị ứng.
+
+**Tập món được chọn một lần và cố định trong suốt phiên.** Hệ thống **không** điều chỉnh món tiếp theo dựa trên lượt vuốt vừa rồi. Ba lý do:
+
+| Lý do | Giải thích |
+|---|---|
+| Độ đa dạng đã tối ưu từ đầu | Chọn thích ứng từng bước dễ rơi vào tối ưu cục bộ, phủ kém hơn so với chọn cả tập một lần |
+| Ứng dụng vuốt được khi mất mạng | Tải một lần rồi vuốt ngoại tuyến, chỉ cần mạng lúc gửi kết quả |
+| Đơn giản hóa giao tiếp | Cả phiên chỉ cần 2 lần gọi API thay vì hàng chục lần |
+
+Vì vậy toàn bộ kết quả vuốt được ứng dụng giữ trong bộ nhớ và **gửi lên một lần duy nhất** khi người dùng vuốt xong. Việc đếm tiến độ do ứng dụng tự làm, không hỏi máy chủ. Chi tiết giao diện lập trình xem `API_SPECIFICATION.md` mục 7.4.
 
 **Dựng hồ sơ sở thích.** Hồ sơ sở thích của người dùng là vector trọng số tổng hợp từ các món đã vuốt:
 
@@ -514,6 +526,110 @@ Tính cá nhân hóa được bảo đảm nhờ **đặc trưng người dùng 
 Khi số lượng người dùng đủ lớn, có thể phân cụm các hồ sơ sở thích `p_u` bằng k-means để tìm ra các **nhóm khẩu vị** đặc trưng. Người dùng mới sẽ được gán vào nhóm gần nhất ngay sau phiên vuốt onboarding, và nhận gợi ý dựa trên món phổ biến trong nhóm đó.
 
 Đây là cách khai thác dữ liệu cộng đồng mà **không cần dựng ma trận người dùng–món ăn** như lọc cộng tác truyền thống, nên vẫn hoạt động được khi dữ liệu thưa. Ghi nhận như hướng phát triển, không nằm trong phạm vi bắt buộc của đồ án.
+
+---
+
+### 4.6 Chống thực đơn một màu — cơ chế 70-30
+
+> **Bong bóng lọc (filter bubble)** là hiện tượng hệ thống chỉ hiển thị những thứ nó đã biết người dùng thích, khiến phạm vi lựa chọn của họ hẹp dần theo thời gian. Thuật ngữ do Eli Pariser đặt năm 2011; trong lĩnh vực hệ khuyến nghị nó còn được gọi là **thiên lệch vòng lặp phản hồi** (feedback loop bias).
+
+Điểm nguy hiểm không nằm ở chỗ gợi ý nhàm chán, mà ở chỗ **vòng lặp tự nuôi chính nó**:
+
+```text
+   Hệ thống cho rằng người dùng thích món chiên
+                    ↓
+   Chỉ gợi ý món chiên
+                    ↓
+   Người dùng chỉ có cơ hội ăn và đánh giá món chiên
+                    ↓
+   Dữ liệu mới thu được toàn là món chiên
+                    ↓
+   Mô hình càng chắc chắn người dùng thích món chiên
+                    ↓
+             (quay lại đầu, chặt hơn)
+```
+
+Mô hình không hề **sai** — nó chỉ không bao giờ **biết thêm**. Người dùng có thể rất thích canh chua, nhưng nếu hệ thống chưa từng gợi ý canh chua thì nó sẽ chẳng bao giờ biết điều đó.
+
+**Hệ thống này dễ dính bong bóng lọc hơn bình thường.** Với 300–500 món trong kho nhưng chỉ 4–6 suất mỗi ngày, vùng điểm cao có thể chỉ gồm 30–50 món — tức khoảng **10% kho món**. Ba trăm món còn lại không bao giờ được hiển thị, nên không bao giờ có tín hiệu, nên không bao giờ vào tập huấn luyện.
+
+Quan trọng hơn: vì cơ chế vuốt chỉ chạy một lần lúc tạo tài khoản, **nguồn dữ liệu mới duy nhất là thực đơn**. Không có kênh nào khác để hệ thống hỏi thêm. Thực đơn hẹp thì dữ liệu hẹp, vĩnh viễn. Ở ứng dụng cho vuốt liên tục, người dùng còn tự khám phá được; ở đây thì hệ thống **phải tự thăm dò**.
+
+Nếu luôn chọn món có điểm cao nhất theo vector sở thích, vector `p_u` càng bị củng cố về hướng cũ, và vòng lặp phản hồi tự bóp nghẹt chính nó.
+
+Vì cơ chế vuốt chỉ chạy một lần lúc tạo tài khoản, hệ thống **không thể hỏi thêm** để mở rộng hiểu biết. Nó phải tự thăm dò ngay trong thực đơn hằng ngày.
+
+#### Cách làm
+
+Chia số suất trong mỗi thực đơn thành hai nhóm, chấm điểm bằng hai vector khác nhau:
+
+```text
+p_u   = vector sở thích hiện tại
+
+p_u'  = chuẩn_hóa( p_u + δ · n )       n = vector nhiễu ngẫu nhiên đơn vị
+                                        δ = biên độ nhiễu
+
+┌──────────────────────────────────────────────────────────────────┐
+│  70 % số suất  →  xếp hạng theo cos(p_u,  v_i)                   │
+│                   KHAI THÁC — món chắc chắn hợp gu               │
+├──────────────────────────────────────────────────────────────────┤
+│  30 % số suất  →  xếp hạng theo cos(p_u', v_i)                   │
+│                   THĂM DÒ — món lân cận khẩu vị, loại các món    │
+│                   đã được chọn ở nhóm khai thác                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Cả hai nhóm đều lấy từ tập ứng viên đã qua Bộ lọc F1, và đều đi tiếp vào Bước 4 để ghép thành tổ hợp thỏa ràng buộc năng lượng.
+
+#### Vì sao xoay vector thay vì chọn ngẫu nhiên
+
+Cách thăm dò kinh điển là ε-greedy: với xác suất ε, chèn một món **ngẫu nhiên**. Cách đó có nhược điểm rõ: món ngẫu nhiên có thể nằm rất xa khẩu vị, người dùng thấy vô lý và thay thế ngay, vừa mất một suất trong thực đơn vừa không thu được thông tin hữu ích.
+
+Xoay nhẹ chính vector sở thích cho kết quả khác hẳn:
+
+| | ε-greedy ngẫu nhiên | Xoay vector (70-30) |
+|---|---|---|
+| Món thăm dò nằm ở đâu | Bất kỳ đâu trong không gian đặc trưng | **Vùng lân cận** khẩu vị hiện tại |
+| Xác suất được chấp nhận | Thấp | Cao hơn đáng kể |
+| Thông tin thu được khi bị từ chối | Ít — đã biết trước là món lạ | Nhiều — biết ranh giới khẩu vị nằm ở đâu |
+| Điều khiển được mức độ mạo hiểm | Không, chỉ có tần suất ε | Có, qua biên độ δ |
+
+Khi món thăm dò được chấp nhận, tín hiệu đó đi vào tập huấn luyện, vector `p_u` dịch dần về hướng mới, và lần sau vùng khai thác đã rộng hơn. Đó chính là cơ chế mở rộng khẩu vị theo thời gian.
+
+#### Hai tham số cần hiệu chỉnh bằng thực nghiệm
+
+**Biên độ nhiễu δ** quyết định món thăm dò lệch bao xa:
+
+| δ | Hậu quả |
+|---|---|
+| Quá nhỏ | Món "mới" gần như trùng món cũ — không khám phá được gì |
+| Quá lớn | Suy biến thành ngẫu nhiên, mất hết ưu điểm so với ε-greedy |
+
+**Tỷ lệ thăm dò** khởi đầu ở 30 %. Nếu thực nghiệm cho thấy người dùng hiếm khi chọn món ngoài vùng khai thác, có thể nâng dần lên 40 % rồi 50 %. **Trần cứng là 50 %** — quá nửa thực đơn là món thử nghiệm thì nó không còn là gợi ý cá nhân hóa nữa. Ràng buộc `chk_expl_ratio` trong cơ sở dữ liệu chặn ngưỡng này.
+
+#### Dữ liệu ghi lại để đánh giá
+
+| Cột | Bảng | Ghi lại |
+|---|---|---|
+| `exploration_ratio` | `meal_plans` | Tỷ lệ thăm dò **mục tiêu** của thực đơn |
+| `exploration_delta` | `meal_plan_items` | Biên độ δ của **từng món** thăm dò. `NULL` = món khai thác |
+
+Từ hai cột này tính được các chỉ số quyết định:
+
+| Chỉ số | Ý nghĩa |
+|---|---|
+| Tỷ lệ món thăm dò bị thay thế | Cao hơn hẳn nhóm khai thác → δ quá lớn |
+| Tỷ lệ món thăm dò được ăn thật | Gần bằng nhóm khai thác → δ hợp lý, có thể nâng tỷ lệ |
+| Chênh lệch điểm dự đoán giữa hai nhóm | Gần bằng 0 → δ quá nhỏ, không thực sự khám phá |
+| Tỷ lệ thăm dò thực tế so với mục tiêu | Thấp hơn nhiều → Bước 4 không tìm đủ món thăm dò khả thi |
+| **Số món khác nhau đã xuất hiện sau N ngày** | **Đo trực tiếp bong bóng lọc.** Chạy song song hai cấu hình tỷ lệ thăm dò `0` và `0.3`, chênh lệch chính là bằng chứng định lượng |
+| Độ dịch chuyển của vector `p_u` theo thời gian | Vector đứng yên nghĩa là bong bóng đã đóng, hệ thống ngừng học |
+
+Một tính chất đáng chú ý: **kể cả khi người dùng từ chối món thăm dò, hệ thống vẫn học được** — nó biết thêm một điểm về ranh giới khẩu vị, điều mà nhóm khai thác không bao giờ cho biết vì món nào cũng được chấp nhận.
+
+> **Thăm dò chỉ nới lỏng về khẩu vị, không nới lỏng về an toàn.** Món thăm dò vẫn phải qua Bộ lọc F1 (dị ứng, bệnh lý, chế độ ăn) và vẫn phải nằm trong tổ hợp thỏa hạn mức năng lượng ở Bước 4. Không bao giờ có chuyện vì thăm dò mà gợi ý món tôm cho người dị ứng hải sản.
+
+Truy vấn sẵn ở `DATABASE_DESIGN.md` mục 8.5. Đây là một mục thực nghiệm hoàn chỉnh cho Chương 3.
 
 ---
 
@@ -623,5 +739,7 @@ Mobile App              Backend API                ML Service           MySQL
 | **Phản hồi liên tục** | Mọi tương tác đều được ghi nhận và quy về nhãn huấn luyện |
 | **Khởi đầu nguội có lời giải** | Vuốt thăm dò onboarding cho cá nhân hóa ngay từ ngày đầu sử dụng |
 | **Chuyển tiếp mượt** | Trộn dần hai phương pháp chấm điểm theo lượng dữ liệu tích lũy |
+| **Thăm dò có hướng** | Cơ chế 70-30 xoay nhẹ vector sở thích thay vì chèn món ngẫu nhiên |
+| **Vuốt chỉ một lần** | Sau khảo sát ban đầu, hệ thống học từ hành vi thật chứ không hỏi thêm |
 | **Thực nghiệm tái lập được** | Tập dữ liệu, phân chia train/test và tham số chuẩn hóa đều đóng băng và lưu lại |
 | **Khả năng mở rộng** | Các module có thể tách thành microservice khi cần |

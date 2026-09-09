@@ -80,11 +80,9 @@ Cơ sở dữ liệu gồm **21 bảng**, chia thành 6 nhóm chức năng:
 
 ## 2.1 Thứ tự tạo bảng
 
-Tài liệu này trình bày các bảng theo **nhóm chức năng** để dễ đọc, nhưng đó **không phải** thứ tự tạo bảng. Chỉ có duy nhất một chỗ khóa ngoại trỏ ngược lại nhóm khác:
+Tài liệu này trình bày các bảng theo **nhóm chức năng** để dễ đọc, nhưng đó **không phải** thứ tự tạo bảng.
 
-- `interactions` → `recommendations`
-
-Đồ thị phụ thuộc không có chu trình, nên chỉ cần tạo theo thứ tự sau:
+Sau khi bỏ `interactions.recommendation_id`, **không còn khóa ngoại nào trỏ ngược sang nhóm khác**. Đồ thị phụ thuộc rất nông, chỉ 4 tầng:
 
 ```text
 Tầng 0 — không phụ thuộc bảng nào
@@ -96,10 +94,10 @@ Tầng 1
 
 Tầng 2
     food_nutrition, food_tags, meal_plans, recommendations,
-    food_diary, feedbacks, ml_training_samples, ml_evaluations
+    food_diary, feedbacks, interactions, ml_training_samples, ml_evaluations
 
 Tầng 3
-    meal_plan_items, interactions
+    meal_plan_items
 ```
 
 > Khi viết `schema.sql`, đặt các câu `CREATE TABLE` theo đúng thứ tự này. Nếu dùng Entity Framework Core Migrations thì công cụ tự sắp xếp, không cần quan tâm.
@@ -524,27 +522,22 @@ Bảng tra cứu tĩnh, nạp một lần từ tài liệu NIN 2016. Dùng để
 
 ```sql
 CREATE TABLE interactions (
-    id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id           BIGINT UNSIGNED NOT NULL,
-    food_id           BIGINT UNSIGNED NOT NULL,
-    action            ENUM('like','dislike','neutral','unknown') NOT NULL,
+    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id       BIGINT UNSIGNED NOT NULL,
+    food_id       BIGINT UNSIGNED NOT NULL,
+    action        ENUM('like','dislike','neutral','unknown') NOT NULL,
+    -- Mã phiên khảo sát. Cả gói vuốt được ghi trong một giao dịch,
+    -- nên mọi dòng của một người dùng chia sẻ cùng một session_id.
+    session_id    CHAR(36) NOT NULL,
+    interacted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    session_type      ENUM('onboarding','explore') NOT NULL DEFAULT 'explore',
-    session_id        CHAR(36) NULL,
-    context_meal_type ENUM('breakfast','lunch','dinner','snack') NULL,
-    recommendation_id BIGINT UNSIGNED NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
 
-    interacted_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (user_id)           REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (food_id)           REFERENCES foods(id) ON DELETE CASCADE,
-    FOREIGN KEY (recommendation_id) REFERENCES recommendations(id) ON DELETE SET NULL,
-
-    INDEX idx_user_time   (user_id, interacted_at),
-    INDEX idx_user_food   (user_id, food_id),
-    INDEX idx_food        (food_id),
-    INDEX idx_session     (session_id),
-    INDEX idx_recommendation (recommendation_id)
+    INDEX idx_user_time (user_id, interacted_at),
+    INDEX idx_user_food (user_id, food_id),
+    INDEX idx_food      (food_id),
+    INDEX idx_session   (session_id)
 ) ENGINE=InnoDB;
 ```
 
@@ -555,38 +548,34 @@ CREATE TABLE interactions (
 | `neutral` | Vuốt lên | Bình thường | 0.0 | 0.50 |
 | `unknown` | Vuốt xuống | Chưa biết | Loại khỏi tổng | Loại khỏi tập huấn luyện |
 
-**Ba cột mới so với thiết kế cũ, mỗi cột giải quyết một vấn đề cụ thể:**
+### Bảng này chỉ chứa kết quả phiên khảo sát khẩu vị
 
-| Cột | Vấn đề nó giải quyết |
-|---|---|
-| `session_type` | Phân biệt vuốt onboarding với vuốt trong quá trình dùng. Backend đếm số lượt `onboarding` để biết khi nào kết thúc phiên thăm dò và chuyển người dùng sang Giai đoạn 1 |
-| `context_meal_type` | Sở thích phụ thuộc bữa ăn. Cùng một người thích phở buổi sáng nhưng không muốn ăn phở lúc 8 giờ tối. `NULL` với phiên onboarding vì lúc đó chưa gắn với bữa cụ thể |
-| `recommendation_id` | **Bắt buộc để tính Precision@K và NDCG.** Không có liên kết ngược này thì không biết lượt vuốt nào ứng với gợi ý nào, và mọi độ đo xếp hạng đều không tính được |
+Cơ chế vuốt chạy **đúng một lần trong đời tài khoản**, ở phiên khảo sát ngay sau khi khai báo hồ sơ. Sau đó ứng dụng không còn màn hình vuốt nào.
 
-> Bảng vẫn **không có** ràng buộc `UNIQUE (user_id, food_id)` — người dùng có thể vuốt lại cùng một món ở thời điểm khác, và lịch sử thay đổi khẩu vị theo thời gian chính là dữ liệu quý.
+Vì vậy bảng cố ý **không có** ba cột từng xuất hiện trong bản thiết kế trước:
 
-### Dư thừa có kiểm soát — chỗ duy nhất còn tồn tại trong lược đồ
+| Cột đã bỏ | Giá trị thực tế nếu giữ | Lý do bỏ |
+|---|---|---|
+| `session_type` | Luôn là `'onboarding'` | Không còn loại phiên nào khác |
+| `context_meal_type` | Luôn `NULL` | Vuốt khảo sát không gắn với bữa ăn cụ thể nào |
+| `recommendation_id` | Luôn `NULL` | Gói món khảo sát chọn theo độ đa dạng, không phải bản ghi gợi ý |
 
-Khi `recommendation_id` khác `NULL`, hai cột `user_id` và `food_id` lặp lại thông tin đã có ở `recommendations`. Đây là **đường đi vòng** (hai đường đi phân biệt từ `interactions` tới `users` và tới `foods`).
+Cả ba đều sẽ là **cột hằng số** — dạng dư thừa dữ liệu rõ ràng nhất.
 
-Ba chỗ trong lược đồ từng mắc lỗi này; hai chỗ kia đã được sửa bằng cách bỏ cột khóa ngoại cho phép `NULL` (xem `food_diary` Mục 6.2 và `feedbacks` Mục 6.3). Riêng chỗ này **cố ý giữ lại**, vì không bỏ được cột nào:
+> **Hệ quả quan trọng: lược đồ giờ không còn đường đi vòng nào.** `interactions.recommendation_id` là chỗ cuối cùng còn dư thừa có kiểm soát; bỏ nó đi thì mọi bảng chỉ còn đúng một đường tới mỗi bảng đích. Xem thêm Mục 10.
 
-| Cột | Vì sao không bỏ được |
-|---|---|
-| `user_id`, `food_id` | `recommendation_id` cho phép `NULL` — lượt vuốt trong phiên onboarding không xuất phát từ gợi ý nào |
-| `recommendation_id` | Bắt buộc để tính Precision@K và NDCG. Không khôi phục được bằng khóa tự nhiên, vì phải truy "gợi ý gần nhất trước thời điểm vuốt" — mơ hồ khi cùng một món được gợi ý nhiều lần |
+### Chỉ số xếp hạng chuyển sang tính trên thực đơn
 
-**Phương án chuẩn hóa triệt để đã được cân nhắc và bác bỏ:** ghi mọi thẻ món hiển thị — kể cả 30 món onboarding — vào `recommendations` để `recommendation_id` thành `NOT NULL`, rồi bỏ `user_id`/`food_id`. Bác bỏ vì `recommendations` chứa các cột kết quả chấm điểm (`score`, `score_ml`, `alpha`, `model_id`), mà món thăm dò onboarding được chọn theo nguyên tắc **cực đại hóa độ đa dạng chứ không theo điểm ưa thích** — toàn bộ các cột đó sẽ là `NULL`. Gộp hai khái niệm khác nhau vào một bảng để tránh một cột dư thừa là đánh đổi tệ hơn.
+Cột `recommendation_id` từng được biện minh là *"bắt buộc để tính Precision@K và NDCG"*. Lập luận đó dựa trên giả định người dùng vuốt các món được gợi ý — giả định không còn đúng.
 
-**Bất biến mà Backend phải bảo đảm:**
+Chỗ đúng để đo chất lượng khuyến nghị là **thực đơn**, vì đó mới là thứ hệ thống thật sự đưa cho người dùng:
 
-```text
-Nếu interactions.recommendation_id IS NOT NULL thì
-    interactions.user_id = recommendations.user_id
-    interactions.food_id = recommendations.food_id
-```
+| Loại độ đo | Nguồn dữ liệu | Ghi ở đâu |
+|---|---|---|
+| Ngoại tuyến — Precision@K, Recall@K, NDCG | `ml_training_samples` tập `test` | Mục 8.2 |
+| Trực tuyến — tỷ lệ tuân thủ, tỷ lệ thay thế | `meal_plan_items.status` + `food_diary` | Mục 8.3, 8.4 |
 
-Backend luôn ghi cả ba cột trong cùng một thao tác nên khó lệch. MySQL không hỗ trợ khóa ngoại có điều kiện, nên nếu muốn ràng buộc ở tầng CSDL thì phải dùng `TRIGGER BEFORE INSERT`.
+Cách này còn đúng hơn về mặt nghiệp vụ: một món "được gợi ý" nghĩa là nó **vào được thực đơn**, không phải nó được chấm điểm cao trong danh sách ứng viên.
 
 ---
 
@@ -652,11 +641,63 @@ CREATE TABLE feedbacks (
     FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
 
     INDEX idx_user        (user_id),
-    INDEX idx_food_rating (food_id, rating)
+    INDEX idx_food_rating (food_id, rating),
+    -- Lấy đánh giá GẦN NHẤT của một người cho một món.
+    -- Khẩu vị đổi theo thời gian: hôm nay 5 sao, tháng sau có thể 2 sao.
+    INDEX idx_user_food_time (user_id, food_id, created_at)
 ) ENGINE=InnoDB;
 ```
 
 Đây là **nguồn nhãn có độ tin cậy cao nhất** trong toàn hệ thống. Bảng thống nhất nhãn ở Mục 7.4 gán trọng số mẫu 1.0 cho nguồn này.
+
+### Điều kiện được đánh giá — ràng buộc nghiệp vụ bắt buộc
+
+Người dùng **không được đánh giá món tùy ý trong catalogue**. Một món chỉ được chấm sao khi thỏa **đồng thời hai điều kiện**:
+
+```text
+① Món đã từng nằm trong thực đơn của người dùng
+   EXISTS (SELECT 1 FROM meal_plan_items mpi
+           JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
+           WHERE mp.user_id = ? AND mpi.food_id = ?)
+
+② Người dùng đã ghi nhận là đã ăn món đó
+   EXISTS (SELECT 1 FROM food_diary
+           WHERE user_id = ? AND food_id = ?)
+```
+
+| Điều kiện | Chặn tình huống nào |
+|---|---|
+| ① Có trong thực đơn | Người dùng duyệt catalogue rồi chấm sao hàng loạt món chưa bao giờ được gợi ý |
+| ② Có trong nhật ký | Chấm sao món **chưa từng ăn** — ví dụ món bị thay thế hoặc bỏ bữa |
+
+Điều kiện ② là cơ sở để bảng thống nhất nhãn gán trọng số **1.0** cho nguồn `feedback`: *đã ăn thật rồi mới đánh giá thì mới đáng tin nhất*. Bỏ điều kiện này thì lý do cho trọng số 1.0 không còn.
+
+**MySQL không kiểm tra được ràng buộc này bằng `CHECK`** vì cần truy vấn con. Backend phải kiểm tra trước khi ghi, trả lỗi `409 FEEDBACK_NOT_ALLOWED` nếu vi phạm. Hai chỉ mục phục vụ phép kiểm tra: `food_diary.idx_user_food` và `meal_plan_items.idx_food`.
+
+### Đánh giá lại theo thời gian
+
+Bảng **cố ý không đặt** `UNIQUE (user_id, food_id)`. Khẩu vị thay đổi: hôm nay thấy ngon chấm 5 sao, ba tháng sau ăn lại thấy dở chấm 2 sao. Cả hai dòng đều được giữ.
+
+| Cột | Vai trò với việc đánh giá lại |
+|---|---|
+| `created_at` | **Ngày đánh giá.** Phân biệt lần chấm cũ với lần chấm mới |
+| `idx_user_food_time` | Chỉ mục `(user_id, food_id, created_at)` để lấy nhanh đánh giá gần nhất |
+
+Bước dựng tập huấn luyện lấy **đánh giá gần nhất tính đến mốc thời gian cắt tập**:
+
+```sql
+SELECT f.*
+FROM feedbacks f
+JOIN (
+    SELECT user_id, food_id, MAX(created_at) AS latest
+    FROM feedbacks
+    WHERE created_at < ?          -- mốc cắt train / test
+    GROUP BY user_id, food_id
+) m ON m.user_id = f.user_id AND m.food_id = f.food_id
+   AND m.latest  = f.created_at;
+```
+
+> Không đưa **cả hai** đánh giá cũ và mới vào cùng một tập huấn luyện. Cùng một cặp `(người dùng, món ăn)` mang hai nhãn mâu thuẫn sẽ làm nhiễu mô hình. Lấy bản gần nhất trong mỗi khung thời gian là đúng: dữ liệu cũ đã bị dữ liệu mới thay thế.
 
 ### Vì sao không có cột `ate_at` và không có `food_diary_id`
 
@@ -703,7 +744,6 @@ CREATE TABLE recommendations (
     source            ENUM('rule_based','content_based','ml','hybrid') NOT NULL,
     model_id          INT UNSIGNED NULL,
 
-    was_interacted    TINYINT(1) NOT NULL DEFAULT 0,
     was_selected      TINYINT(1) NOT NULL DEFAULT 0,
     recommended_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -721,8 +761,7 @@ CREATE TABLE recommendations (
 |---|---|
 | `batch_id` | Nhóm toàn bộ món trong **một lần gợi ý**. Bắt buộc để tính các độ đo `@K` |
 | `score_content` / `score_ml` / `alpha` | Ba thành phần của công thức trộn, lưu tách riêng |
-| `was_interacted` | Người dùng có vuốt món này không — **nguồn mẫu âm cho ML** |
-| `was_selected` | Món có được đưa vào thực đơn cuối cùng không (sau Bước 4) |
+| `was_selected` | Món có được Bước 4 đưa vào thực đơn cuối cùng không — cho biết ràng buộc dinh dưỡng đã bác bỏ bao nhiêu món điểm cao |
 
 **Vì sao tách `score_content`, `score_ml` và `alpha` thành ba cột riêng.**
 
@@ -734,7 +773,9 @@ Công thức chuyển tiếp là `score = α · score_ml + (1 − α) · score_c
 
 Đây là dữ liệu thực nghiệm gần như miễn phí — chỉ tốn ba cột.
 
-> **Giữ nguyên `was_interacted` từ thiết kế cũ.** Cột này ban đầu nhìn có vẻ chỉ để thống kê, nhưng thực ra nó là **mỏ mẫu âm** của mô hình. Người dùng chủ yếu để lại tín hiệu dương, và không có mẫu âm thì mô hình sẽ học ra "món nào cũng thích".
+> **Bảng này là nhật ký chấm điểm, không phải nhật ký hiển thị.** Nó ghi lại toàn bộ món đã được chấm điểm cho một lần sinh thực đơn, kèm thứ hạng. Đối chiếu `rank_position` với `was_selected` cho biết ràng buộc dinh dưỡng ở Bước 4 đã loại bỏ bao nhiêu món điểm cao — một phân tích đắt giá cho Chương 3.
+
+> Cột `was_interacted` của thiết kế trước **đã bị bỏ**. Nó đếm số lượt vuốt trên món được gợi ý, nhưng người dùng không còn vuốt sau khi qua phiên khảo sát. Nguồn mẫu âm thay thế: món trong thực đơn bị `replaced` hoặc `skipped`.
 
 ---
 
@@ -768,12 +809,15 @@ CREATE TABLE meal_plans (
              / target_calories_kcal) STORED,
 
     total_preference_score DECIMAL(8,4) NULL,
+    exploration_ratio      DECIMAL(4,3) NULL,
     generation_source      ENUM('rule_based','content_based','ml','hybrid') NOT NULL,
     model_id               INT UNSIGNED NULL,
     status                 ENUM('draft','active','completed') NOT NULL DEFAULT 'active',
     generated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_target_positive CHECK (target_calories_kcal > 0),
+    CONSTRAINT chk_expl_ratio      CHECK (exploration_ratio IS NULL
+                                          OR exploration_ratio BETWEEN 0 AND 0.5),
     FOREIGN KEY (user_id)  REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (model_id) REFERENCES ml_models(id) ON DELETE SET NULL,
 
@@ -790,6 +834,7 @@ CREATE TABLE meal_plans (
 | `actual_*` | Tổng dinh dưỡng thực tế của tổ hợp Bước 4 đã chọn |
 | `calorie_deviation_pct` | **Cột tính tự động.** Đề cương yêu cầu chứng minh sai lệch không quá 10 % — đây là chỗ lấy con số đó. `NULL` khi chưa chạy xong Bước 4 |
 | `total_preference_score` | Tổng `Σ score` của thực đơn, dùng so sánh phương án học máy với phương án chỉ dùng quy tắc |
+| `exploration_ratio` | Tỷ lệ thăm dò **mục tiêu** của cơ chế 70-30. Trần `0.5` |
 | `generation_source` | Ghi rõ thực đơn này sinh bằng phương pháp nào — nền tảng cho toàn bộ phần so sánh ở Chương 3 |
 
 > `calorie_deviation_pct` là cột `GENERATED ... STORED` nên MySQL tự tính và tự cập nhật, đồng thời **đánh chỉ mục được** nếu cần lọc nhanh các thực đơn vi phạm ngưỡng. `chk_target_positive` chặn lỗi chia cho 0.
@@ -827,7 +872,7 @@ CREATE TABLE meal_plan_items (
                             NOT NULL DEFAULT 'suggested',
     replaced_by_food_id BIGINT UNSIGNED NULL,
     replaced_at         DATETIME NULL,
-    is_exploration      TINYINT(1) NOT NULL DEFAULT 0,
+    exploration_delta   DECIMAL(4,3) NULL,
     position            TINYINT UNSIGNED NULL,
     note                VARCHAR(255) NULL,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -836,8 +881,14 @@ CREATE TABLE meal_plan_items (
     FOREIGN KEY (food_id)             REFERENCES foods(id),
     FOREIGN KEY (replaced_by_food_id) REFERENCES foods(id),
 
+    CONSTRAINT chk_expl_delta CHECK (exploration_delta IS NULL
+                                     OR exploration_delta BETWEEN 0 AND 1),
+
     INDEX idx_plan_meal (meal_plan_id, meal_type),
-    INDEX idx_status    (status)
+    INDEX idx_status    (status),
+    -- Kiểm tra "món này từng nằm trong thực đơn của user chưa"
+    -- -> điều kiện bắt buộc để được đánh giá
+    INDEX idx_food      (food_id)
 ) ENGINE=InnoDB;
 ```
 
@@ -845,10 +896,38 @@ CREATE TABLE meal_plan_items (
 |---|---|
 | `status` | **Nguồn phản hồi ngầm định** mà đề cương gọi là "món được chọn, món bị thay thế" |
 | `replaced_by_food_id` | Người dùng đổi sang món nào — tín hiệu kép: chê món cũ, thích món mới |
-| `is_exploration` | Đánh dấu món do chiến lược thăm dò ε-greedy chèn vào, không phải do điểm cao |
+| `exploration_delta` | Biên độ nhiễu δ nếu món này thuộc nhóm thăm dò. `NULL` = nhóm khai thác |
 | `predicted_score` | Điểm dự đoán lúc sinh, để về sau đối chiếu với phản hồi thực tế |
 
-> **`is_exploration` phục vụ một thí nghiệm riêng.** Nó cho phép trả lời: món thăm dò có bị người dùng thay thế nhiều hơn món gợi ý bình thường không, và tỷ lệ ε bao nhiêu là hợp lý. Chỉ tốn một cột `TINYINT`, nhưng cho hẳn một mục thực nghiệm trong Chương 3.
+### Cơ chế 70-30 và hai cột phục vụ nó
+
+Để tránh thực đơn chỉ toàn một kiểu món, hệ thống chia số suất trong mỗi thực đơn thành hai nhóm:
+
+```text
+p_u   = vector sở thích hiện tại
+p_u'  = chuẩn_hóa( p_u + δ · n )      n = vector nhiễu ngẫu nhiên đơn vị
+                                       δ = biên độ nhiễu
+
+70 %  số suất  →  chọn theo điểm với p_u    (KHAI THÁC — món chắc chắn hợp gu)
+30 %  số suất  →  chọn theo điểm với p_u'   (THĂM DÒ  — món lân cận khẩu vị)
+```
+
+Điểm khác biệt so với thăm dò ngẫu nhiên thuần túy: món thăm dò vẫn nằm trong **vùng lân cận** khẩu vị người dùng, không phải món bất kỳ. Nhờ vậy xác suất được chấp nhận cao hơn, và khi được chấp nhận thì vector `p_u` dịch dần về hướng đó — khẩu vị mở rộng theo thời gian.
+
+Hai cột ghi lại tham số của cơ chế này:
+
+| Cột | Bảng | Ghi lại |
+|---|---|---|
+| `meal_plans.exploration_ratio` | Cha | Tỷ lệ thăm dò **mục tiêu** khi sinh thực đơn: `0.300`, `0.400`, `0.500` |
+| `meal_plan_items.exploration_delta` | Con | Biên độ nhiễu δ của **từng món** thăm dò. `NULL` = món khai thác |
+
+**Vì sao không có cột `is_exploration`.** Cột cờ đó suy ra được hoàn toàn từ `exploration_delta IS NOT NULL` — giữ cả hai là dư thừa dữ liệu, đúng loại lỗi đã sửa ở `food_diary` và `feedbacks`. Một cột `DECIMAL` vừa trả lời được câu hỏi "có phải món thăm dò không", vừa cho biết luôn δ bằng bao nhiêu.
+
+**Vì sao `exploration_ratio` nằm ở bảng cha dù suy ra được từ các dòng con.** Đây là **tỷ lệ mục tiêu**, không phải tỷ lệ đạt được — giống cặp `target_calories_kcal` với `actual_calories_kcal`. Bước 4 có thể không tìm đủ món thăm dò khả thi, khiến tỷ lệ thực tế thấp hơn mục tiêu. Muốn phân tích được điều đó thì phải lưu con số mục tiêu.
+
+**Ràng buộc trần 0.5.** Quá nửa thực đơn là món thử nghiệm thì nó không còn là gợi ý cá nhân hóa nữa. `chk_expl_ratio` chặn ở tầng CSDL.
+
+> Hai cột này cho hẳn một mục thực nghiệm Chương 3: chạy hệ thống ở các mức `0.300`, `0.400`, `0.500`, đo tỷ lệ món thăm dò bị thay thế và tỷ lệ được ăn thật, từ đó chọn tỷ lệ tối ưu. Truy vấn sẵn ở Mục 8.5.
 
 ---
 
@@ -919,8 +998,8 @@ CREATE TABLE ml_training_samples (
 
     label            DECIMAL(4,3) NOT NULL,
     sample_weight    DECIMAL(4,3) NOT NULL DEFAULT 1.000,
-    source           ENUM('feedback','swipe_onboarding','swipe_explore','diary',
-                          'plan_kept','plan_replaced','impression_neg','random_neg')
+    source           ENUM('feedback','swipe','diary',
+                          'plan_kept','plan_replaced','plan_skipped','random_neg')
                          NOT NULL,
 
     context_meal_type ENUM('breakfast','lunch','dinner','snack') NULL,
@@ -950,12 +1029,12 @@ CREATE TABLE ml_training_samples (
 | `feedback` (2 sao) | `feedbacks` | 0.250 | 1.0 |
 | `feedback` (1 sao) | `feedbacks` | 0.000 | 1.0 |
 | `diary` | `food_diary` | 0.800 | 0.9 |
-| `swipe_onboarding` / `swipe_explore` (like) | `interactions` | 0.900 | 0.7 |
-| `swipe_onboarding` / `swipe_explore` (neutral) | `interactions` | 0.500 | 0.7 |
-| `swipe_onboarding` / `swipe_explore` (dislike) | `interactions` | 0.000 | 0.7 |
+| `swipe` (like) | `interactions` | 0.900 | 0.7 |
+| `swipe` (neutral) | `interactions` | 0.500 | 0.7 |
+| `swipe` (dislike) | `interactions` | 0.000 | 0.7 |
 | `plan_kept` | `meal_plan_items` | 0.700 | 0.6 |
 | `plan_replaced` | `meal_plan_items` | 0.150 | 0.6 |
-| `impression_neg` | `recommendations` (`was_interacted = 0`) | 0.300 | 0.3 |
+| `plan_skipped` | `meal_plan_items` (`status = 'skipped'`) | 0.300 | 0.3 |
 | `random_neg` | Lấy ngẫu nhiên từ món chưa hiển thị | 0.100 | 0.2 |
 | — | `interactions` (`action = 'unknown'`) | **Loại khỏi tập** | — |
 
@@ -1090,20 +1169,27 @@ GROUP BY e.metric, e.k_value
 ORDER BY e.metric, e.k_value;
 ```
 
-### 8.3 Precision@5 đo trực tiếp trên hệ thống đang chạy
+### 8.3 Ràng buộc dinh dưỡng đã bác bỏ bao nhiêu món điểm cao
+
+Đối chiếu thứ hạng chấm điểm với việc có vào được thực đơn hay không:
 
 ```sql
 SELECT
     r.source,
-    COUNT(*)                                              AS so_goi_y,
-    ROUND(SUM(i.action = 'like') / COUNT(*), 4)           AS precision_at_5
+    r.rank_position,
+    COUNT(*)                                          AS so_lan_duoc_cham_diem,
+    SUM(r.was_selected)                               AS so_lan_vao_thuc_don,
+    ROUND(100.0 * SUM(r.was_selected) / COUNT(*), 2)  AS ty_le_duoc_chon_pct,
+    ROUND(AVG(r.score), 4)                            AS diem_tb
 FROM recommendations r
-LEFT JOIN interactions i ON i.recommendation_id = r.id
-WHERE r.rank_position <= 5
-GROUP BY r.source;
+WHERE r.rank_position <= 10
+GROUP BY r.source, r.rank_position
+ORDER BY r.source, r.rank_position;
 ```
 
-> Truy vấn này chỉ chạy được nhờ khóa ngoại `interactions.recommendation_id` đã bổ sung ở Mục 6.1.
+> Món xếp hạng 1 mà tỷ lệ vào thực đơn thấp nghĩa là **ràng buộc năng lượng ở Bước 4 thường xuyên bác bỏ món hợp khẩu vị nhất**. Đây chính là sự đánh đổi giữa "hợp khẩu vị" và "cân đối dinh dưỡng" mà đề cương gọi là *hai yêu cầu vốn mâu thuẫn nhau* — có số liệu định lượng để trình bày.
+
+Các độ đo xếp hạng chuẩn (Precision@K, Recall@K, NDCG) tính **ngoại tuyến** trên tập `test` của `ml_training_samples`, kết quả ghi vào `ml_evaluations` — xem Mục 8.2.
 
 ### 8.4 Tỷ lệ tuân thủ thực đơn — chỉ số thực tế thuyết phục nhất
 
@@ -1126,17 +1212,50 @@ GROUP BY mp.generation_source;
 
 > Ghép theo **khóa tự nhiên** `(user_id, ate_on, meal_type, food_id)` thay vì theo khóa ngoại, vì `food_diary` không còn cột `meal_plan_item_id` — xem lý do ở Mục 6.2. Chỉ mục `idx_compliance` được dựng đúng theo thứ tự bốn cột này.
 
-### 8.5 Hiệu quả của chiến lược thăm dò ε-greedy
+### 8.5 Hiệu quả của cơ chế thăm dò 70-30
+
+Truy vấn này trả lời câu hỏi trung tâm: **tỷ lệ thăm dò bao nhiêu là hợp lý?** Chạy hệ thống lần lượt ở các mức `0.300`, `0.400`, `0.500` rồi đối chiếu.
 
 ```sql
 SELECT
-    is_exploration,
-    COUNT(*)                                                AS so_mon,
-    ROUND(100.0 * SUM(status = 'replaced') / COUNT(*), 2)   AS ty_le_bi_thay_the_pct,
-    ROUND(AVG(predicted_score), 4)                          AS diem_du_doan_tb
-FROM meal_plan_items
-GROUP BY is_exploration;
+    mp.exploration_ratio                                            AS ty_le_tham_do,
+    CASE WHEN mpi.exploration_delta IS NULL
+         THEN 'khai thac' ELSE 'tham do' END                        AS nhom,
+    COUNT(*)                                                        AS so_mon,
+    ROUND(AVG(mpi.exploration_delta), 3)                            AS bien_do_nhieu_tb,
+    ROUND(AVG(mpi.predicted_score), 4)                              AS diem_du_doan_tb,
+    ROUND(100.0 * SUM(mpi.status = 'replaced') / COUNT(*), 2)       AS ty_le_bi_thay_the_pct,
+    ROUND(100.0 * SUM(mpi.status = 'eaten')    / COUNT(*), 2)       AS ty_le_duoc_an_pct
+FROM meal_plan_items mpi
+JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
+GROUP BY mp.exploration_ratio, nhom
+ORDER BY mp.exploration_ratio, nhom;
 ```
+
+**Cách đọc kết quả:**
+
+| Dấu hiệu | Kết luận |
+|---|---|
+| Nhóm thăm dò bị thay thế nhiều hơn hẳn nhóm khai thác | Biên độ nhiễu δ quá lớn — món gợi ý ra xa khẩu vị |
+| Nhóm thăm dò được ăn gần bằng nhóm khai thác | δ hợp lý, có thể nâng tỷ lệ thăm dò lên |
+| Hai nhóm có điểm dự đoán gần như nhau | δ quá nhỏ — món "mới" thực chất trùng món cũ, không khám phá được gì |
+
+Truy vấn kèm theo để xem tỷ lệ thăm dò **thực tế** có đạt mục tiêu không:
+
+```sql
+SELECT
+    mp.id,
+    mp.exploration_ratio                                              AS muc_tieu,
+    ROUND(SUM(mpi.exploration_delta IS NOT NULL) / COUNT(*), 3)       AS thuc_te,
+    COUNT(*)                                                          AS so_mon
+FROM meal_plans mp
+JOIN meal_plan_items mpi ON mpi.meal_plan_id = mp.id
+WHERE mp.exploration_ratio IS NOT NULL
+GROUP BY mp.id, mp.exploration_ratio
+HAVING thuc_te < muc_tieu * 0.8;
+```
+
+> Thực đơn xuất hiện trong kết quả là những lần Bước 4 **không tìm đủ món thăm dò khả thi** — thường do ràng buộc cứng thu hẹp tập ứng viên quá mức.
 
 ---
 
@@ -1154,11 +1273,12 @@ GROUP BY is_exploration;
 | `food_tags` | `tag_id` | **Bộ lọc F1** truy ngược từ nhãn ra món |
 | `interactions` | `(user_id, interacted_at)` | Lịch sử gần nhất của user |
 | `interactions` | `(user_id, food_id)` | Tương tác gần nhất với một món |
-| `interactions` | `recommendation_id` | **Tính Precision@K, NDCG** |
-| `interactions` | `session_id` | Đếm lượt vuốt onboarding |
+| `interactions` | `session_id` | Nhóm các lượt vuốt của một phiên khảo sát |
 | `food_diary` | `(user_id, ate_on, meal_type, food_id)` | Nhật ký theo ngày; **ghép khóa tự nhiên** tính tỷ lệ tuân thủ |
 | `food_diary` | `(user_id, food_id, ate_on)` | **Bước 2** — lọc món đã ăn trong N ngày |
 | `feedbacks` | `(food_id, rating)` | Điểm trung bình theo món |
+| `feedbacks` | `(user_id, food_id, created_at)` | Lấy **đánh giá gần nhất** khi khẩu vị thay đổi theo thời gian |
+| `meal_plan_items` | `food_id` | Kiểm tra điều kiện được đánh giá: món từng ở trong thực đơn |
 | `recommendations` | `batch_id` | Nhóm một lần gợi ý để tính `@K` |
 | `recommendations` | `(user_id, recommended_at)` | Gợi ý gần nhất |
 | `meal_plans` | `(user_id, plan_date)` (UNIQUE) | Thực đơn theo ngày, chặn trùng |
@@ -1187,10 +1307,13 @@ GROUP BY is_exploration;
 | `meal_plans.actual_*` cho phép `NULL` | Số `0` là giá trị hợp lệ về mặt số học, dùng nó để nói "chưa có dữ liệu" sẽ khiến cột dẫn xuất tính ra −100 % |
 | `food_diary` không có `meal_plan_item_id` | Đường đi vòng tới `foods` và `users`. Thay bằng ghép khóa tự nhiên |
 | `feedbacks` không có `food_diary_id` | Cùng lỗi đường đi vòng. Đánh giá là ý kiến về **món ăn**, không phải về một **lần ăn** |
-| `interactions` giữ cả `user_id`, `food_id` lẫn `recommendation_id` | Dư thừa **có kiểm soát** — chỗ duy nhất còn lại, vì không bỏ được cột nào. Xem Mục 6.1 |
 | `meal_plan_items` có hai FK cùng trỏ `foods` | Không phải dư thừa — `food_id` và `replaced_by_food_id` là hai **vai trò** khác nhau |
-| `interactions.recommendation_id` | Không có cột này thì không tính được Precision@K và NDCG |
-| `interactions.context_meal_type` | Sở thích món ăn phụ thuộc bữa ăn |
+| `feedbacks` không có `UNIQUE (user_id, food_id)` | Cố ý, để đánh giá lại được khi khẩu vị đổi theo thời gian. `created_at` phân biệt các lần chấm |
+| Điều kiện được đánh giá kiểm tra ở tầng ứng dụng | MySQL không hỗ trợ truy vấn con trong `CHECK`. Backend kiểm tra, trả `409 FEEDBACK_NOT_ALLOWED` |
+| `exploration_delta` thay cho cột cờ `is_exploration` | Cột cờ suy ra được từ `exploration_delta IS NOT NULL` — giữ cả hai là dư thừa |
+| `meal_plans.exploration_ratio` vẫn giữ dù suy ra được | Đây là tỷ lệ **mục tiêu**, khác tỷ lệ **đạt được** — cùng logic với cặp `target` / `actual` |
+| `interactions` bỏ `session_type`, `context_meal_type`, `recommendation_id` | Cả ba là cột hằng số vì vuốt chỉ chạy một lần. Bỏ đi thì lược đồ **hết sạch đường đi vòng** |
+| `recommendations` bỏ `was_interacted` | Không còn ai vuốt món được gợi ý. Mẫu âm lấy từ `status` = `replaced` hoặc `skipped` |
 | Tách `score_content`, `score_ml`, `alpha` | Cho phép phân tích ngược hiệu quả của cơ chế chuyển tiếp |
 | `user_preference_profiles.sum_abs_weight` | Bắt buộc để cập nhật vector Rocchio tăng dần |
 | `ml_training_samples` đóng băng tập dữ liệu | Bảo đảm số liệu báo cáo tái lập được |

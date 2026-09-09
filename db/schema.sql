@@ -3,7 +3,7 @@
 --  Đồ án tốt nghiệp — Trần Lâm Nghĩa (22115053122231)
 --
 --  MySQL 8.x · InnoDB · utf8mb4_unicode_ci
---  21 bảng · 28 khóa ngoại
+--  21 bảng · 27 khóa ngoại
 --
 --  Thiết kế chi tiết: docs/DATABASE_DESIGN.md
 --  Thứ tự tạo bảng theo 4 tầng phụ thuộc (Mục 2.1)
@@ -341,12 +341,19 @@ CREATE TABLE meal_plans (
              / target_calories_kcal) STORED,
 
     total_preference_score DECIMAL(8,4) NULL,
+    -- Tỷ lệ thăm dò MỤC TIÊU dùng khi sinh thực đơn này (cơ chế 70-30).
+    -- 0.300 = 30% số suất dành cho món thăm dò. Trần 0.5 vì quá nửa thực đơn
+    -- là món thử nghiệm thì không còn là gợi ý cá nhân hóa nữa.
+    -- Tỷ lệ THỰC TẾ đạt được tính từ meal_plan_items.exploration_delta.
+    exploration_ratio      DECIMAL(4,3) NULL,
     generation_source      ENUM('rule_based','content_based','ml','hybrid') NOT NULL,
     model_id               INT UNSIGNED NULL,
     status                 ENUM('draft','active','completed') NOT NULL DEFAULT 'active',
     generated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_target_positive CHECK (target_calories_kcal > 0),
+    CONSTRAINT chk_expl_ratio      CHECK (exploration_ratio IS NULL
+                                          OR exploration_ratio BETWEEN 0 AND 0.5),
     FOREIGN KEY (user_id)  REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (model_id) REFERENCES ml_models(id) ON DELETE SET NULL,
 
@@ -375,9 +382,8 @@ CREATE TABLE recommendations (
     source            ENUM('rule_based','content_based','ml','hybrid') NOT NULL,
     model_id          INT UNSIGNED NULL,
 
-    -- was_interacted = mỏ mẫu âm cho ML. Không có mẫu âm thì mô hình
-    -- sẽ học ra "món nào cũng thích".
-    was_interacted    TINYINT(1) NOT NULL DEFAULT 0,
+    -- was_selected = món có được Bước 4 đưa vào thực đơn cuối cùng không.
+    -- Cho biết ràng buộc dinh dưỡng đã bác bỏ bao nhiêu món điểm cao.
     was_selected      TINYINT(1) NOT NULL DEFAULT 0,
     recommended_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -430,7 +436,10 @@ CREATE TABLE feedbacks (
     FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
 
     INDEX idx_user        (user_id),
-    INDEX idx_food_rating (food_id, rating)
+    INDEX idx_food_rating (food_id, rating),
+    -- Lấy đánh giá GẦN NHẤT của một người cho một món.
+    -- Khẩu vị đổi theo thời gian: hôm nay 5 sao, tháng sau có thể 2 sao.
+    INDEX idx_user_food_time (user_id, food_id, created_at)
 ) ENGINE=InnoDB;
 
 
@@ -445,8 +454,8 @@ CREATE TABLE ml_training_samples (
 
     label            DECIMAL(4,3) NOT NULL,
     sample_weight    DECIMAL(4,3) NOT NULL DEFAULT 1.000,
-    source           ENUM('feedback','swipe_onboarding','swipe_explore','diary',
-                          'plan_kept','plan_replaced','impression_neg','random_neg')
+    source           ENUM('feedback','swipe','diary',
+                          'plan_kept','plan_replaced','plan_skipped','random_neg')
                          NOT NULL,
 
     context_meal_type ENUM('breakfast','lunch','dinner','snack') NULL,
@@ -490,7 +499,7 @@ CREATE TABLE ml_evaluations (
 
 
 -- ╔═════════════════════════════════════════════════════════════════════════╗
--- ║  TẦNG 3                                                                 ║
+-- ║  TẦNG 3 — chỉ còn meal_plan_items phụ thuộc meal_plans                  ║
 -- ╚═════════════════════════════════════════════════════════════════════════╝
 
 -- ── meal_plan_items ───────────────────────────────────────────────────────
@@ -510,8 +519,12 @@ CREATE TABLE meal_plan_items (
                             NOT NULL DEFAULT 'suggested',
     replaced_by_food_id BIGINT UNSIGNED NULL,
     replaced_at         DATETIME NULL,
-    -- Đánh dấu món do chiến lược thăm dò ε-greedy chèn vào
-    is_exploration      TINYINT(1) NOT NULL DEFAULT 0,
+    -- Biên độ nhiễu δ đã dùng khi chọn món này theo cơ chế 70-30.
+    --   NULL       = nhóm KHAI THÁC, chọn theo vector sở thích p_u
+    --   có giá trị = nhóm THĂM DÒ,  chọn theo p_u' = chuẩn_hóa(p_u + δ·n)
+    -- Không cần thêm cột cờ is_exploration: (exploration_delta IS NOT NULL)
+    -- đã trả lời được câu hỏi đó.
+    exploration_delta   DECIMAL(4,3) NULL,
     position            TINYINT UNSIGNED NULL,
     note                VARCHAR(255) NULL,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -520,42 +533,39 @@ CREATE TABLE meal_plan_items (
     FOREIGN KEY (food_id)             REFERENCES foods(id),
     FOREIGN KEY (replaced_by_food_id) REFERENCES foods(id),
 
+    CONSTRAINT chk_expl_delta CHECK (exploration_delta IS NULL
+                                     OR exploration_delta BETWEEN 0 AND 1),
+
     INDEX idx_plan_meal (meal_plan_id, meal_type),
-    INDEX idx_status    (status)
+    INDEX idx_status    (status),
+    -- Kiểm tra "món này từng nằm trong thực đơn của user chưa"
+    -- -> điều kiện bắt buộc để được đánh giá
+    INDEX idx_food      (food_id)
 ) ENGINE=InnoDB;
 
 
 -- ── interactions ──────────────────────────────────────────────────────────
--- DƯ THỪA CÓ KIỂM SOÁT — chỗ duy nhất còn lại trong lược đồ.
--- Khi recommendation_id khác NULL, user_id/food_id lặp lại thông tin đã có
--- ở recommendations. Không bỏ được cột nào:
---   - user_id/food_id      : recommendation_id cho phép NULL (vuốt onboarding)
---   - recommendation_id    : bắt buộc để tính Precision@K và NDCG
--- Bất biến Backend phải giữ khi recommendation_id IS NOT NULL:
---   interactions.user_id = recommendations.user_id
---   interactions.food_id = recommendations.food_id
+-- Chỉ chứa kết quả PHIÊN KHẢO SÁT KHẨU VỊ lúc tạo tài khoản.
+-- Cơ chế vuốt chạy đúng một lần trong đời tài khoản, nên bảng này không có
+-- session_type, context_meal_type hay recommendation_id — cả ba sẽ là hằng số.
+-- Sau khảo sát, tín hiệu sở thích đến từ meal_plan_items, food_diary, feedbacks.
 CREATE TABLE interactions (
-    id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id           BIGINT UNSIGNED NOT NULL,
-    food_id           BIGINT UNSIGNED NOT NULL,
-    action            ENUM('like','dislike','neutral','unknown') NOT NULL,
+    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id       BIGINT UNSIGNED NOT NULL,
+    food_id       BIGINT UNSIGNED NOT NULL,
+    action        ENUM('like','dislike','neutral','unknown') NOT NULL,
+    -- Mã phiên khảo sát. Cả gói vuốt được ghi trong một giao dịch,
+    -- nên mọi dòng của một người dùng chia sẻ cùng một session_id.
+    session_id    CHAR(36) NOT NULL,
+    interacted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    session_type      ENUM('onboarding','explore') NOT NULL DEFAULT 'explore',
-    session_id        CHAR(36) NULL,
-    context_meal_type ENUM('breakfast','lunch','dinner','snack') NULL,
-    recommendation_id BIGINT UNSIGNED NULL,
-
-    interacted_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (user_id)           REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (food_id)           REFERENCES foods(id) ON DELETE CASCADE,
-    FOREIGN KEY (recommendation_id) REFERENCES recommendations(id) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
 
     -- KHÔNG đặt UNIQUE (user_id, food_id): người dùng vuốt lại cùng món ở
     -- thời điểm khác, lịch sử thay đổi khẩu vị chính là dữ liệu quý.
-    INDEX idx_user_time      (user_id, interacted_at),
-    INDEX idx_user_food      (user_id, food_id),
-    INDEX idx_food           (food_id),
-    INDEX idx_session        (session_id),
-    INDEX idx_recommendation (recommendation_id)
+    INDEX idx_user_time (user_id, interacted_at),
+    INDEX idx_user_food (user_id, food_id),
+    INDEX idx_food      (food_id),
+    INDEX idx_session   (session_id)
 ) ENGINE=InnoDB;
