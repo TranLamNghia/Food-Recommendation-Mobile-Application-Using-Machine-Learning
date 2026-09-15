@@ -433,3 +433,29 @@ FodyWeavers.xsd
 # Local File
 /_backup/
 /docs/database_erd.html
+
+# ── Riêng của đồ án ─────────────────────────────────────────────
+
+# Cấu hình IDE của từng máy, không dùng chung được
+.idea/
+*.iml
+.vscode/
+
+# Ảnh chụp màn hình ứng dụng bên thứ ba dùng cho phần khảo sát hiện trạng.
+# Giữ ở máy và sao lưu riêng, không phát hành trên repo công khai.
+/docs/references/
+
+# Bí mật cấu hình: chuỗi kết nối CSDL, khóa ký JWT
+appsettings.Development.json
+appsettings.Production.json
+
+# Môi trường ảo và kết quả huấn luyện của ML service.
+# Lưu ý: KHÔNG chặn *.csv — tập dữ liệu món ăn là sản phẩm phải nộp.
+.venv/
+*.pkl
+*.joblib
+.ipynb_checkpoints/
+
+# Rác hệ điều hành
+Thumbs.db
+.DS_Store
