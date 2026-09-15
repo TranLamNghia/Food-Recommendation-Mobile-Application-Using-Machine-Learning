@@ -1,0 +1,42 @@
+name: nutrition_app
+description: "Ứng dụng khuyến nghị thực đơn dinh dưỡng cá nhân hóa"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/placeholder/
+    - assets/icons/
+
+  fonts:
+    # Font hiển thị cho tên món.
+    #
+    # Bản thiết kế Figma dùng Abril Fatface, nhưng font đó thiếu 15 ký tự
+    # tiếng Việt nên "Phở", "Cơm tấm sườn nướng", "Ốc" sẽ vỡ chữ. Playfair
+    # Display cùng họ didone nét đậm và phủ đủ bộ ký tự tiếng Việt.
+    - family: Display
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Variable.ttf
+
+    # Font chữ thường, đúng như thiết kế.
+    - family: Afacad
+      fonts:
+        - asset: assets/fonts/Afacad-Variable.ttf
