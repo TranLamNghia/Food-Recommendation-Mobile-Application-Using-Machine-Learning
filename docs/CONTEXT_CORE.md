@@ -29,6 +29,15 @@ Cơ chế tương tác vuốt thẻ món ăn:
 
 Vuốt là **cơ chế thu thập dữ liệu**, không phải sản phẩm chính. Sản phẩm chính vẫn là thực đơn hằng ngày.
 
+### Hạn chế đã biết: không có thao tác hoàn tác
+
+Màn hình khảo sát được thiết kế **thuần cử chỉ** — không có nút bấm, kể cả nút hoàn tác. Đổi lại, một cú vuốt lỡ tay sẽ đi thẳng vào tập huấn luyện và **không rút lại được**.
+
+Đây là đánh đổi có chủ ý, chấp nhận nhiễu nhãn để giữ giao diện gọn. Cần ghi vào phần hạn chế của báo cáo, kèm hai điểm:
+
+- Ngưỡng vuốt đặt ở 26 % bề rộng thẻ theo phương ngang và 22 % chiều cao theo phương dọc, cùng ngưỡng vận tốc 820 px/s. Ngưỡng này đã lọc bớt phần lớn thao tác chạm nhẹ ngoài ý muốn, nhưng không lọc được cú vuốt dứt khoát nhầm hướng.
+- Nhiễu nhãn từ nguồn này nằm trong nhóm tín hiệu **trọng số mẫu 0.7** (vuốt khảo sát), tức đã được đánh giá thấp hơn đánh giá sao (1.0) và nhật ký ăn uống (0.9). Ảnh hưởng của nó tới mô hình vì vậy bị hạn chế sẵn bởi cơ chế trọng số.
+
 ### Vuốt chỉ dùng ở đúng một chỗ bắt buộc
 
 | Thời điểm | Vai trò | Phạm vi |
