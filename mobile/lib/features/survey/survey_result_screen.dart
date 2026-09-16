@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
 import '../../data/models/swipe_action.dart';
+import '../home/home_shell.dart';
 import 'survey_screen.dart';
 
 /// Màn hình tổng kết sau khi vuốt xong.
@@ -160,7 +161,14 @@ class _SurveyResultScreenState extends State<SurveyResultScreen>
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
                 child: FilledButton(
-                  onPressed: () {},
+                  onPressed: () => Navigator.of(context).pushReplacement(
+                    PageRouteBuilder(
+                      transitionDuration: AppMotion.page,
+                      pageBuilder: (_, _, _) => const HomeShell(),
+                      transitionsBuilder: (_, animation, _, child) =>
+                          FadeTransition(opacity: animation, child: child),
+                    ),
+                  ),
                   child: const Text('Xem thực đơn hôm nay'),
                 ),
               ),
