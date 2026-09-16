@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_motion.dart';
 import '../../data/models/health_profile.dart';
+import '../../data/session.dart';
 import 'calculating_screen.dart';
 import 'steps/activity_step.dart';
 import 'steps/birth_year_step.dart';
@@ -41,7 +42,9 @@ class OnboardingFlow extends StatefulWidget {
 }
 
 class _OnboardingFlowState extends State<OnboardingFlow> {
-  final _profile = HealthProfile();
+  /// Hồ sơ nằm ở [AppSession] chứ không ở riêng luồng này, vì màn hình thực
+  /// đơn và màn hình tiến trình phía sau đều cần đọc lại nó.
+  HealthProfile get _profile => SessionScope.of(context).profile;
 
   int _index = 0;
 

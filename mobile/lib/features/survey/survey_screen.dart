@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_motion.dart';
 import '../../data/models/food.dart';
 import '../../data/models/swipe_action.dart';
+import '../../data/session.dart';
 import 'survey_result_screen.dart';
 import 'widgets/survey_footer.dart';
 import 'widgets/swipe_burst.dart';
@@ -54,6 +55,10 @@ class _SurveyScreenState extends State<SurveyScreen> {
   }
 
   void _finish() {
+    // Nộp trọn gói kết quả một lần, đúng như thiết kế phiên vuốt: ứng dụng
+    // giữ toàn bộ lượt vuốt trong bộ nhớ rồi gửi một lượt duy nhất.
+    SessionScope.of(context).completeSurvey(_results);
+
     // Chờ thẻ cuối bay hết ra ngoài rồi mới chuyển màn, tránh cắt ngang
     // chuyển động đang chạy.
     Future.delayed(AppMotion.quick, () {
