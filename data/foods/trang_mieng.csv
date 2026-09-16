@@ -1,0 +1,3 @@
+name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+Sữa chua nếp cẩm,trang_mieng,dessert,song,0,breakfast|lunch|dinner|snack,,,230,7,40,5,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Chè đậu xanh,trang_mieng,dessert,khac,0,breakfast|lunch|dinner|snack,,,260,6,52,4,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON

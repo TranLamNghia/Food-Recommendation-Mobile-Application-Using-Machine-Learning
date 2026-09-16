@@ -1,0 +1,4 @@
+name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+Canh chua cá lóc,mon_canh,soup,nau_canh,1,breakfast|lunch|dinner|snack,,,210,20,16,7,,,,,,,,,,,sour,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Canh bí đao nấu tôm,mon_canh,soup,nau_canh,0,breakfast|lunch|dinner|snack,,,90,9,8,2,,,,,,,,,,,light|contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Canh rau ngót thịt bằm,mon_canh,soup,nau_canh,0,breakfast|lunch|dinner|snack,,,110,10,6,5,,,,,,,,,,,high_fiber|light,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON

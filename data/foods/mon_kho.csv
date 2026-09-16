@@ -1,0 +1,5 @@
+name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+Thịt kho tàu,mon_kho,side_protein,kho,0,breakfast|lunch|dinner|snack,,,480,26,12,36,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Cá kho tộ,mon_kho,side_protein,kho,1,breakfast|lunch|dinner|snack,,,320,30,8,18,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Đậu hũ sốt cà chua,mon_kho,side_protein,kho,0,breakfast|lunch|dinner|snack,,,220,14,16,12,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Gà kho gừng,mon_kho,side_protein,kho,1,breakfast|lunch|dinner|snack,,,380,31,10,24,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON

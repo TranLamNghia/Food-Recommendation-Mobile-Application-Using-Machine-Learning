@@ -1,0 +1,4 @@
+name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+Bánh xèo miền Tây,mon_chien,main,chien,0,breakfast|lunch|dinner|snack,,,560,18,62,26,,,,,,,,,,,contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Chả giò,mon_chien,snack,chien,0,breakfast|lunch|dinner|snack,,,400,15,38,21,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Trứng chiên hành,mon_chien,side_protein,chien,0,breakfast|lunch|dinner|snack,,,200,14,3,15,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON

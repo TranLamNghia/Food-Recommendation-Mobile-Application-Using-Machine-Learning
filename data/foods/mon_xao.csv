@@ -1,0 +1,4 @@
+name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+Rau muống xào tỏi,mon_xao,side_veg,xao,0,breakfast|lunch|dinner|snack,,,130,4,10,8,,,,,,,,,,,high_fiber,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Bò lúc lắc,mon_xao,side_protein,xao,1,breakfast|lunch|dinner|snack,,,430,33,14,27,,,,,,,,,,,high_protein,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Tôm rang me,mon_xao,side_protein,xao,1,breakfast|lunch|dinner|snack,,,340,28,22,15,,,,,,,,,,,sour|contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON

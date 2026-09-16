@@ -1,0 +1,8 @@
+name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+Phở bò tái,mon_nuoc,main,khac,0,breakfast|lunch|dinner|snack,,,420,25,55,10,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Bún chả Hà Nội,mon_nuoc,main,nuong,1,breakfast|lunch|dinner|snack,,,520,28,58,18,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Bún bò Huế,mon_nuoc,main,khac,3,breakfast|lunch|dinner|snack,,,490,27,56,17,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Hủ tiếu Nam Vang,mon_nuoc,main,khac,0,breakfast|lunch|dinner|snack,,,440,24,58,12,,,,,,,,,,,contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Cháo lòng,mon_nuoc,main,khac,0,breakfast|lunch|dinner|snack,,,360,18,46,11,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Mì Quảng,mon_nuoc,main,khac,2,breakfast|lunch|dinner|snack,,,510,26,60,18,,,,,,,,,,,contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+Lẩu thái hải sản,mon_nuoc,main,khac,3,breakfast|lunch|dinner|snack,,,380,32,20,18,,,,,,,,,,,contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
