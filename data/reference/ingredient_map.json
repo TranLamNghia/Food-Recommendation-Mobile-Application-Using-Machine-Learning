@@ -1,0 +1,211 @@
+{
+  "_doc": [
+    "Ánh xạ nguyên liệu trong Bảng thành phần thực phẩm Việt Nam 2007 sang",
+    "mục tương ứng ở USDA FoodData Central, dùng để VAY các chất ngoại vi mà",
+    "bảng gốc còn thiếu: natri, đường, cholesterol, kẽm, sắt, calci, vitamin C.",
+    "",
+    "KHÔNG BAO GIỜ vay năng lượng, protein, lipid, glucid — xem",
+    "SOURCING_POLICY.md mục 2. Hai bảng không đo cùng mẫu vật, trộn chất sinh",
+    "năng lượng sẽ tạo ra nguyên liệu không tồn tại và làm hỏng phép đối chiếu",
+    "Atwater.",
+    "",
+    "Mỗi cặp ánh xạ là một phán đoán của người, không phải kết quả dò tự động.",
+    "Trường `why` ghi lại căn cứ để người sau kiểm được. Cặp nào đáng ngờ thì",
+    "đặt `confidence` là `thap` và ưu tiên rà lại trước."
+  ],
+  "mappings": {
+    "1013": {
+      "vi": "Bánh phở tươi",
+      "fdc_id": 168914,
+      "usda": "Rice noodles, cooked",
+      "confidence": "cao",
+      "why": "Cùng là sợi gạo đã làm chín, cùng dải độ ẩm. Năng lượng hai bảng lệch (143 so với 108 kcal) nên chỉ vay chất ngoại vi, giữ nguyên macro của bảng Việt Nam."
+    },
+    "1020": {
+      "vi": "Bún tươi",
+      "fdc_id": 168914,
+      "usda": "Rice noodles, cooked",
+      "confidence": "trung binh",
+      "why": "USDA không tách bún khỏi bánh phở; cả hai đều là sợi gạo tươi nên dùng chung mục. Bảng gốc thiếu cả lipid ở mục này — lipid là macro nên KHÔNG vay, để bộ cộng dồn cảnh báo thay vì điền bừa."
+    },
+    "1004": {
+      "vi": "Gạo tẻ",
+      "fdc_id": 168878,
+      "usda": "Rice, white, long-grain, regular, raw, unenriched",
+      "confidence": "cao",
+      "why": "Gạo trắng xát, chưa nấu, không tăng cường vi chất — khớp với mô tả của bảng Việt Nam. Bản `enriched` bị loại vì có thêm sắt và vitamin nhóm B bổ sung, không phản ánh gạo bán ở Việt Nam."
+    },
+    "4037": {
+      "vi": "Hành lá",
+      "fdc_id": 170005,
+      "usda": "Onions, spring or scallions (includes tops and bulb), raw",
+      "confidence": "cao",
+      "why": "Cùng bộ phận sử dụng, cả lá lẫn củ."
+    },
+    "8049": {
+      "vi": "Tôm",
+      "fdc_id": 175179,
+      "usda": "Crustaceans, shrimp, raw",
+      "confidence": "thap",
+      "why": "Bảng Việt Nam ghi 'tôm nhỏ' 58 kcal đạm 11,7 g, USDA ghi tôm chung 85 kcal đạm 20,1 g — chênh lệch lớn, nhiều khả năng khác loài và khác trạng thái nước. Chỉ vay natri, cholesterol, sắt, kẽm. Cần rà lại."
+    },
+    "8034": {
+      "vi": "Cua đồng",
+      "fdc_id": 174204,
+      "usda": "Crustaceans, crab, blue, raw",
+      "confidence": "thap",
+      "why": "Cua đồng nước ngọt Việt Nam khác hẳn cua xanh biển của USDA; năng lượng trùng nhau (87 kcal) nhưng đạm lệch 12,3 so với 18,1 g. Vay cholesterol và kẽm là chấp nhận được, natri thì đáng ngờ vì khác độ mặn môi trường sống."
+    },
+    "8033": {
+      "vi": "Thịt cua biển",
+      "fdc_id": 174204,
+      "usda": "Crustaceans, crab, blue, raw",
+      "confidence": "trung binh",
+      "why": "Cùng là cua biển, dùng chung mục với cua đồng vì USDA không tách theo vùng. Chỉ thiếu đường nên phạm vi vay hẹp."
+    },
+    "8041": {
+      "vi": "Ốc nhồi",
+      "fdc_id": 167744,
+      "usda": "Mollusks, snail, raw",
+      "confidence": "cao",
+      "why": "Cùng là ốc nước ngọt ăn được, chưa chế biến. Năng lượng hai bảng gần nhau."
+    },
+    "8038": {
+      "vi": "Lươn",
+      "fdc_id": 174193,
+      "usda": "Fish, eel, mixed species, raw",
+      "confidence": "cao",
+      "why": "Cùng loài lươn, chưa chế biến. Chỉ thiếu đường nên phạm vi vay rất hẹp."
+    },
+    "4123": {
+      "vi": "Nấm hương tươi",
+      "fdc_id": 169242,
+      "usda": "Mushrooms, shiitake, raw",
+      "confidence": "cao",
+      "why": "Trùng khớp loài: nấm hương chính là shiitake."
+    },
+    "4050": {
+      "vi": "Măng",
+      "fdc_id": 169210,
+      "usda": "Bamboo shoots, raw",
+      "confidence": "cao",
+      "why": "Cùng là măng tươi chưa luộc. Bảng gốc thiếu cả lipid — lipid là macro nên KHÔNG vay, để bộ cộng dồn cảnh báo."
+    },
+    "8023": {
+      "vi": "Cá rô đồng",
+      "fdc_id": 175176,
+      "usda": "Fish, tilapia, raw",
+      "confidence": "trung binh",
+      "why": "Không cùng loài nhưng cùng nhóm cá nước ngọt thịt trắng, nạc. Năng lượng lệch nhẹ (126 so với 96 kcal)."
+    },
+    "8026": {
+      "vi": "Chả cá thu",
+      "fdc_id": 175119,
+      "usda": "Fish, mackerel, Atlantic, raw",
+      "confidence": "trung binh",
+      "why": "Mục bảng gốc là hỗn hợp 'cá thu, cá tuyết, cá kingfish' nên vốn đã không thuần một loài; cá thu Atlantic là xấp xỉ gần nhất."
+    },
+    "1022": {
+      "vi": "Mì trứng khô",
+      "fdc_id": 169731,
+      "usda": "Noodles, egg, dry, enriched",
+      "confidence": "trung binh",
+      "why": "Mục USDA có tăng cường sắt và vitamin nhóm B, không giống mì bán ở Việt Nam. Chỉ vay natri, đường, kẽm — KHÔNG vay sắt."
+    },
+    "7069": {
+      "vi": "Giò lụa",
+      "fdc_id": 168296,
+      "usda": "Pork, cured, ham, boneless, extra lean and regular",
+      "confidence": "thap",
+      "why": "CẢNH BÁO: giò lụa là thịt lợn xay hấp, còn mục USDA là giăm bông muối. Natri của giăm bông cao gấp khoảng hai lần giò lụa thật, nên số natri vay về sẽ ƯỚC THỪA và có thể khiến món bị loại oan cho người tăng huyết áp. Cần thay bằng nguồn Việt Nam khi có."
+    },
+    "8048": {
+      "vi": "Hàu",
+      "fdc_id": 171978,
+      "usda": "Mollusks, oyster, eastern, wild, raw",
+      "confidence": "cao",
+      "why": "Cùng là hàu tự nhiên chưa chế biến. Chỉ thiếu đường nên phạm vi vay rất hẹp."
+    },
+    "8040": {
+      "vi": "Mực tươi",
+      "fdc_id": 174223,
+      "usda": "Mollusks, squid, mixed species, raw",
+      "confidence": "cao",
+      "why": "Cùng là mực tươi. Chỉ vay đường."
+    },
+    "8037": {
+      "vi": "Thịt trai",
+      "fdc_id": 174214,
+      "usda": "Mollusks, clam, mixed species, raw",
+      "confidence": "cao",
+      "why": "Cùng nhóm nhuyễn thể hai mảnh vỏ nước ngọt/lợ."
+    },
+    "3025": {
+      "vi": "Đậu phụ",
+      "fdc_id": 172475,
+      "usda": "Tofu, raw, firm, prepared with calcium sulfate",
+      "confidence": "cao",
+      "why": "Mục USDA có bổ sung calci sulfat nên calci cao bất thường — nhưng bảng gốc đã có calci nên KHÔNG vay, chỉ vay đường."
+    },
+    "3027": {
+      "vi": "Đậu phụ rán",
+      "fdc_id": 172451,
+      "usda": "Tofu, fried",
+      "confidence": "cao",
+      "why": "Trùng khớp: đậu phụ đã rán."
+    },
+    "3010": {
+      "vi": "Đậu xanh",
+      "fdc_id": 174256,
+      "usda": "Mung beans, mature seeds, raw",
+      "confidence": "cao",
+      "why": "Trùng khớp: hạt đậu xanh khô."
+    },
+    "7004": {
+      "vi": "Thịt bò nạm",
+      "fdc_id": 168672,
+      "usda": "Beef, chuck, blade roast, separable lean and fat",
+      "confidence": "trung binh",
+      "why": "Không cùng phần thịt nhưng natri, cholesterol và kẽm của thịt bò khá ổn định giữa các phần. CỐ Ý tránh mục corned beef brisket mà USDA trả về đầu tiên: đó là thịt bò MUỐI, natri cao gấp cả chục lần."
+    },
+    "1012": {
+      "vi": "Bánh mì",
+      "fdc_id": 172675,
+      "usda": "Bread, french or vienna (includes sourdough)",
+      "confidence": "cao",
+      "why": "Trùng khớp: bánh mì Pháp, cùng loại bột và cách nướng."
+    },
+    "3017": {
+      "vi": "Đậu phộng rang",
+      "fdc_id": 172430,
+      "usda": "Peanuts, all types, raw",
+      "confidence": "trung binh",
+      "why": "Mục USDA là đậu phộng SỐNG, bảng gốc là hạt khô. Chỉ vay đường và vitamin C, hai chất không đổi đáng kể khi rang."
+    }
+  },
+  "khong_anh_xa": {
+    "_doc": "Những nguyên liệu bảng gốc đã đủ, không cần vay.",
+    "4005": "Cà chua",
+    "4036": "Giá đỗ",
+    "4081": "Rau mùi",
+    "7003": "Thịt bò thăn",
+    "7013": "Thịt gà",
+    "7018": "Thịt lợn nạc vừa",
+    "9001": "Trứng gà",
+    "13017": "Nước mắm",
+    "7059": "Tiết luộc — CỐ Ý không ánh xạ: USDA không có mục tiết động vật, ứng viên gần nhất là gan bò vốn khác hẳn về natri và cholesterol. Để trống còn hơn vay sai.",
+    "4007": "Cà rốt",
+    "4039": "Hành tây",
+    "4083": "Rau muống",
+    "4016": "Rau cải",
+    "4053": "Măng tươi",
+    "1007": "Ngô ngọt",
+    "7028": "Thịt vịt",
+    "8003": "Cá chép",
+    "8010": "Cá lóc (mục bảng gốc thực ra là cá bống) — CỐ Ý không ánh xạ: USDA trả về cá bluefish, là cá biển nhiều mỡ, khác hẳn cá nước ngọt thịt trắng. Để trống còn hơn vay sai.",
+    "7016": "Giò heo (thịt lợn nạc và mỡ)",
+    "7053": "Sườn heo",
+    "7080": "Thịt ếch",
+    "13010": "Nước tương"
+  }
+}

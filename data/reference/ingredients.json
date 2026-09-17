@@ -1,0 +1,1606 @@
+{
+ "1013": {
+  "code": "1013",
+  "name_vi": "Bánh phở tươi",
+  "name_en_fct": "Rice noodles",
+  "values": {
+   "calories_kcal": 143.0,
+   "protein_g": 3.2,
+   "fat_g": 0.4,
+   "carbs_g": 31.7,
+   "fiber_g": 0.0,
+   "purine_mg": 0.0,
+   "sodium_mg": 3.0,
+   "cholesterol_mg": 0.0,
+   "iron_mg": 0.3,
+   "calcium_mg": 16.0,
+   "vitamin_c_mg": 0.0,
+   "zinc_mg": 0.25
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 168914,
+   "description": "Rice noodles, cooked",
+   "confidence": "cao"
+  }
+ },
+ "1020": {
+  "code": "1020",
+  "name_vi": "Bún tươi",
+  "name_en_fct": "Rice vermicelli",
+  "values": {
+   "calories_kcal": 110.0,
+   "protein_g": 1.7,
+   "carbs_g": 25.7,
+   "fiber_g": 0.5,
+   "cholesterol_mg": 0.0,
+   "iron_mg": 0.2,
+   "calcium_mg": 12.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 19.0,
+   "zinc_mg": 0.25
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 168914,
+   "description": "Rice noodles, cooked",
+   "confidence": "trung binh"
+  }
+ },
+ "1004": {
+  "code": "1004",
+  "name_vi": "Gạo tẻ",
+  "name_en_fct": "Ordinary polished rice",
+  "values": {
+   "calories_kcal": 344.0,
+   "protein_g": 7.9,
+   "fat_g": 1.0,
+   "carbs_g": 75.9,
+   "fiber_g": 0.4,
+   "sodium_mg": 5.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.5,
+   "iron_mg": 1.3,
+   "calcium_mg": 30.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 168878,
+   "description": "Rice, white, long-grain, regular, raw, unenriched",
+   "confidence": "cao"
+  }
+ },
+ "4037": {
+  "code": "4037",
+  "name_vi": "Hành lá",
+  "name_en_fct": "Onion, Welsh",
+  "values": {
+   "calories_kcal": 26.0,
+   "protein_g": 1.3,
+   "fat_g": 0.4,
+   "carbs_g": 4.4,
+   "fiber_g": 0.7,
+   "sodium_mg": 17.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.52,
+   "iron_mg": 1.1,
+   "calcium_mg": 32.0,
+   "vitamin_c_mg": 10.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 170005,
+   "description": "Onions, spring or scallions (includes tops and bulb), raw",
+   "confidence": "cao"
+  }
+ },
+ "8049": {
+  "code": "8049",
+  "name_vi": "Tôm",
+  "name_en_fct": "Tiny shrimp",
+  "values": {
+   "calories_kcal": 58.0,
+   "protein_g": 11.7,
+   "fat_g": 1.2,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sugar_g": 0.0,
+   "calcium_mg": 910.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 119.0,
+   "cholesterol_mg": 161.0,
+   "zinc_mg": 1.34,
+   "iron_mg": 0.52
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sugar_g": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA",
+   "iron_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 175179,
+   "description": "Crustaceans, shrimp, raw",
+   "confidence": "thap"
+  }
+ },
+ "8034": {
+  "code": "8034",
+  "name_vi": "Cua đồng",
+  "name_en_fct": "Crab, fresh water",
+  "values": {
+   "calories_kcal": 87.0,
+   "protein_g": 12.3,
+   "fat_g": 3.3,
+   "carbs_g": 2.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 453.0,
+   "iron_mg": 1.4,
+   "calcium_mg": 120.0,
+   "vitamin_c_mg": 0.0,
+   "cholesterol_mg": 78.0,
+   "zinc_mg": 3.54
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 174204,
+   "description": "Crustaceans, crab, blue, raw",
+   "confidence": "thap"
+  }
+ },
+ "8033": {
+  "code": "8033",
+  "name_vi": "Thịt cua biển",
+  "name_en_fct": "Crab, sea water",
+  "values": {
+   "calories_kcal": 103.0,
+   "protein_g": 17.5,
+   "fat_g": 0.6,
+   "carbs_g": 7.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 316.0,
+   "cholesterol_mg": 78.0,
+   "zinc_mg": 1.4,
+   "iron_mg": 3.8,
+   "calcium_mg": 141.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 174204,
+   "description": "Crustaceans, crab, blue, raw",
+   "confidence": "trung binh"
+  }
+ },
+ "8041": {
+  "code": "8041",
+  "name_vi": "Ốc nhồi",
+  "name_en_fct": "Snail medium - size, edible",
+  "values": {
+   "calories_kcal": 84.0,
+   "protein_g": 11.1,
+   "fat_g": 0.7,
+   "carbs_g": 8.3,
+   "fiber_g": 0.0,
+   "calcium_mg": 1310.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 70.0,
+   "cholesterol_mg": 50.0,
+   "zinc_mg": 1.0,
+   "iron_mg": 3.5
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA",
+   "iron_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 167744,
+   "description": "Mollusks, snail, raw",
+   "confidence": "cao"
+  }
+ },
+ "8038": {
+  "code": "8038",
+  "name_vi": "Lươn",
+  "name_en_fct": "Eel, silver - pike",
+  "values": {
+   "calories_kcal": 180.0,
+   "protein_g": 18.4,
+   "fat_g": 11.7,
+   "carbs_g": 0.2,
+   "fiber_g": 0.0,
+   "sodium_mg": 51.0,
+   "cholesterol_mg": 126.0,
+   "zinc_mg": 1.62,
+   "iron_mg": 1.0,
+   "calcium_mg": 35.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 174193,
+   "description": "Fish, eel, mixed species, raw",
+   "confidence": "cao"
+  }
+ },
+ "4123": {
+  "code": "4123",
+  "name_vi": "Nấm hương tươi",
+  "name_en_fct": "Mushroom, Chinese, raw",
+  "values": {
+   "calories_kcal": 39.0,
+   "protein_g": 5.5,
+   "fat_g": 0.5,
+   "carbs_g": 3.1,
+   "fiber_g": 3.0,
+   "cholesterol_mg": 0.0,
+   "iron_mg": 5.2,
+   "calcium_mg": 27.0,
+   "sodium_mg": 9.0,
+   "zinc_mg": 1.03
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 169242,
+   "description": "Mushrooms, shiitake, raw",
+   "confidence": "cao"
+  }
+ },
+ "4050": {
+  "code": "4050",
+  "name_vi": "Măng",
+  "name_en_fct": "Bamboo shoot, unspecified",
+  "values": {
+   "calories_kcal": 11.0,
+   "protein_g": 1.4,
+   "carbs_g": 1.4,
+   "fiber_g": 4.1,
+   "sodium_mg": 9.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.1,
+   "iron_mg": 0.9,
+   "calcium_mg": 18.0,
+   "vitamin_c_mg": 9.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 169210,
+   "description": "Bamboo shoots, raw",
+   "confidence": "cao"
+  }
+ },
+ "8023": {
+  "code": "8023",
+  "name_vi": "Cá rô đồng",
+  "name_en_fct": "Anabas",
+  "values": {
+   "calories_kcal": 126.0,
+   "protein_g": 19.1,
+   "fat_g": 5.5,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sugar_g": 0.0,
+   "iron_mg": 0.25,
+   "calcium_mg": 26.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 52.0,
+   "cholesterol_mg": 50.0,
+   "zinc_mg": 0.33
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sugar_g": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 175176,
+   "description": "Fish, tilapia, raw",
+   "confidence": "trung binh"
+  }
+ },
+ "8026": {
+  "code": "8026",
+  "name_vi": "Chả cá thu",
+  "name_en_fct": "Mackerel, codfish, kingfish",
+  "values": {
+   "calories_kcal": 166.0,
+   "protein_g": 18.2,
+   "fat_g": 10.3,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "purine_mg": 145.0,
+   "sodium_mg": 110.0,
+   "sugar_g": 0.0,
+   "iron_mg": 1.3,
+   "calcium_mg": 50.0,
+   "vitamin_c_mg": 0.0,
+   "cholesterol_mg": 70.0,
+   "zinc_mg": 0.63
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 175119,
+   "description": "Fish, mackerel, Atlantic, raw",
+   "confidence": "trung binh"
+  }
+ },
+ "1022": {
+  "code": "1022",
+  "name_vi": "Mì trứng khô",
+  "name_en_fct": "Wheat noodles",
+  "values": {
+   "calories_kcal": 349.0,
+   "protein_g": 11.0,
+   "fat_g": 0.9,
+   "carbs_g": 74.2,
+   "fiber_g": 0.3,
+   "cholesterol_mg": 0.0,
+   "iron_mg": 1.5,
+   "calcium_mg": 34.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 21.0,
+   "zinc_mg": 1.92
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 169731,
+   "description": "Noodles, egg, dry, enriched",
+   "confidence": "trung binh"
+  }
+ },
+ "7069": {
+  "code": "7069",
+  "name_vi": "Giò lụa",
+  "name_en_fct": "Pork, mince lean meat steamed",
+  "values": {
+   "calories_kcal": 136.0,
+   "protein_g": 21.5,
+   "fat_g": 5.5,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sugar_g": 0.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 1385.0,
+   "cholesterol_mg": 57.0,
+   "zinc_mg": 2.63,
+   "iron_mg": 1.4,
+   "calcium_mg": 8.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sugar_g": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA",
+   "iron_mg": "USDA",
+   "calcium_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 168296,
+   "description": "Pork, cured, ham, boneless, extra lean and regular",
+   "confidence": "thap"
+  }
+ },
+ "8048": {
+  "code": "8048",
+  "name_vi": "Hàu",
+  "name_en_fct": "Oyster",
+  "values": {
+   "calories_kcal": 78.0,
+   "protein_g": 9.5,
+   "fat_g": 2.3,
+   "carbs_g": 4.9,
+   "fiber_g": 0.0,
+   "purine_mg": 90.0,
+   "sodium_mg": 380.0,
+   "cholesterol_mg": 50.0,
+   "zinc_mg": 13.4,
+   "iron_mg": 1.9,
+   "calcium_mg": 37.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 171978,
+   "description": "Mollusks, oyster, eastern, wild, raw",
+   "confidence": "cao"
+  }
+ },
+ "8040": {
+  "code": "8040",
+  "name_vi": "Mực tươi",
+  "name_en_fct": "Cuttle fish, raw (Squid)",
+  "values": {
+   "calories_kcal": 73.0,
+   "protein_g": 16.3,
+   "fat_g": 0.9,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 44.0,
+   "cholesterol_mg": 233.0,
+   "zinc_mg": 0.7,
+   "iron_mg": 0.6,
+   "calcium_mg": 14.0,
+   "vitamin_c_mg": 5.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 174223,
+   "description": "Mollusks, squid, mixed species, raw",
+   "confidence": "cao"
+  }
+ },
+ "8037": {
+  "code": "8037",
+  "name_vi": "Thịt trai",
+  "name_en_fct": "Clam",
+  "values": {
+   "calories_kcal": 45.0,
+   "protein_g": 4.5,
+   "fat_g": 0.7,
+   "carbs_g": 5.1,
+   "fiber_g": 0.0,
+   "iron_mg": 1.6,
+   "calcium_mg": 144.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 601.0,
+   "cholesterol_mg": 30.0,
+   "zinc_mg": 0.51
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 174214,
+   "description": "Mollusks, clam, mixed species, raw",
+   "confidence": "cao"
+  }
+ },
+ "3025": {
+  "code": "3025",
+  "name_vi": "Đậu phụ",
+  "name_en_fct": "Soybean curt cake pressed, raw",
+  "values": {
+   "calories_kcal": 95.0,
+   "protein_g": 10.9,
+   "fat_g": 5.4,
+   "carbs_g": 0.7,
+   "fiber_g": 0.4,
+   "purine_mg": 68.0,
+   "sodium_mg": 7.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.8,
+   "iron_mg": 2.2,
+   "calcium_mg": 24.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 172475,
+   "description": "Tofu, raw, firm, prepared with calcium sulfate",
+   "confidence": "cao"
+  }
+ },
+ "3027": {
+  "code": "3027",
+  "name_vi": "Đậu phụ rán",
+  "name_en_fct": "Curd tofu, fried",
+  "values": {
+   "calories_kcal": 114.0,
+   "protein_g": 13.4,
+   "fat_g": 6.4,
+   "carbs_g": 0.8,
+   "fiber_g": 0.5,
+   "cholesterol_mg": 0.0,
+   "iron_mg": 4.7,
+   "calcium_mg": 370.0,
+   "sodium_mg": 16.0,
+   "zinc_mg": 1.99,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "zinc_mg": "USDA",
+   "vitamin_c_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 172451,
+   "description": "Tofu, fried",
+   "confidence": "cao"
+  }
+ },
+ "3010": {
+  "code": "3010",
+  "name_vi": "Đậu xanh",
+  "name_en_fct": "Mungo bean seeds, dried",
+  "values": {
+   "calories_kcal": 328.0,
+   "protein_g": 23.4,
+   "fat_g": 2.4,
+   "carbs_g": 53.1,
+   "fiber_g": 4.7,
+   "sodium_mg": 6.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.1,
+   "iron_mg": 4.8,
+   "calcium_mg": 64.0,
+   "vitamin_c_mg": 4.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  },
+  "usda_ref": {
+   "fdc_id": 174256,
+   "description": "Mung beans, mature seeds, raw",
+   "confidence": "cao"
+  }
+ },
+ "7004": {
+  "code": "7004",
+  "name_vi": "Thịt bò nạm",
+  "name_en_fct": "Beef, grade II",
+  "values": {
+   "calories_kcal": 167.0,
+   "protein_g": 18.0,
+   "fat_g": 10.5,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sugar_g": 0.0,
+   "iron_mg": 2.7,
+   "calcium_mg": 10.0,
+   "vitamin_c_mg": 1.0,
+   "sodium_mg": 69.0,
+   "cholesterol_mg": 71.0,
+   "zinc_mg": 5.07
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sugar_g": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "cholesterol_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 168672,
+   "description": "Beef, chuck, blade roast, separable lean and fat",
+   "confidence": "trung binh"
+  }
+ },
+ "1012": {
+  "code": "1012",
+  "name_vi": "Bánh mì",
+  "name_en_fct": "French bread",
+  "values": {
+   "calories_kcal": 249.0,
+   "protein_g": 7.9,
+   "fat_g": 0.8,
+   "carbs_g": 52.6,
+   "fiber_g": 0.2,
+   "cholesterol_mg": 0.0,
+   "iron_mg": 2.0,
+   "calcium_mg": 28.0,
+   "vitamin_c_mg": 0.0,
+   "sodium_mg": 602.0,
+   "zinc_mg": 1.04
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007",
+   "sodium_mg": "USDA",
+   "zinc_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 172675,
+   "description": "Bread, french or vienna (includes sourdough)",
+   "confidence": "cao"
+  }
+ },
+ "3017": {
+  "code": "3017",
+  "name_vi": "Đậu phộng rang",
+  "name_en_fct": "Dried peanut seed",
+  "values": {
+   "calories_kcal": 573.0,
+   "protein_g": 27.5,
+   "fat_g": 44.5,
+   "carbs_g": 15.5,
+   "fiber_g": 2.5,
+   "purine_mg": 74.0,
+   "sodium_mg": 4.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.9,
+   "iron_mg": 2.2,
+   "calcium_mg": 68.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "USDA"
+  },
+  "usda_ref": {
+   "fdc_id": 172430,
+   "description": "Peanuts, all types, raw",
+   "confidence": "trung binh"
+  }
+ },
+ "4005": {
+  "code": "4005",
+  "name_vi": "Cà chua",
+  "name_en_fct": "Tomato",
+  "values": {
+   "calories_kcal": 20.0,
+   "protein_g": 0.6,
+   "fat_g": 0.2,
+   "carbs_g": 4.0,
+   "fiber_g": 0.8,
+   "purine_mg": 11.0,
+   "sodium_mg": 12.0,
+   "sugar_g": 2.63,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.74,
+   "iron_mg": 1.4,
+   "calcium_mg": 12.0,
+   "vitamin_c_mg": 40.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "4036": {
+  "code": "4036",
+  "name_vi": "Giá đỗ",
+  "name_en_fct": "Mungobean sprouts, Green gram, Tiensin green bean",
+  "values": {
+   "calories_kcal": 44.0,
+   "protein_g": 5.5,
+   "fat_g": 0.2,
+   "carbs_g": 5.1,
+   "fiber_g": 2.0,
+   "sodium_mg": 23.0,
+   "sugar_g": 4.13,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.41,
+   "iron_mg": 1.4,
+   "calcium_mg": 38.0,
+   "vitamin_c_mg": 10.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "4081": {
+  "code": "4081",
+  "name_vi": "Rau mùi",
+  "name_en_fct": "Coriander",
+  "values": {
+   "calories_kcal": 16.0,
+   "protein_g": 2.6,
+   "fat_g": 0.5,
+   "carbs_g": 0.2,
+   "fiber_g": 1.8,
+   "sodium_mg": 46.0,
+   "sugar_g": 0.87,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.5,
+   "iron_mg": 4.5,
+   "calcium_mg": 133.0,
+   "vitamin_c_mg": 140.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7003": {
+  "code": "7003",
+  "name_vi": "Thịt bò thăn",
+  "name_en_fct": "Beef, grade I",
+  "values": {
+   "calories_kcal": 118.0,
+   "protein_g": 21.0,
+   "fat_g": 3.8,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 83.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 59.0,
+   "zinc_mg": 2.2,
+   "iron_mg": 3.1,
+   "calcium_mg": 12.0,
+   "vitamin_c_mg": 1.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7013": {
+  "code": "7013",
+  "name_vi": "Thịt gà",
+  "name_en_fct": "Chicken meat, average",
+  "values": {
+   "calories_kcal": 199.0,
+   "protein_g": 20.3,
+   "fat_g": 13.1,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 70.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 75.0,
+   "zinc_mg": 1.5,
+   "iron_mg": 1.5,
+   "calcium_mg": 12.0,
+   "vitamin_c_mg": 4.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7018": {
+  "code": "7018",
+  "name_vi": "Thịt lợn nạc vừa",
+  "name_en_fct": "Pork, medium fat",
+  "values": {
+   "calories_kcal": 260.0,
+   "protein_g": 16.5,
+   "fat_g": 21.5,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 55.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 68.0,
+   "zinc_mg": 1.91,
+   "iron_mg": 1.5,
+   "calcium_mg": 9.0,
+   "vitamin_c_mg": 2.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "9001": {
+  "code": "9001",
+  "name_vi": "Trứng gà",
+  "name_en_fct": "Hen egg, raw, whole",
+  "values": {
+   "calories_kcal": 166.0,
+   "protein_g": 14.8,
+   "fat_g": 11.6,
+   "carbs_g": 0.5,
+   "fiber_g": 0.0,
+   "sodium_mg": 158.0,
+   "sugar_g": 0.77,
+   "cholesterol_mg": 470.0,
+   "zinc_mg": 0.9,
+   "iron_mg": 2.7,
+   "calcium_mg": 55.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "13017": {
+  "code": "13017",
+  "name_vi": "Nước mắm",
+  "name_en_fct": "Fish sauce, ready-to-serve",
+  "values": {
+   "calories_kcal": 35.0,
+   "protein_g": 5.1,
+   "fat_g": 0.01,
+   "carbs_g": 3.6,
+   "fiber_g": 0.0,
+   "sodium_mg": 7720.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.2,
+   "iron_mg": 0.78,
+   "calcium_mg": 43.0,
+   "vitamin_c_mg": 1.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7059": {
+  "code": "7059",
+  "name_vi": "Tiết luộc — CỐ Ý không ánh xạ: USDA không có mục tiết động vật, ứng viên gần nhất là gan bò vốn khác hẳn về natri và cholesterol. Để trống còn hơn vay sai.",
+  "name_en_fct": "Hog blood, boiled",
+  "values": {
+   "calories_kcal": 44.0,
+   "protein_g": 10.7,
+   "fat_g": 0.1,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sugar_g": 0.0,
+   "iron_mg": 25.9,
+   "calcium_mg": 7.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sugar_g": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007"
+  }
+ },
+ "4007": {
+  "code": "4007",
+  "name_vi": "Cà rốt",
+  "name_en_fct": "Carrots",
+  "values": {
+   "calories_kcal": 39.0,
+   "protein_g": 1.5,
+   "fat_g": 0.2,
+   "carbs_g": 7.8,
+   "fiber_g": 1.2,
+   "purine_mg": 17.0,
+   "sodium_mg": 52.0,
+   "sugar_g": 4.54,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.11,
+   "iron_mg": 0.8,
+   "calcium_mg": 43.0,
+   "vitamin_c_mg": 8.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "4039": {
+  "code": "4039",
+  "name_vi": "Hành tây",
+  "name_en_fct": "Onion, common, garden",
+  "values": {
+   "calories_kcal": 41.0,
+   "protein_g": 1.8,
+   "fat_g": 0.1,
+   "carbs_g": 8.2,
+   "fiber_g": 1.1,
+   "purine_mg": 13.0,
+   "sodium_mg": 8.0,
+   "sugar_g": 4.28,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.43,
+   "iron_mg": 0.8,
+   "calcium_mg": 38.0,
+   "vitamin_c_mg": 10.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "4083": {
+  "code": "4083",
+  "name_vi": "Rau muống",
+  "name_en_fct": "Swamp cabbage, water spinach, water convol",
+  "values": {
+   "calories_kcal": 25.0,
+   "protein_g": 3.2,
+   "fat_g": 0.4,
+   "carbs_g": 2.1,
+   "fiber_g": 1.0,
+   "purine_mg": 57.0,
+   "sodium_mg": 37.0,
+   "sugar_g": 0.42,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.35,
+   "iron_mg": 1.4,
+   "calcium_mg": 100.0,
+   "vitamin_c_mg": 23.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "4016": {
+  "code": "4016",
+  "name_vi": "Rau cải",
+  "name_en_fct": "Mustard greens, India, leaves and stems",
+  "values": {
+   "calories_kcal": 16.0,
+   "protein_g": 1.7,
+   "fat_g": 0.2,
+   "carbs_g": 1.9,
+   "fiber_g": 1.8,
+   "sodium_mg": 29.0,
+   "sugar_g": 1.6,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.9,
+   "iron_mg": 1.9,
+   "calcium_mg": 89.0,
+   "vitamin_c_mg": 51.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "4053": {
+  "code": "4053",
+  "name_vi": "Măng tươi",
+  "name_en_fct": "Bamboo shoots, spring variety",
+  "values": {
+   "calories_kcal": 15.0,
+   "protein_g": 1.7,
+   "fat_g": 0.3,
+   "carbs_g": 1.4,
+   "fiber_g": 4.1,
+   "purine_mg": 29.0,
+   "sodium_mg": 4.0,
+   "sugar_g": 3.0,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.1,
+   "iron_mg": 1.0,
+   "calcium_mg": 22.0,
+   "vitamin_c_mg": 1.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "1007": {
+  "code": "1007",
+  "name_vi": "Ngô ngọt",
+  "name_en_fct": "Fresh maize seeds, raw",
+  "values": {
+   "calories_kcal": 196.0,
+   "protein_g": 4.1,
+   "fat_g": 2.3,
+   "carbs_g": 39.6,
+   "fiber_g": 1.2,
+   "purine_mg": 52.0,
+   "sodium_mg": 3.0,
+   "sugar_g": 1.7,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 1.4,
+   "iron_mg": 0.6,
+   "calcium_mg": 4.0,
+   "vitamin_c_mg": 12.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7028": {
+  "code": "7028",
+  "name_vi": "Thịt vịt",
+  "name_en_fct": "Duck meat, average",
+  "values": {
+   "calories_kcal": 267.0,
+   "protein_g": 17.8,
+   "fat_g": 21.8,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "purine_mg": 138.0,
+   "sodium_mg": 63.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 76.0,
+   "zinc_mg": 1.36,
+   "iron_mg": 1.8,
+   "calcium_mg": 13.0,
+   "vitamin_c_mg": 3.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "8003": {
+  "code": "8003",
+  "name_vi": "Cá chép",
+  "name_en_fct": "Carp",
+  "values": {
+   "calories_kcal": 96.0,
+   "protein_g": 16.0,
+   "fat_g": 3.6,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "purine_mg": 160.0,
+   "sodium_mg": 49.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 70.0,
+   "zinc_mg": 1.48,
+   "iron_mg": 0.9,
+   "calcium_mg": 17.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "purine_mg": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "8010": {
+  "code": "8010",
+  "name_vi": "Cá lóc (mục bảng gốc thực ra là cá bống) — CỐ Ý không ánh xạ: USDA trả về cá bluefish, là cá biển nhiều mỡ, khác hẳn cá nước ngọt thịt trắng. Để trống còn hơn vay sai.",
+  "name_en_fct": "Goby",
+  "values": {
+   "calories_kcal": 98.0,
+   "protein_g": 20.1,
+   "fat_g": 2.0,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sugar_g": 0.0,
+   "calcium_mg": 90.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sugar_g": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7016": {
+  "code": "7016",
+  "name_vi": "Giò heo (thịt lợn nạc và mỡ)",
+  "name_en_fct": "Pork, lean and fat",
+  "values": {
+   "calories_kcal": 394.0,
+   "protein_g": 14.5,
+   "fat_g": 37.3,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 42.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 74.0,
+   "zinc_mg": 1.59,
+   "iron_mg": 0.4,
+   "calcium_mg": 8.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7053": {
+  "code": "7053",
+  "name_vi": "Sườn heo",
+  "name_en_fct": "Pork, ribs",
+  "values": {
+   "calories_kcal": 187.0,
+   "protein_g": 17.9,
+   "fat_g": 12.8,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 60.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 65.0,
+   "zinc_mg": 3.6,
+   "iron_mg": 0.61,
+   "calcium_mg": 7.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "7080": {
+  "code": "7080",
+  "name_vi": "Thịt ếch",
+  "name_en_fct": "Frog",
+  "values": {
+   "calories_kcal": 90.0,
+   "protein_g": 20.0,
+   "fat_g": 1.1,
+   "carbs_g": 0.0,
+   "fiber_g": 0.0,
+   "sodium_mg": 58.0,
+   "sugar_g": 0.0,
+   "cholesterol_mg": 50.0,
+   "zinc_mg": 1.0,
+   "iron_mg": 1.5,
+   "calcium_mg": 18.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ },
+ "13010": {
+  "code": "13010",
+  "name_vi": "Nước tương",
+  "name_en_fct": "Soybean sauce",
+  "values": {
+   "calories_kcal": 65.0,
+   "protein_g": 10.5,
+   "fat_g": 0.1,
+   "carbs_g": 5.6,
+   "fiber_g": 0.0,
+   "sodium_mg": 5586.0,
+   "sugar_g": 1.7,
+   "cholesterol_mg": 0.0,
+   "zinc_mg": 0.43,
+   "iron_mg": 2.38,
+   "calcium_mg": 20.0,
+   "vitamin_c_mg": 0.0
+  },
+  "sources": {
+   "calories_kcal": "FCT2007",
+   "protein_g": "FCT2007",
+   "fat_g": "FCT2007",
+   "carbs_g": "FCT2007",
+   "fiber_g": "FCT2007",
+   "sodium_mg": "FCT2007",
+   "sugar_g": "FCT2007",
+   "cholesterol_mg": "FCT2007",
+   "zinc_mg": "FCT2007",
+   "iron_mg": "FCT2007",
+   "calcium_mg": "FCT2007",
+   "vitamin_c_mg": "FCT2007"
+  }
+ }
+}

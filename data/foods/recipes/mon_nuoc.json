@@ -1,0 +1,2680 @@
+[
+  {
+    "name": "Phở bò tái",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh phở tươi"
+      },
+      {
+        "code": "7003",
+        "g": 60,
+        "label": "thịt bò thăn"
+      },
+      {
+        "code": "4036",
+        "g": 30,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Nước dùng xương không tính vào khối lượng suất vì bảng gốc không có mục tương ứng; phần natri của nước dùng được xấp xỉ bằng lượng nước mắm nêm. Đây là ước tính thiếu, cần đối chiếu USDA khi hoàn thiện"
+  },
+  {
+    "name": "Phở gà",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh phở tươi"
+      },
+      {
+        "code": "7013",
+        "g": 70,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Như phở bò, phần nước dùng không tính vào khối lượng suất"
+  },
+  {
+    "name": "Bún bò Huế",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 2,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Huế",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7003",
+        "g": 50,
+        "label": "thịt bò"
+      },
+      {
+        "code": "7018",
+        "g": 40,
+        "label": "giò heo"
+      },
+      {
+        "code": "4036",
+        "g": 30,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 15,
+        "label": "mắm ruốc và nước mắm"
+      }
+    ],
+    "note": "Vị cay từ sa tế, lượng không đáng kể về năng lượng nên không tính"
+  },
+  {
+    "name": "Bún riêu cua",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Bắc",
+    "tags": [
+      "contains_egg",
+      "contains_seafood",
+      "sour"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8034",
+        "g": 60,
+        "label": "cua đồng"
+      },
+      {
+        "code": "4005",
+        "g": 50,
+        "label": "cà chua"
+      },
+      {
+        "code": "9001",
+        "g": 25,
+        "label": "trứng gà"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạch cua lấy từ mục cua đồng, không tách riêng phần gạch"
+  },
+  {
+    "name": "Bún mọc",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7018",
+        "g": 70,
+        "label": "giò sống và mọc"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Mọc tính theo thịt lợn nạc vừa vì bảng gốc không có mục giò sống"
+  },
+  {
+    "name": "Hủ tiếu Nam Vang",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_egg",
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "hủ tiếu"
+      },
+      {
+        "code": "7018",
+        "g": 50,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "8049",
+        "g": 40,
+        "label": "tôm"
+      },
+      {
+        "code": "9001",
+        "g": 25,
+        "label": "trứng cút"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Sợi hủ tiếu tính theo bánh phở vì cùng là sợi gạo tươi; trứng cút tính theo trứng gà"
+  },
+  {
+    "name": "Miến gà",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 150,
+        "label": "miến dong đã ngâm"
+      },
+      {
+        "code": "7013",
+        "g": 70,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Miến dong tính theo bún tươi vì bảng gốc không có mục miến; cần đối chiếu lại, đây là điểm yếu nhất của dòng này"
+  },
+  {
+    "name": "Bánh canh cua",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_egg",
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 200,
+        "label": "sợi bánh canh"
+      },
+      {
+        "code": "8033",
+        "g": 60,
+        "label": "thịt cua biển"
+      },
+      {
+        "code": "9001",
+        "g": 25,
+        "label": "trứng cút"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Sợi bánh canh bột gạo tính theo bánh phở"
+  },
+  {
+    "name": "Mì Quảng",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Quảng Nam",
+    "tags": [
+      "contains_egg",
+      "contains_peanut",
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "sợi mì Quảng"
+      },
+      {
+        "code": "8049",
+        "g": 40,
+        "label": "tôm"
+      },
+      {
+        "code": "7018",
+        "g": 40,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "9001",
+        "g": 25,
+        "label": "trứng cút"
+      },
+      {
+        "code": "4036",
+        "g": 30,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4081",
+        "g": 15,
+        "label": "rau sống"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      },
+      {
+        "code": "3017",
+        "g": 12,
+        "label": "đậu phộng rang"
+      }
+    ],
+    "note": "Đậu phộng rang rắc lên đã tính vào công thức và gắn nhãn dị nguyên"
+  },
+  {
+    "name": "Cháo gà",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 50,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7013",
+        "g": 60,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng gạo khô trước khi nấu; khối lượng suất vì vậy nhỏ hơn bát cháo thực tế khoảng bốn lần do gạo hút nước"
+  },
+  {
+    "name": "Bún thang",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_egg",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7013",
+        "g": 50,
+        "label": "thịt gà xé"
+      },
+      {
+        "code": "7069",
+        "g": 40,
+        "label": "giò lụa"
+      },
+      {
+        "code": "9001",
+        "g": 30,
+        "label": "trứng tráng thái chỉ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Giò lụa tính theo mục thịt lợn nạc hấp; tôm he khô rắc lên chưa tính"
+  },
+  {
+    "name": "Bún ốc",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_seafood",
+      "sour"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8041",
+        "g": 80,
+        "label": "ốc nhồi"
+      },
+      {
+        "code": "4005",
+        "g": 60,
+        "label": "cà chua"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Vị chua từ giấm bỗng, lượng không đáng kể về năng lượng"
+  },
+  {
+    "name": "Bánh đa cua Hải Phòng",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hải Phòng",
+    "tags": [
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh đa đỏ"
+      },
+      {
+        "code": "8034",
+        "g": 70,
+        "label": "cua đồng"
+      },
+      {
+        "code": "4083",
+        "g": 50,
+        "label": "rau muống"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bánh đa đỏ tính theo bánh phở vì cùng là sợi bột gạo; chả lá lốt ăn kèm chưa tính"
+  },
+  {
+    "name": "Bún măng vịt",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7028",
+        "g": 80,
+        "label": "thịt vịt"
+      },
+      {
+        "code": "4053",
+        "g": 70,
+        "label": "măng tươi"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Măng tươi đã luộc bỏ nước; nếu dùng măng khô phải đổi sang mã 4051, năng lượng gấp mười lần"
+  },
+  {
+    "name": "Miến lươn",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Nghệ An",
+    "tags": [
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 150,
+        "label": "miến dong đã ngâm"
+      },
+      {
+        "code": "8038",
+        "g": 70,
+        "label": "lươn"
+      },
+      {
+        "code": "4036",
+        "g": 30,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Miến dong tính theo bún tươi vì bảng gốc không có mục miến — điểm yếu cần rà lại"
+  },
+  {
+    "name": "Bún cá rô đồng",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hải Dương",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8023",
+        "g": 80,
+        "label": "cá rô đồng"
+      },
+      {
+        "code": "4016",
+        "g": 60,
+        "label": "rau cải"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cá rô rán sơ trước khi nấu, phần dầu thấm vào chưa tính"
+  },
+  {
+    "name": "Bún chả cá",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Nha Trang",
+    "tags": [
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8026",
+        "g": 80,
+        "label": "chả cá thu"
+      },
+      {
+        "code": "4050",
+        "g": 40,
+        "label": "măng"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Chả cá tính theo cá thu tươi; phần bột và dầu chiên chả chưa tính, ước thiếu khoảng 40 kcal"
+  },
+  {
+    "name": "Canh bún",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8034",
+        "g": 60,
+        "label": "cua đồng"
+      },
+      {
+        "code": "4083",
+        "g": 80,
+        "label": "rau muống"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Đậu phụ rán ăn kèm chưa tính"
+  },
+  {
+    "name": "Cháo lòng",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 50,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7059",
+        "g": 60,
+        "label": "tiết luộc"
+      },
+      {
+        "code": "7018",
+        "g": 50,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bảng gốc không có mục lòng heo; phần lòng tạm tính theo thịt lợn nạc vừa, đây là xấp xỉ thô"
+  },
+  {
+    "name": "Cháo sườn",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7018",
+        "g": 60,
+        "label": "thịt sườn"
+      },
+      {
+        "code": "4037",
+        "g": 10,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bảng gốc không có mục sườn heo; tính theo thịt lợn nạc vừa nên thiếu phần mỡ và tủy"
+  },
+  {
+    "name": "Cháo cá chép",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8003",
+        "g": 80,
+        "label": "cá chép"
+      },
+      {
+        "code": "4053",
+        "g": 30,
+        "label": "măng"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô trước khi nấu"
+  },
+  {
+    "name": "Súp cua",
+    "category": "mon_nuoc",
+    "dish_role": "snack",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "snack",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_egg",
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "8033",
+        "g": 50,
+        "label": "thịt cua biển"
+      },
+      {
+        "code": "9001",
+        "g": 40,
+        "label": "trứng gà"
+      },
+      {
+        "code": "1007",
+        "g": 50,
+        "label": "ngô ngọt"
+      },
+      {
+        "code": "4123",
+        "g": 20,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bột năng tạo độ sánh chưa tính, ước thiếu khoảng 30 kcal"
+  },
+  {
+    "name": "Hủ tiếu bò kho",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "hủ tiếu"
+      },
+      {
+        "code": "7003",
+        "g": 80,
+        "label": "thịt bò bắp"
+      },
+      {
+        "code": "4007",
+        "g": 60,
+        "label": "cà rốt"
+      },
+      {
+        "code": "4039",
+        "g": 30,
+        "label": "hành tây"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Sợi hủ tiếu tính theo bánh phở; nước kho có dầu điều và bột năng chưa tính"
+  },
+  {
+    "name": "Mì vằn thắn",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_egg",
+      "contains_gluten",
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1022",
+        "g": 120,
+        "label": "mì trứng khô"
+      },
+      {
+        "code": "8049",
+        "g": 40,
+        "label": "tôm"
+      },
+      {
+        "code": "7018",
+        "g": 50,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "9001",
+        "g": 30,
+        "label": "trứng"
+      },
+      {
+        "code": "4123",
+        "g": 20,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Mì trứng tính theo khối lượng khô; khi luộc chín nở khoảng 2,5 lần"
+  },
+  {
+    "name": "Phở bò chín",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh phở tươi"
+      },
+      {
+        "code": "7004",
+        "g": 70,
+        "label": "thịt bò nạm"
+      },
+      {
+        "code": "4036",
+        "g": 30,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Dùng thịt bò loại II vì nạm nhiều mỡ hơn thăn; đây là khác biệt duy nhất so với phở bò tái"
+  },
+  {
+    "name": "Phở sốt vang",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty",
+      "fatty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh phở tươi"
+      },
+      {
+        "code": "7004",
+        "g": 90,
+        "label": "thịt bò nạm"
+      },
+      {
+        "code": "4007",
+        "g": 50,
+        "label": "cà rốt"
+      },
+      {
+        "code": "4039",
+        "g": 30,
+        "label": "hành tây"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Rượu vang trong nước sốt bay hơi khi hầm nên không tính; dầu điều tạo màu chưa tính"
+  },
+  {
+    "name": "Bún riêu ốc",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_seafood",
+      "contains_soy",
+      "sour"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8041",
+        "g": 70,
+        "label": "ốc nhồi"
+      },
+      {
+        "code": "8034",
+        "g": 40,
+        "label": "cua đồng"
+      },
+      {
+        "code": "4005",
+        "g": 50,
+        "label": "cà chua"
+      },
+      {
+        "code": "3025",
+        "g": 40,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kết hợp riêu cua và ốc, là biến thể phổ biến ở Hà Nội"
+  },
+  {
+    "name": "Bún sườn chua",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "sour"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7053",
+        "g": 90,
+        "label": "sườn heo"
+      },
+      {
+        "code": "4005",
+        "g": 60,
+        "label": "cà chua"
+      },
+      {
+        "code": "4053",
+        "g": 40,
+        "label": "măng chua"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Dùng mục sườn heo riêng (7053) thay vì thịt lợn nạc vừa, chính xác hơn cháo sườn đã nhập trước đó"
+  },
+  {
+    "name": "Bún cá Hải Phòng",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hải Phòng",
+    "tags": [
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8026",
+        "g": 80,
+        "label": "cá thu"
+      },
+      {
+        "code": "4083",
+        "g": 60,
+        "label": "rau muống"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cá rán sơ trước khi nấu, phần dầu thấm chưa tính"
+  },
+  {
+    "name": "Bún mực",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Nha Trang",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8040",
+        "g": 90,
+        "label": "mực tươi"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Mực tươi, không phải mực khô — mực khô năng lượng gấp bốn lần"
+  },
+  {
+    "name": "Bún ếch",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 2,
+    "suitable_meals": [
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Bắc",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7080",
+        "g": 90,
+        "label": "thịt ếch"
+      },
+      {
+        "code": "4123",
+        "g": 25,
+        "label": "nấm hương"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Ếch xào măng trước khi chan nước dùng, phần dầu xào chưa tính"
+  },
+  {
+    "name": "Miến măng gà",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 150,
+        "label": "miến dong đã ngâm"
+      },
+      {
+        "code": "7013",
+        "g": 70,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4053",
+        "g": 70,
+        "label": "măng tươi"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Miến dong tính theo bún tươi vì bảng gốc không có mục miến"
+  },
+  {
+    "name": "Miến ngan",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 150,
+        "label": "miến dong đã ngâm"
+      },
+      {
+        "code": "7028",
+        "g": 80,
+        "label": "thịt ngan"
+      },
+      {
+        "code": "4053",
+        "g": 50,
+        "label": "măng"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Thịt ngan tính theo mục thịt vịt vì bảng gốc không tách hai loài"
+  },
+  {
+    "name": "Bánh canh giò heo",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Trung",
+    "tags": [
+      "salty",
+      "fatty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 200,
+        "label": "sợi bánh canh"
+      },
+      {
+        "code": "7016",
+        "g": 90,
+        "label": "giò heo"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Giò heo tính theo thịt lợn nạc và mỡ (7016); phần da và gân chưa tách riêng"
+  },
+  {
+    "name": "Bánh canh cá lóc",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Trung",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 200,
+        "label": "sợi bánh canh"
+      },
+      {
+        "code": "8010",
+        "g": 90,
+        "label": "cá lóc"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bảng gốc không có cá lóc; tạm dùng mục cá bống (8010) vì cùng nhóm cá nước ngọt thịt trắng — cần rà lại"
+  },
+  {
+    "name": "Hủ tiếu mì",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_gluten",
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 120,
+        "label": "hủ tiếu"
+      },
+      {
+        "code": "1022",
+        "g": 60,
+        "label": "mì trứng"
+      },
+      {
+        "code": "7018",
+        "g": 50,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "8049",
+        "g": 30,
+        "label": "tôm"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Món trộn hai loại sợi; mì trứng tính theo khối lượng khô"
+  },
+  {
+    "name": "Cháo trai",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8037",
+        "g": 100,
+        "label": "thịt trai"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô trước khi nấu"
+  },
+  {
+    "name": "Cháo hàu",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Quảng Ninh",
+    "tags": [
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8048",
+        "g": 90,
+        "label": "hàu"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô"
+  },
+  {
+    "name": "Cháo tôm",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8049",
+        "g": 70,
+        "label": "tôm"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô"
+  },
+  {
+    "name": "Cháo vịt",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 50,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7028",
+        "g": 80,
+        "label": "thịt vịt"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô; nước luộc vịt dùng nấu cháo nên phần mỡ vịt tan vào chưa tính riêng"
+  },
+  {
+    "name": "Cháo đậu xanh",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_soy",
+      "high_fiber",
+      "light",
+      "vegan",
+      "vegetarian"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 40,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "3010",
+        "g": 30,
+        "label": "đậu xanh"
+      },
+      {
+        "code": "13010",
+        "g": 10,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Đậu xanh tính theo hạt khô. Nêm nước tương thay nước mắm nên thuần chay thật sự"
+  },
+  {
+    "name": "Súp gà ngô non",
+    "category": "mon_nuoc",
+    "dish_role": "snack",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "snack",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_egg",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "7013",
+        "g": 60,
+        "label": "thịt gà xé"
+      },
+      {
+        "code": "1007",
+        "g": 70,
+        "label": "ngô ngọt"
+      },
+      {
+        "code": "9001",
+        "g": 35,
+        "label": "trứng gà"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bột năng tạo độ sánh chưa tính, ước thiếu khoảng 30 kcal"
+  },
+  {
+    "name": "Phở chay",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_soy",
+      "light",
+      "vegetarian"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh phở tươi"
+      },
+      {
+        "code": "3027",
+        "g": 70,
+        "label": "đậu phụ rán"
+      },
+      {
+        "code": "4123",
+        "g": 30,
+        "label": "nấm hương"
+      },
+      {
+        "code": "4036",
+        "g": 30,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "4081",
+        "g": 10,
+        "label": "rau mùi"
+      },
+      {
+        "code": "13010",
+        "g": 14,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Nước dùng ninh từ củ quả, nêm nước tương. Natri thấp hơn phở thường nhưng không phải bằng không"
+  },
+  {
+    "name": "Bún riêu chay",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_soy",
+      "sour",
+      "vegan",
+      "vegetarian"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "3025",
+        "g": 80,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "4005",
+        "g": 60,
+        "label": "cà chua"
+      },
+      {
+        "code": "4123",
+        "g": 30,
+        "label": "nấm hương"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13010",
+        "g": 12,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Riêu làm từ đậu phụ nghiền thay gạch cua; nêm nước tương nên thuần chay"
+  },
+  {
+    "name": "Bánh đa cá rô",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hải Dương",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "bánh đa"
+      },
+      {
+        "code": "8023",
+        "g": 85,
+        "label": "cá rô đồng"
+      },
+      {
+        "code": "4016",
+        "g": 60,
+        "label": "rau cải"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bánh đa tính theo bánh phở vì cùng sợi bột gạo"
+  },
+  {
+    "name": "Cháo lươn Nghệ An",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 2,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Nghệ An",
+    "tags": [
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8038",
+        "g": 80,
+        "label": "lươn"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô; ớt bột và nghệ tạo màu chưa tính"
+  },
+  {
+    "name": "Cháo hến",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Huế",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8037",
+        "g": 90,
+        "label": "hến"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hến tính theo mục trai (8037) vì bảng gốc không tách hai loài"
+  },
+  {
+    "name": "Súp lươn",
+    "category": "mon_nuoc",
+    "dish_role": "snack",
+    "cooking_method": "khac",
+    "spice_level": 2,
+    "suitable_meals": [
+      "snack",
+      "dinner"
+    ],
+    "origin": "Nghệ An",
+    "tags": [
+      "contains_gluten",
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "8038",
+        "g": 80,
+        "label": "lươn"
+      },
+      {
+        "code": "1012",
+        "g": 60,
+        "label": "bánh mì ăn kèm"
+      },
+      {
+        "code": "4039",
+        "g": 30,
+        "label": "hành tây"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bánh mì tính theo mục bánh mì Pháp (1012); ăn kèm chứ không nấu chung"
+  },
+  {
+    "name": "Hủ tiếu sa tế",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 3,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_peanut",
+      "salty",
+      "fatty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 180,
+        "label": "hủ tiếu"
+      },
+      {
+        "code": "7004",
+        "g": 80,
+        "label": "thịt bò nạm"
+      },
+      {
+        "code": "3017",
+        "g": 15,
+        "label": "đậu phộng rang"
+      },
+      {
+        "code": "4039",
+        "g": 30,
+        "label": "hành tây"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Sa tế gồm đậu phộng, ớt, sả — phần đậu phộng đã tính, dầu sa tế chưa tính. CÓ ĐẬU PHỘNG nên phải gắn nhãn dị nguyên"
+  },
+  {
+    "name": "Bún bung",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Thái Bình",
+    "tags": [
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7053",
+        "g": 80,
+        "label": "sườn heo"
+      },
+      {
+        "code": "4053",
+        "g": 70,
+        "label": "măng tươi"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Dọc mùng là nguyên liệu đặc trưng nhưng bảng gốc không có; đã bỏ khỏi công thức"
+  },
+  {
+    "name": "Bánh canh chả cá",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Nha Trang",
+    "tags": [
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1013",
+        "g": 200,
+        "label": "sợi bánh canh"
+      },
+      {
+        "code": "8026",
+        "g": 80,
+        "label": "chả cá"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Chả cá tính theo cá thu tươi; bột và dầu chiên chả chưa tính"
+  },
+  {
+    "name": "Cháo thịt bằm",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7018",
+        "g": 60,
+        "label": "thịt lợn bằm"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô"
+  },
+  {
+    "name": "Súp hải sản",
+    "category": "mon_nuoc",
+    "dish_role": "snack",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "snack",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_egg",
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "8049",
+        "g": 40,
+        "label": "tôm"
+      },
+      {
+        "code": "8040",
+        "g": 40,
+        "label": "mực"
+      },
+      {
+        "code": "8033",
+        "g": 30,
+        "label": "cua"
+      },
+      {
+        "code": "9001",
+        "g": 35,
+        "label": "trứng gà"
+      },
+      {
+        "code": "4123",
+        "g": 20,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bột năng tạo sánh chưa tính, ước thiếu khoảng 30 kcal"
+  },
+  {
+    "name": "Bún nước lèo",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 2,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Sóc Trăng",
+    "tags": [
+      "contains_seafood",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8026",
+        "g": 60,
+        "label": "cá lóc"
+      },
+      {
+        "code": "8049",
+        "g": 40,
+        "label": "tôm"
+      },
+      {
+        "code": "7018",
+        "g": 40,
+        "label": "thịt quay"
+      },
+      {
+        "code": "4083",
+        "g": 50,
+        "label": "rau muống"
+      },
+      {
+        "code": "13017",
+        "g": 14,
+        "label": "mắm bò hóc và nước mắm"
+      }
+    ],
+    "note": "Mắm bò hóc không có trong bảng gốc, tính gộp vào nước mắm; cá lóc tạm dùng mục cá thu"
+  },
+  {
+    "name": "Miến cua",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_seafood"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 150,
+        "label": "miến dong đã ngâm"
+      },
+      {
+        "code": "8034",
+        "g": 70,
+        "label": "cua đồng"
+      },
+      {
+        "code": "4005",
+        "g": 40,
+        "label": "cà chua"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Miến dong tính theo bún tươi"
+  },
+  {
+    "name": "Bún riêu tôm",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 1,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Miền Nam",
+    "tags": [
+      "contains_seafood",
+      "contains_soy",
+      "sour"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "8049",
+        "g": 70,
+        "label": "tôm"
+      },
+      {
+        "code": "4005",
+        "g": 60,
+        "label": "cà chua"
+      },
+      {
+        "code": "3025",
+        "g": 40,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Biến thể riêu dùng tôm thay cua"
+  },
+  {
+    "name": "Cháo cá bống",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Miền Trung",
+    "tags": [
+      "contains_seafood",
+      "light"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8010",
+        "g": 85,
+        "label": "cá bống"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gạo tính theo khối lượng khô"
+  },
+  {
+    "name": "Mì gà tần",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "contains_gluten",
+      "salty"
+    ],
+    "ingredients": [
+      {
+        "code": "1022",
+        "g": 100,
+        "label": "mì trứng khô"
+      },
+      {
+        "code": "7013",
+        "g": 90,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4123",
+        "g": 25,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Thuốc bắc hầm cùng không có trong bảng gốc và đóng góp năng lượng không đáng kể"
+  },
+  {
+    "name": "Bún chân giò",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "origin": "Hà Nội",
+    "tags": [
+      "salty",
+      "fatty"
+    ],
+    "ingredients": [
+      {
+        "code": "1020",
+        "g": 200,
+        "label": "bún tươi"
+      },
+      {
+        "code": "7016",
+        "g": 90,
+        "label": "chân giò"
+      },
+      {
+        "code": "4053",
+        "g": 50,
+        "label": "măng"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Chân giò tính theo thịt lợn nạc và mỡ; phần da và gân chưa tách riêng"
+  },
+  {
+    "name": "Cháo nấm chay",
+    "category": "mon_nuoc",
+    "dish_role": "main",
+    "cooking_method": "khac",
+    "spice_level": 0,
+    "suitable_meals": [
+      "breakfast",
+      "dinner"
+    ],
+    "origin": "Toàn quốc",
+    "tags": [
+      "contains_soy",
+      "light",
+      "vegan",
+      "vegetarian"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 45,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "4123",
+        "g": 60,
+        "label": "nấm hương"
+      },
+      {
+        "code": "4007",
+        "g": 40,
+        "label": "cà rốt"
+      },
+      {
+        "code": "13010",
+        "g": 10,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Nêm nước tương nên thuần chay; gạo tính theo khối lượng khô"
+  }
+]
