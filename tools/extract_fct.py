@@ -49,6 +49,41 @@ NUTRIENTS = {
     "vitamin_c_mg": r"Vitamin C \(Ascorbic acid\)\s*mg\s+([\d.]+|-)",
     "cholesterol_mg": r"Cholesterol\s+mg\s+([\d.]+|-)",
     "purine_mg": r"Purin\s+mg\s+([\d.]+|-)",
+
+    # Bốn thành phần của hoạt tính vitamin A. Bảng gốc **không công bố một
+    # cột "vitamin A tổng"** — nó in retinol và các carotenoid riêng, để
+    # người dùng tự quy đổi. Lấy riêng từng thành phần rồi tự quy đổi ở
+    # `vitamin_a_rae`, và giữ cả bốn số thô trong JSON để truy lại được.
+    #
+    # Đơn vị là micro-gam, in bằng ký tự μ (U+03BC) ở trang này và µ
+    # (U+00B5) ở trang khác — phải nhận cả hai, nếu không sẽ mất số liệu
+    # một cách âm thầm ở đúng những trang dùng ký tự kia.
+    "retinol_mcg": r"Vitamin A \(Retinol\)\s*[μµ]g\s+([\d.]+|-)",
+    "beta_carotene_mcg": r"Beta-caroten\s+[μµ]g\s+([\d.]+|-)",
+    "alpha_carotene_mcg": r"Alpha-caroten\s+[μµ]g\s+([\d.]+|-)",
+    "beta_cryptoxanthin_mcg": r"Beta-cryptoxanthin\s+[μµ]g\s+([\d.]+|-)",
+}
+
+# Quy đổi hoạt tính vitamin A sang RAE (Retinol Activity Equivalent).
+#
+# Vì sao phải quy đổi thay vì lấy thẳng cột retinol: **retinol bằng 0 ở mọi
+# thực phẩm thực vật** — đo được trong bảng gốc là 84/373 mục có retinol
+# khác 0, gần như toàn bộ là thịt, trứng, sữa, gan. Lấy thẳng retinol thì
+# cà rốt, bí đỏ, rau ngót đều ra 0 mg vitamin A, tức sai về dinh dưỡng chứ
+# không phải thiếu dữ liệu.
+#
+# Hệ số theo IOM (2001), cũng là hệ số USDA dùng cho cột Vitamin A RAE:
+#   1 μg RAE = 1 μg retinol
+#            = 12 μg beta-caroten trong thức ăn
+#            = 24 μg alpha-caroten hoặc beta-cryptoxanthin
+# Các hệ số này nhỏ hơn hệ số RE 1:6 và 1:12 của FAO/WHO 1967 vì về sau đo
+# lại thấy hiệu suất hấp thu carotenoid từ thức ăn thấp hơn ước tính cũ.
+# Dùng RAE là **chọn con số thấp hơn**, nên không làm đẹp số liệu.
+RAE_FACTORS = {
+    "retinol_mcg": 1.0,
+    "beta_carotene_mcg": 1 / 12,
+    "alpha_carotene_mcg": 1 / 24,
+    "beta_cryptoxanthin_mcg": 1 / 24,
 }
 
 # Tên thực phẩm phải lấy theo **tọa độ**, không lấy theo văn bản thuần.
@@ -166,6 +201,18 @@ def extract(pdf_path: Path) -> list[dict]:
             m = re.search(pattern, flat)
             entry[key] = parse_value(m.group(1)) if m else None
 
+        # Thiếu một thành phần thì coi phần đó bằng 0, nhưng thiếu **cả
+        # bốn** thì để trống chứ không ghi 0: ghi 0 sẽ không phân biệt được
+        # "thực phẩm này không có vitamin A" với "bảng gốc không đo".
+        present = [k for k in RAE_FACTORS if entry.get(k) is not None]
+        entry["vitamin_a_mcg"] = (
+            round(sum(entry[k] * RAE_FACTORS[k] for k in present), 2)
+            if present else None
+        )
+        entry["vitamin_a_parts_missing"] = [
+            k for k in RAE_FACTORS if entry.get(k) is None
+        ]
+
         foods.append(entry)
 
     return foods
@@ -215,7 +262,7 @@ def main() -> int:
 
     coverage = {
         key: sum(1 for f in foods if f[key] is not None)
-        for key in NUTRIENTS
+        for key in list(NUTRIENTS) + ["vitamin_a_mcg"]
     }
     print("\nĐộ phủ từng chất:")
     for key, n in sorted(coverage.items(), key=lambda kv: -kv[1]):

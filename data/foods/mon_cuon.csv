@@ -1,3 +1,4 @@
-name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
-Gỏi cuốn tôm thịt,mon_cuon,snack,khac,0,breakfast|lunch|dinner|snack,,,180,12,24,3,,,,,,,,,,,light|contains_seafood,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
-Bánh cuốn nóng,mon_cuon,main,khac,0,breakfast|lunch|dinner|snack,,,300,12,48,7,,,,,,,,,,,light,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+name,category,dish_role,spice_level,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,note
+Gỏi cuốn tôm thịt,Món cuốn,snack,0,208,248.9,19.2,35.4,3.4,0.6,0.3,735.2,102.8,145.1,71.7,1.9,1.8,159.4,12.5,Có hải sản|Giàu purin,"Công thức: bánh tráng 30g + tôm biển 50g + thịt lợn nạc 40g + xà lách 40g + bún tươi 40g + nước mắm 8g. Cuốn tươi, nước chấm tính vào phần nước mắm"
+Bánh cuốn nóng,Món cuốn,main,0,150,313.0,17.0,52.8,3.7,1.1,0.0,807.9,26.8,76.2,35.5,3.4,3.1,1.2,0.5,Có gluten,"Công thức: bột gạo 70g + thịt lợn nạc 40g + nấm hương 30g + nước mắm 10g. Tráng mỏng, nhân thịt nấm"
+Bò bía,Món cuốn,snack,0,151,168.6,6.4,28.6,3.1,0.9,2.8,534.3,117.5,13.7,59.0,1.7,1.0,743.6,16.1,Có trứng,Công thức: bánh tráng 30g + cà rốt 50g + trứng gà 25g + xà lách 40g + nước mắm 6g. Cuốn chay có trứng

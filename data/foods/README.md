@@ -37,6 +37,31 @@ món còn thiếu so với mốc 300.
 
 ---
 
+## Nạp vào cơ sở dữ liệu
+
+```bash
+# Lần đầu: chỉnh lược đồ cho khớp tập dữ liệu
+mysql -u <user> -p <db> < db/migrations/001_dataset_readiness.sql
+mysql -u <user> -p <db> < db/migrations/002_food_name_unique.sql
+
+# Sinh SQL rồi đọc lại trước khi chạy
+python tools/load_foods.py
+mysql -u <user> -p <db> < db/seed_foods.sql
+
+# Hoặc nạp thẳng, cần MYSQL_* trong .env
+python tools/load_foods.py --apply
+```
+
+`db/seed_foods.sql` **không nằm trong repo** — nó sinh ra từ chính các tệp
+CSV ở đây, nên commit cả bản sinh ra chỉ tạo diff hàng trăm KB mỗi lần sửa
+một món, và hai bản có thể lệch nhau lúc nào không biết. Cần thì chạy lại
+`python tools/load_foods.py`.
+
+Trình nạp **bỏ qua** dòng còn thiếu cột `NOT NULL` và báo rõ đã bỏ những gì.
+Nạp lại nhiều lần cho cùng một kết quả nhờ `UNIQUE (name)` ở migration 002.
+
+---
+
 ## Quy ước từng cột
 
 ### Bắt buộc
@@ -46,12 +71,9 @@ món còn thiếu so với mốc 300.
 | `name` | Tên tiếng Việt có dấu, viết hoa chữ đầu. Ghi tên món cụ thể: "Bún bò Huế" chứ không phải "Bún". |
 | `category` | Phải trùng tên tệp. |
 | `dish_role` | Xem bảng vai trò bên dưới. |
-| `cooking_method` | `luoc` `hap` `xao` `chien` `nuong` `kho` `nau_canh` `tron` `song` `khac` |
 | `spice_level` | 0 không cay · 1 cay nhẹ · 2 cay vừa · 3 cay nhiều |
-| `suitable_meals` | Ngăn bằng `\|`, ví dụ `breakfast\|lunch\|dinner`. Giá trị: `breakfast` `lunch` `dinner` `snack` |
 | `serving_size_g` | Khối lượng **một suất ăn thực tế**, không phải 100 g. Xem mục dưới. |
 | `calories_kcal` `protein_g` `carbs_g` `fat_g` | Tính cho **trọn một suất** như đã khai ở `serving_size_g`. |
-| `data_source` | Tên nguồn, ví dụ `Bảng thành phần thực phẩm Việt Nam 2007` hoặc `USDA FoodData Central`. |
 
 ### Nên có — bộ quy tắc F1 cần
 
@@ -76,7 +98,6 @@ món có khả năng vi phạm.
 | Cột | Quy ước |
 |---|---|
 | `tags` | Ngăn bằng `\|`. Xem danh sách nhãn bên dưới. |
-| `source_url` | Đường dẫn tới đúng trang chứa số liệu, không phải trang chủ. |
 | `note` | Ghi chú tự do: điều còn ngờ, cách quy đổi đã dùng. |
 
 ---
@@ -93,17 +114,10 @@ món có khả năng vi phạm.
 | `dessert` | Tráng miệng | Chè, trái cây |
 | `drink` | Đồ uống | Nước cam, sữa đậu nành |
 
-> **Lưu ý về schema.** Cột `foods.dish_role` hiện chỉ có 5 giá trị
-> (`main` `side` `soup` `dessert` `drink`), gộp *món mặn* và *món rau* chung
-> vào `side`. Bộ sinh thực đơn cần tách hai thứ này, nếu không bữa tối có
-> thể ra hai món rau và không có đạm nào. CSV dùng vốn từ đã tách; cần chạy
-> `ALTER TABLE` trước khi nạp:
->
-> ```sql
-> ALTER TABLE foods MODIFY dish_role
->   ENUM('main','side_protein','side_veg','soup','snack','dessert','drink')
->   NOT NULL DEFAULT 'main';
-> ```
+> **Lưu ý về schema.** Lược đồ gốc chỉ có 5 vai trò, gộp *món mặn* và *món
+> rau* chung vào `side` — bữa tối vì thế có thể ra hai món rau và không có
+> đạm nào. Bảy giá trị ở trên chỉ dùng được sau khi chạy
+> `db/migrations/001_dataset_readiness.sql`.
 
 ---
 
@@ -166,7 +180,7 @@ rượu sinh 7 kcal/g, và số liệu công bố thường đã làm tròn.
 2. **USDA FoodData Central** — dùng cho món không có trong bảng Việt Nam, và
    để bổ khuyết natri, đường, cholesterol. <https://fdc.nal.usda.gov/>
 3. **Nguồn khác** — chỉ khi hai nguồn trên không có. Bắt buộc ghi
-   `source_url` và nêu trong `note` vì sao phải dùng nguồn này.
+   nêu trong `note` vì sao phải dùng nguồn này.
 
 Không lấy số từ ứng dụng đếm calo hay trang tin sức khỏe: phần lớn là dữ
 liệu người dùng tự nhập, không truy nguồn được, và hội đồng sẽ hỏi.
@@ -175,8 +189,64 @@ liệu người dùng tự nhập, không truy nguồn được, và hội đồ
 
 ## Trạng thái hiện tại
 
-30 món đầu tiên được chuyển từ bộ dữ liệu giả của giao diện, **số liệu chưa
-đối chiếu nguồn** — cột `data_source` và `serving_size_g` còn trống nên bộ
-kiểm tra đang báo lỗi. Đây là trạng thái đúng: chúng là chỗ giữ tên món và
-phân loại, không phải dữ liệu đã nghiệm thu. Cần tra nguồn và điền đủ trước
-khi dùng cho thực nghiệm.
+**318 món, cả 318 đều cộng dồn từ công thức.** Không còn món nào chuyển từ
+dữ liệu giả của giao diện. Đã vượt mốc 300 món của đề cương.
+
+| Nhóm | Số món | Công thức |
+|---|---|---|
+| `mon_nuoc` | 73 | 73 |
+| `mon_luoc_hap` | 59 | 59 |
+| `mon_canh` | 37 | 37 |
+| `mon_xao` | 28 | 28 |
+| `trang_mieng` | 25 | 25 |
+| `mon_kho` | 25 | 25 |
+| `do_uong` | 21 | 21 |
+| `com` | 16 | 16 |
+| `mon_chien` | 16 | 16 |
+| `mon_nuong` | 12 | 12 |
+| `mon_cuon` | 3 | 3 |
+| `mon_goi` | 3 | 3 |
+
+**13 món gần nhất là món chay**, thêm vì `tools/check_f1.py` đo được rằng sau
+Bộ lọc F1, người ăn chay chỉ còn **1 món `side_protein` và 0 món `soup`** —
+cả 31 món canh khi đó đều có thịt, cá hoặc nước mắm, nên Bước 4 không dựng nổi
+một ngày. Một nửa số món mới nêm **muối** và lấy đạm từ **nấm**, không dùng
+đậu nành ở đâu cả: đậu phụ và nước tương đều LÀ đậu nành, nên nếu món chay nào
+cũng dựa vào chúng thì người vừa ăn chay vừa dị ứng đậu nành lại về 0 món.
+
+Mỗi món có một mục trong `recipes/<nhóm>.json` ghi mã nguyên liệu của Bảng
+thành phần 2007 kèm số gam — đó là phần truy xuất nguồn, và là thứ dựng lại
+được toàn bộ CSV bằng `tools/compose_dishes.py`.
+
+Vai trò món: `main` 89 · `side_protein` 78 · `side_veg` 52 · `soup` 37 ·
+`dessert` 25 · `drink` 21 · `snack` 16.
+
+### Độ phủ từng cột
+
+| Cột | Phủ | |
+|---|---|---|
+| `serving_size_g` `calories_kcal` `protein_g` `carbs_g` `fat_g` | 318/318 | 100 % |
+| `fiber_g` `cholesterol_mg` `calcium_mg` `iron_mg` `vitamin_a_mcg` | 318/318 | 100 % |
+| `vitamin_c_mg` | 314/318 | 98,7 % |
+| `sodium_mg` | 303/318 | 95,3 % |
+| `zinc_mg` | 298/318 | 93,7 % |
+| `sugar_g` | 230/318 | 72,3 % |
+| `purine_mg` | 70/318 | 22,0 % |
+
+`vitamin_a_mcg` phủ kín được là nhờ **quy đổi RAE**, không phải lấy thẳng cột
+retinol của bảng gốc. Retinol bằng 0 ở mọi thực phẩm thực vật, nên lấy thẳng
+thì cà rốt và bí đỏ đều ra 0. Xem `tools/extract_fct.py`, mục `RAE_FACTORS`.
+
+### Hai hạn chế đã biết
+
+**Purin phủ 22 %.** Bảng Việt Nam chỉ có purin ở 82/526 mục (15,6 %) và USDA
+không công bố chất này, nên quy tắc định lượng cho người bệnh gút chỉ áp được
+lên 70/318 món. Nhãn `Giàu purin` là tuyến bảo vệ chính — hiện gắn cho 91 món
+(nội tạng và tiết, hải sản vỏ cứng, cá) và được một quy tắc `exclude_tag`
+dùng. Đây là hạn chế cấu trúc cần nêu trong báo cáo, không phải thiếu sót
+điền dữ liệu.
+
+**Phép đối chiếu Atwater không bắt được lỗi công thức.** Với món cộng dồn từ
+nguyên liệu, số liệu vốn đã tự nhất quán nên phép này luôn xanh. Ghi nhầm
+thịt bò 60 g thành 160 g thì mọi phép kiểm vẫn qua. Chỉ người biết nấu ăn rà
+lại `note` mới phát hiện được.

@@ -1,0 +1,998 @@
+[
+  {
+    "name": "Canh chua cá lóc",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 1,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8022",
+        "g": 80,
+        "label": "cá lóc"
+      },
+      {
+        "code": "4005",
+        "g": 60,
+        "label": "cà chua"
+      },
+      {
+        "code": "4036",
+        "g": 40,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Vị chua từ me, khối lượng me không đáng kể nên không tính"
+  },
+  {
+    "name": "Canh bí đao nấu tôm",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4002",
+        "g": 180,
+        "label": "bí đao"
+      },
+      {
+        "code": "8051",
+        "g": 40,
+        "label": "tôm biển"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh nhạt, ít nêm"
+  },
+  {
+    "name": "Canh rau ngót thịt bằm",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4086",
+        "g": 150,
+        "label": "rau ngót"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau truyền thống"
+  },
+  {
+    "name": "Canh bí đỏ nấu tôm",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4003",
+        "g": 180,
+        "label": "bí đỏ"
+      },
+      {
+        "code": "8051",
+        "g": 40,
+        "label": "tôm biển"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh ngọt tự nhiên từ bí đỏ"
+  },
+  {
+    "name": "Canh cải nấu thịt",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4015",
+        "g": 150,
+        "label": "cải thảo"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nhẹ"
+  },
+  {
+    "name": "Canh bầu nấu thịt bò nạc",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4001",
+        "g": 150,
+        "label": "bầu"
+      },
+      {
+        "code": "7003",
+        "g": 40,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh bí đao nấu thăn bò",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4002",
+        "g": 150,
+        "label": "bí đao"
+      },
+      {
+        "code": "7005",
+        "g": 40,
+        "label": "thăn bò"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh bí đỏ nấu thịt dê",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4003",
+        "g": 150,
+        "label": "bí đỏ"
+      },
+      {
+        "code": "7011",
+        "g": 40,
+        "label": "thịt dê"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh cà tím nấu thịt gà",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4004",
+        "g": 150,
+        "label": "cà tím"
+      },
+      {
+        "code": "7013",
+        "g": 40,
+        "label": "thịt gà"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh cà rốt nấu thịt lợn nạc",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4007",
+        "g": 150,
+        "label": "cà rốt"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh bắp cải nấu thịt lợn",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4010",
+        "g": 150,
+        "label": "bắp cải"
+      },
+      {
+        "code": "7018",
+        "g": 40,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh bắp cải tím nấu thịt thỏ",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4011",
+        "g": 150,
+        "label": "bắp cải tím"
+      },
+      {
+        "code": "7021",
+        "g": 40,
+        "label": "thịt thỏ"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh cải thảo nấu cá chép",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4015",
+        "g": 150,
+        "label": "cải thảo"
+      },
+      {
+        "code": "8003",
+        "g": 40,
+        "label": "cá chép"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh cải bẹ xanh nấu cá hồi",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4016",
+        "g": 150,
+        "label": "cải bẹ xanh"
+      },
+      {
+        "code": "8011",
+        "g": 40,
+        "label": "cá hồi"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh củ cải trắng nấu cá ngừ",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4021",
+        "g": 150,
+        "label": "củ cải trắng"
+      },
+      {
+        "code": "8019",
+        "g": 40,
+        "label": "cá ngừ"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh đậu đũa nấu cá rô",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4030",
+        "g": 150,
+        "label": "đậu đũa"
+      },
+      {
+        "code": "8023",
+        "g": 40,
+        "label": "cá rô"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh đậu Hà Lan nấu cá rô phi",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4031",
+        "g": 150,
+        "label": "đậu Hà Lan"
+      },
+      {
+        "code": "8024",
+        "g": 40,
+        "label": "cá rô phi"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh đậu rồng nấu cá thu",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4032",
+        "g": 150,
+        "label": "đậu rồng"
+      },
+      {
+        "code": "8026",
+        "g": 40,
+        "label": "cá thu"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh giá đậu nành nấu cá trê",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4035",
+        "g": 150,
+        "label": "giá đậu nành"
+      },
+      {
+        "code": "8030",
+        "g": 40,
+        "label": "cá trê"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh giá đỗ nấu tôm biển",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4036",
+        "g": 150,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "8051",
+        "g": 40,
+        "label": "tôm biển"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh măng tây nấu mực",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4052",
+        "g": 150,
+        "label": "măng tây"
+      },
+      {
+        "code": "8040",
+        "g": 40,
+        "label": "mực"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh măng nấu thịt bò nạc",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4053",
+        "g": 150,
+        "label": "măng"
+      },
+      {
+        "code": "7003",
+        "g": 40,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh mướp nấu thăn bò",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4054",
+        "g": 150,
+        "label": "mướp"
+      },
+      {
+        "code": "7005",
+        "g": 40,
+        "label": "thăn bò"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh khổ qua nấu thịt dê",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4055",
+        "g": 150,
+        "label": "khổ qua"
+      },
+      {
+        "code": "7011",
+        "g": 40,
+        "label": "thịt dê"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh ngải cứu nấu thịt gà",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4057",
+        "g": 150,
+        "label": "ngải cứu"
+      },
+      {
+        "code": "7013",
+        "g": 40,
+        "label": "thịt gà"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh ngô bao tử nấu thịt lợn nạc",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4058",
+        "g": 150,
+        "label": "ngô bao tử"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh củ sen nấu thịt lợn",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4059",
+        "g": 150,
+        "label": "củ sen"
+      },
+      {
+        "code": "7018",
+        "g": 40,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau nấu đạm, nêm nhẹ"
+  },
+  {
+    "name": "Canh hẹ đậu phụ",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "4042",
+        "g": 80,
+        "label": "hẹ"
+      },
+      {
+        "code": "3025",
+        "g": 100,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh hẹ nấu đậu phụ, món dân dã"
+  },
+  {
+    "name": "Canh rau đay mướp",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4070",
+        "g": 100,
+        "label": "rau đay"
+      },
+      {
+        "code": "4054",
+        "g": 80,
+        "label": "mướp"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau đay nấu mướp, món mùa hè"
+  },
+  {
+    "name": "Canh rau lang nấu tôm",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "4076",
+        "g": 120,
+        "label": "rau lang"
+      },
+      {
+        "code": "8051",
+        "g": 40,
+        "label": "tôm biển"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh rau lang nấu tôm"
+  },
+  {
+    "name": "Canh su su nấu thịt",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4098",
+        "g": 150,
+        "label": "su su"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Canh su su nấu thịt bằm"
+  },
+  {
+    "name": "Canh chua chay",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay",
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "4005",
+        "g": 60,
+        "label": "cà chua"
+      },
+      {
+        "code": "5015",
+        "g": 45,
+        "label": "dứa"
+      },
+      {
+        "code": "3025",
+        "g": 60,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "13010",
+        "g": 8,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Nêm nước tương thay nước mắm nên thuần chay thật sự. Vị chua từ me và dứa"
+  },
+  {
+    "name": "Canh bí đỏ nấu đậu phụ",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay",
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "4003",
+        "g": 120,
+        "label": "bí đỏ"
+      },
+      {
+        "code": "3025",
+        "g": 55,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "13010",
+        "g": 8,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Nêm nước tương, không dùng nước mắm"
+  },
+  {
+    "name": "Canh rau ngót nấu nấm",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4086",
+        "g": 100,
+        "label": "rau ngót"
+      },
+      {
+        "code": "4125",
+        "g": 55,
+        "label": "nấm rơm"
+      },
+      {
+        "code": "13005",
+        "g": 2,
+        "label": "muối"
+      }
+    ],
+    "note": "Nêm muối, đạm từ nấm. KHÔNG dùng đậu nành — dành cho người vừa ăn chay vừa dị ứng đậu nành"
+  },
+  {
+    "name": "Canh cải nấu nấm hương",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4016",
+        "g": 110,
+        "label": "cải bẹ xanh"
+      },
+      {
+        "code": "4123",
+        "g": 40,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13005",
+        "g": 2,
+        "label": "muối"
+      }
+    ],
+    "note": "Nêm muối, không dùng đậu nành"
+  },
+  {
+    "name": "Canh mướp nấu nấm rơm",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4054",
+        "g": 120,
+        "label": "mướp"
+      },
+      {
+        "code": "4125",
+        "g": 50,
+        "label": "nấm rơm"
+      },
+      {
+        "code": "13005",
+        "g": 2,
+        "label": "muối"
+      }
+    ],
+    "note": "Nêm muối, không dùng đậu nành"
+  },
+  {
+    "name": "Canh bầu nấu nấm hương",
+    "category": "Món canh",
+    "dish_role": "soup",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4001",
+        "g": 120,
+        "label": "bầu"
+      },
+      {
+        "code": "4123",
+        "g": 40,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13005",
+        "g": 2,
+        "label": "muối"
+      }
+    ],
+    "note": "Nêm muối, không dùng đậu nành"
+  }
+]

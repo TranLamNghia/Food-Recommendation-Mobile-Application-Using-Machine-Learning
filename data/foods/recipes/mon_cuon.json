@@ -1,0 +1,114 @@
+[
+  {
+    "name": "Gỏi cuốn tôm thịt",
+    "category": "Món cuốn",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1010",
+        "g": 30,
+        "label": "bánh tráng"
+      },
+      {
+        "code": "8051",
+        "g": 50,
+        "label": "tôm biển"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "4069",
+        "g": 40,
+        "label": "xà lách"
+      },
+      {
+        "code": "1020",
+        "g": 40,
+        "label": "bún tươi"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cuốn tươi, nước chấm tính vào phần nước mắm"
+  },
+  {
+    "name": "Bánh cuốn nóng",
+    "category": "Món cuốn",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có gluten"
+    ],
+    "ingredients": [
+      {
+        "code": "1018",
+        "g": 70,
+        "label": "bột gạo"
+      },
+      {
+        "code": "7017",
+        "g": 40,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "4123",
+        "g": 30,
+        "label": "nấm hương"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Tráng mỏng, nhân thịt nấm"
+  },
+  {
+    "name": "Bò bía",
+    "category": "Món cuốn",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Có trứng"
+    ],
+    "ingredients": [
+      {
+        "code": "1010",
+        "g": 30,
+        "label": "bánh tráng"
+      },
+      {
+        "code": "4007",
+        "g": 50,
+        "label": "cà rốt"
+      },
+      {
+        "code": "9001",
+        "g": 25,
+        "label": "trứng gà"
+      },
+      {
+        "code": "4069",
+        "g": 40,
+        "label": "xà lách"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cuốn chay có trứng"
+  }
+]

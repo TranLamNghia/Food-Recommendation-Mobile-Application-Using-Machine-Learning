@@ -1,0 +1,393 @@
+[
+  {
+    "name": "Nước cam ép",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "14005",
+        "g": 250,
+        "label": "nước cam ép"
+      }
+    ],
+    "note": "Ép từ cam tươi, không thêm đường"
+  },
+  {
+    "name": "Sữa đậu nành",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Có đậu nành",
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "3032",
+        "g": 250,
+        "label": "sữa đậu nành"
+      }
+    ],
+    "note": "Không thêm đường"
+  },
+  {
+    "name": "Sinh tố xoài",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Có đậu nành",
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5055",
+        "g": 120,
+        "label": "xoài chín"
+      },
+      {
+        "code": "3032",
+        "g": 150,
+        "label": "sữa đậu nành"
+      }
+    ],
+    "note": "Xay xoài với sữa đậu nành, không thêm đường"
+  },
+  {
+    "name": "Nước ép ổi",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5040",
+        "g": 220,
+        "label": "ổi"
+      }
+    ],
+    "note": "Ép từ ổi tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép cà rốt",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4007",
+        "g": 220,
+        "label": "cà rốt"
+      }
+    ],
+    "note": "Ép từ cà rốt tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép bưởi",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5001",
+        "g": 220,
+        "label": "bưởi"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép chôm chôm",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5004",
+        "g": 220,
+        "label": "chôm chôm"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép dâu tây",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5009",
+        "g": 220,
+        "label": "dâu tây"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép dưa lưới",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5010",
+        "g": 220,
+        "label": "dưa lưới"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép dưa bở",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5012",
+        "g": 220,
+        "label": "dưa bở"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép dứa",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5015",
+        "g": 220,
+        "label": "dứa"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép đào",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5016",
+        "g": 220,
+        "label": "đào"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép hồng",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5020",
+        "g": 220,
+        "label": "hồng"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép hồng xiêm",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5022",
+        "g": 220,
+        "label": "hồng xiêm"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép lê",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5023",
+        "g": 220,
+        "label": "lê"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép lựu",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5024",
+        "g": 220,
+        "label": "lựu"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép mãng cầu xiêm",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5025",
+        "g": 220,
+        "label": "mãng cầu xiêm"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép mận",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5027",
+        "g": 220,
+        "label": "mận"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép mít",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5028",
+        "g": 220,
+        "label": "mít"
+      }
+    ],
+    "note": "Ép từ quả tươi, không thêm đường"
+  },
+  {
+    "name": "Nước ép cà chua",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4005",
+        "g": 220,
+        "label": "cà chua"
+      }
+    ],
+    "note": "Ép tươi, không thêm muối hay đường"
+  },
+  {
+    "name": "Sinh tố bơ",
+    "category": "Đồ uống",
+    "dish_role": "drink",
+    "spice_level": 0,
+    "tags": [
+      "Có đậu nành",
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5041",
+        "g": 120,
+        "label": "bơ"
+      },
+      {
+        "code": "3032",
+        "g": 150,
+        "label": "sữa đậu nành"
+      }
+    ],
+    "note": "Xay bơ với sữa đậu nành, không thêm đường"
+  }
+]

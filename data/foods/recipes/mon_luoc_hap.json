@@ -1,0 +1,1241 @@
+[
+  {
+    "name": "Rau muống luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4083",
+        "g": 200,
+        "label": "rau muống"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Bí đỏ hấp",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4003",
+        "g": 220,
+        "label": "bí đỏ"
+      }
+    ],
+    "note": "Hấp cách thủy, không nêm"
+  },
+  {
+    "name": "Khoai lang luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2008",
+        "g": 250,
+        "label": "khoai lang"
+      }
+    ],
+    "note": "Khối lượng tính phần ăn được, đã bỏ vỏ"
+  },
+  {
+    "name": "Ngô luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1007",
+        "g": 150,
+        "label": "ngô hạt tươi"
+      }
+    ],
+    "note": "Khối lượng tính phần hạt, đã tách khỏi lõi"
+  },
+  {
+    "name": "Khổ qua luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4055",
+        "g": 200,
+        "label": "khổ qua"
+      }
+    ],
+    "note": "Luộc chín tới, không nêm"
+  },
+  {
+    "name": "Bắp cải luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4010",
+        "g": 200,
+        "label": "bắp cải"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm"
+  },
+  {
+    "name": "Trứng luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có trứng"
+    ],
+    "ingredients": [
+      {
+        "code": "9001",
+        "g": 100,
+        "label": "trứng gà"
+      }
+    ],
+    "note": "Khoảng hai quả. Natri là natri tự nhiên của trứng, không nêm thêm"
+  },
+  {
+    "name": "Thịt bò luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7003",
+        "g": 150,
+        "label": "thịt bò nạc"
+      }
+    ],
+    "note": "Luộc không nêm. Khối lượng tính thịt sống, phần ăn được"
+  },
+  {
+    "name": "Cá hấp gừng",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8030",
+        "g": 150,
+        "label": "cá trê"
+      },
+      {
+        "code": "4037",
+        "g": 10,
+        "label": "hành lá"
+      }
+    ],
+    "note": "Hấp gừng, không nêm nước mắm. Gừng không tính vì khối lượng không đáng kể"
+  },
+  {
+    "name": "Đậu phụ hấp",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có đậu nành",
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "3025",
+        "g": 200,
+        "label": "đậu phụ"
+      }
+    ],
+    "note": "Hấp chín, không nêm"
+  },
+  {
+    "name": "Bầu luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4001",
+        "g": 200,
+        "label": "bầu"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Bí đỏ luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4003",
+        "g": 200,
+        "label": "bí đỏ"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Cà tím luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4004",
+        "g": 200,
+        "label": "cà tím"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Cà rốt luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4007",
+        "g": 200,
+        "label": "cà rốt"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Bắp cải tím luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4011",
+        "g": 200,
+        "label": "bắp cải tím"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Cải thảo luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4015",
+        "g": 200,
+        "label": "cải thảo"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Cải bẹ xanh luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4016",
+        "g": 200,
+        "label": "cải bẹ xanh"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Củ cải trắng luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4021",
+        "g": 200,
+        "label": "củ cải trắng"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Đậu đũa luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4030",
+        "g": 200,
+        "label": "đậu đũa"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Đậu hà lan luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4031",
+        "g": 200,
+        "label": "đậu Hà Lan"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Đậu rồng luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4032",
+        "g": 200,
+        "label": "đậu rồng"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Giá đậu nành luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4035",
+        "g": 200,
+        "label": "giá đậu nành"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Giá đỗ luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4036",
+        "g": 200,
+        "label": "giá đỗ"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Măng tây luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4052",
+        "g": 200,
+        "label": "măng tây"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Măng luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4053",
+        "g": 200,
+        "label": "măng"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Mướp luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4054",
+        "g": 200,
+        "label": "mướp"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Ngải cứu luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4057",
+        "g": 200,
+        "label": "ngải cứu"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm. Nước luộc không tính vào suất"
+  },
+  {
+    "name": "Thịt bò nạc hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7003",
+        "g": 130,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Thăn bò hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7005",
+        "g": 130,
+        "label": "thăn bò"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Thịt dê hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7011",
+        "g": 130,
+        "label": "thịt dê"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Thịt gà hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7013",
+        "g": 130,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Thịt lợn nạc hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7017",
+        "g": 130,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Thịt lợn hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7018",
+        "g": 130,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Thịt thỏ hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7021",
+        "g": 130,
+        "label": "thịt thỏ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá chép hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8003",
+        "g": 130,
+        "label": "cá chép"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá hồi hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8011",
+        "g": 130,
+        "label": "cá hồi"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá ngừ hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8019",
+        "g": 130,
+        "label": "cá ngừ"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá lóc hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8022",
+        "g": 130,
+        "label": "cá lóc"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá rô hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8023",
+        "g": 130,
+        "label": "cá rô"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá rô phi hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8024",
+        "g": 130,
+        "label": "cá rô phi"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá thu hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8026",
+        "g": 130,
+        "label": "cá thu"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cá trê hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8030",
+        "g": 130,
+        "label": "cá trê"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Tôm biển hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8051",
+        "g": 130,
+        "label": "tôm biển"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Cua biển hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8033",
+        "g": 130,
+        "label": "cua biển"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Mực hấp hành",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8040",
+        "g": 130,
+        "label": "mực"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm rất nhẹ"
+  },
+  {
+    "name": "Củ ấu luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2001",
+        "g": 200,
+        "label": "củ ấu"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai mỡ luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2002",
+        "g": 200,
+        "label": "khoai mỡ"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai lang trắng luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2008",
+        "g": 200,
+        "label": "khoai lang trắng"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai lang vàng luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2009",
+        "g": 200,
+        "label": "khoai lang vàng"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai mài luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2010",
+        "g": 200,
+        "label": "khoai mài"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai nước luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2011",
+        "g": 200,
+        "label": "khoai nước"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai sọ luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2013",
+        "g": 200,
+        "label": "khoai sọ"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Khoai tây luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "2014",
+        "g": 200,
+        "label": "khoai tây"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Ngô hạt luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "snack",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1007",
+        "g": 200,
+        "label": "ngô hạt"
+      }
+    ],
+    "note": "Luộc chín, phần ăn được"
+  },
+  {
+    "name": "Rau lang luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4076",
+        "g": 200,
+        "label": "rau lang"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm"
+  },
+  {
+    "name": "Su su luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4098",
+        "g": 200,
+        "label": "su su"
+      }
+    ],
+    "note": "Luộc chín tới, không nêm"
+  },
+  {
+    "name": "Rau đay luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4070",
+        "g": 200,
+        "label": "rau đay"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm"
+  },
+  {
+    "name": "Rau dền luộc",
+    "category": "Món luộc hấp",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4072",
+        "g": 200,
+        "label": "rau dền"
+      }
+    ],
+    "note": "Luộc nước sôi, không nêm"
+  },
+  {
+    "name": "Đậu phụ hấp nấm",
+    "category": "Món luộc hấp",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay",
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "3025",
+        "g": 110,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "4125",
+        "g": 45,
+        "label": "nấm rơm"
+      },
+      {
+        "code": "4037",
+        "g": 10,
+        "label": "hành lá"
+      },
+      {
+        "code": "13005",
+        "g": 1.5,
+        "label": "muối"
+      }
+    ],
+    "note": "Hấp cách thủy, nêm muối"
+  }
+]

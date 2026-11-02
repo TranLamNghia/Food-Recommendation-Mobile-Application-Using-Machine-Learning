@@ -1,2 +1,4 @@
-name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
-Salad rau trộn dầu giấm,mon_goi,side_veg,tron,0,breakfast|lunch|dinner|snack,,,120,3,12,7,,,,,,,,,,,light,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+name,category,dish_role,spice_level,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,note
+Salad rau trộn dầu giấm,Món gỏi / nộm,side_veg,0,260,129.3,2.4,6.5,10.4,1.6,3.6,33.2,0.0,26.7,70.0,2.8,1.0,472.2,60.0,Món chay|Món thuần chay,"Công thức: xà lách 120g + dưa chuột 80g + cà chua 50g + dầu thực vật 10g. Trộn dầu giấm, không nêm mắm"
+Gỏi bắp cải gà,Món gỏi / nộm,side_veg,0,228,124.0,15.8,9.8,2.5,2.4,6.1,721.8,35.4,33.2,85.4,3.6,2.8,350.2,39.9,,Công thức: bắp cải 120g + thịt gà 60g + cà rốt 40g + nước mắm 8g. Gỏi trộn chua ngọt
+Gỏi dưa chuột,Món gỏi / nộm,side_veg,0,163,101.8,1.5,5.5,8.2,1.1,2.6,20.4,0.0,10.5,35.7,1.6,0.3,17.2,8.0,Món chay|Món thuần chay,"Công thức: dưa chuột 150g + tỏi 5g + dầu thực vật 8g. Trộn nhẹ, không nêm mắm"

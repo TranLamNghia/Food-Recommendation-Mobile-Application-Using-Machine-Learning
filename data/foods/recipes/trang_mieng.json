@@ -1,0 +1,452 @@
+[
+  {
+    "name": "Chuối tiêu",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5006",
+        "g": 150,
+        "label": "chuối tiêu"
+      }
+    ],
+    "note": "Khoảng hai quả, phần ăn được"
+  },
+  {
+    "name": "Cam tươi",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5002",
+        "g": 200,
+        "label": "cam"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Đu đủ chín",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5017",
+        "g": 200,
+        "label": "đu đủ chín"
+      }
+    ],
+    "note": "Phần ăn được"
+  },
+  {
+    "name": "Dưa hấu",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5011",
+        "g": 250,
+        "label": "dưa hấu"
+      }
+    ],
+    "note": "Phần ruột, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Xoài chín",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5055",
+        "g": 150,
+        "label": "xoài chín"
+      }
+    ],
+    "note": "Phần ăn được"
+  },
+  {
+    "name": "Ổi",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5040",
+        "g": 150,
+        "label": "ổi"
+      }
+    ],
+    "note": "Phần ăn được"
+  },
+  {
+    "name": "Bưởi",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5001",
+        "g": 180,
+        "label": "bưởi"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Chôm chôm",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5004",
+        "g": 180,
+        "label": "chôm chôm"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Dâu tây",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5009",
+        "g": 180,
+        "label": "dâu tây"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Dưa lưới",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5010",
+        "g": 180,
+        "label": "dưa lưới"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Dưa bở",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5012",
+        "g": 180,
+        "label": "dưa bở"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Dứa",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5015",
+        "g": 180,
+        "label": "dứa"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Đào",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5016",
+        "g": 180,
+        "label": "đào"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Hồng",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5020",
+        "g": 180,
+        "label": "hồng"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Hồng xiêm",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5022",
+        "g": 180,
+        "label": "hồng xiêm"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Lê",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5023",
+        "g": 180,
+        "label": "lê"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Lựu",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5024",
+        "g": 180,
+        "label": "lựu"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Mãng cầu xiêm",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5025",
+        "g": 180,
+        "label": "mãng cầu xiêm"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Mận",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5027",
+        "g": 180,
+        "label": "mận"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Mít",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5028",
+        "g": 180,
+        "label": "mít"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Na",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5034",
+        "g": 180,
+        "label": "na"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Nhãn",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5035",
+        "g": 180,
+        "label": "nhãn"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Nho",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5037",
+        "g": 180,
+        "label": "nho"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Bơ",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5041",
+        "g": 180,
+        "label": "bơ"
+      }
+    ],
+    "note": "Phần ăn được, đã bỏ vỏ và hạt"
+  },
+  {
+    "name": "Chuối sứ",
+    "category": "Tráng miệng",
+    "dish_role": "dessert",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "5007",
+        "g": 160,
+        "label": "chuối sứ"
+      }
+    ],
+    "note": "Phần ăn được"
+  }
+]

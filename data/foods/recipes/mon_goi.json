@@ -1,0 +1,93 @@
+[
+  {
+    "name": "Salad rau trộn dầu giấm",
+    "category": "Món gỏi / nộm",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4069",
+        "g": 120,
+        "label": "xà lách"
+      },
+      {
+        "code": "4027",
+        "g": 80,
+        "label": "dưa chuột"
+      },
+      {
+        "code": "4005",
+        "g": 50,
+        "label": "cà chua"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      }
+    ],
+    "note": "Trộn dầu giấm, không nêm mắm"
+  },
+  {
+    "name": "Gỏi bắp cải gà",
+    "category": "Món gỏi / nộm",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4010",
+        "g": 120,
+        "label": "bắp cải"
+      },
+      {
+        "code": "7003",
+        "g": 60,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4007",
+        "g": 40,
+        "label": "cà rốt"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Gỏi trộn chua ngọt"
+  },
+  {
+    "name": "Gỏi dưa chuột",
+    "category": "Món gỏi / nộm",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4027",
+        "g": 150,
+        "label": "dưa chuột"
+      },
+      {
+        "code": "4103",
+        "g": 5,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 8,
+        "label": "dầu thực vật"
+      }
+    ],
+    "note": "Trộn nhẹ, không nêm mắm"
+  }
+]
