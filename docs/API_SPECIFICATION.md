@@ -197,10 +197,15 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 
 | Trường | Giá trị hợp lệ |
 |---|---|
-| `cookingMethod` | `luoc` · `hap` · `xao` · `chien` · `nuong` · `kho` · `nau_canh` · `tron` · `song` · `khac` |
 | `dishRole` | `main` · `side` · `soup` · `dessert` · `drink` |
 | `spiceLevel` | số nguyên `0` – `3` |
 | `tagType` | `allergen` · `diet` · `nutrition` · `taste` |
+
+> Bản thiết kế trước đây có thêm `cookingMethod` và `origin`; cả hai đã bỏ khỏi
+> lược đồ nên API không trả về nữa. Cách chế biến đã nằm trong `categoryName`
+> (`Món luộc hấp`, `Món xào`, `Món chiên rán`...) — để nó thành một trục riêng
+> thì không gì ngăn một dòng thuộc nhóm `Món nước` lại mang `cookingMethod = xao`.
+> Lý do đầy đủ ở `docs/DATABASE_DESIGN.md` §"Vì sao không có cột phương pháp chế biến".
 
 ### 5.3 Bữa ăn và tương tác
 
@@ -881,9 +886,7 @@ Authorization: Bearer <accessToken>
       "id": "00000001-0000-4000-8000-000000000000",
       "name": "Phở bò",
       "imageUrl": "https://cdn.example.com/foods/pho-bo.jpg",
-      "origin": "Hà Nội",
       "categoryName": "Món nước",
-      "cookingMethod": "nau_canh",
       "spiceLevel": 0,
       "dishRole": "main",
       "caloriesKcal": 430.0,
@@ -894,9 +897,7 @@ Authorization: Bearer <accessToken>
       "id": "00000008-0000-4000-8000-000000000000",
       "name": "Rau muống luộc",
       "imageUrl": "https://cdn.example.com/foods/rau-muong-luoc.jpg",
-      "origin": null,
       "categoryName": "Món luộc hấp",
-      "cookingMethod": "luoc",
       "spiceLevel": 0,
       "dishRole": "side",
       "caloriesKcal": 35.0,
@@ -1077,10 +1078,8 @@ Ví dụ lỗi `422`:
       "id": "00000005-0000-4000-8000-000000000000",
       "name": "Canh chua cá lóc",
       "imageUrl": "https://cdn.example.com/foods/canh-chua-ca-loc.jpg",
-      "origin": "Miền Tây",
       "categoryName": "Món canh",
       "dishRole": "soup",
-      "cookingMethod": "nau_canh",
       "spiceLevel": 1,
       "caloriesKcal": 120.0,
       "servingSizeG": 250,
@@ -1122,9 +1121,7 @@ Ví dụ lỗi `422`:
   "name": "Canh chua cá lóc",
   "description": "Canh chua nấu với cá lóc, dứa, cà chua, giá đỗ và rau thơm",
   "imageUrl": "https://cdn.example.com/foods/canh-chua-ca-loc.jpg",
-  "origin": "Miền Tây",
   "category": { "id": "00000005-0000-4000-8000-000000000000", "name": "Món canh" },
-  "cookingMethod": "nau_canh",
   "spiceLevel": 1,
   "dishRole": "soup",
   "nutrition": {

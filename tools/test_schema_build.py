@@ -35,6 +35,8 @@ import pathlib
 import re
 import sys
 
+import _env  # noqa: E402
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 # Dùng lại bộ tách câu lệnh của `run_sql.py` thay vì chép thêm một bản. Hai
@@ -96,6 +98,7 @@ def assert_no_real_db(label: str, text: str, real: str) -> None:
 
 
 def main() -> int:
+    _env.in_utf8()
     try:
         import pymysql
     except ImportError:

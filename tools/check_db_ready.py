@@ -25,6 +25,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _env  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # Cho phép trỏ sang tệp schema khác qua biến môi trường SCHEMA_FILE. Dùng để
@@ -109,6 +112,7 @@ def read_schema(text: str) -> dict[str, dict]:
 
 
 def main() -> int:
+    _env.in_utf8()
     schema = read_schema(SCHEMA.read_text(encoding="utf-8"))
     seed = SEED.read_text(encoding="utf-8")
 

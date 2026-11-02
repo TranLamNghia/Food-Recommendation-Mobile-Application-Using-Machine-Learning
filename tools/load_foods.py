@@ -263,6 +263,7 @@ def apply(rows: list[dict]) -> int:
 
 
 def main() -> int:
+    _env.in_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--apply", action="store_true",

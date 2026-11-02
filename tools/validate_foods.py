@@ -25,6 +25,9 @@ import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _env  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "foods"
 
@@ -300,6 +303,7 @@ def check_row(issues, filename, lineno, row, expected_category):
 
 
 def main() -> int:
+    _env.in_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--strict", action="store_true", help="coi cảnh báo là lỗi"

@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Đối chiếu ba tài liệu thiết kế với CSDL thật.
+"""Đối chiếu bốn tài liệu thiết kế với CSDL thật.
 
-Lược đồ được mô tả ở bốn nơi, và chúng rất dễ lệch nhau:
+Lược đồ được mô tả ở năm nơi, và chúng rất dễ lệch nhau:
 
-    db/schema.sql           nguồn để dựng CSDL
-    docs/DATABASE_DESIGN.md khối DDL + bảng mô tả từng cột
-    docs/database_erd.html  sơ đồ quan hệ
-    docs/ERD_REVIEW.md      bản rà soát để nộp bài tập
+    db/schema.sql               nguồn để dựng CSDL
+    docs/DATABASE_DESIGN.md     khối DDL + bảng mô tả từng cột
+    docs/database_erd.html      sơ đồ quan hệ
+    docs/ERD_REVIEW.md          bản rà soát để nộp bài tập
+    docs/API_SPECIFICATION.md   trường JSON mà API trả về
 
 Phép kiểm trước đây chỉ đối chiếu hai tệp giữa, nên `ERD_REVIEW.md` lệch mà
 không ai biết: nó nêu quy mô ở HAI chỗ, một chỗ được cập nhật còn chỗ kia vẫn
 ghi `21 bảng · 27 khóa ngoại · 14 ràng buộc CHECK` sau khi lược đồ đã thành
-22/30/15. Bộ này kiểm cả bốn.
+22/30/15. Cùng kiểu lỗi ấy lặp lại với `API_SPECIFICATION.md`: nó vẫn trả
+`origin` và `cookingMethod` hơn một tháng sau khi hai cột rời lược đồ, vì tệp
+không nằm trong danh sách quét. Bộ này kiểm cả năm.
 
 Kiểm bốn nhóm:
 
@@ -39,10 +42,21 @@ ROOT = Path(__file__).resolve().parent.parent
 ERD = ROOT / "docs" / "database_erd.html"
 DESIGN = ROOT / "docs" / "DATABASE_DESIGN.md"
 REVIEW = ROOT / "docs" / "ERD_REVIEW.md"
+APISPEC = ROOT / "docs" / "API_SPECIFICATION.md"
 
 # Cột đã bỏ khỏi lược đồ. Tài liệu được phép NHẮC chúng trong các mục giải
 # thích "vì sao không có cột này", nhưng không được liệt kê như cột đang có.
 DROPPED = ("origin", "suitable_meals", "cooking_method", "computed_at")
+
+# API_SPECIFICATION.md viết tên trường kiểu camelCase, nên phép kiểm phải tra
+# cả hai dạng. Chính khoảng trống này đã để `cookingMethod` và `origin` nằm
+# trong tài liệu API hơn một tháng sau khi hai cột bị bỏ khỏi lược đồ: tệp
+# không có trong danh sách quét, mà nếu có thì mẫu tìm `cooking_method` cũng
+# không khớp được chữ `cookingMethod` trong khối JSON.
+def camel(ten: str) -> str:
+    dau, *sau = ten.split("_")
+    return dau + "".join(k.capitalize() for k in sau)
+
 
 # Từ khóa cho thấy một lần nhắc là phần giải thích lịch sử, không phải liệt kê.
 HISTORICAL = (
@@ -245,6 +259,7 @@ def has_diacritics(text: str) -> bool:
 
 
 def main() -> int:
+    _env.in_utf8()
     db = read_db("nutrition_rec")
     n_tables = len(db["tables"])
     problems: list[str] = []
@@ -521,12 +536,20 @@ def main() -> int:
     # ── 3. Cột đã bỏ mà tài liệu còn liệt kê ──
     print("\n3. Cột đã bỏ khỏi lược đồ")
     live = {c for cols in db["columns"].values() for c in cols}
-    for path in (DESIGN, REVIEW, ERD):
+    for path in (DESIGN, REVIEW, ERD, APISPEC):
         text = path.read_text(encoding="utf-8")
         for col in DROPPED:
             if col in live:
                 continue
-            for m in re.finditer(rf"`{col}`|\['{col}'", text):
+            # Dấu nháy/backtick hai đầu là cố ý: `origin` phải khớp nhưng
+            # `originalItem` thì không, mà nó có thật trong tài liệu API.
+            ten = {col, camel(col)}
+            mau = "|".join(
+                [rf"`{t}`" for t in sorted(ten)]
+                + [rf'"{t}"\s*:' for t in sorted(ten)]
+                + [rf"\['{col}'"]
+            )
+            for m in re.finditer(mau, text):
                 lineno = text[: m.start()].count("\n") + 1
                 line = text.split("\n")[lineno - 1]
                 # Nhắc trong mục giải thích lịch sử thì bỏ qua
@@ -613,7 +636,7 @@ def main() -> int:
         for p in problems:
             print(f"  ✗ {p}")
     else:
-        print("TẤT CẢ KHỚP — bốn nguồn mô tả cùng một lược đồ.")
+        print("TẤT CẢ KHỚP — năm nguồn mô tả cùng một lược đồ.")
     print("═" * 72)
     return 1 if problems else 0
 

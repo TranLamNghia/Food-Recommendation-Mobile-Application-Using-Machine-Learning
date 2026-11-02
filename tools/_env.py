@@ -15,6 +15,7 @@ trường mà không phải sửa tệp:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,3 +67,20 @@ def get(name: str, default: str = "") -> str:
     """Lấy một biến tùy chọn."""
     load_env()
     return os.environ.get(name, default).strip() or default
+
+
+def in_utf8() -> None:
+    """Bắt stdout nhận được tiếng Việt trên Windows (mặc định là cp1252).
+
+    Không gọi hàm này thì mọi bộ kiểm in ký tự ✓ ✗ hay khung kẻ sẽ **chết giữa
+    lúc chạy** với UnicodeEncodeError, chứ không phải in ra chữ sai. Chạy trực
+    tiếp trên console thì có thể không thấy vì console Windows mới đã là utf-8;
+    lỗi chỉ nổ khi đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức là đúng
+    lúc chạy trong CI. Cùng một hàm với `ml.db.in_utf8`; để ở hai nơi vì `ml/`
+    không phụ thuộc vào `tools/`.
+    """
+    for luong in (sys.stdout, sys.stderr):
+        try:
+            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except Exception:  # pragma: no cover - console lạ
+            pass
