@@ -49,39 +49,23 @@ class _SurveyResultScreenState extends State<SurveyResultScreen>
 
   /// Đặc trưng nổi bật của các món được thích — xếp theo số lần xuất hiện.
   ///
-  /// Đếm riêng phương pháp chế biến và nhóm món rồi lấy hai đặc trưng mạnh
-  /// nhất của mỗi loại. Nếu gộp chung một rổ, hai nhãn gần như đồng nghĩa
-  /// ("Chiên" và "Món chiên") sẽ cùng lọt vào và nói đi nói lại một ý.
+  /// Chỉ đếm theo nhóm món. Bản trước đếm riêng cả phương pháp chế biến, rồi
+  /// phải khử trùng vì hai nhãn gần như đồng nghĩa ("Chiên" và "Món chiên")
+  /// cùng lọt vào và nói đi nói lại một ý. Bỏ một trục thì bộ máy khử trùng
+  /// cũng không còn cần.
   List<({String label, int count})> _topTraits() {
-    final byMethod = <String, int>{};
     final byCategory = <String, int>{};
-
     for (final r in widget.results.where((r) => r.action == SwipeAction.like)) {
-      byMethod[r.food.cookingMethod] =
-          (byMethod[r.food.cookingMethod] ?? 0) + 1;
       byCategory[r.food.category] = (byCategory[r.food.category] ?? 0) + 1;
     }
 
-    String key(String s) => s.toLowerCase().replaceAll('món ', '').trim();
+    final entries = byCategory.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
-    final picked = <({String label, int count})>[];
-    final seen = <String>{};
-
-    void takeTop(Map<String, int> tally, int limit) {
-      final entries = tally.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      var added = 0;
-      for (final e in entries) {
-        if (added == limit) break;
-        if (!seen.add(key(e.key))) continue;
-        picked.add((label: e.key, count: e.value));
-        added++;
-      }
-    }
-
-    takeTop(byMethod, 2);
-    takeTop(byCategory, 2);
-    return picked;
+    return entries
+        .take(3)
+        .map((e) => (label: e.key, count: e.value))
+        .toList();
   }
 
   @override

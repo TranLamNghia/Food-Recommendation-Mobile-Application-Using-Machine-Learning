@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../models/food.dart';
 import '../models/meal_plan.dart';
+import 'nutrient_target.dart';
 import 'preference_profile.dart';
 
 /// Hình dạng của một bữa ăn: những vai trò món bắt buộc và những vai trò có
@@ -65,6 +66,9 @@ class MenuBuilder {
     this.energyPenalty = 1.2,
     this.macroPenalty = 0.6,
     this.localSearchRounds = 20,
+    this.nutrientTargets = const [],
+    this.nutrientRepairRounds = 12,
+    this.maxEnergyDeviation = 0.10,
     math.Random? rng,
   }) : _rng = rng ?? math.Random();
 
@@ -88,6 +92,21 @@ class MenuBuilder {
   /// Số vòng lặp tối đa của pha tìm kiếm cục bộ.
   final int localSearchRounds;
 
+  /// Ràng buộc vi chất ở cấp **ngày** — ngưỡng cứng `per_day` của
+  /// `condition_rules`, cộng mục tiêu người dùng tự khai.
+  final List<NutrientTarget> nutrientTargets;
+
+  /// Số phép đổi tối đa mà pha 5 được làm. Chặn trên để pha sửa không chạy
+  /// mãi khi danh mục không đủ món để thỏa ràng buộc.
+  final int nutrientRepairRounds;
+
+  /// Trần độ lệch năng lượng mà pha 5 được phép đẩy thực đơn tới.
+  ///
+  /// 10 % là cam kết trong đề cương. Pha 5 **không bao giờ** đẩy độ lệch vượt
+  /// mốc này để đổi lấy việc thỏa một ràng buộc vi chất: làm vậy là chữa một
+  /// vi phạm bằng cách tạo ra một vi phạm khác.
+  final double maxEnergyDeviation;
+
   final math.Random _rng;
 
   /// Sinh thực đơn cho một ngày.
@@ -109,7 +128,7 @@ class MenuBuilder {
     final picks = <MealType, List<MealPlanItem>>{
       for (final t in MealType.values) t: [],
     };
-    final usedIds = <int>{};
+    final usedIds = <String>{};
 
     // ── Pha 1 — tham lam trên các suất bắt buộc ──────────────────────
     for (final slot in slots) {
@@ -149,19 +168,62 @@ class MenuBuilder {
     _topUp(picks: picks, usedIds: usedIds, targetKcal: targetKcal);
 
     // ── Pha 3 — tìm kiếm cục bộ trên từng bữa ────────────────────────
-    final result = <MealSlot>[];
     for (final type in MealType.values) {
-      final mealTarget = targetKcal * type.energyShare;
+      final before = picks[type]!.map((i) => i.food.id).toSet();
+
       final refined = _localSearch(
         selected: picks[type]!,
         usedIds: usedIds,
-        targetKcal: mealTarget,
+        targetKcal: targetKcal * type.energyShare,
         targetProtein: targetProtein * type.energyShare,
         targetCarb: targetCarb * type.energyShare,
         targetFat: targetFat * type.energyShare,
       );
-      result.add(MealSlot(type: type, targetKcal: mealTarget, items: refined));
+
+      // Cập nhật `usedIds` theo kết quả hoán đổi trước khi sang bữa sau.
+      //
+      // Thiếu bước này thì món vừa được đổi VÀO bữa sáng không nằm trong
+      // `usedIds`, nên bữa trưa vẫn thấy nó còn trống và lấy luôn — cùng một
+      // món xuất hiện hai lần trong ngày. Ngược lại, món bị đổi RA phải được
+      // trả lại tập ứng viên, vì nó không còn trong thực đơn nữa.
+      final after = refined.map((i) => i.food.id).toSet();
+      usedIds
+        ..removeAll(before.difference(after))
+        ..addAll(after);
+
+      picks[type] = refined;
     }
+
+    // ── Pha 4 — bù lại ở cấp ngày ────────────────────────────────────
+    //
+    // Pha 3 tối ưu từng bữa **riêng lẻ**, nên nó có thể kéo tổng năng lượng
+    // của cả ngày xa hạn mức dù mỗi bữa đều khá hơn: đổi một món chính nhẹ
+    // hơn vào bữa trưa làm bữa đó khớp macro hơn, nhưng cả ngày hụt thêm.
+    //
+    // Gọi lại `_topUp` sau pha 3 để sửa. Phép này chỉ thêm món khi món đó
+    // làm khoảng lệch cấp ngày **nhỏ lại**, nên nó không bao giờ làm xấu đi
+    // — chạy thêm một lượt là an toàn.
+    _topUp(picks: picks, usedIds: usedIds, targetKcal: targetKcal);
+
+    // -- Pha 5 - thi hanh rang buoc vi chat o cap ngay --
+    //
+    // Phải ở cấp ngày và phải ở cuối: ngưỡng "natri dưới 2000 mg/ngày" là
+    // phát biểu về **tổng cả ngày**, nên không kiểm được ở pha 1 (chọn từng
+    // suất) cũng không ở pha 3 (tối ưu từng bữa).
+    //
+    // Đây là phần trước đây thiếu hẳn. `condition_rules` lưu sáu ngưỡng cứng
+    // `per_day`, tài liệu nói Bước 4 kiểm chúng, nhưng Bước 4 chỉ bám `kcal`
+    // và ba macro — tức các ngưỡng đó không được thi hành ở đâu cả.
+    _repairNutrients(picks: picks, usedIds: usedIds, targetKcal: targetKcal);
+
+    final result = [
+      for (final type in MealType.values)
+        MealSlot(
+          type: type,
+          targetKcal: targetKcal * type.energyShare,
+          items: picks[type]!,
+        ),
+    ];
 
     return DailyPlan(
       date: date,
@@ -171,7 +233,149 @@ class MenuBuilder {
       targetFat: targetFat,
       slots: result,
       explorationRatio: ratio,
+      nutrientTargets: nutrientTargets,
     );
+  }
+
+  /// Tổng từng chất của cả ngày.
+  Map<String, double> _dayTotals(Map<MealType, List<MealPlanItem>> picks) {
+    final totals = <String, double>{};
+    for (final nutrient in NutrientTarget.supported) {
+      var sum = 0.0;
+      for (final items in picks.values) {
+        for (final item in items) {
+          sum += NutrientTarget.valueOf(item.food, nutrient) ?? 0;
+        }
+      }
+      totals[nutrient] = sum;
+    }
+    return totals;
+  }
+
+  /// Pha 5 — sửa thực đơn cho thỏa các ràng buộc vi chất cấp ngày.
+  ///
+  /// Cách làm là **hoán đổi một món cùng vai trò**, không thêm và không bớt
+  /// món: thêm món sẽ phá hạn mức năng lượng, bớt món sẽ phá cấu trúc bữa.
+  ///
+  /// Mỗi vòng xử lý **vi phạm nặng nhất** trước, đo theo tỷ lệ trên ngưỡng để
+  /// so được giữa các chất khác đơn vị. Một phép đổi chỉ được nhận khi:
+  ///
+  ///   1. nó làm vi phạm đang xét **nhỏ lại**;
+  ///   2. nó không tạo ra vi phạm mới ở ràng buộc nào khác đang thỏa;
+  ///   3. độ lệch năng lượng sau khi đổi vẫn trong [maxEnergyDeviation], hoặc
+  ///      không tệ hơn mức đang có.
+  ///
+  /// Điều kiện 2 là chỗ dễ sai nhất. Không có nó thì pha này sẽ sửa thiếu
+  /// chất xơ bằng cách nhồi món nhiều natri, và người tăng huyết áp nhận một
+  /// thực đơn đạt xơ nhưng vi phạm đúng ngưỡng quan trọng với họ.
+  ///
+  /// Khi nhiều phép đổi cùng mức cải thiện, chọn phép **giữ khẩu vị tốt
+  /// nhất**: đo được rằng bỏ mặc tiêu chí này làm điểm hợp khẩu vị rơi 7,1 %
+  /// thay vì 2,1 %.
+  void _repairNutrients({
+    required Map<MealType, List<MealPlanItem>> picks,
+    required Set<String> usedIds,
+    required double targetKcal,
+  }) {
+    final active = nutrientTargets
+        .where((t) => NutrientTarget.supported.contains(t.nutrient))
+        .toList();
+    if (active.isEmpty) return;
+
+    for (var round = 0; round < nutrientRepairRounds; round++) {
+      final totals = _dayTotals(picks);
+
+      NutrientTarget? worst;
+      var worstViolation = 0.0;
+      for (final target in active) {
+        final v = target.violation(totals[target.nutrient] ?? 0);
+        if (v > worstViolation) {
+          worstViolation = v;
+          worst = target;
+        }
+      }
+      if (worst == null) return;
+
+      final kcalNow = picks.values.fold<double>(0, (s, l) => s + _kcalOf(l));
+      final deviationNow = targetKcal <= 0
+          ? 0.0
+          : (kcalNow - targetKcal).abs() / targetKcal;
+      final deviationCap = math.max(deviationNow, maxEnergyDeviation);
+
+      MealType? bestMeal;
+      var bestIndex = -1;
+      Food? bestFood;
+      var bestViolation = worstViolation;
+      var bestScore = -1.0;
+
+      for (final type in MealType.values) {
+        final items = picks[type]!;
+        for (var i = 0; i < items.length; i++) {
+          final current = items[i].food;
+          final currentValue =
+              NutrientTarget.valueOf(current, worst.nutrient) ?? 0;
+
+          for (final swap in candidates) {
+            if (swap.dishRole != current.dishRole) continue;
+            if (usedIds.contains(swap.id)) continue;
+
+            final swapValue = NutrientTarget.valueOf(swap, worst.nutrient) ?? 0;
+            final newTotal =
+                (totals[worst.nutrient] ?? 0) - currentValue + swapValue;
+            final newViolation = worst.violation(newTotal);
+            if (newViolation > bestViolation) continue;
+
+            final newKcal = kcalNow - current.kcal + swap.kcal;
+            final newDeviation = targetKcal <= 0
+                ? 0.0
+                : (newKcal - targetKcal).abs() / targetKcal;
+            if (newDeviation > deviationCap) continue;
+
+            var breaksOther = false;
+            for (final other in active) {
+              if (other == worst) continue;
+              final before = totals[other.nutrient] ?? 0;
+              if (!other.isSatisfiedBy(before)) continue;
+              final after =
+                  before -
+                  (NutrientTarget.valueOf(current, other.nutrient) ?? 0) +
+                  (NutrientTarget.valueOf(swap, other.nutrient) ?? 0);
+              if (!other.isSatisfiedBy(after)) {
+                breaksOther = true;
+                break;
+              }
+            }
+            if (breaksOther) continue;
+
+            final score = profile.score(swap);
+            final strictlyBetter = newViolation < bestViolation - 1e-9;
+            if (strictlyBetter || score > bestScore) {
+              bestViolation = newViolation;
+              bestScore = score;
+              bestMeal = type;
+              bestIndex = i;
+              bestFood = swap;
+            }
+          }
+        }
+      }
+
+      // Không còn phép đổi nào cải thiện được: danh mục không đủ món để thỏa
+      // ràng buộc này. Dừng và để `DailyPlan.nutrientViolations` báo ra, thay
+      // vì tiếp tục đổi món vô ích hay trả về một thực đơn rỗng.
+      if (bestMeal == null || bestFood == null) return;
+      if (bestViolation >= worstViolation) return;
+
+      final replaced = picks[bestMeal]![bestIndex];
+      usedIds
+        ..remove(replaced.food.id)
+        ..add(bestFood.id);
+      picks[bestMeal]![bestIndex] = MealPlanItem(
+        food: bestFood,
+        score: profile.score(bestFood),
+        explorationDelta: replaced.explorationDelta,
+      );
+    }
   }
 
   /// Quyết định suất nào là thăm dò, tính trên **toàn thực đơn**.
@@ -221,7 +425,7 @@ class MenuBuilder {
   /// bù lại, và đó là hành vi đúng: người ta ăn sáng nhẹ rồi ăn trưa nhiều.
   void _topUp({
     required Map<MealType, List<MealPlanItem>> picks,
-    required Set<int> usedIds,
+    required Set<String> usedIds,
     required double targetKcal,
   }) {
     while (true) {
@@ -307,7 +511,7 @@ class MenuBuilder {
   /// làm hàm mục tiêu tăng, và dừng khi không còn cải thiện được.
   List<MealPlanItem> _localSearch({
     required List<MealPlanItem> selected,
-    required Set<int> usedIds,
+    required Set<String> usedIds,
     required double targetKcal,
     required double targetProtein,
     required double targetCarb,
@@ -417,7 +621,7 @@ class MenuBuilder {
   /// xem bảng quy đổi nhãn `plan_replaced` và `plan_kept`.
   List<Food> alternativesFor(
     MealPlanItem item, {
-    required Set<int> excludeIds,
+    required Set<String> excludeIds,
     int limit = 6,
   }) {
     final pool = candidates

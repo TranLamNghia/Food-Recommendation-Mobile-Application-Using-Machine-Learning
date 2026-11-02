@@ -10,6 +10,7 @@ import 'models/meal_plan.dart';
 import 'models/swipe_action.dart';
 import 'recommender/food_vector.dart';
 import 'recommender/menu_builder.dart';
+import 'recommender/nutrient_target.dart';
 import 'recommender/preference_profile.dart';
 
 /// Trạng thái dùng chung của cả phiên sử dụng.
@@ -49,6 +50,28 @@ class AppSession extends ChangeNotifier {
   /// màn hình thực nghiệm đổi được khi cần so sánh hai cấu hình.
   double explorationRatio = 0.3;
 
+  /// Ràng buộc vi chất ở cấp **ngày** mà Bước 4 phải thỏa.
+  ///
+  /// Trong hệ thống thật, danh sách này ghép từ hai nguồn — không có nguồn
+  /// nào là do lập trình viên tự đặt:
+  ///
+  /// * `condition_rules` với `scope = 'per_day'` và `is_hard = 1`, lọc theo
+  ///   bệnh lý người dùng đã khai. Hiện là bốn dòng: natri ≤ 2000 mg (WHO,
+  ///   áp cho tăng huyết áp và bệnh thận), purin ≤ 400 mg, đạm ≤ 48 g
+  ///   (KDIGO 2024).
+  /// * `rda_reference`, tra theo giới tính và tuổi, cho những mục tiêu người
+  ///   dùng **tự khai**. Hiện là chất xơ ≥ 25 g/ngày với người từ 10 tuổi
+  ///   (WHO 2023).
+  ///
+  /// Mặc định rỗng: không bệnh lý, không mục tiêu thì Bước 4 chạy đúng như
+  /// trước. Bản mock chưa có luồng khai bệnh nên màn hình thực nghiệm gán
+  /// trực tiếp vào đây.
+  ///
+  /// Lưu ý `purine_mg` **không** thi hành được — xem
+  /// `NutrientTarget.valueOf`. Truyền vào vẫn hợp lệ và sẽ hiện ra ở
+  /// `DailyPlan.unenforceableTargets` thay vì bị lặng lẽ coi là đã thỏa.
+  List<NutrientTarget> nutrientTargets = const [];
+
   // ── Khởi đầu nguội ───────────────────────────────────────────────
 
   /// Nhận kết quả phiên vuốt, dựng hồ sơ sở thích rồi sinh thực đơn đầu tiên.
@@ -83,6 +106,7 @@ class AppSession extends ChangeNotifier {
     candidates: candidates,
     profile: preference,
     explorationRatio: explorationRatio,
+    nutrientTargets: nutrientTargets,
     rng: _rng,
   );
 
@@ -90,7 +114,7 @@ class AppSession extends ChangeNotifier {
   List<Food> alternativesFor(MealPlanItem item) {
     final plan = _plan;
     final exclude = plan == null
-        ? <int>{}
+        ? <String>{}
         : plan.allItems.map((i) => i.food.id).toSet();
 
     return _builder().alternativesFor(item, excludeIds: exclude);

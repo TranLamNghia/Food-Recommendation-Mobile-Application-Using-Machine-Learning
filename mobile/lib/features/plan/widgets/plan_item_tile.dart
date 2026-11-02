@@ -73,7 +73,7 @@ class PlanItemTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${food.kcal} kcal · ${food.dishRole} · ${food.cookingMethod}',
+                      '${food.kcal} kcal · ${food.dishRole} · ${food.category}',
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: AppColors.textSecondary,

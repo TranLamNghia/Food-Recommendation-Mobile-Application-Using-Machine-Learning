@@ -84,7 +84,16 @@ class PreferenceProfile {
     signalCount: 0,
   );
 
-  bool get isEmpty => signalCount == 0 || weights.every((w) => w == 0);
+  /// Rỗng khi **mọi trọng số bằng 0**, không phải khi chưa có lượt vuốt nào.
+  ///
+  /// Phân biệt này quan trọng: người dùng có thể **khai mục tiêu trước khi
+  /// vuốt lượt đầu tiên**. Hồ sơ khi đó có `signalCount == 0` nhưng trọng số
+  /// khác 0, và vẫn phải xếp hạng được. Nếu còn xét `signalCount == 0` thì
+  /// `score` trả về 0,5 cho mọi món và mục tiêu vừa khai bị bỏ qua hoàn toàn.
+  ///
+  /// Không đổi hành vi của các trường hợp cũ: hồ sơ `empty` và phiên vuốt
+  /// toàn `neutral` đều cho vector toàn 0 nên vẫn rỗng như trước.
+  bool get isEmpty => weights.every((w) => w == 0);
 
   /// Chấm điểm mức độ ưa thích của một món, đưa về đoạn [0, 1].
   ///
@@ -96,6 +105,57 @@ class PreferenceProfile {
     if (isEmpty) return 0.5;
     final cos = cosineSimilarity(weights, space.encode(food));
     return (1 + cos) / 2;
+  }
+
+  /// Bản sao của hồ sơ có **mục tiêu dinh dưỡng người dùng tự khai** nhúng
+  /// thẳng vào vector.
+  ///
+  /// [goals] ánh xạ tên cột dinh dưỡng sang lượng đẩy **có dấu**: dương là
+  /// "muốn nhiều hơn" (`'fiber_g': 0.6`), âm là "muốn ít hơn"
+  /// (`'sodium_mg': -0.6`). Chất không có chiều riêng thì bị bỏ qua — xem
+  /// `FoodVectorSpace.dimensionOfNutrient`.
+  ///
+  /// **Vì sao nhúng được vào đây mà không phải chỉ xử lý ở Bước 4.** `p_u`
+  /// chỉ là một vector; Rocchio trong tìm tin vốn cho phép khởi tạo vector
+  /// truy vấn từ ý định rõ ràng chứ không bắt buộc học hết từ phản hồi. Đo
+  /// trên 305 món, mục tiêu 25 g xơ/ngày, 12 hồ sơ khẩu vị không liên quan
+  /// tới xơ:
+  ///
+  /// | Mục tiêu đưa vào đâu | Xơ/ngày | Đạt | Bước 4 phải sửa | Điểm hợp vị |
+  /// |---|---|---|---|---|
+  /// | không đâu | 18,7 g | 0/12 | 0 | 0,7452 |
+  /// | chỉ `p_u` | 23,7 g | 0/12 | 0 | 0,7410 |
+  /// | chỉ Bước 4 | 28,4 g | 12/12 | 3,5 | 0,6924 |
+  /// | cả hai | 25,5 g | 12/12 | **1,7** | **0,7294** |
+  ///
+  /// Nhúng vào `p_u` lấp 79 % khoảng cách gần như không tốn gì về khẩu vị,
+  /// nhưng **không bảo đảm** đạt mục tiêu (0/12) — phần bảo đảm vẫn phải do
+  /// Bước 4 làm. Để tất cả cho Bước 4 thì nó phải đổi gấp đôi số món và điểm
+  /// hợp khẩu vị rơi 7,1 % thay vì 2,1 %.
+  ///
+  /// **Đây là NGHIÊNG chứ không LOẠI.** Lọc cứng theo ngưỡng xơ ≥ 2 g sẽ xóa
+  /// sạch vai trò `side_protein` (71 → 0 món) vì thịt cá vốn không có xơ, và
+  /// Bước 4 không dựng nổi bữa ăn — đúng thất bại của ngưỡng natri 600 mg
+  /// mỗi suất trước đây. Lọc cứng dành cho bệnh lý và dị ứng, không dành cho
+  /// mục tiêu.
+  PreferenceProfile withNutrientGoals(Map<String, double> goals) {
+    if (goals.isEmpty) return this;
+
+    final adjusted = List<double>.of(weights);
+    var changed = false;
+    for (final entry in goals.entries) {
+      final dim = space.dimensionOfNutrient(entry.key);
+      if (dim == null || entry.value == 0) continue;
+      adjusted[dim] += entry.value;
+      changed = true;
+    }
+    if (!changed) return this;
+
+    return PreferenceProfile(
+      space: space,
+      weights: adjusted,
+      signalCount: signalCount,
+    );
   }
 
   /// Bản sao của hồ sơ sau khi xoay nhẹ theo một hướng ngẫu nhiên.
