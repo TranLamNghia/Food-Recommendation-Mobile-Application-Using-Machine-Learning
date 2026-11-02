@@ -47,9 +47,14 @@ ASP.NET Core mặc định tuần tự hóa `camelCase`, không cần cấu hìn
 | Ngày | `YYYY-MM-DD` | `"2026-11-20"` |
 | Ngày giờ | ISO 8601, múi giờ UTC | `"2026-11-20T07:15:30Z"` |
 | Số thập phân | `number`, không phải chuỗi | `68.5` |
-| Khóa chính | `number` (int64) | `42` |
+| Khóa chính | chuỗi UUID 36 ký tự | `"00000042-0000-4000-8000-000000000000"` |
+| Khóa của bảng tra cứu | `number` (int32) | `42` |
 | UUID | chuỗi 36 ký tự | `"3f2c8a1e-..."` |
 | Trường rỗng | `null`, **không** dùng chuỗi rỗng | `"avatarUrl": null` |
+
+Khóa chính của mọi thực thể gắn với người dùng hoặc món ăn là **chuỗi UUID**, do CSDL sinh bằng `DEFAULT (UUID())`. Riêng ba bảng tra cứu `conditions`, `tags` và `ml_models` giữ khóa **số nguyên tự tăng**: chúng không lộ ra ngoài theo người dùng nào, và khóa số làm bảng tra cứu nhẹ hơn.
+
+Mã UUID trong các ví dụ dưới đây được đặt theo dạng dễ đối chiếu (`00000003-…` ứng với món số 3), không phải mã thật.
 
 ### 2.4 Xác thực
 
@@ -195,7 +200,6 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 | `cookingMethod` | `luoc` · `hap` · `xao` · `chien` · `nuong` · `kho` · `nau_canh` · `tron` · `song` · `khac` |
 | `dishRole` | `main` · `side` · `soup` · `dessert` · `drink` |
 | `spiceLevel` | số nguyên `0` – `3` |
-| `suitableMeals` | mảng các giá trị `mealType` |
 | `tagType` | `allergen` · `diet` · `nutrition` · `taste` |
 
 ### 5.3 Bữa ăn và tương tác
@@ -364,7 +368,7 @@ Content-Type: application/json
   "tokenType": "Bearer",
   "expiresIn": 3600,
   "user": {
-    "id": 1,
+    "id": "00000001-0000-4000-8000-000000000000",
     "email": "nghia@example.com",
     "displayName": "Trần Lâm Nghĩa",
     "avatarUrl": null,
@@ -466,7 +470,7 @@ Authorization: Bearer <accessToken>
 
 ```json
 {
-  "id": 1,
+  "id": "00000001-0000-4000-8000-000000000000",
   "email": "nghia@example.com",
   "displayName": "Trần Lâm Nghĩa",
   "avatarUrl": null,
@@ -514,7 +518,6 @@ Authorization: Bearer <accessToken>
   "conditions": [
     {
       "conditionId": 2,
-      "code": "hypertension",
       "nameVi": "Tăng huyết áp",
       "conditionType": "disease",
       "severity": "mild",
@@ -627,8 +630,7 @@ Dùng `PUT` chứ không phải `POST` vì quan hệ người dùng–hồ sơ l
   "formula": {
     "bmr": "Mifflin-St Jeor",
     "expression": "10 × 68.5 + 6.25 × 172 − 5 × 22 + 5 = 1660"
-  },
-  "computedAt": "2026-11-20T07:20:05Z"
+  }
 }
 ```
 
@@ -652,7 +654,6 @@ Dùng `PUT` chứ không phải `POST` vì quan hệ người dùng–hồ sơ l
 [
   {
     "conditionId": 2,
-    "code": "hypertension",
     "nameVi": "Tăng huyết áp",
     "conditionType": "disease",
     "severity": "mild",
@@ -660,7 +661,6 @@ Dùng `PUT` chứ không phải `POST` vì quan hệ người dùng–hồ sơ l
   },
   {
     "conditionId": 6,
-    "code": "allergy_seafood",
     "nameVi": "Dị ứng hải sản",
     "conditionType": "allergy",
     "severity": "severe",
@@ -732,10 +732,10 @@ Ba endpoint này trả dữ liệu **tĩnh, hiếm thay đổi**. Frontend nên 
 
 ```json
 [
-  { "id": 1, "code": "diabetes",     "nameVi": "Đái tháo đường", "conditionType": "disease", "description": "Cần hạn chế đường và tinh bột hấp thu nhanh" },
-  { "id": 2, "code": "hypertension", "nameVi": "Tăng huyết áp",  "conditionType": "disease", "description": "Cần hạn chế natri" },
-  { "id": 6, "code": "allergy_seafood", "nameVi": "Dị ứng hải sản", "conditionType": "allergy", "description": null },
-  { "id": 11, "code": "vegetarian",  "nameVi": "Ăn chay",        "conditionType": "diet",    "description": "Không ăn thịt, có thể dùng trứng và sữa" }
+  { "id": 1,     "nameVi": "Đái tháo đường", "conditionType": "disease", "description": "Cần hạn chế đường và tinh bột hấp thu nhanh" },
+  { "id": 2, "nameVi": "Tăng huyết áp",  "conditionType": "disease", "description": "Cần hạn chế natri" },
+  { "id": 6, "nameVi": "Dị ứng hải sản", "conditionType": "allergy", "description": null },
+  { "id": 11,  "nameVi": "Ăn chay",        "conditionType": "diet",    "description": "Không ăn thịt, có thể dùng trứng và sữa" }
 ]
 ```
 
@@ -755,8 +755,8 @@ Ba endpoint này trả dữ liệu **tĩnh, hiếm thay đổi**. Frontend nên 
 
 ```json
 [
-  { "id": 1, "code": "mon_nuoc", "name": "Món nước", "description": "Phở, bún, miến, hủ tiếu", "iconUrl": null },
-  { "id": 5, "code": "mon_canh", "name": "Món canh", "description": "Canh chua, canh rau",     "iconUrl": null }
+  { "id": "00000001-0000-4000-8000-000000000000", "name": "Món nước", "description": "Phở, bún, miến, hủ tiếu", "iconUrl": null },
+  { "id": "00000005-0000-4000-8000-000000000000", "name": "Món canh", "description": "Canh chua, canh rau",     "iconUrl": null }
 ]
 ```
 
@@ -776,8 +776,9 @@ Ba endpoint này trả dữ liệu **tĩnh, hiếm thay đổi**. Frontend nên 
 
 ```json
 [
-  { "id": 1,  "code": "contains_seafood", "nameVi": "Có hải sản",  "tagType": "allergen" },
-  { "id": 13, "code": "salty",            "nameVi": "Mặn",         "tagType": "taste" }
+  { "id": 1,  "nameVi": "Có hải sản",   "tagType": "allergen" },
+  { "id": 7,  "nameVi": "Món chay",     "tagType": "diet" },
+  { "id": 13, "nameVi": "Giàu purin",   "tagType": "nutrition" }
 ]
 ```
 
@@ -877,7 +878,7 @@ Authorization: Bearer <accessToken>
   "minRequired": 20,
   "items": [
     {
-      "id": 1,
+      "id": "00000001-0000-4000-8000-000000000000",
       "name": "Phở bò",
       "imageUrl": "https://cdn.example.com/foods/pho-bo.jpg",
       "origin": "Hà Nội",
@@ -890,7 +891,7 @@ Authorization: Bearer <accessToken>
       "tags": ["salty"]
     },
     {
-      "id": 8,
+      "id": "00000008-0000-4000-8000-000000000000",
       "name": "Rau muống luộc",
       "imageUrl": "https://cdn.example.com/foods/rau-muong-luoc.jpg",
       "origin": null,
@@ -964,11 +965,11 @@ Content-Type: application/json
 {
   "sessionId": "3f2c8a1e-7d4b-4a91-b2c6-8e5f1a0d3c7b",
   "swipes": [
-    { "foodId": 1,  "action": "like" },
-    { "foodId": 8,  "action": "dislike" },
-    { "foodId": 12, "action": "neutral" },
-    { "foodId": 15, "action": "unknown" },
-    { "foodId": 21, "action": "like" }
+    { "foodId": "00000001-0000-4000-8000-000000000000",  "action": "like" },
+    { "foodId": "00000008-0000-4000-8000-000000000000",  "action": "dislike" },
+    { "foodId": "00000012-0000-4000-8000-000000000000", "action": "neutral" },
+    { "foodId": "00000015-0000-4000-8000-000000000000", "action": "unknown" },
+    { "foodId": "00000021-0000-4000-8000-000000000000", "action": "like" }
   ]
 }
 ```
@@ -1038,7 +1039,7 @@ Ví dụ lỗi `422`:
 
 > Flutter nên **kiểm tra `minRequired` ngay tại máy** trước khi gọi, để người dùng không phải chờ một vòng mạng mới biết là thiếu. Máy chủ vẫn kiểm tra lại vì không được tin dữ liệu từ client.
 
-**Vector sở thích không trả về cho Frontend.** Nó là dữ liệu nội bộ của ML Service, gồm khoảng 30 chiều số thực, không có ý nghĩa hiển thị. Frontend chỉ nhận `tasteSummary` đã diễn giải sang ngôn ngữ người dùng hiểu được.
+**Vector sở thích không trả về cho Frontend.** Nó là dữ liệu nội bộ của ML Service, gồm 20 chiều số thực, không có ý nghĩa hiển thị. Frontend chỉ nhận `tasteSummary` đã diễn giải sang ngôn ngữ người dùng hiểu được.
 
 ---
 
@@ -1073,7 +1074,7 @@ Ví dụ lỗi `422`:
 {
   "items": [
     {
-      "id": 5,
+      "id": "00000005-0000-4000-8000-000000000000",
       "name": "Canh chua cá lóc",
       "imageUrl": "https://cdn.example.com/foods/canh-chua-ca-loc.jpg",
       "origin": "Miền Tây",
@@ -1117,16 +1118,15 @@ Ví dụ lỗi `422`:
 
 ```json
 {
-  "id": 5,
+  "id": "00000005-0000-4000-8000-000000000000",
   "name": "Canh chua cá lóc",
   "description": "Canh chua nấu với cá lóc, dứa, cà chua, giá đỗ và rau thơm",
   "imageUrl": "https://cdn.example.com/foods/canh-chua-ca-loc.jpg",
   "origin": "Miền Tây",
-  "category": { "id": 5, "code": "mon_canh", "name": "Món canh" },
+  "category": { "id": "00000005-0000-4000-8000-000000000000", "name": "Món canh" },
   "cookingMethod": "nau_canh",
   "spiceLevel": 1,
   "dishRole": "soup",
-  "suitableMeals": ["lunch", "dinner"],
   "nutrition": {
     "servingSizeG": 250,
     "caloriesKcal": 120.0,
@@ -1141,13 +1141,11 @@ Ví dụ lỗi `422`:
     "calciumMg": null,
     "ironMg": null,
     "zincMg": null,
-    "vitaminAMcg": null,
-    "vitaminCMg": null,
-    "dataSource": "Bảng thành phần thực phẩm Việt Nam"
+    "vitaminAMcg": 412.3,
+    "vitaminCMg": 8.4
   },
   "tags": [
-    { "code": "sour",  "nameVi": "Chua",       "tagType": "taste" },
-    { "code": "light", "nameVi": "Thanh đạm",  "tagType": "taste" }
+    { "nameVi": "Có hải sản", "tagType": "allergen" }
   ],
   "isSafeForUser": true,
   "warnings": [],
@@ -1199,7 +1197,7 @@ Khi món vi phạm ràng buộc của người dùng:
 
 ```json
 {
-  "id": 42,
+  "id": "00000042-0000-4000-8000-000000000000",
   "planDate": "2026-11-20",
   "status": "active",
   "generationSource": "hybrid",
@@ -1227,9 +1225,9 @@ Khi món vi phạm ràng buộc của người dùng:
       "actualCaloriesKcal": 430.0,
       "items": [
         {
-          "id": 301,
+          "id": "00000301-0000-4000-8000-000000000000",
           "food": {
-            "id": 1,
+            "id": "00000001-0000-4000-8000-000000000000",
             "name": "Phở bò",
             "imageUrl": "https://cdn.example.com/foods/pho-bo.jpg",
             "categoryName": "Món nước",
@@ -1251,8 +1249,8 @@ Khi món vi phạm ràng buộc của người dùng:
       "actualCaloriesKcal": 1080.0,
       "items": [
         {
-          "id": 302,
-          "food": { "id": 3, "name": "Cơm tấm sườn nướng", "imageUrl": "...", "categoryName": "Cơm", "dishRole": "main", "caloriesKcal": 620.0 },
+          "id": "00000302-0000-4000-8000-000000000000",
+          "food": { "id": "00000003-0000-4000-8000-000000000000", "name": "Cơm tấm sườn nướng", "imageUrl": "...", "categoryName": "Cơm", "dishRole": "main", "caloriesKcal": 620.0 },
           "servingSizeG": 400,
           "predictedScore": 0.9105,
           "status": "kept",
@@ -1261,8 +1259,8 @@ Khi món vi phạm ràng buộc của người dùng:
           "position": 1
         },
         {
-          "id": 303,
-          "food": { "id": 5, "name": "Canh chua cá lóc", "imageUrl": "...", "categoryName": "Món canh", "dishRole": "soup", "caloriesKcal": 120.0 },
+          "id": "00000303-0000-4000-8000-000000000000",
+          "food": { "id": "00000005-0000-4000-8000-000000000000", "name": "Canh chua cá lóc", "imageUrl": "...", "categoryName": "Món canh", "dishRole": "soup", "caloriesKcal": 120.0 },
           "servingSizeG": 250,
           "predictedScore": 0.6733,
           "status": "suggested",
@@ -1385,21 +1383,21 @@ Backend tìm các món **cùng vai trò, năng lượng tương đương**, đã
 ```json
 {
   "originalItem": {
-    "id": 303,
+    "id": "00000303-0000-4000-8000-000000000000",
     "foodName": "Canh chua cá lóc",
     "caloriesKcal": 120.0,
     "dishRole": "soup"
   },
   "alternatives": [
     {
-      "food": { "id": 6, "name": "Canh bí đao", "imageUrl": "...", "categoryName": "Món canh", "dishRole": "soup", "caloriesKcal": 45.0 },
+      "food": { "id": "00000006-0000-4000-8000-000000000000", "name": "Canh bí đao", "imageUrl": "...", "categoryName": "Món canh", "dishRole": "soup", "caloriesKcal": 45.0 },
       "servingSizeG": 250,
       "predictedScore": 0.7218,
       "calorieDeltaKcal": -75.0,
       "keepsWithinTolerance": true
     },
     {
-      "food": { "id": 21, "name": "Canh rau ngót thịt băm", "imageUrl": "...", "categoryName": "Món canh", "dishRole": "soup", "caloriesKcal": 95.0 },
+      "food": { "id": "00000021-0000-4000-8000-000000000000", "name": "Canh rau ngót thịt băm", "imageUrl": "...", "categoryName": "Món canh", "dishRole": "soup", "caloriesKcal": 95.0 },
       "servingSizeG": 250,
       "predictedScore": 0.6904,
       "calorieDeltaKcal": -25.0,
@@ -1466,7 +1464,7 @@ Giá trị cho phép từ Frontend: `kept` · `eaten` · `skipped`. Hai giá tr�
 
 ```json
 {
-  "id": 302,
+  "id": "00000302-0000-4000-8000-000000000000",
   "status": "eaten",
   "diaryEntryCreated": true,
   "diaryEntryId": 88
@@ -1509,8 +1507,8 @@ Giá trị cho phép từ Frontend: `kept` · `eaten` · `skipped`. Hai giá tr�
       "totalCaloriesKcal": 1830.0,
       "entries": [
         {
-          "id": 88,
-          "food": { "id": 3, "name": "Cơm tấm sườn nướng", "imageUrl": "...", "categoryName": "Cơm", "caloriesKcal": 620.0 },
+          "id": "00000088-0000-4000-8000-000000000000",
+          "food": { "id": "00000003-0000-4000-8000-000000000000", "name": "Cơm tấm sườn nướng", "imageUrl": "...", "categoryName": "Cơm", "caloriesKcal": 620.0 },
           "mealType": "lunch",
           "servingSizeG": 400,
           "actualCaloriesKcal": 620.0,
@@ -1519,8 +1517,8 @@ Giá trị cho phép từ Frontend: `kept` · `eaten` · `skipped`. Hai giá tr�
           "createdAt": "2026-11-20T12:35:00Z"
         },
         {
-          "id": 89,
-          "food": { "id": 47, "name": "Trà sữa trân châu", "imageUrl": "...", "categoryName": "Đồ uống", "caloriesKcal": 340.0 },
+          "id": "00000089-0000-4000-8000-000000000000",
+          "food": { "id": "00000047-0000-4000-8000-000000000000", "name": "Trà sữa trân châu", "imageUrl": "...", "categoryName": "Đồ uống", "caloriesKcal": 340.0 },
           "mealType": "snack",
           "servingSizeG": 500,
           "actualCaloriesKcal": 340.0,
@@ -1558,15 +1556,15 @@ Giá trị cho phép từ Frontend: `kept` · `eaten` · `skipped`. Hai giá tr�
 | `servingSizeG` | int | ✗ | Mặc định lấy khẩu phần chuẩn của món |
 
 ```json
-{ "foodId": 47, "ateOn": "2026-11-20", "mealType": "snack", "servingSizeG": 500 }
+{ "foodId": "00000047-0000-4000-8000-000000000000", "ateOn": "2026-11-20", "mealType": "snack", "servingSizeG": 500 }
 ```
 
 **Response `201 Created`**
 
 ```json
 {
-  "id": 89,
-  "food": { "id": 47, "name": "Trà sữa trân châu", "imageUrl": "...", "categoryName": "Đồ uống", "caloriesKcal": 340.0 },
+  "id": "00000089-0000-4000-8000-000000000000",
+  "food": { "id": "00000047-0000-4000-8000-000000000000", "name": "Trà sữa trân châu", "imageUrl": "...", "categoryName": "Đồ uống", "caloriesKcal": 340.0 },
   "ateOn": "2026-11-20",
   "mealType": "snack",
   "servingSizeG": 500,
@@ -1678,15 +1676,15 @@ Vi phạm một trong hai vế thì trả `409 FEEDBACK_NOT_ALLOWED`. Frontend n
 | `comment` | string | ✗ | Tối đa 1000 ký tự |
 
 ```json
-{ "foodId": 3, "rating": 4, "comment": "Ngon, hơi mặn" }
+{ "foodId": "00000003-0000-4000-8000-000000000000", "rating": 4, "comment": "Ngon, hơi mặn" }
 ```
 
 **Response `201 Created`**
 
 ```json
 {
-  "id": 55,
-  "foodId": 3,
+  "id": "00000055-0000-4000-8000-000000000000",
+  "foodId": "00000003-0000-4000-8000-000000000000",
   "foodName": "Cơm tấm sườn nướng",
   "rating": 4,
   "comment": "Ngon, hơi mặn",
@@ -1743,8 +1741,8 @@ Bước dựng tập huấn luyện lấy đánh giá **gần nhất tính đế
 {
   "items": [
     {
-      "id": 55,
-      "food": { "id": 3, "name": "Cơm tấm sườn nướng", "imageUrl": "...", "categoryName": "Cơm" },
+      "id": "00000055-0000-4000-8000-000000000000",
+      "food": { "id": "00000003-0000-4000-8000-000000000000", "name": "Cơm tấm sườn nướng", "imageUrl": "...", "categoryName": "Cơm" },
       "rating": 4,
       "comment": "Ngon, hơi mặn",
       "createdAt": "2026-11-20T13:05:00Z"
@@ -1836,7 +1834,7 @@ Trả `401` nếu thiếu hoặc sai khóa.
 
 ```json
 {
-  "userId": 1,
+  "userId": "00000001-0000-4000-8000-000000000000",
   "contextMealType": "lunch",
   "candidateFoodIds": [3, 5, 6, 12, 21, 47],
   "userFeatures": {
@@ -1859,9 +1857,9 @@ Trả `401` nếu thiếu hoặc sai khóa.
   "stage": "hybrid",
   "alpha": 0.42,
   "scores": [
-    { "foodId": 3,  "score": 0.9105, "scoreContent": 0.8802, "scoreMl": 0.9523 },
-    { "foodId": 5,  "score": 0.6733, "scoreContent": 0.7011, "scoreMl": 0.6349 },
-    { "foodId": 47, "score": 0.2140, "scoreContent": 0.1902, "scoreMl": 0.2469 }
+    { "foodId": "00000003-0000-4000-8000-000000000000",  "score": 0.9105, "scoreContent": 0.8802, "scoreMl": 0.9523 },
+    { "foodId": "00000005-0000-4000-8000-000000000000",  "score": 0.6733, "scoreContent": 0.7011, "scoreMl": 0.6349 },
+    { "foodId": "00000047-0000-4000-8000-000000000000", "score": 0.2140, "scoreContent": 0.1902, "scoreMl": 0.2469 }
   ],
   "elapsedMs": 34
 }
@@ -1894,7 +1892,7 @@ Gọi sau khi hoàn tất onboarding, hoặc khi `featureVersion` thay đổi.
 
 ```json
 {
-  "userId": 1,
+  "userId": "00000001-0000-4000-8000-000000000000",
   "featureVersion": "fv1",
   "nSignals": 26,
   "sumAbsWeight": 21.0,

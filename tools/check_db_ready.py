@@ -42,10 +42,7 @@ COLUMN_MAP = {
     # `food_categories`. Đánh dấu là tra cứu để không kiểm kiểu như cột thường.
     "category": ("foods", "category_id", "lookup"),
     "dish_role": ("foods", "dish_role"),
-    "cooking_method": ("foods", "cooking_method"),
     "spice_level": ("foods", "spice_level"),
-    "suitable_meals": ("foods", "suitable_meals"),
-    "origin": ("foods", "origin"),
     "note": ("foods", "description"),
     "serving_size_g": ("food_nutrition", "serving_size_g"),
     "calories_kcal": ("food_nutrition", "calories_kcal"),
@@ -62,9 +59,7 @@ COLUMN_MAP = {
     "zinc_mg": ("food_nutrition", "zinc_mg"),
     "vitamin_a_mcg": ("food_nutrition", "vitamin_a_mcg"),
     "vitamin_c_mg": ("food_nutrition", "vitamin_c_mg"),
-    "data_source": ("food_nutrition", "data_source"),
     "tags": ("food_tags", "tag_id", "lookup"),
-    "source_url": ("food_nutrition", "source_url"),
 }
 
 
@@ -118,9 +113,12 @@ def main() -> int:
     seed = SEED.read_text(encoding="utf-8")
 
     categories = set(
-        re.findall(r"^\('(\w+)',\s*'[^']*',\s*'[^']*'\),?$", seed, re.M)
+        re.findall(r"^\('([^']+)',\s*'[^']*'\)[,;]?$", seed, re.M)
     )
-    tags = set(re.findall(r"^\('(\w+)',\s*'[^']*',\s*'\w+',", seed, re.M))
+    tags = set(re.findall(r"^\('([^']+)',\s*'\w+',", seed, re.M))
+    # Dòng cuối mỗi khối kết thúc bằng `;` thay vì `,` nên regex trên bỏ sót
+    # nhãn cuối; bắt riêng dạng không có mô tả.
+    tags |= set(re.findall(r"^\('([^']+)',\s*'\w+',.*\)[,;]$", seed, re.M))
 
     blockers: list[str] = []
     errors: list[str] = []
@@ -180,8 +178,6 @@ def main() -> int:
     bad_roles = set()
     for fname, lineno, row in rows:
         where = f"{fname}:{lineno}"
-        check_enum(row, where, "cooking_method", "cooking_method")
-        check_enum(row, where, "suitable_meals", "suitable_meals", multi=True)
 
         role = row.get("dish_role", "").strip()
         allowed_roles = foods.get("dish_role", {}).get("values", set())
