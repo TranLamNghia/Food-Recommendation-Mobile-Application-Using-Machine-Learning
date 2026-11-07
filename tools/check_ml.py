@@ -37,7 +37,14 @@ from ml.build_dataset import (  # noqa: E402
     nhan_split,
     nhan_tu_sao,
 )
-from ml.f1_filter import LyDoLoai  # noqa: E402
+from ml.f1_filter import (  # noqa: E402
+    TANG_THI_HANH,
+    LuatMem,
+    LyDoLoai,
+    luat_chua_thi_hanh,
+    luat_mem_theo_pham_vi,
+)
+from ml.scoring import hinh_phat  # noqa: E402
 from ml.dataset import NGUONG_THICH  # noqa: E402
 from ml.han_muc import (  # noqa: E402
     MotHanMuc,
@@ -893,6 +900,153 @@ def kiem_ly_do_loai() -> None:
     )
 
 
+# ── 13. Hình phạt mềm ─────────────────────────────────────────────────
+
+
+def kiem_hinh_phat_mem() -> None:
+    print("13. Ràng buộc mềm — hệ số nhân, và phép cộng hình phạt")
+
+    # Hai dải LỒNG NHAU của cùng một bệnh, cùng một chất. Đây là ca mà một
+    # phép nhân thẳng sẽ đếm đôi.
+    tha_nhe = LuatMem(
+        benh="Tăng huyết áp",
+        severity_min="mild",
+        nutrient="sodium_mg",
+        comparator="lte",
+        nguong=700.0,
+        penalty=0.600,
+        scope="per_serving",
+    )
+    tha_nang = LuatMem(
+        benh="Tăng huyết áp",
+        severity_min="severe",
+        nutrient="sodium_mg",
+        comparator="lte",
+        nguong=500.0,
+        penalty=0.400,
+        scope="per_serving",
+    )
+    gut = LuatMem(
+        benh="Gút",
+        severity_min="mild",
+        nutrient="purine_mg",
+        comparator="lte",
+        nguong=150.0,
+        penalty=0.500,
+        scope="per_serving",
+    )
+
+    # `penalty` là HỆ SỐ NHÂN. Chứng cứ nằm trong chính dữ liệu: ghi chú của
+    # dòng mức nặng viết "phạt nặng hơn cho mức nặng" và giá trị là 0,400 so
+    # với 0,600 của mức nhẹ. Đọc theo phép trừ thì 0,400 trừ ÍT hơn, tức
+    # mức nặng bị phạt nhẹ hơn — ngược hẳn ghi chú.
+    kiem(tha_nang.penalty < tha_nhe.penalty, "mức nặng có hệ số NHỎ hơn")
+
+    mot_nhom = hinh_phat({"sodium_mg": 800.0, "purine_mg": 10.0}, [tha_nhe, tha_nang, gut])
+    gan(
+        mot_nhom.he_so,
+        0.400,
+        "800 mg natri vượt CẢ HAI dải của cùng bệnh → lấy nặng nhất 0,400, "
+        "không nhân thành 0,240",
+    )
+    kiem(len(mot_nhom.vi_pham) == 1, "một mối lo thì nêu một vi phạm, không hai")
+    kiem(
+        mot_nhom.vi_pham[0].nguong == 500.0,
+        "vi phạm được nêu là dải chặt hơn (500 mg), không phải dải 700 mg",
+    )
+    gan(mot_nhom.vi_pham[0].lech, 300.0, "lệch so với dải được nêu: 800 − 500")
+
+    hai_nhom = hinh_phat(
+        {"sodium_mg": 800.0, "purine_mg": 200.0}, [tha_nhe, tha_nang, gut]
+    )
+    gan(hai_nhom.he_so, 0.200, "hai bệnh khác nhau thì NHÂN qua nhóm: 0,4 × 0,5")
+    kiem(len(hai_nhom.vi_pham) == 2, "hai mối lo thì nêu hai vi phạm")
+    kiem(
+        [v.benh for v in hai_nhom.vi_pham] == ["Tăng huyết áp", "Gút"],
+        "vi phạm xếp theo mức phạt nặng trước",
+    )
+
+    sach = hinh_phat({"sodium_mg": 100.0, "purine_mg": 10.0}, [tha_nhe, tha_nang, gut])
+    gan(sach.he_so, 1.0, "không vượt gì thì hệ số 1,0")
+    kiem(not sach.bi_tru_diem, "hệ số 1,0 thì không bị trừ điểm")
+    kiem(sach.vi_pham == (), "không vi phạm nào")
+    gan(sach.ap(0.78), 0.78, "hệ số 1,0 không đổi điểm")
+    gan(mot_nhom.ap(0.78), 0.312, "điểm 0,78 × 0,400 = 0,312")
+
+    # Biên: đúng bằng ngưỡng thì KHÔNG vượt.
+    bien = hinh_phat({"sodium_mg": 700.0, "purine_mg": 150.0}, [tha_nhe, gut])
+    gan(bien.he_so, 1.0, "đúng bằng ngưỡng `lte` thì không vượt")
+    hon = hinh_phat({"sodium_mg": 700.01, "purine_mg": 10.0}, [tha_nhe, gut])
+    kiem(hon.bi_tru_diem, "hơn ngưỡng 0,01 mg là vượt — biên phải chặt")
+
+    # Thiếu số liệu: KHÔNG phạt, nhưng phải ghi lại. Ràng buộc mềm là quyết
+    # định về xếp hạng, nên hạ điểm một món vì danh mục thiếu số liệu là
+    # phạt sai đối tượng.
+    khuyet = hinh_phat({"sodium_mg": None, "purine_mg": 10.0}, [tha_nhe, tha_nang, gut])
+    gan(khuyet.he_so, 1.0, "thiếu số liệu thì không phạt")
+    kiem(
+        khuyet.thieu_so_lieu == ("sodium_mg",),
+        "nhưng ghi lại chất không xét được, và chỉ ghi một lần cho hai luật",
+    )
+    kiem(khuyet.vi_pham == (), "không bịa ra vi phạm từ số liệu không có")
+
+    # Ngưỡng `gte` là sàn: thiếu thì phạt, chứ không phải vượt thì phạt.
+    san = LuatMem(
+        benh="Thiếu máu",
+        severity_min="mild",
+        nutrient="iron_mg",
+        comparator="gte",
+        nguong=4.0,
+        penalty=0.800,
+        scope="per_serving",
+    )
+    duoi_san = hinh_phat({"iron_mg": 1.5}, [san])
+    gan(duoi_san.he_so, 0.800, "dưới sàn sắt thì bị phạt")
+    gan(duoi_san.vi_pham[0].lech, 2.5, "lệch của sàn: ngưỡng − số đo")
+    gan(hinh_phat({"iron_mg": 9.0}, [san]).he_so, 1.0, "trên sàn thì không phạt")
+    kiem(san.lech_bao_nhieu_tu == "thiếu", "chữ cho sàn là `thiếu`")
+    kiem(tha_nhe.lech_bao_nhieu_tu == "vượt", "chữ cho trần là `vượt`")
+
+    # Phạm vi sai phải NỔ, không được âm thầm tính ra một con số trông hợp lý.
+    # Áp luật `per_meal` cho từng món sai cả hai chiều: bỏ sót khi tổng bữa
+    # vượt dù không món nào vượt, và phạt oan món lớn trong bữa còn dư địa.
+    bua = LuatMem(
+        benh="Đái tháo đường",
+        severity_min="mild",
+        nutrient="carbs_g",
+        comparator="lte",
+        nguong=60.0,
+        penalty=0.700,
+        scope="per_meal",
+    )
+    ngay = LuatMem(
+        benh="Đái tháo đường",
+        severity_min="mild",
+        nutrient="sugar_g",
+        comparator="lte",
+        nguong=25.0,
+        penalty=0.600,
+        scope="per_day",
+    )
+    nem(lambda: hinh_phat({"carbs_g": 80.0}, [bua]), ValueError, "luật per_meal phải nổ")
+    nem(lambda: hinh_phat({"sugar_g": 30.0}, [ngay]), ValueError, "luật per_day phải nổ")
+
+    # Phân luồng theo phạm vi, và luật chưa có tầng thi hành.
+    theo = luat_mem_theo_pham_vi([tha_nhe, gut, bua, ngay])
+    kiem(len(theo["per_serving"]) == 2, "hai luật theo suất")
+    kiem(len(theo["per_meal"]) == 1 and len(theo["per_day"]) == 1, "mỗi phạm vi một luật")
+    chua = luat_chua_thi_hanh([tha_nhe, gut, bua, ngay])
+    kiem(
+        [l.scope for l in chua] == ["per_meal"],
+        "chỉ `per_meal` là chưa có tầng thi hành — Bước 4 chưa nhận nó",
+    )
+    kiem(
+        TANG_THI_HANH["per_serving"] is not None
+        and TANG_THI_HANH["per_day"] is not None,
+        "hai phạm vi còn lại đã có chủ",
+    )
+
+
 def main() -> int:
     in_utf8()
     print("Kiểm phần học máy — hàm thuần, không cần CSDL")
@@ -909,6 +1063,7 @@ def main() -> int:
         kiem_pho_bien,
         kiem_han_muc,
         kiem_ly_do_loai,
+        kiem_hinh_phat_mem,
     ):
         ham()
     print("=" * 62)

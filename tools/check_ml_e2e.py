@@ -54,8 +54,12 @@ from ml.f1_filter import (  # noqa: E402
     dieu_kien_theo_ten,
     doi_chieu_loc_f1,
     loc_f1,
+    luat_chua_thi_hanh,
+    luat_mem,
+    luat_mem_theo_pham_vi,
     ly_do_loai,
 )
+from ml.scoring import hinh_phat  # noqa: E402
 from ml.han_muc import (  # noqa: E402
     da_an,
     da_len_ke_hoach,
@@ -1356,6 +1360,188 @@ def kiem_ly_do_loai_sql(db: str) -> None:
         cn.close()
 
 
+def kiem_hinh_phat_mem_sql(db: str) -> None:
+    """Ràng buộc mềm trên bộ quy tắc thật — và điều chúng KHÔNG được làm.
+
+    Bất biến quan trọng nhất: một ràng buộc mềm **không bao giờ** được làm
+    một món rời khỏi `loc_f1`. `is_hard = 0` nghĩa là trừ điểm; nếu nó loại
+    món thì cả tầng mềm mất lý do tồn tại, và Bước 4 lại hết đường xoay xở
+    đúng như trước khi tầng này được thêm.
+    """
+    print("\n8. Ràng buộc mềm trên bộ quy tắc thật")
+    ngay = date(2026, 10, 20)
+    uid = "00000004-0000-0000-0000-000000000000"
+
+    cn = ket_noi(db)
+    try:
+        bon_benh = ["Gút", "Tăng huyết áp", "Đái tháo đường", "Rối loạn mỡ máu"]
+        dk = dieu_kien_theo_ten(cn, bon_benh, severity="severe")
+        lm = luat_mem(cn, dk)
+        kiem(len(lm) == 7, f"bốn bệnh cho 7 luật mềm, được {len(lm)}")
+
+        theo = luat_mem_theo_pham_vi(lm)
+        kiem(
+            len(theo["per_serving"]) == 4,
+            f"4 luật theo suất, được {len(theo['per_serving'])}",
+        )
+        kiem(len(theo["per_meal"]) == 1, f"1 luật theo bữa, được {len(theo['per_meal'])}")
+        kiem(len(theo["per_day"]) == 2, f"2 luật theo ngày, được {len(theo['per_day'])}")
+
+        chua = luat_chua_thi_hanh(lm)
+        kiem(
+            [l.scope for l in chua] == ["per_meal"],
+            f"đúng 1 luật chưa có tầng thi hành, được {[l.scope for l in chua]}",
+        )
+        kiem(
+            chua and chua[0].nutrient == "carbs_g" and chua[0].benh == "Đái tháo đường",
+            "luật chưa thi hành là bột đường ≤ 60 g mỗi bữa của Đái tháo đường",
+        )
+
+        # `penalty` là hệ số nhân: mức nặng phải có hệ số NHỎ hơn mức nhẹ.
+        natri = sorted(
+            [l for l in theo["per_serving"] if l.nutrient == "sodium_mg"],
+            key=lambda l: l.nguong,
+        )
+        kiem(len(natri) == 2, f"hai dải natri theo suất, được {len(natri)}")
+        if len(natri) == 2:
+            chat, long_ = natri[0], natri[1]
+            kiem(
+                chat.nguong < long_.nguong and chat.penalty < long_.penalty,
+                f"dải chặt hơn ({chat.nguong:.0f} mg) có hệ số nhỏ hơn "
+                f"({chat.penalty} < {long_.penalty}) — hệ số NHÂN, không "
+                f"phải lượng trừ",
+            )
+
+        # ── Áp lên danh mục thật ──
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT f.id, f.name, fn.sodium_mg, fn.purine_mg, fn.fat_g "
+                "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1 ORDER BY f.name"
+            )
+            tat_ca = list(cur.fetchall())
+
+        bi_tru = 0
+        thieu = 0
+        he_so_nho_nhat = 1.0
+        for d in tat_ca:
+            so_do = {
+                "sodium_mg": d["sodium_mg"],
+                "purine_mg": d["purine_mg"],
+                "fat_g": d["fat_g"],
+            }
+            r = hinh_phat(so_do, theo["per_serving"])
+            kiem_am_tham = 0.0 < r.he_so <= 1.0
+            if not kiem_am_tham:
+                kiem(False, f"{d['name']}: hệ số {r.he_so} ra ngoài (0, 1]")
+                return
+            if r.bi_tru_diem:
+                bi_tru += 1
+            if r.thieu_so_lieu:
+                thieu += 1
+            he_so_nho_nhat = min(he_so_nho_nhat, r.he_so)
+
+        kiem(True, f"mọi hệ số của 318 món nằm trong (0, 1]")
+        kiem(
+            bi_tru > 0,
+            f"{bi_tru} món bị trừ điểm vì ràng buộc mềm — nếu bằng 0 thì "
+            f"tầng mềm không làm gì cả",
+        )
+        kiem(
+            thieu > 0,
+            f"{thieu} món thiếu số liệu ở chất có luật mềm — không bị phạt, "
+            f"nhưng được ghi lại",
+        )
+        kiem(
+            he_so_nho_nhat < 0.4,
+            f"có món vướng nhiều nhóm luật nên hệ số xuống {he_so_nho_nhat:.3f} "
+            f"— thấp hơn hệ số nặng nhất của một nhóm (0,400)",
+        )
+
+        # ── Bất biến: luật mềm KHÔNG loại món ──
+        chi_cung = dieu_kien_theo_ten(cn, ["Gút"], severity="mild")
+        kiem(
+            len(loc_f1(cn, dieu_kien=chi_cung)) == 318,
+            "Gút mức nhẹ: luật mềm purin ≤ 150 mg/suất KHÔNG loại món nào",
+        )
+        kiem(
+            len(ly_do_loai(cn, dieu_kien=chi_cung)) == 0,
+            "và cũng không sinh ra lý do bị loại nào",
+        )
+        bon = loc_f1(cn, dieu_kien=dk)
+        kiem(
+            len(bon) == len(loc_f1(cn, dieu_kien=dieu_kien_theo_ten(
+                cn, ["Gút", "Tăng huyết áp"], severity="severe"))),
+            "thêm Đái tháo đường và Rối loạn mỡ máu — toàn luật mềm — không "
+            "làm tập ứng viên nhỏ đi",
+        )
+
+        # ── Hạn mức MỀM theo ngày ──
+        with cn.cursor() as cur:
+            for cid, muc in ((6, "severe"),):  # Đái tháo đường
+                cur.execute(
+                    "SELECT id FROM conditions WHERE name_vi = %s",
+                    ("Đái tháo đường",),
+                )
+                cid = cur.fetchone()["id"]
+                cur.execute(
+                    "INSERT INTO user_conditions (id, user_id, condition_id, "
+                    "severity, created_at) VALUES (UUID(), %s, %s, %s, NOW())",
+                    (uid, cid, muc),
+                )
+            # Một món rất ngọt, ăn hai suất, để vượt hẳn mốc 25 g/ngày.
+            cur.execute(
+                "SELECT f.id, f.name, fn.sugar_g FROM foods f "
+                "JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1 AND fn.sugar_g IS NOT NULL "
+                "ORDER BY fn.sugar_g DESC LIMIT 1"
+            )
+            ngot = cur.fetchone()
+            cur.execute(
+                "INSERT INTO food_diary (id, user_id, food_id, ate_on, "
+                "meal_type, portion_multiplier, created_at) "
+                "VALUES (UUID(), %s, %s, %s, 'snack', 2.00, NOW())",
+                (uid, ngot["id"], ngay),
+            )
+        cn.commit()
+
+        dk_dtd = dieu_kien_cua_nguoi_dung(cn, uid)
+        tt = trang_thai(cn, uid, dieu_kien=dk_dtd, ngay=ngay)
+        kiem(len(tt.nguong_mem()) == 1, f"một ngưỡng mềm theo ngày, được {len(tt.nguong_mem())}")
+        kiem(len(tt.nguong_cung()) == 0, "Đái tháo đường không có ngưỡng CỨNG theo ngày")
+
+        mem = tt.nguong_mem()[0]
+        gan(mem.nguong, 25.0, "mốc đường 25 g/ngày")
+        gan(mem.penalty or 0.0, 0.600, "hệ số phạt 0,600 đi theo ngưỡng")
+        gan(
+            mem.da_an,
+            float(ngot["sugar_g"]) * 2,
+            f"đã ăn 2 suất {ngot['name']}",
+        )
+        kiem(
+            mem.da_vuot,
+            f"{mem.tong:.1f} g đường vượt mốc 25 g — vào `vuot_khuyen_cao`",
+        )
+        kiem(
+            [h.chat for h in tt.vuot_khuyen_cao()] == ["sugar_g"],
+            "`vuot_khuyen_cao` nêu đúng chất",
+        )
+
+        # Và đây là điều phải giữ: vượt khuyến cáo KHÔNG chặn món nào.
+        kq = mon_khong_vua(tt, tat_ca)
+        kiem(
+            kq.khong_vua == {} and kq.khong_xet_duoc == {},
+            f"vượt mốc đường mềm không chặn món nào "
+            f"({len(kq.khong_vua)} bị chặn) — mềm là trừ điểm, không phải cấm",
+        )
+        kiem(
+            tt.han_muc_chat_nhat("sugar_g") is None,
+            "`han_muc_chat_nhat` chỉ trả ngưỡng CỨNG, nên đường trả None",
+        )
+    finally:
+        cn.close()
+
+
 def main() -> int:
     in_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
@@ -1393,6 +1579,7 @@ def main() -> int:
         kiem_phuc_vu(t.db, so_tin_hieu)
         kiem_han_muc_ngay(t.db)
         kiem_ly_do_loai_sql(t.db)
+        kiem_hinh_phat_mem_sql(t.db)
     finally:
         if t.giu:
             print(f"\nGiữ lại CSDL {t.db!r} theo --giu.")

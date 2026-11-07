@@ -269,7 +269,8 @@ def hinh_phat_mem(cn, dieu_kien: Sequence[DieuKien]) -> list[dict[str, Any]]:
         cte
         + f"""
 SELECT co.name_vi, cr.rule_type, cr.tag_id, t.name_vi AS tag_name,
-       cr.nutrient, cr.comparator, cr.threshold, cr.scope, cr.penalty, cr.note
+       cr.nutrient, cr.comparator, cr.threshold, cr.scope, cr.penalty,
+       cr.severity_min, cr.note
 FROM condition_rules cr
 JOIN dk         ON dk.condition_id = cr.condition_id
 JOIN conditions co ON co.id = cr.condition_id
@@ -284,33 +285,149 @@ ORDER BY co.name_vi, cr.rule_type, cr.nutrient
         return list(cur.fetchall())
 
 
-def han_muc_theo_ngay(cn, dieu_kien: Sequence[DieuKien]) -> list[dict[str, Any]]:
-    """Ngưỡng dinh dưỡng **cứng theo ngày** — đầu vào của Bước 4 pha 5.
+def han_muc_theo_ngay(
+    cn,
+    dieu_kien: Sequence[DieuKien],
+    *,
+    chi_cung: bool = True,
+) -> list[dict[str, Any]]:
+    """Ngưỡng dinh dưỡng **theo ngày** — đầu vào của Bước 4 pha 5.
 
     Không lọc món nào: một món mặn vẫn hợp lệ nếu tổng cả ngày vẫn dưới
     ngưỡng. Bản trước đặt ngưỡng cứng theo từng suất và ngưỡng natri 600 mg
     loại 58/60 món, khiến Bước 4 không dựng nổi thực đơn.
+
+    `chi_cung=True` (mặc định, giữ nguyên hành vi cũ) chỉ trả ngưỡng cứng —
+    thứ **chặn** món. `chi_cung=False` trả thêm ngưỡng mềm theo ngày, thứ
+    chỉ **trừ điểm**. Hai loại phải phân biệt được ở phía gọi, nên mỗi dòng
+    mang theo `is_hard` và `penalty`; gộp chúng lại sẽ biến một khuyến cáo
+    thành một lệnh cấm.
     """
     if not dieu_kien:
         return []
     cte, tham_so = _cte_dieu_kien(dieu_kien)
+    loc_cung = "  AND cr.is_hard = 1\n" if chi_cung else ""
     sql = (
         cte
         + f"""
-SELECT co.name_vi, cr.nutrient, cr.comparator, cr.threshold, cr.note
+SELECT co.name_vi, cr.nutrient, cr.comparator, cr.threshold,
+       cr.is_hard, cr.penalty, cr.severity_min, cr.note
 FROM condition_rules cr
 JOIN dk         ON dk.condition_id = cr.condition_id
 JOIN conditions co ON co.id = cr.condition_id
 WHERE cr.rule_type = 'nutrient_limit'
-  AND cr.is_hard = 1
-  AND cr.scope = 'per_day'
+{loc_cung}  AND cr.scope = 'per_day'
   AND {_DU_MUC_DO}
-ORDER BY co.name_vi, cr.nutrient
+ORDER BY cr.is_hard DESC, co.name_vi, cr.nutrient
 """
     )
     with cn.cursor() as cur:
         cur.execute(sql, tuple(tham_so))
         return list(cur.fetchall())
+
+
+# ── Ràng buộc mềm, dạng có kiểu ────────────────────────────────────────
+#
+# `hinh_phat_mem` trả về dòng thô. Nó được giữ nguyên vì `main()` dùng, còn
+# `LuatMem` là dạng mà bước chấm điểm nhận: có kiểu, có `scope` bắt buộc
+# phải xét, và không cho một luật đi lạc phạm vi.
+
+
+@dataclass(frozen=True)
+class LuatMem:
+    """Một ràng buộc mềm: vượt thì **trừ điểm**, không loại món."""
+
+    benh: str
+    severity_min: str
+    nutrient: str
+    comparator: str
+    nguong: float
+    #: **Hệ số nhân**, không phải lượng trừ. Xem `scoring.hinh_phat`.
+    penalty: float
+    scope: str
+    note: str = ""
+
+    def vi_pham(self, gia_tri: float) -> bool:
+        if self.comparator == "lte":
+            return gia_tri > self.nguong
+        return gia_tri < self.nguong
+
+    @property
+    def lech_bao_nhieu_tu(self) -> str:
+        """Chiều của ngưỡng, để giao diện chọn chữ: `vượt` hay `thiếu`."""
+        return "vượt" if self.comparator == "lte" else "thiếu"
+
+
+def luat_mem(cn, dieu_kien: Sequence[DieuKien]) -> list[LuatMem]:
+    """`hinh_phat_mem` ở dạng có kiểu, chỉ gồm quy tắc `nutrient_limit`.
+
+    Bộ quy tắc hiện tại không có ràng buộc mềm nào dạng nhãn, nhưng lược đồ
+    cho phép. Lọc ở đây thay vì để bước chấm điểm tự đoán: một luật nhãn mềm
+    không có `nutrient` nên mọi phép so số với nó đều vô nghĩa.
+    """
+    ra: list[LuatMem] = []
+    for d in hinh_phat_mem(cn, dieu_kien):
+        if d["rule_type"] != "nutrient_limit" or d["nutrient"] is None:
+            continue
+        ra.append(
+            LuatMem(
+                benh=d["name_vi"],
+                severity_min=d["severity_min"],
+                nutrient=d["nutrient"],
+                comparator=d["comparator"],
+                nguong=float(d["threshold"]),
+                penalty=float(d["penalty"]),
+                scope=d["scope"],
+                note=d["note"] or "",
+            )
+        )
+    return ra
+
+
+#: Phạm vi nào đã có tầng thi hành, và tầng đó ở đâu.
+#:
+#: `per_meal` là `None` vì **chưa có ai thi hành**. Bộ quy tắc hiện có đúng
+#: một luật như vậy — Đái tháo đường, bột đường ≤ 60 g mỗi bữa — và nó không
+#: ảnh hưởng đến bất cứ thứ gì. Nêu ra thành dữ liệu để `luat_chua_thi_hanh`
+#: báo được, thay vì để nó nằm im trong CSDL trông như đang hoạt động.
+TANG_THI_HANH: dict[str, str | None] = {
+    "per_serving": "ml/scoring.hinh_phat",
+    "per_day": "ml/han_muc.trang_thai",
+    "per_meal": None,
+}
+
+
+def luat_chua_thi_hanh(luat: Sequence[LuatMem]) -> list[LuatMem]:
+    """Luật mềm thuộc phạm vi chưa có tầng nào thi hành.
+
+    Danh sách này **không được phép** biến thành rỗng bằng cách xóa luật.
+    Nó rỗng khi và chỉ khi Bước 4 nhận phần `per_meal`.
+    """
+    return [l for l in luat if TANG_THI_HANH.get(l.scope) is None]
+
+
+def luat_mem_theo_pham_vi(
+    luat: Sequence[LuatMem],
+) -> dict[str, list[LuatMem]]:
+    """Chia luật mềm theo `scope`, vì ba phạm vi cần ba lượng thông tin khác.
+
+        per_serving — xét được từng món một, bước chấm điểm làm
+        per_meal    — cần tổng cả bữa, thuộc Bước 4
+        per_day     — cần tổng cả ngày, thuộc `ml/han_muc.py`
+
+    Áp một luật `per_meal` cho từng món là sai cả hai chiều: nó bỏ sót
+    trường hợp tổng bữa vượt dù không món nào vượt, và nó phạt oan một món
+    lớn trong một bữa vẫn còn dư địa. Nên hàm chia ra để mỗi tầng chỉ nhận
+    phần nó xét được, và `chua_thi_hanh` nói thẳng phần nào chưa có ai nhận.
+    """
+    ra: dict[str, list[LuatMem]] = {
+        "per_serving": [],
+        "per_meal": [],
+        "per_day": [],
+    }
+    for l in luat:
+        ra.setdefault(l.scope, []).append(l)
+    return ra
 
 
 # ── Nghịch đảo của F1: vì sao một món bị loại ─────────────────────────

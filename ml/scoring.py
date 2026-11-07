@@ -22,8 +22,10 @@ khác thang thì phép trộn là vô nghĩa dù vẫn ra một con số.
 
 from __future__ import annotations
 
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Mapping, Sequence
 
+from .f1_filter import LuatMem
 from .features import cosine_similarity
 from .rocchio import alpha
 
@@ -122,3 +124,135 @@ def tron(diem_ml: float, diem_noi_dung_: float, n_signals: int) -> float:
     """
     a = alpha(n_signals)
     return a * diem_ml + (1 - a) * diem_noi_dung_
+
+
+# ── Ràng buộc mềm — hình phạt theo suất ───────────────────────────────
+#
+# `penalty` là **HỆ SỐ NHÂN**, không phải lượng trừ.
+#
+# Lược đồ chỉ nói `DECIMAL(4,3)` và `docs/DATABASE_DESIGN.md` từng gọi nó là
+# "hệ số trừ điểm". Chính dữ liệu phản bác cách đọc đó:
+#
+#     Tăng huyết áp · natri ≤ 700 mg/suất · mức nhẹ  · penalty 0,600
+#     Tăng huyết áp · natri ≤ 500 mg/suất · mức nặng · penalty 0,400
+#         ghi chú: "Ràng buộc MỀM, phạt nặng hơn cho mức nặng"
+#
+# Nếu là phép trừ thì 0,400 trừ ít hơn 0,600, nghĩa là mức nặng bị phạt
+# NHẸ hơn — ngược hẳn ghi chú của chính dòng đó. Là hệ số nhân thì ×0,400
+# nặng hơn ×0,600, khớp. Phép nhân còn giữ điểm trong [0, 1], còn trừ 0,750
+# sẽ đẩy một điểm [0, 1] xuống âm.
+
+
+@dataclass(frozen=True)
+class ViPhamMem:
+    """Một ràng buộc mềm bị món này vượt."""
+
+    benh: str
+    nutrient: str
+    comparator: str
+    nguong: float
+    gia_tri: float
+    penalty: float
+    note: str = ""
+
+    @property
+    def lech(self) -> float:
+        """Lệch khỏi ngưỡng bao nhiêu, luôn là số dương."""
+        if self.comparator == "lte":
+            return self.gia_tri - self.nguong
+        return self.nguong - self.gia_tri
+
+
+@dataclass(frozen=True)
+class KetQuaHinhPhat:
+    """Hệ số phạt của một món, kèm lý do để giao diện nói ra."""
+
+    he_so: float
+    vi_pham: tuple[ViPhamMem, ...] = ()
+    #: Chất mà món này không có số đo, nên không xét được luật mềm nào của
+    #: nó. Không phạt, nhưng cũng không được coi là đã kiểm.
+    thieu_so_lieu: tuple[str, ...] = ()
+
+    @property
+    def bi_tru_diem(self) -> bool:
+        return self.he_so < 1.0
+
+    def ap(self, diem: float) -> float:
+        """Áp hệ số vào một điểm trong [0, 1].
+
+        Giữ `diem` gốc ở phía gọi: giao diện cần nói "khớp khẩu vị 0,78,
+        bị trừ vì mặn" chứ không phải chỉ hiện 0,47 mà không giải thích.
+        """
+        return diem * self.he_so
+
+
+def hinh_phat(
+    so_do: Mapping[str, float | None],
+    luat: Sequence[LuatMem],
+) -> KetQuaHinhPhat:
+    """Hệ số phạt của một món theo các ràng buộc mềm **theo suất**.
+
+    `so_do` là số dinh dưỡng của một suất, `{tên chất: giá trị}`; giá trị
+    `None` nghĩa là không có số liệu.
+
+    **Chỉ nhận `scope = 'per_serving'`.** Một luật `per_meal` hay `per_day`
+    truyền vào đây là lỗi lập trình, không phải dữ liệu lạ: áp nó cho từng
+    món sai cả hai chiều — bỏ sót trường hợp tổng bữa vượt dù không món nào
+    vượt, và phạt oan một món lớn trong một bữa còn dư địa. Nên hàm nổ thay
+    vì âm thầm tính ra một con số trông hợp lý.
+
+    **Cộng hình phạt.** Hai luật cùng (bệnh, chất) là hai dải lồng nhau, ví
+    dụ natri ≤ 700 mg và ≤ 500 mg của cùng Tăng huyết áp: một món 800 mg
+    vượt cả hai, nhưng đó là **một** mối lo, không phải hai. Nhân cả hai sẽ
+    ra ×0,24 thay vì ×0,40 — đếm đôi. Nên trong mỗi nhóm (bệnh, chất) lấy
+    hệ số NẶNG NHẤT, rồi nhân qua các nhóm khác nhau.
+
+    Thiếu số liệu thì **không phạt**, nhưng được ghi lại. Ràng buộc mềm là
+    quyết định về xếp hạng, không phải về an toàn, nên hạ điểm một món vì
+    danh mục thiếu số liệu là phạt sai đối tượng. Chiều này ngược với
+    `f1_filter.loc_f1`, nơi thiếu số liệu thì loại — ở đó câu hỏi là "món
+    này có an toàn không".
+    """
+    nang_nhat: dict[tuple[str, str], ViPhamMem] = {}
+    thieu: list[str] = []
+
+    for l in luat:
+        if l.scope != "per_serving":
+            raise ValueError(
+                f"`hinh_phat` chỉ nhận luật per_serving, nhận {l.scope!r} "
+                f"({l.benh} · {l.nutrient}). Luật per_meal thuộc Bước 4, "
+                f"per_day thuộc ml/han_muc.py"
+            )
+        gia_tri = so_do.get(l.nutrient)
+        if gia_tri is None:
+            if l.nutrient not in thieu:
+                thieu.append(l.nutrient)
+            continue
+        gia_tri = float(gia_tri)
+        if not l.vi_pham(gia_tri):
+            continue
+        vp = ViPhamMem(
+            benh=l.benh,
+            nutrient=l.nutrient,
+            comparator=l.comparator,
+            nguong=l.nguong,
+            gia_tri=gia_tri,
+            penalty=l.penalty,
+            note=l.note,
+        )
+        khoa = (l.benh, l.nutrient)
+        cu = nang_nhat.get(khoa)
+        if cu is None or vp.penalty < cu.penalty:
+            nang_nhat[khoa] = vp
+
+    he_so = 1.0
+    for vp in nang_nhat.values():
+        he_so *= vp.penalty
+
+    return KetQuaHinhPhat(
+        he_so=he_so,
+        vi_pham=tuple(
+            sorted(nang_nhat.values(), key=lambda v: (v.penalty, v.benh, v.nutrient))
+        ),
+        thieu_so_lieu=tuple(sorted(thieu)),
+    )

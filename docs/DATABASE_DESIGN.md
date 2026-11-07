@@ -633,28 +633,48 @@ CREATE TABLE condition_rules (
 | `scope` | Ngưỡng áp cho một khẩu phần, một bữa, hay cả ngày |
 | `severity_min` | Quy tắc chỉ kích hoạt khi mức độ bệnh của người dùng đạt từ mức này trở lên |
 | `is_hard` | `1` = ràng buộc cứng, loại bỏ ở **Bước 2**. `0` = ràng buộc mềm, trừ điểm ở **Bước 3** |
-| `penalty` | Hệ số trừ điểm khi `is_hard = 0` |
+| `penalty` | **Hệ số nhân** điểm khi `is_hard = 0` — nhỏ hơn là phạt nặng hơn |
 
 **Dữ liệu mẫu — đây chính là bảng sẽ in vào báo cáo:**
 
-| Bệnh lý | rule_type | Nhãn / Chất | So sánh | Ngưỡng | scope | is_hard |
-|---|---|---|---|---|---|---|
-| Đái tháo đường | `nutrient_limit` | `sugar_g` | `lte` | 10.00 | per_serving | 1 |
-| Đái tháo đường | `nutrient_limit` | `carbs_g` | `lte` | 60.00 | per_meal | 0 |
-| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 600.00 | per_serving | 1 |
-| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 2000.00 | per_day | 1 |
-| Rối loạn mỡ máu | `nutrient_limit` | `cholesterol_mg` | `lte` | 200.00 | per_serving | 1 |
-| Rối loạn mỡ máu | `nutrient_limit` | `fat_g` | `lte` | 20.00 | per_serving | 0 |
-| Bệnh thận | `nutrient_limit` | `protein_g` | `lte` | 15.00 | per_serving | 1 |
-| Bệnh thận | `nutrient_limit` | `sodium_mg` | `lte` | 500.00 | per_serving | 1 |
-| Gút | `nutrient_limit` | `purine_mg` | `lte` | 100.00 | per_serving | 1 |
-| Dị ứng hải sản | `exclude_tag` | `contains_seafood` | — | — | per_serving | 1 |
-| Dị ứng đậu phộng | `exclude_tag` | `contains_peanut` | — | — | per_serving | 1 |
-| Không dung nạp lactose | `exclude_tag` | `contains_dairy` | — | — | per_serving | 1 |
-| Ăn chay | `require_tag` | `vegetarian` | — | — | per_serving | 1 |
-| Ăn thuần chay | `require_tag` | `vegan` | — | — | per_serving | 1 |
+| Bệnh lý | rule_type | Nhãn / Chất | So sánh | Ngưỡng | scope | is_hard | penalty | severity_min |
+|---|---|---|---|---|---|---|---|---|
+| Ăn chay | `require_tag` | `Món chay` | — | — | per_serving | 1 | — | mild |
+| Ăn thuần chay | `require_tag` | `Món thuần chay` | — | — | per_serving | 1 | — | mild |
+| Bệnh thận | `nutrient_limit` | `protein_g` | `lte` | 48.00 | per_day | 1 | — | mild |
+| Bệnh thận | `nutrient_limit` | `sodium_mg` | `lte` | 2000.00 | per_day | 1 | — | mild |
+| Dị ứng đậu nành | `exclude_tag` | `Có đậu nành` | — | — | per_serving | 1 | — | mild |
+| Dị ứng đậu phộng | `exclude_tag` | `Có đậu phộng` | — | — | per_serving | 1 | — | mild |
+| Dị ứng hải sản | `exclude_tag` | `Có hải sản` | — | — | per_serving | 1 | — | mild |
+| Dị ứng trứng | `exclude_tag` | `Có trứng` | — | — | per_serving | 1 | — | mild |
+| Đái tháo đường | `nutrient_limit` | `carbs_g` | `lte` | 60.00 | per_meal | 0 | 0.700 | mild |
+| Đái tháo đường | `nutrient_limit` | `sugar_g` | `lte` | 25.00 | per_day | 0 | 0.600 | mild |
+| Gút | `exclude_tag` | `Giàu purin` | — | — | per_serving | 1 | — | **moderate** |
+| Gút | `nutrient_limit` | `purine_mg` | `lte` | 400.00 | per_day | 1 | — | mild |
+| Gút | `nutrient_limit` | `purine_mg` | `lte` | 150.00 | per_serving | 0 | 0.500 | mild |
+| Không dung nạp gluten | `exclude_tag` | `Có gluten` | — | — | per_serving | 1 | — | mild |
+| Không dung nạp lactose | `exclude_tag` | `Có sữa / chế phẩm sữa` | — | — | per_serving | 1 | — | mild |
+| Rối loạn mỡ máu | `nutrient_limit` | `cholesterol_mg` | `lte` | 300.00 | per_day | 0 | 0.700 | mild |
+| Rối loạn mỡ máu | `nutrient_limit` | `fat_g` | `lte` | 25.00 | per_serving | 0 | 0.750 | mild |
+| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 2000.00 | per_day | 1 | — | mild |
+| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 700.00 | per_serving | 0 | 0.600 | mild |
+| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 500.00 | per_serving | 0 | 0.400 | **severe** |
 
-> **Giá trị ngưỡng trong bảng trên là số minh họa.** Khi triển khai thật phải tra theo tài liệu *Nhu cầu dinh dưỡng khuyến nghị cho người Việt Nam (NIN 2016)* — chính là tài liệu ban đầu ghi trong file nhiệm vụ — và ghi rõ nguồn của từng ngưỡng trong cột `note`.
+Hai mươi dòng trên là **dữ liệu thật trong `nutrition_rec`**, không phải số minh họa. Mỗi ngưỡng ghi nguồn trong cột `note`, và nguồn chia làm ba mức tin cậy khác nhau — tài liệu không được trình bày chúng như nhau:
+
+| Mức | Ví dụ `note` |
+|---|---|
+| **Có nguồn công bố** | `WHO: người lớn dưới 2000 mg natri/ngày`; `KDIGO 2024: 0,8 g đạm/kg/ngày`; hướng dẫn gút Nhật Bản dưới 400 mg/ngày |
+| **Suy diễn** | `400 mg/ngày chia cho 3 bữa chính; là suy diễn, không phải ngưỡng công bố` |
+| **Chưa xác minh** | `Ngưỡng theo ngày cho mức nặng CẦN TRA AHA/ESC — chưa xác minh` |
+
+Hai dòng in đậm ở cột `severity_min` là hai quy tắc duy nhất **không** áp từ mức nhẹ. Luật `Giàu purin` cần mức vừa, nên người bị gút mức nhẹ không bị loại món nào (318 món đi qua F1), còn mức vừa thì bị loại 91 món.
+
+Ba ghi chú đáng nhớ về nhóm `is_hard = 0`:
+
+- Ngưỡng cholesterol 300 mg/ngày **đã bị rút** khỏi *Dietary Guidelines for Americans 2015* và AHA/ACC 2019, nên nó được giữ ở mức khuyến cáo chứ không phải chống chỉ định.
+- Mục tiêu thật của AHA là **béo bão hòa** dưới 10% năng lượng, nhưng bảng thành phần thực phẩm Việt Nam không tách béo bão hòa, nên `fat_g` tổng được dùng thay.
+- ADA *Standards of Care* nêu rõ **không có** tỷ lệ bột đường lý tưởng; mốc 45–60 g mỗi bữa là cách làm cũ, giữ làm khuyến cáo.
 
 **Hai ràng buộc ép tính nhất quán.**
 
@@ -674,7 +694,7 @@ CONSTRAINT chk_rule_shape CHECK (
 CONSTRAINT chk_rule_penalty CHECK (is_hard = 1 OR penalty IS NOT NULL)
 ```
 
-Ràng buộc thứ hai ép quy tắc mềm phải khai mức phạt — quy tắc mềm không có `penalty` thì bước chấm điểm không biết trừ bao nhiêu.
+Ràng buộc thứ hai ép quy tắc mềm phải khai mức phạt — quy tắc mềm không có `penalty` thì bước chấm điểm không biết nhân bao nhiêu.
 
 **Vì sao tách `is_hard`.** Không phải quy tắc dinh dưỡng nào cũng tuyệt đối. "Không được ăn tôm khi dị ứng hải sản" là cứng. "Nên hạn chế chất béo khi rối loạn mỡ máu" là mềm — nếu xử lý như ràng buộc cứng, tập ứng viên sẽ bị thu hẹp quá mức và Bước 4 không tìm nổi tổ hợp thỏa hạn mức năng lượng. Cột này cho phép diễn đạt đúng sự khác biệt đó.
 

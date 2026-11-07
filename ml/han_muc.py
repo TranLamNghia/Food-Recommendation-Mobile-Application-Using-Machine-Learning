@@ -121,6 +121,12 @@ class MotHanMuc:
     #: Số suất đã ăn / đã lên kế hoạch KHÔNG có số liệu cho chất này.
     thieu_da_an: int = 0
     thieu_ke_hoach: int = 0
+    #: Cứng thì **chặn** món, mềm thì chỉ **trừ điểm**. Gộp hai thứ lại sẽ
+    #: biến một khuyến cáo thành một lệnh cấm — đường ≤ 25 g/ngày của WHO là
+    #: khuyến cáo, natri ≤ 2 000 mg thì là ngưỡng chặn.
+    la_cung: bool = True
+    #: Hệ số nhân khi vượt, chỉ có ở ngưỡng mềm. Xem `scoring.hinh_phat`.
+    penalty: float | None = None
 
     @property
     def so_mon_thieu_so(self) -> int:
@@ -225,12 +231,25 @@ class TrangThaiHanMuc:
 
     def han_muc_chat_nhat(self, chat: str) -> MotHanMuc | None:
         """Ngưỡng trần còn ít dư địa nhất cho một chất, `None` nếu không có."""
-        tran = [h for h in self.theo_chat(chat) if h.la_tran]
+        tran = [h for h in self.theo_chat(chat) if h.la_tran and h.la_cung]
         return min(tran, key=lambda h: h.con_lai) if tran else None
 
     def da_vuot(self) -> list[MotHanMuc]:
-        """Các ngưỡng đã bị vượt."""
+        """Các ngưỡng đã bị vượt, cả cứng lẫn mềm."""
         return [h for h in self.han_muc if h.da_vuot]
+
+    def nguong_cung(self) -> list[MotHanMuc]:
+        """Ngưỡng chặn món."""
+        return [h for h in self.han_muc if h.la_cung]
+
+    def nguong_mem(self) -> list[MotHanMuc]:
+        """Ngưỡng chỉ trừ điểm — khuyến cáo, không phải lệnh cấm."""
+        return [h for h in self.han_muc if not h.la_cung]
+
+    def vuot_khuyen_cao(self) -> list[MotHanMuc]:
+        """Ngưỡng MỀM đã bị vượt — giao diện nói "vượt khuyến cáo", không
+        nói "bị loại"."""
+        return [h for h in self.han_muc if h.da_vuot and not h.la_cung]
 
 
 # ── Đọc tiêu thụ ──────────────────────────────────────────────────────
@@ -323,7 +342,7 @@ def trang_thai(
     ke_hoach = da_len_ke_hoach(cn, user_id, hom_nay)
 
     cac_han_muc: list[MotHanMuc] = []
-    for luat in han_muc_theo_ngay(cn, dieu_kien):
+    for luat in han_muc_theo_ngay(cn, dieu_kien, chi_cung=False):
         chat = luat["nutrient"]
         if chat not in CAC_CHAT:
             # Lược đồ có thể thêm chất mới; bỏ qua lặng lẽ sẽ làm mất một
@@ -343,6 +362,10 @@ def trang_thai(
                 note=luat.get("note") or "",
                 thieu_da_an=an.thieu[chat],
                 thieu_ke_hoach=ke_hoach.thieu[chat],
+                la_cung=bool(luat["is_hard"]),
+                penalty=(
+                    None if luat["penalty"] is None else float(luat["penalty"])
+                ),
             )
         )
 
@@ -411,7 +434,10 @@ def mon_khong_vua(
     định cuối cùng với nhóm này là của tầng trên — hiện món kèm ghi chú,
     hay bỏ — nhưng nó phải là một quyết định được nói ra.
     """
-    tran = [h for h in tt.han_muc if h.la_tran]
+    # Chỉ ngưỡng CỨNG được chặn món. Ngưỡng mềm theo ngày vẫn nằm trong
+    # `tt.han_muc` để giao diện vẽ thanh tiến độ, nhưng vượt nó là chuyện
+    # trừ điểm, không phải chuyện bỏ món.
+    tran = [h for h in tt.han_muc if h.la_tran and h.la_cung]
     if not tran:
         return KetQuaHanMuc({}, {})
 
