@@ -38,6 +38,12 @@ from ml.build_dataset import (  # noqa: E402
     nhan_tu_sao,
 )
 from ml.dataset import NGUONG_THICH  # noqa: E402
+from ml.han_muc import (  # noqa: E402
+    MotHanMuc,
+    TongChat,
+    TrangThaiHanMuc,
+    mon_khong_vua,
+)
 from ml.db import in_utf8  # noqa: E402
 from ml.evaluate import (  # noqa: E402
     _dcg,
@@ -55,7 +61,7 @@ from ml.rocchio import alpha, dung_ho_so, giai_doan, ho_so_rong  # noqa: E402
 
 from ml.popularity import SAO_DUONG, tu_tap_mau, wilson_chan_duoi  # noqa: E402
 
-from datetime import datetime  # noqa: E402
+from datetime import date, datetime  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -618,6 +624,206 @@ def kiem_pho_bien() -> None:
     gan4(lap["fA"], 0.2065, "20 lượt của cùng một người chỉ tính là 1 người")
 
 
+# ── 11. Hạn mức theo ngày ─────────────────────────────────────────────
+
+
+def kiem_han_muc() -> None:
+    print("11. Hạn mức cứng theo ngày — trần, sàn và phần còn lại")
+
+    # Tình huống lấy từ bản thiết kế giao diện, và mọi số là số thật trong
+    # `nutrition_rec`. Giữ hai nơi dùng CÙNG con số là có chủ ý: nếu công
+    # thức đổi, phép kiểm này sai ngay, chứ không để mockup và mã lệch nhau
+    # âm thầm.
+    #
+    #   đã ăn    Bánh cuốn nóng            natri 807,9   purin  76,2
+    #   kế hoạch Cơm gạo lứt + giá đậu nành natri  20,8   purin  96,0
+    #            Canh chua chay             natri 458,7   purin  55,9
+    #            Cá chiên xù                natri 464,0   purin   2,8
+    #            Bắp cải luộc               natri  56,0   purin  44,0
+    natri = MotHanMuc(
+        benh="Tăng huyết áp",
+        chat="sodium_mg",
+        comparator="lte",
+        nguong=2000.0,
+        da_an=807.9,
+        da_len_ke_hoach=20.8 + 458.7 + 464.0 + 56.0,
+    )
+    gan(natri.tong, 1807.4, "natri đã dùng = đã ăn + đã lên kế hoạch")
+    gan(natri.con_lai, 192.6, "natri còn lại 192,6 mg")
+    kiem(not natri.da_vuot, "1 807,4 / 2 000 thì chưa vượt")
+    gan4(natri.ty_le, 0.9037, "tỷ lệ dùng 90,37%")
+
+    purin = MotHanMuc(
+        benh="Gút",
+        chat="purine_mg",
+        comparator="lte",
+        nguong=400.0,
+        da_an=76.2,
+        da_len_ke_hoach=96.0 + 55.9 + 2.8 + 44.0,
+    )
+    gan(purin.tong, 274.9, "purin đã dùng 274,9 mg")
+    gan(purin.con_lai, 125.1, "purin còn lại 125,1 mg")
+
+    # `vua_khong` là phép mà giao diện gọi cho từng ứng viên.
+    kiem(
+        not natri.vua_khong(1022.3),
+        "Phở sốt vang 1 022,3 mg natri KHÔNG vừa phần còn lại 192,6 mg",
+    )
+    kiem(natri.vua_khong(14.0), "Đậu phụ hấp 14 mg natri thì vừa")
+    kiem(natri.vua_khong(192.6), "đúng bằng phần còn lại thì vẫn vừa (lte)")
+    kiem(
+        not natri.vua_khong(192.7),
+        "hơn phần còn lại 0,1 mg là không vừa — biên phải chặt",
+    )
+
+    # Vượt trần: `con_lai` KHÔNG được kẹp về 0, vì giao diện cần nói vượt
+    # bao nhiêu. Kẹp về 0 thì câu "vượt 222 mg" không viết được.
+    da_vuot = MotHanMuc(
+        benh="Tăng huyết áp",
+        chat="sodium_mg",
+        comparator="lte",
+        nguong=2000.0,
+        da_an=1500.0,
+        da_len_ke_hoach=700.0,
+    )
+    kiem(da_vuot.da_vuot, "2 200 / 2 000 là đã vượt")
+    gan(da_vuot.con_lai, -200.0, "vượt thì `con_lai` âm, không bị kẹp về 0")
+    kiem(da_vuot.ty_le > 1.0, "tỷ lệ vượt 100% thì không bị kẹp")
+
+    # Hai chiều của ngưỡng không đối xứng. Hỏi sai chiều phải nổ, chứ không
+    # trả về một số vô nghĩa — đây là chỗ một ngưỡng sàn thêm vào sau này sẽ
+    # âm thầm chặn món nếu cả hai dùng chung một phép trừ.
+    san = MotHanMuc(
+        benh="Thiếu máu",
+        chat="iron_mg",
+        comparator="gte",
+        nguong=18.0,
+        da_an=5.0,
+        da_len_ke_hoach=4.0,
+    )
+    kiem(not san.la_tran, "`gte` không phải trần")
+    gan(san.con_thieu, 9.0, "sàn sắt: còn thiếu 9 mg")
+    kiem(not san.da_vuot, "không bao giờ `vượt` một cái sàn")
+    kiem(san.vua_khong(999.0), "ăn thêm không bao giờ làm hỏng một cái sàn")
+    nem(lambda: san.con_lai, ValueError, "hỏi `con_lai` của ngưỡng sàn phải nổ")
+    nem(lambda: natri.con_thieu, ValueError, "hỏi `con_thieu` của trần phải nổ")
+
+    # Hai bệnh hạn chế cùng một chất: phải lấy ngưỡng CHẶT NHẤT, không phải
+    # ngưỡng đầu tiên gặp. Tăng huyết áp và Bệnh thận đều giới hạn natri.
+    than = MotHanMuc(
+        benh="Bệnh thận",
+        chat="sodium_mg",
+        comparator="lte",
+        nguong=2000.0,
+        da_an=807.9,
+        da_len_ke_hoach=1000.0,
+    )
+    tt = TrangThaiHanMuc(
+        user_id="u1",
+        ngay=date(2026, 11, 7),
+        han_muc=(natri, purin, than),
+    )
+    kiem(not tt.rong, "có ngưỡng thì không rỗng")
+    kiem(len(tt.theo_chat("sodium_mg")) == 2, "natri có hai ngưỡng đang áp")
+    chat_nhat = tt.han_muc_chat_nhat("sodium_mg")
+    kiem(
+        chat_nhat is not None and chat_nhat.benh == "Bệnh thận",
+        "lấy ngưỡng natri còn ít dư địa nhất (Bệnh thận: 192,1 < 192,6)",
+    )
+    kiem(tt.han_muc_chat_nhat("calcium_mg") is None, "chất không bị hạn chế → None")
+    kiem(TrangThaiHanMuc(user_id="u1", ngay=date(2026, 11, 7)).rong, "không ngưỡng → rỗng")
+
+    # `mon_khong_vua`: đầu vào là các dòng đã qua F1, nên lý do duy nhất còn
+    # lại để bỏ một món là hạn mức hôm nay — và món đó HÔM KHÁC VẪN HỢP.
+    tt_toi = TrangThaiHanMuc(
+        user_id="u1", ngay=date(2026, 11, 7), han_muc=(natri, purin)
+    )
+    ung_vien = [
+        {"id": "f1", "name": "Phở sốt vang", "sodium_mg": 1022.3, "purine_mg": 12.4},
+        {"id": "f2", "name": "Hủ tiếu sa tế", "sodium_mg": 990.0, "purine_mg": 15.0},
+        {"id": "f3", "name": "Đậu phụ hấp", "sodium_mg": 14.0, "purine_mg": 136.0},
+        {"id": "f4", "name": "Bắp cải luộc", "sodium_mg": 56.0, "purine_mg": 44.0},
+    ]
+    kq = mon_khong_vua(tt_toi, ung_vien)
+    khong_vua = kq.khong_vua
+    kiem(set(khong_vua) == {"f1", "f2", "f3"}, "ba món không vừa, Bắp cải luộc thì vừa")
+    kiem(kq.vua("f4"), "Bắp cải luộc vừa cả hai hạn mức")
+    gan(khong_vua["f1"][0].vuot_bao_nhieu, 1022.3 - 192.6, "Phở vượt 829,7 mg natri")
+    kiem(
+        khong_vua["f1"][0].chat == "sodium_mg"
+        and khong_vua["f1"][0].benh == "Tăng huyết áp",
+        "lý do nêu đúng chất và đúng bệnh",
+    )
+
+    # Mục đáng giá nhất của cả phần này. Đậu phụ hấp có natri 14 mg — THẤP
+    # NHẤT trong mọi ứng viên — nhưng purin 136 mg thì vượt phần purin còn
+    # lại 125,1 mg của người bị gút. Một món có thể rất tốt ở chất đang
+    # thiếu và vẫn bị chặn bởi một chất khác, nên giao diện không được xếp
+    # hạng theo một chất rồi kết luận.
+    kiem(
+        [l.chat for l in khong_vua["f3"]] == ["purine_mg"],
+        "Đậu phụ hấp bị chặn bởi PURIN, không phải natri",
+    )
+    gan(khong_vua["f3"][0].vuot_bao_nhieu, 136.0 - 125.1, "vượt purin 10,9 mg")
+    kiem(
+        all(l.chat == "sodium_mg" for l in khong_vua["f2"]),
+        "Hủ tiếu sa tế chỉ vướng natri, purin 15 mg thì dư sức",
+    )
+
+    # Món thiếu số đo chất bị hạn chế thì KHÔNG được coi là vừa một cách
+    # lặng lẽ — nhưng cũng không được coi là vượt. Nó đơn giản là không xét
+    # được, và F1 đã lọc trước nên dòng tới đây luôn có số.
+    # Món thiếu số đo KHÔNG được kết luận vượt, nhưng cũng KHÔNG được coi là
+    # vừa. `purine_mg` khuyết ở 248/318 món, nên gộp nhóm chưa biết vào nhóm
+    # vừa sẽ làm trần purin gần như không bao giờ chạm tới.
+    kq_thieu = mon_khong_vua(tt_toi, [{"id": "f9", "name": "Món lạ"}])
+    kiem(kq_thieu.khong_vua == {}, "món thiếu số đo không bị kết luận vượt")
+    kiem(
+        kq_thieu.khong_xet_duoc == {"f9": ["sodium_mg", "purine_mg"]},
+        "món thiếu số đo vào nhóm `khong_xet_duoc`, nêu đủ hai chất",
+    )
+    kiem(not kq_thieu.vua("f9"), "`vua()` phải là Sai với món chưa xét được")
+
+    # Vướng một ngưỡng ĐÃ BIẾT thì kết luận được ngay, dù ngưỡng khác khuyết.
+    kq_mot_nua = mon_khong_vua(
+        tt_toi, [{"id": "f8", "name": "Nửa số", "sodium_mg": 9999.0}]
+    )
+    kiem(
+        set(kq_mot_nua.khong_vua) == {"f8"} and kq_mot_nua.khong_xet_duoc == {},
+        "đã chắc chắn vượt thì không xếp vào nhóm chưa biết",
+    )
+
+    kq_rong = mon_khong_vua(TrangThaiHanMuc("u1", date(2026, 11, 7)), ung_vien)
+    kiem(
+        kq_rong.khong_vua == {} and kq_rong.khong_xet_duoc == {},
+        "không có ngưỡng nào thì không món nào bị bỏ",
+    )
+
+    # ── Cờ đủ dữ liệu ──
+    kiem(natri.du_lieu_du, "mọi suất đều có số liệu natri → đủ dữ liệu")
+    thieu_sl = MotHanMuc(
+        benh="Gút",
+        chat="purine_mg",
+        comparator="lte",
+        nguong=400.0,
+        da_an=38.1,
+        da_len_ke_hoach=102.5,
+        thieu_da_an=1,
+        thieu_ke_hoach=3,
+    )
+    kiem(not thieu_sl.du_lieu_du, "có suất khuyết số liệu → KHÔNG đủ dữ liệu")
+    kiem(thieu_sl.so_mon_thieu_so == 4, "đếm đủ 4 suất thiếu số liệu")
+    kiem(
+        thieu_sl.con_lai > 0,
+        "còn lại vẫn tính được, nhưng nó CAO hơn thực tế — cờ `du_lieu_du` "
+        "là chỗ duy nhất nói ra điều đó",
+    )
+
+    tc = TongChat(tong={"purine_mg": 140.6}, thieu={"purine_mg": 4}, so_suat=6)
+    kiem(not tc.du_lieu_du("purine_mg"), "TongChat báo thiếu đúng chất")
+    kiem(tc.du_lieu_du("sodium_mg"), "chất không khuyết thì đủ")
+
+
 def main() -> int:
     in_utf8()
     print("Kiểm phần học máy — hàm thuần, không cần CSDL")
@@ -632,6 +838,7 @@ def main() -> int:
         kiem_nhan,
         kiem_chi_so,
         kiem_pho_bien,
+        kiem_han_muc,
     ):
         ham()
     print("=" * 62)

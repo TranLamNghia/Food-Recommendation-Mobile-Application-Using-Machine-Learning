@@ -38,7 +38,7 @@ import random
 import shutil
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,7 +49,17 @@ import pymysql  # noqa: E402
 from ml.build_dataset import main as chay_dung_tap  # noqa: E402
 from ml.db import ket_noi, in_utf8  # noqa: E402
 from ml.evaluate import main as chay_danh_gia  # noqa: E402
-from ml.f1_filter import dieu_kien_theo_ten  # noqa: E402
+from ml.f1_filter import (  # noqa: E402
+    dieu_kien_cua_nguoi_dung,
+    dieu_kien_theo_ten,
+)
+from ml.han_muc import (  # noqa: E402
+    da_an,
+    da_len_ke_hoach,
+    kiem_dem_doi,
+    mon_khong_vua,
+    trang_thai,
+)
 from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
 from ml.rocchio import dung_ho_so, giai_doan  # noqa: E402
 from ml.serve import goi_y, nap_mo_hinh_hoat_dong  # noqa: E402
@@ -110,6 +120,19 @@ def kiem(dieu_kien: bool, mo_ta: str) -> None:
     else:
         _loi.append(mo_ta)
         print(f"  ✗ {mo_ta}")
+
+
+#: Sai số khi so hai tổng dinh dưỡng. `food_nutrition` là `DECIMAL`, khẩu
+#: phần là `DECIMAL(4,2)`, nên tổng do MySQL cộng và tổng do Python cộng có
+#: thể lệch ở chữ số cuối — nhưng chỉ ở đó.
+SAI_SO_TONG = 1e-6
+
+
+def gan(thuc_te: float, mong_doi: float, mo_ta: str) -> None:
+    kiem(
+        abs(thuc_te - mong_doi) < SAI_SO_TONG,
+        f"{mo_ta}: được {thuc_te:.4f}, mong đợi {mong_doi:.4f}",
+    )
 
 
 # ── Dựng CSDL thử ─────────────────────────────────────────────────────
@@ -848,6 +871,299 @@ def kiem_phuc_vu(db: str, so_tin_hieu: dict[str, int]) -> None:
         cn.close()
 
 
+def kiem_han_muc_ngay(db: str) -> None:
+    """Hạn mức theo ngày trên CSDL thật — hai nguồn, và quy ước không đếm đôi.
+
+    Phần này chèn nhật ký và thực đơn thật rồi đối chiếu tổng với số cộng tay
+    lấy ngay từ `food_nutrition`. Nó kiểm những điều phép kiểm hàm thuần
+    không chạm tới: câu SQL có nhân `portion_multiplier` không, ô `replaced`
+    có tính theo món **mới** không, và ô `eaten` có bị cộng hai lần không.
+    """
+    print("\n6. Hạn mức theo ngày — nhật ký, thực đơn và quy ước đếm")
+    ngay = date(2026, 10, 15)
+    uid = "00000003-0000-0000-0000-000000000000"
+
+    cn = ket_noi(db)
+    try:
+        with cn.cursor() as cur:
+            # Gút mức vừa + Tăng huyết áp mức nhẹ: đúng hai bệnh có ngưỡng
+            # cứng theo ngày trong bộ quy tắc.
+            for cid, muc in ((5, "moderate"), (2, "mild")):
+                cur.execute(
+                    "INSERT INTO user_conditions (id, user_id, condition_id, "
+                    "severity, created_at) VALUES (UUID(), %s, %s, %s, NOW())",
+                    (uid, cid, muc),
+                )
+
+            cur.execute(
+                "SELECT f.id, f.name, fn.sodium_mg, fn.purine_mg "
+                "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.name IN (%s, %s, %s, %s)",
+                ("Bánh cuốn nóng", "Canh chua chay", "Cá chiên xù", "Bắp cải luộc"),
+            )
+            mon = {d["name"]: d for d in cur.fetchall()}
+
+        kiem(len(mon) == 4, f"tìm đủ 4 món mốc trong CSDL thử, được {len(mon)}")
+        if len(mon) != 4:
+            return
+
+        natri = {k: float(v["sodium_mg"]) for k, v in mon.items()}
+        purin = {k: float(v["purine_mg"]) for k, v in mon.items()}
+
+        with cn.cursor() as cur:
+            # ĐÃ ĂN: một suất rưỡi, để bắt lỗi quên nhân khẩu phần. Lỗi đó
+            # cho ra số NHỎ hơn thật, tức là nới hạn mức an toàn mà không
+            # báo gì — đúng loại lỗi không bao giờ tự lộ.
+            cur.execute(
+                "INSERT INTO food_diary (id, user_id, food_id, ate_on, "
+                "meal_type, portion_multiplier, created_at) "
+                "VALUES (UUID(), %s, %s, %s, 'breakfast', 0.50, NOW())",
+                (uid, mon["Bánh cuốn nóng"]["id"], ngay),
+            )
+
+            cur.execute(
+                "INSERT INTO meal_plans (id, user_id, plan_date, "
+                "target_calories_kcal, target_protein_g, target_carbs_g, "
+                "target_fat_g, generation_source, status, generated_at) "
+                "VALUES (UUID(), %s, %s, 2000, 90, 250, 60, 'rule_based', "
+                "'active', NOW())",
+                (uid, ngay),
+            )
+            cur.execute(
+                "SELECT id FROM meal_plans WHERE user_id = %s AND plan_date = %s",
+                (uid, ngay),
+            )
+            plan_id = cur.fetchone()["id"]
+
+            o = (
+                # (món, trạng thái, khẩu phần, món thay thế)
+                ("Canh chua chay", "kept", 1.00, None),
+                ("Cá chiên xù", "suggested", 2.00, None),
+                # Ô bị đổi: phải tính Bắp cải luộc, KHÔNG phải Cá chiên xù.
+                ("Cá chiên xù", "replaced", 1.00, "Bắp cải luộc"),
+                # Có nhật ký kèm → quy ước được tôn trọng.
+                ("Bánh cuốn nóng", "eaten", 1.00, None),
+                # KHÔNG có nhật ký → `kiem_dem_doi` phải bắt được.
+                ("Cá chiên xù", "eaten", 1.00, None),
+                ("Bắp cải luộc", "skipped", 1.00, None),
+            )
+            for ten, tt_o, khau, thay in o:
+                cur.execute(
+                    "INSERT INTO meal_plan_items (id, meal_plan_id, food_id, "
+                    "meal_type, portion_multiplier, status, "
+                    "replaced_by_food_id, created_at) "
+                    "VALUES (UUID(), %s, %s, 'lunch', %s, %s, %s, NOW())",
+                    (
+                        plan_id,
+                        mon[ten]["id"],
+                        khau,
+                        tt_o,
+                        mon[thay]["id"] if thay else None,
+                    ),
+                )
+        cn.commit()
+
+        # ── Từng tổng đối chiếu với số cộng tay ──
+        an = da_an(cn, uid, ngay)
+        mong_an = natri["Bánh cuốn nóng"] * 0.5
+        gan(an.tong["sodium_mg"], mong_an, "đã ăn: natri = 0,5 suất Bánh cuốn nóng")
+
+        ke = da_len_ke_hoach(cn, uid, ngay)
+        mong_ke = (
+            natri["Canh chua chay"] * 1.0
+            + natri["Cá chiên xù"] * 2.0
+            + natri["Bắp cải luộc"] * 1.0  # ô `replaced` tính theo món MỚI
+        )
+        gan(
+            ke.tong["sodium_mg"],
+            mong_ke,
+            "kế hoạch: `kept` + `suggested`×2 + `replaced`→món mới",
+        )
+        kiem(
+            abs(ke.tong["sodium_mg"] - (mong_ke + natri["Bánh cuốn nóng"])) > 1.0,
+            "ô `eaten` KHÔNG bị cộng vào kế hoạch — nếu cộng là đếm đôi",
+        )
+        kiem(
+            abs(ke.tong["sodium_mg"] - (mong_ke + natri["Bắp cải luộc"])) > 1.0,
+            "ô `skipped` không được cộng",
+        )
+        kiem(
+            abs(
+                ke.tong["sodium_mg"]
+                - (mong_ke - natri["Bắp cải luộc"] + natri["Cá chiên xù"])
+            )
+            > 1.0,
+            "ô `replaced` không tính theo món CŨ",
+        )
+
+        # ── Trạng thái hạn mức ──
+        dk = dieu_kien_cua_nguoi_dung(cn, uid)
+        kiem(len(dk) == 2, f"đọc được 2 bệnh của người này, được {len(dk)}")
+        tt = trang_thai(cn, uid, dieu_kien=dk, ngay=ngay)
+        kiem(not tt.rong, "có ngưỡng cứng theo ngày")
+        chat = {h.chat for h in tt.han_muc}
+        kiem(
+            chat == {"sodium_mg", "purine_mg"},
+            f"hai ngưỡng: natri và purin, được {sorted(chat)}",
+        )
+
+        h_natri = tt.han_muc_chat_nhat("sodium_mg")
+        kiem(h_natri is not None, "có ngưỡng trần cho natri")
+        if h_natri is not None:
+            gan(h_natri.nguong, 2000.0, "ngưỡng natri 2 000 mg (WHO)")
+            gan(h_natri.da_an, mong_an, "phần đã ăn khớp")
+            gan(h_natri.da_len_ke_hoach, mong_ke, "phần kế hoạch khớp")
+            gan(
+                h_natri.con_lai,
+                2000.0 - mong_an - mong_ke,
+                "phần còn lại = ngưỡng − đã ăn − kế hoạch",
+            )
+
+        h_purin = tt.han_muc_chat_nhat("purine_mg")
+        kiem(h_purin is not None, "có ngưỡng trần cho purin")
+        if h_purin is not None:
+            gan(h_purin.nguong, 400.0, "ngưỡng purin 400 mg")
+            mong_purin = (
+                purin["Bánh cuốn nóng"] * 0.5
+                + purin["Canh chua chay"]
+                + purin["Cá chiên xù"] * 2.0
+                + purin["Bắp cải luộc"]
+            )
+            gan(h_purin.tong, mong_purin, "tổng purin khớp số cộng tay")
+
+        # ── `mon_khong_vua` trên toàn danh mục thật ──
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT f.id, f.name, fn.sodium_mg, fn.purine_mg "
+                "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1 ORDER BY f.name"
+            )
+            tat_ca = list(cur.fetchall())
+
+        kq = mon_khong_vua(tt, tat_ca)
+        khong_vua = kq.khong_vua
+        if h_natri is not None and h_purin is not None:
+            # Phép lọc tay phải xử lý NULL y như mã: ô khuyết KHÔNG kết luận
+            # được, nên không vào tập này.
+            def vuot(d, chat, h):
+                v = d[chat]
+                return v is not None and float(v) > h.con_lai
+
+            bang_tay = {
+                d["id"]
+                for d in tat_ca
+                if vuot(d, "sodium_mg", h_natri) or vuot(d, "purine_mg", h_purin)
+            }
+            kiem(
+                set(khong_vua) == bang_tay,
+                f"tập món không vừa khớp phép lọc tay "
+                f"({len(khong_vua)} vs {len(bang_tay)} món)",
+            )
+            # Nhóm chưa xét được phải khớp đúng số ô NULL của danh mục.
+            tay_thieu = {
+                d["id"]
+                for d in tat_ca
+                if d["id"] not in bang_tay
+                and (d["sodium_mg"] is None or d["purine_mg"] is None)
+            }
+            kiem(
+                set(kq.khong_xet_duoc) == tay_thieu,
+                f"nhóm chưa xét được khớp số ô NULL "
+                f"({len(kq.khong_xet_duoc)} vs {len(tay_thieu)} món)",
+            )
+            kiem(
+                len(kq.khong_xet_duoc) > 0,
+                f"danh mục thật CÓ món thiếu số liệu — {len(kq.khong_xet_duoc)} "
+                f"món; nếu con số này là 0 thì phép kiểm mất ý nghĩa",
+            )
+            kiem(
+                not any(f in kq.khong_xet_duoc for f in khong_vua),
+                "không món nào ở cả hai nhóm cùng lúc",
+            )
+        kiem(
+            all(l.vuot_bao_nhieu > 0 for ly_do in khong_vua.values() for l in ly_do),
+            "mọi lý do đều nêu một lượng vượt dương",
+        )
+        kiem(
+            all(
+                l.chat in ("sodium_mg", "purine_mg")
+                for ly_do in khong_vua.values()
+                for l in ly_do
+            ),
+            "không lý do nào viện một chất không bị hạn chế",
+        )
+
+        # ── Cờ đủ dữ liệu, trên danh mục thật ──
+        if h_purin is not None:
+            kiem(
+                h_purin.du_lieu_du,
+                "bốn món mốc đều có số liệu purin nên cờ báo ĐỦ dữ liệu",
+            )
+
+        # Giờ chèn một món KHUYẾT purin vào nhật ký. Trên 318 món hoạt động
+        # có 248 món như vậy, nên đây là trường hợp thường, không phải ngoại
+        # lệ — và cờ phải bật.
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT f.id, f.name FROM foods f "
+                "JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1 AND fn.purine_mg IS NULL "
+                "ORDER BY f.name LIMIT 1"
+            )
+            mon_khuyet = cur.fetchone()
+        kiem(mon_khuyet is not None, "danh mục có món khuyết purine_mg")
+        if mon_khuyet is not None:
+            with cn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO food_diary (id, user_id, food_id, ate_on, "
+                    "meal_type, portion_multiplier, created_at) "
+                    "VALUES (UUID(), %s, %s, %s, 'snack', 1.00, NOW())",
+                    (uid, mon_khuyet["id"], ngay),
+                )
+            cn.commit()
+
+            tt2 = trang_thai(cn, uid, dieu_kien=dk, ngay=ngay)
+            h2 = tt2.han_muc_chat_nhat("purine_mg")
+            kiem(h2 is not None, "vẫn đọc được ngưỡng purin sau khi thêm món")
+            if h2 is not None:
+                kiem(
+                    not h2.du_lieu_du,
+                    f"thêm 1 món khuyết purin thì cờ báo THIẾU dữ liệu "
+                    f"({mon_khuyet['name']})",
+                )
+                gan(
+                    float(h2.so_mon_thieu_so),
+                    1.0,
+                    "đếm đúng 1 suất thiếu số liệu purin",
+                )
+                gan(
+                    h2.tong,
+                    h_purin.tong if h_purin else 0.0,
+                    "tổng purin KHÔNG đổi — món khuyết cộng vào 0, và chính "
+                    "đó là lý do phải có cờ chứ không thể tin con số",
+                )
+            h2_natri = tt2.han_muc_chat_nhat("sodium_mg")
+            if h2_natri is not None:
+                kiem(
+                    h2_natri.tong > (h_natri.tong if h_natri else 0.0),
+                    "natri của cùng món đó thì CÓ cộng vào — khuyết theo "
+                    "từng chất, không theo cả món",
+                )
+
+        # ── Quy ước đếm đôi ──
+        lech = kiem_dem_doi(cn, uid, ngay)
+        kiem(
+            len(lech) == 1,
+            f"bắt đúng 1 ô `eaten` thiếu nhật ký, được {len(lech)}",
+        )
+        kiem(
+            bool(lech) and lech[0]["food_name"] == "Cá chiên xù",
+            "ô bị bắt là Cá chiên xù, còn Bánh cuốn nóng có nhật ký nên bỏ qua",
+        )
+    finally:
+        cn.close()
+
+
 def main() -> int:
     in_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
@@ -883,6 +1199,7 @@ def main() -> int:
         kiem_nhap_phieu(t.db)
         kiem_duong_ong(t.db, so_tin_hieu)
         kiem_phuc_vu(t.db, so_tin_hieu)
+        kiem_han_muc_ngay(t.db)
     finally:
         if t.giu:
             print(f"\nGiữ lại CSDL {t.db!r} theo --giu.")
