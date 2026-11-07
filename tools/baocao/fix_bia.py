@@ -132,7 +132,23 @@ def fix_document(xml: str) -> str:
     return xml
 
 
+
+def _in_utf8() -> None:
+    """Bắt stdout nhận tiếng Việt trên Windows (mặc định cp1252).
+
+    Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
+    đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
+    Bản sao của `tools/_env.in_utf8`; để ở đây vì `tools/baocao/` không chắc
+    có `tools/` trên `sys.path`.
+    """
+    for luong in (sys.stdout, sys.stderr):
+        try:
+            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except Exception:  # pragma: no cover
+            pass
+
 def main() -> int:
+    _in_utf8()
     if not DOC.exists():
         sys.exit(f"Không thấy {DOC}")
     backup = DOC.with_suffix(".docx.bak2")

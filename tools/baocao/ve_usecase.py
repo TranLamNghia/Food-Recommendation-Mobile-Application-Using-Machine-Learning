@@ -48,7 +48,23 @@ def chu_nhieu_dong(d, text, l, t, w, h, f, mau="black"):
         y += f.size + 2
 
 
+
+def _in_utf8() -> None:
+    """Bắt stdout nhận tiếng Việt trên Windows (mặc định cp1252).
+
+    Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
+    đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
+    Bản sao của `tools/_env.in_utf8`; để ở đây vì `tools/baocao/` không chắc
+    có `tools/` trên `sys.path`.
+    """
+    for luong in (sys.stdout, sys.stderr):
+        try:
+            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except Exception:  # pragma: no cover
+            pass
+
 def main() -> int:
+    _in_utf8()
     ra = pathlib.Path(sys.argv[1] if len(sys.argv) > 1
                       else "BAOCAO/_render/usecase.png")
     goc = json.loads(MDJ.read_text(encoding="utf-8"))
