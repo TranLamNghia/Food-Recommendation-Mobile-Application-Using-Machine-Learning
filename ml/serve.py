@@ -351,22 +351,154 @@ def goi_y(
     )
 
 
-def giai_thich(kg: KhongGianDacTrung, ho_so: HoSoSoThich, m: Mon, so: int = 3) -> str:
-    """Vì sao món này được gợi ý — ba chiều đóng góp nhiều nhất.
+# ── Giải thích bằng câu, không bằng số ────────────────────────────────
+#
+# `giai_thich` trả về `"Tỷ lệ đạm (+0.182), Nhóm: Món canh (+0.061)"`. Nhãn
+# chiều thì đã là tiếng Việt đọc được, nhưng `+0.182` vô nghĩa với người
+# dùng: nó là một số hạng trong tử số của phép cosin, không phải phần trăm,
+# không có đơn vị, và độ lớn của nó phụ thuộc cả vào hồ sơ lẫn vào món.
+#
+# **Thứ tự mới là thông tin.** Nên phần dưới giữ thứ tự và tỷ lệ TƯƠNG ĐỐI
+# so với đóng góp lớn nhất, rồi bỏ giá trị tuyệt đối khỏi phần hiện ra.
+#
+# ## Vì sao chỉ nêu chiều dương, và vì sao câu luôn là "nhiều X"
+#
+# Mọi chiều của vector món nằm trong [0, 1] — `food_vector_parity_test.dart`
+# khẳng định điều đó, và `KhongGianDacTrung._chuan_hoa` kẹp lại. Nên
+# `v[i] ≥ 0` luôn, và dấu của `p_u[i]·v[i]` chính là dấu của `p_u[i]`.
+#
+# Suy ra: một đóng góp DƯƠNG nghĩa là `p_u[i] > 0`, tức là món người này
+# thích có giá trị cao ở chiều đó. Câu vì vậy luôn theo chiều "nhiều X",
+# không bao giờ là "ít X" — "bạn nghiêng về món ít ngọt" ứng với `p_u` ÂM,
+# và đóng góp khi ấy là số âm nên đã bị loại khỏi danh sách này.
 
-    Đóng góp của một chiều là `p_u[i] · vᵢ[i]`, tức là số hạng của chính nó
-    trong tử số của phép tính cosin. Chỉ nêu chiều **dương**: một chiều âm
-    nghĩa là món bị trừ điểm ở đó, không phải lý do nó được gợi ý.
+#: Nhãn chiều → mệnh đề mô tả món, để dựng câu "Bạn thường chọn món …".
+#:
+#: Thiếu một nhãn ở đây KHÔNG làm hàm nổ — giao diện vẫn chạy, chỉ là chiều
+#: đó không có câu. Nhưng `thieu_menh_de` báo ra và `tools/check_ml.py` gọi
+#: nó, nên một chiều mới thêm vào mà quên đặt câu thì phép kiểm sai ngay chứ
+#: không âm thầm hiện nhãn kỹ thuật cho người dùng.
+MENH_DE_THEO_CHIEU: dict[str, str] = {
+    "Tỷ lệ đạm": "nhiều đạm",
+    "Tỷ lệ bột đường": "nhiều bột đường",
+    "Tỷ lệ béo": "nhiều chất béo",
+    "Năng lượng": "nhiều năng lượng",
+    "Vị ngọt": "có vị ngọt",
+    "Vị mặn": "đậm vị mặn",
+    "Chất xơ": "nhiều chất xơ",
+    "Mức cay": "có vị cay",
+}
+
+#: Tiền tố mà `KhongGianDacTrung.labels` gắn cho chiều one-hot nhóm món.
+TIEN_TO_NHOM = "Nhóm: "
+
+
+@dataclass(frozen=True)
+class DongGop:
+    """Một chiều góp vào điểm khớp khẩu vị của một món."""
+
+    #: Nhãn kỹ thuật của chiều, giữ lại để gỡ lỗi — KHÔNG hiện cho người dùng.
+    chieu: str
+    #: `p_u[i] · vᵢ[i]`. Giữ lại để kiểm và gỡ lỗi, không hiện ra.
+    gia_tri: float
+    #: So với đóng góp lớn nhất **của chính món này**, trong (0, 1].
+    #:
+    #: Đây là thứ vẽ thành thanh so sánh, nhưng nó chỉ nói thứ tự BÊN TRONG
+    #: một món, KHÔNG nói món đó khớp khẩu vị mạnh đến đâu. Chuối tiêu — món
+    #: người dùng đã vuốt `dislike` — cho ba tỷ lệ 100% / 91% / 88% trong khi
+    #: đóng góp tuyệt đối chỉ +0,0093: chuẩn hóa theo đỉnh của chính nó nên
+    #: một món khớp rất yếu vẫn ra ba thanh gần đầy.
+    #:
+    #: Vì vậy giao diện **phải** hiện điểm khớp tổng (`scoring.diem_noi_dung`)
+    #: bên cạnh. Vẽ riêng mấy thanh này là nói với người dùng rằng mọi món
+    #: đều khớp mạnh như nhau.
+    ty_le: float
+    #: Câu cho người dùng. `None` khi chiều này chưa có mệnh đề — giao diện
+    #: bỏ qua dòng đó thay vì hiện nhãn kỹ thuật.
+    cau: str | None
+
+
+def _cau_cho_chieu(nhan: str) -> str | None:
+    if nhan.startswith(TIEN_TO_NHOM):
+        return f"Bạn thích nhóm {nhan[len(TIEN_TO_NHOM):]}"
+    menh_de = MENH_DE_THEO_CHIEU.get(nhan)
+    return None if menh_de is None else f"Bạn thường chọn món {menh_de}"
+
+
+def thieu_menh_de(kg: KhongGianDacTrung) -> list[str]:
+    """Các chiều chưa có câu cho người dùng.
+
+    Chiều nhóm món luôn có câu vì nó dựng từ tên nhóm, nên danh sách này
+    chỉ gồm chiều cố định bị quên trong `MENH_DE_THEO_CHIEU`.
+    """
+    return [nhan for nhan in kg.labels if _cau_cho_chieu(nhan) is None]
+
+
+def dong_gop(
+    kg: KhongGianDacTrung,
+    ho_so: HoSoSoThich,
+    m: Mon,
+    so: int = 3,
+) -> list[DongGop]:
+    """`so` chiều đóng góp nhiều nhất vào điểm khớp khẩu vị của món `m`.
+
+    Chỉ nêu chiều **dương**: một chiều âm nghĩa là món bị trừ điểm ở đó, nó
+    không phải lý do món được gợi ý. Hồ sơ rỗng trả về danh sách rỗng —
+    không có cơ sở nào để nói người này thích gì.
+    """
+    if ho_so.is_empty:
+        return []
+
+    v = kg.encode(m)
+    gop = sorted(
+        (
+            (p * x, nhan)
+            for p, x, nhan in zip(ho_so.weights, v, kg.labels)
+            if p * x > 0
+        ),
+        key=lambda t: -t[0],
+    )[:so]
+    if not gop:
+        return []
+
+    lon_nhat = gop[0][0]
+    return [
+        DongGop(
+            chieu=nhan,
+            gia_tri=g,
+            ty_le=g / lon_nhat,
+            cau=_cau_cho_chieu(nhan),
+        )
+        for g, nhan in gop
+    ]
+
+
+def cau_giai_thich(
+    kg: KhongGianDacTrung,
+    ho_so: HoSoSoThich,
+    m: Mon,
+    so: int = 3,
+) -> list[str]:
+    """Các câu giải thích, đã bỏ chiều chưa có mệnh đề. Dùng cho giao diện."""
+    return [d.cau for d in dong_gop(kg, ho_so, m, so) if d.cau is not None]
+
+
+def giai_thich(kg: KhongGianDacTrung, ho_so: HoSoSoThich, m: Mon, so: int = 3) -> str:
+    """Dạng **gỡ lỗi** của lời giải thích — nhãn kỹ thuật kèm số thô.
+
+    Dùng cho dòng lệnh và khi soi lỗi, KHÔNG dùng cho giao diện: `+0.182`
+    là một số hạng trong tử số của phép cosin, vô nghĩa với người dùng.
+    Giao diện gọi `cau_giai_thich` hoặc `dong_gop`.
+
+    Thứ tự và phép lọc chiều dương nằm trong `dong_gop`, hàm này chỉ định
+    dạng lại — nếu không thì hai bên có thể xếp hạng khác nhau.
     """
     if ho_so.is_empty:
         return "chưa có hồ sơ sở thích"
-    v = kg.encode(m)
-    gop = sorted(
-        ((p * x, nh) for p, x, nh in zip(ho_so.weights, v, kg.labels)),
-        key=lambda t: -t[0],
-    )
-    duong = [f"{nh} ({g:+.3f})" for g, nh in gop[:so] if g > 0]
-    return ", ".join(duong) if duong else "không chiều nào đóng góp dương"
+    gop = dong_gop(kg, ho_so, m, so)
+    if not gop:
+        return "không chiều nào đóng góp dương"
+    return ", ".join(f"{d.chieu} ({d.gia_tri:+.3f})" for d in gop)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

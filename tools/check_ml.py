@@ -45,6 +45,14 @@ from ml.f1_filter import (  # noqa: E402
     luat_mem_theo_pham_vi,
 )
 from ml.scoring import hinh_phat  # noqa: E402
+from ml.serve import (  # noqa: E402
+    MENH_DE_THEO_CHIEU,
+    TIEN_TO_NHOM,
+    cau_giai_thich,
+    dong_gop,
+    giai_thich,
+    thieu_menh_de,
+)
 from ml.dataset import NGUONG_THICH  # noqa: E402
 from ml.han_muc import (  # noqa: E402
     MotHanMuc,
@@ -1047,6 +1055,126 @@ def kiem_hinh_phat_mem() -> None:
     )
 
 
+# ── 14. Giải thích bằng câu ───────────────────────────────────────────
+
+
+def kiem_cau_giai_thich() -> None:
+    print("14. Giải thích gợi ý — câu cho người dùng, không phải số thô")
+
+    # Không gian hai nhóm, để kiểm cả chiều cố định lẫn chiều one-hot nhóm.
+    mon = [
+        _mon(id="a", name="Canh A", category="Món canh", protein=20, carb=5, fat=2),
+        _mon(id="b", name="Cơm B", category="Cơm", protein=5, carb=60, fat=3),
+    ]
+    kg = KhongGianDacTrung.tu_mon(mon)
+
+    # Mọi chiều phải có câu. Đây là phép kiểm giữ cho một chiều mới thêm vào
+    # không âm thầm hiện nhãn kỹ thuật cho người dùng.
+    kiem(
+        thieu_menh_de(kg) == [],
+        f"mọi chiều đều có mệnh đề, thiếu: {thieu_menh_de(kg)}",
+    )
+
+    # Hồ sơ rỗng: không có cơ sở nào để nói người này thích gì.
+    rong = ho_so_rong(kg)
+    kiem(dong_gop(kg, rong, mon[0]) == [], "hồ sơ rỗng → không đóng góp nào")
+    kiem(cau_giai_thich(kg, rong, mon[0]) == [], "và không câu nào")
+    kiem(
+        giai_thich(kg, rong, mon[0]) == "chưa có hồ sơ sở thích",
+        "dạng gỡ lỗi nói rõ là chưa có hồ sơ",
+    )
+
+    ho_so = dung_ho_so(kg, [(mon[0], "like"), (mon[1], "dislike")])
+    gop = dong_gop(kg, ho_so, mon[0])
+    kiem(len(gop) > 0, "món được thích có đóng góp dương")
+
+    # Chiều one-hot nhóm dựng câu từ tên nhóm, không cần bảng tra.
+    nhom = [d for d in gop if d.chieu.startswith(TIEN_TO_NHOM)]
+    kiem(len(nhom) == 1, "đúng một chiều nhóm đóng góp (one-hot)")
+    kiem(
+        nhom[0].cau == "Bạn thích nhóm Món canh",
+        f"câu cho chiều nhóm: được {nhom[0].cau!r}",
+    )
+
+    # Chiều cố định tra bảng.
+    dam = [d for d in gop if d.chieu == "Tỷ lệ đạm"]
+    if dam:
+        kiem(
+            dam[0].cau == "Bạn thường chọn món nhiều đạm",
+            f"câu cho chiều đạm: được {dam[0].cau!r}",
+        )
+
+    # Thứ tự giảm dần, và tỷ lệ chuẩn hóa theo đỉnh của CHÍNH món đó.
+    kiem(
+        all(a.gia_tri >= b.gia_tri for a, b in zip(gop, gop[1:])),
+        "đóng góp xếp giảm dần",
+    )
+    gan(gop[0].ty_le, 1.0, "đóng góp đầu có tỷ lệ 1,0")
+    kiem(
+        all(0.0 < d.ty_le <= 1.0 for d in gop),
+        "mọi tỷ lệ nằm trong (0, 1]",
+    )
+
+    # Mọi chiều NÊU RA phải dương. Đây là điều khiến câu luôn theo chiều
+    # "nhiều X": vì mọi chiều vector nằm trong [0, 1] nên dấu của
+    # `p_u[i]·v[i]` là dấu của `p_u[i]`, và đóng góp dương nghĩa là người
+    # này nghiêng về giá trị CAO ở chiều đó.
+    v = kg.encode(mon[0])
+    kiem(all(0.0 <= x <= 1.0 for x in v), "mọi chiều vector trong [0, 1]")
+    kiem(all(d.gia_tri > 0 for d in gop), "mọi đóng góp nêu ra đều dương")
+    for d in gop:
+        i = kg.labels.index(d.chieu)
+        kiem(
+            ho_so.weights[i] > 0,
+            f"{d.chieu}: đóng góp dương ⟹ trọng số hồ sơ dương, nên câu "
+            f"phải theo chiều `nhiều`, không bao giờ `ít`",
+        )
+
+    # `so` giới hạn số chiều.
+    kiem(len(dong_gop(kg, ho_so, mon[0], so=1)) == 1, "`so=1` trả đúng một chiều")
+    kiem(len(dong_gop(kg, ho_so, mon[0], so=99)) <= kg.length, "`so` lớn không vượt số chiều")
+
+    # Dạng gỡ lỗi và dạng giao diện phải xếp hạng GIỐNG nhau — chúng dùng
+    # chung `dong_gop`, và phép kiểm này giữ cho ai đó không cài lại.
+    chuoi = giai_thich(kg, ho_so, mon[0])
+    kiem(
+        all(d.chieu in chuoi for d in gop),
+        "dạng gỡ lỗi nêu đúng các chiều mà `dong_gop` chọn",
+    )
+    kiem(
+        chuoi.index(gop[0].chieu) < chuoi.index(gop[-1].chieu) or len(gop) == 1,
+        "và theo cùng thứ tự",
+    )
+    cau = cau_giai_thich(kg, ho_so, mon[0])
+    kiem(
+        cau == [d.cau for d in gop if d.cau is not None],
+        "dạng giao diện chỉ bỏ chiều chưa có câu, không đổi thứ tự",
+    )
+    kiem(
+        all("+" not in c and "0." not in c for c in cau),
+        "không câu nào lọt số thô ra giao diện",
+    )
+
+    # Chiều chưa có mệnh đề: bỏ dòng, KHÔNG hiện nhãn kỹ thuật.
+    luu = MENH_DE_THEO_CHIEU.pop("Tỷ lệ đạm")
+    try:
+        kiem(
+            thieu_menh_de(kg) == ["Tỷ lệ đạm"],
+            "`thieu_menh_de` báo đúng chiều bị quên",
+        )
+        gop2 = dong_gop(kg, ho_so, mon[0])
+        thieu = [d for d in gop2 if d.chieu == "Tỷ lệ đạm"]
+        if thieu:
+            kiem(thieu[0].cau is None, "chiều bị quên có `cau` rỗng")
+            kiem(
+                "Tỷ lệ đạm" not in cau_giai_thich(kg, ho_so, mon[0]),
+                "và không lọt vào danh sách câu của giao diện",
+            )
+    finally:
+        MENH_DE_THEO_CHIEU["Tỷ lệ đạm"] = luu
+    kiem(thieu_menh_de(kg) == [], "đã phục hồi bảng mệnh đề")
+
+
 def main() -> int:
     in_utf8()
     print("Kiểm phần học máy — hàm thuần, không cần CSDL")
@@ -1064,6 +1192,7 @@ def main() -> int:
         kiem_han_muc,
         kiem_ly_do_loai,
         kiem_hinh_phat_mem,
+        kiem_cau_giai_thich,
     ):
         ham()
     print("=" * 62)
