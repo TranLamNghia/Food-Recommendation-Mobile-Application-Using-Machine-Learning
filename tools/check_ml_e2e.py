@@ -52,6 +52,9 @@ from ml.evaluate import main as chay_danh_gia  # noqa: E402
 from ml.f1_filter import (  # noqa: E402
     dieu_kien_cua_nguoi_dung,
     dieu_kien_theo_ten,
+    doi_chieu_loc_f1,
+    loc_f1,
+    ly_do_loai,
 )
 from ml.han_muc import (  # noqa: E402
     da_an,
@@ -1164,6 +1167,195 @@ def kiem_han_muc_ngay(db: str) -> None:
         cn.close()
 
 
+def kiem_ly_do_loai_sql(db: str) -> None:
+    """`ly_do_loai` phải khớp `loc_f1` — và nhánh ngưỡng theo suất phải chạy.
+
+    Phép kiểm cốt lõi là `doi_chieu_loc_f1`: hai câu SQL viết tay đọc cùng
+    một bộ quy tắc, nên chúng có thể lệch nhau sau một lần sửa, và khi đó
+    giao diện hiện một món vừa trong thực đơn vừa trong danh sách bị loại.
+
+    Phần sau quan trọng không kém: bộ quy tắc THẬT hiện **không có** luật
+    `nutrient_limit` cứng theo suất nào — mọi luật theo suất đều mềm. Nghĩa
+    là nhánh thứ ba của cả hai câu SQL chưa bao giờ chạy trên dữ liệu thật.
+    Phần này dựng một luật như vậy trong CSDL thử để nhánh đó được kiểm, kể
+    cả đường thiếu số liệu.
+    """
+    print("\n7. Lý do bị F1 loại — đối chiếu với loc_f1 và nhánh theo suất")
+
+    cn = ket_noi(db)
+    try:
+        # ── Đối chiếu trên bộ quy tắc thật ──
+        for ten, muc in (
+            (["Gút"], "moderate"),
+            (["Gút", "Tăng huyết áp"], "moderate"),
+            (["Ăn chay"], "mild"),
+            (["Dị ứng hải sản", "Gút", "Bệnh thận"], "severe"),
+            (["Ăn thuần chay", "Dị ứng đậu phộng"], "severe"),
+        ):
+            dk = dieu_kien_theo_ten(cn, ten, severity=muc)
+            con = loc_f1(cn, dieu_kien=dk)
+            ly = ly_do_loai(cn, dieu_kien=dk)
+            kh = doi_chieu_loc_f1(cn, dieu_kien=dk)
+            nhan = "+".join(ten)
+            kiem(
+                not kh["thieu_ly_do"],
+                f"{nhan}: mọi món bị bỏ đều có lý do "
+                f"({len(kh['thieu_ly_do'])} món không giải thích được)",
+            )
+            kiem(
+                not kh["ly_do_du"],
+                f"{nhan}: không món nào vừa bị loại vừa được cho qua "
+                f"({len(kh['ly_do_du'])} món)",
+            )
+            kiem(
+                len(con) + len(ly) == 318,
+                f"{nhan}: còn {len(con)} + bị loại {len(ly)} = 318",
+            )
+
+        # ── `severity_min` chặn đúng ──
+        # Luật `Giàu purin` của Gút có `severity_min = 'moderate'`.
+        dk_nhe = dieu_kien_theo_ten(cn, ["Gút"], severity="mild")
+        dk_vua = dieu_kien_theo_ten(cn, ["Gút"], severity="moderate")
+        kiem(
+            len(ly_do_loai(cn, dieu_kien=dk_nhe)) == 0,
+            "Gút mức NHẸ: không món nào bị loại — luật cần mức vừa",
+        )
+        kiem(
+            len(ly_do_loai(cn, dieu_kien=dk_vua)) == 91,
+            "Gút mức VỪA: 91 món bị loại vì nhãn Giàu purin",
+        )
+
+        # ── Nội dung lý do `require_tag` ──
+        dk_chay = dieu_kien_theo_ten(cn, ["Ăn chay"], severity="mild")
+        ly_chay = ly_do_loai(cn, dieu_kien=dk_chay)
+        kiem(len(ly_chay) == 201, f"Ăn chay: 201 món bị loại, được {len(ly_chay)}")
+        mot = next(iter(ly_chay.values()))[0]
+        kiem(
+            mot.rule_type == "require_tag" and mot.the == "Món chay",
+            "lý do nêu đúng loại luật và đúng tên nhãn còn thiếu",
+        )
+        kiem(
+            all(l.bac == "nhan" for v in ly_chay.values() for l in v),
+            "mọi lý do của Ăn chay đều ở bậc `nhan`",
+        )
+
+        # ── Món nhiều lý do ──
+        dk_ba = dieu_kien_theo_ten(
+            cn, ["Dị ứng hải sản", "Gút"], severity="severe"
+        )
+        ly_ba = ly_do_loai(cn, dieu_kien=dk_ba)
+        nhieu = [v for v in ly_ba.values() if len(v) >= 2]
+        kiem(
+            len(nhieu) > 0,
+            f"có món vi phạm nhiều luật cùng lúc ({len(nhieu)} món) — nêu "
+            f"một lý do là chưa đủ để người dùng hiểu",
+        )
+        kiem(
+            any({l.benh for l in v} == {"Gút", "Dị ứng hải sản"} for v in nhieu),
+            "một món nêu được cả hai bệnh, không gộp thành một",
+        )
+
+        # ── Dựng luật cứng theo suất để nhánh 3 được chạy ──
+        with cn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO condition_rules (id, condition_id, rule_type, "
+                "nutrient, comparator, threshold, scope, severity_min, "
+                "is_hard, note) VALUES (UUID(), 2, 'nutrient_limit', "
+                "'sodium_mg', 'lte', 500.00, 'per_serving', 'mild', 1, %s)",
+                ("LUẬT DỰNG RIÊNG cho phép kiểm — không phải khuyến cáo nào",),
+            )
+            cur.execute(
+                "SELECT SUM(fn.sodium_mg > 500) AS vuot, "
+                "       SUM(fn.sodium_mg IS NULL) AS khuyet "
+                "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1"
+            )
+            d = cur.fetchone()
+            so_vuot, so_khuyet = int(d["vuot"]), int(d["khuyet"])
+        cn.commit()
+
+        dk_tha = dieu_kien_theo_ten(cn, ["Tăng huyết áp"], severity="mild")
+        ly_tha = ly_do_loai(cn, dieu_kien=dk_tha)
+        kh_tha = doi_chieu_loc_f1(cn, dieu_kien=dk_tha)
+        kiem(
+            not kh_tha["thieu_ly_do"] and not kh_tha["ly_do_du"],
+            "luật theo suất: hai câu SQL vẫn khớp nhau",
+        )
+
+        bac = {}
+        for v in ly_tha.values():
+            for l in v:
+                bac[l.bac] = bac.get(l.bac, 0) + 1
+        kiem(
+            bac.get("nguong_suat", 0) == so_vuot,
+            f"bậc `nguong_suat` đếm đúng {so_vuot} món vượt 500 mg, "
+            f"được {bac.get('nguong_suat', 0)}",
+        )
+        kiem(
+            bac.get("thieu_so_lieu", 0) == so_khuyet,
+            f"bậc `thieu_so_lieu` đếm đúng {so_khuyet} món khuyết natri, "
+            f"được {bac.get('thieu_so_lieu', 0)}",
+        )
+        kiem(
+            so_khuyet > 0,
+            f"danh mục thật CÓ món khuyết natri ({so_khuyet}) — nếu bằng 0 "
+            f"thì đường thiếu số liệu không được kiểm",
+        )
+
+        # Một lý do cụ thể, đối chiếu số đo với CSDL.
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT f.id, f.name, fn.sodium_mg FROM foods f "
+                "JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1 AND fn.sodium_mg IS NOT NULL "
+                "ORDER BY fn.sodium_mg DESC LIMIT 1"
+            )
+            man_nhat = cur.fetchone()
+        v = ly_tha.get(man_nhat["id"], [])
+        nguong_suat = [l for l in v if l.bac == "nguong_suat"]
+        kiem(
+            len(nguong_suat) == 1,
+            f"{man_nhat['name']} có đúng 1 lý do ngưỡng theo suất",
+        )
+        if nguong_suat:
+            l = nguong_suat[0]
+            gan(l.gia_tri or 0.0, float(man_nhat["sodium_mg"]), "số đo khớp CSDL")
+            gan(l.nguong or 0.0, 500.0, "ngưỡng khớp luật")
+            gan(
+                l.vuot_bao_nhieu or 0.0,
+                float(man_nhat["sodium_mg"]) - 500.0,
+                "lượng vượt = số đo − ngưỡng",
+            )
+            kiem(l.comparator == "lte", "chiều so sánh được giữ lại")
+            kiem(
+                "LUẬT DỰNG RIÊNG" in l.note,
+                "ghi chú của luật đi theo lý do — giao diện cần nó để nói "
+                "nguồn khuyến cáo",
+            )
+
+        # Món khuyết natri phải vào bậc thiếu số liệu, KHÔNG phải vượt ngưỡng.
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT f.id, f.name FROM foods f "
+                "JOIN food_nutrition fn ON fn.food_id = f.id "
+                "WHERE f.is_active = 1 AND fn.sodium_mg IS NULL "
+                "ORDER BY f.name LIMIT 1"
+            )
+            khuyet = cur.fetchone()
+        if khuyet is not None:
+            v2 = ly_tha.get(khuyet["id"], [])
+            kiem(
+                any(l.bac == "thieu_so_lieu" for l in v2),
+                f"{khuyet['name']}: khuyết natri → bậc `thieu_so_lieu`",
+            )
+            kiem(
+                all(l.vuot_bao_nhieu is None for l in v2 if l.thieu_so_lieu),
+                "không bịa ra lượng vượt cho món không có số đo",
+            )
+    finally:
+        cn.close()
+
+
 def main() -> int:
     in_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
@@ -1200,6 +1392,7 @@ def main() -> int:
         kiem_duong_ong(t.db, so_tin_hieu)
         kiem_phuc_vu(t.db, so_tin_hieu)
         kiem_han_muc_ngay(t.db)
+        kiem_ly_do_loai_sql(t.db)
     finally:
         if t.giu:
             print(f"\nGiữ lại CSDL {t.db!r} theo --giu.")

@@ -313,6 +313,287 @@ ORDER BY co.name_vi, cr.nutrient
         return list(cur.fetchall())
 
 
+# ── Nghịch đảo của F1: vì sao một món bị loại ─────────────────────────
+#
+# `loc_f1` trả về tập món còn lại. Giao diện cần điều ngược lại — món nào bị
+# bỏ và vì luật nào — và câu trả lời đó KHÔNG suy ra được từ tập còn lại:
+# lấy phần bù chỉ cho biết món nào bị bỏ, không cho biết tại sao.
+#
+# Hai hàm dưới đây dựng đúng ba mệnh đề `NOT EXISTS` của `loc_f1` thành ba
+# nhánh `UNION ALL` đọc cùng một bộ quy tắc. Nguy cơ rõ ràng là hai bên lệch
+# nhau sau một lần sửa, và khi đó giao diện sẽ nói một món vừa an toàn vừa
+# bị loại. `doi_chieu_loc_f1` tồn tại để bắt đúng tình huống đó.
+
+
+@dataclass(frozen=True)
+class LyDoLoai:
+    """Một luật cứng mà một món vi phạm."""
+
+    food_id: str
+    name: str
+    dish_role: str
+    rule_type: str
+    benh: str
+    severity_min: str
+    the: str | None = None
+    nutrient: str | None = None
+    comparator: str | None = None
+    nguong: float | None = None
+    #: Số đo của món. `None` nghĩa là **thiếu số liệu**, không phải bằng 0.
+    gia_tri: float | None = None
+    note: str = ""
+
+    @property
+    def thieu_so_lieu(self) -> bool:
+        """Món bị loại vì không có số liệu, chứ không vì vượt ngưỡng.
+
+        `loc_f1` loại món thiếu số liệu ở ngưỡng theo suất — không chứng minh
+        được là an toàn thì không cho qua. Đó là lựa chọn đúng cho một tầng
+        an toàn, nhưng nói với người dùng "món này vượt ngưỡng" khi thật ra
+        là "chúng tôi không biết" thì sai sự thật, nên hai thứ phải tách ra.
+
+        Lưu ý chiều ngược với `ml/han_muc.py`: ngưỡng theo SUẤT thiếu số liệu
+        thì LOẠI, còn hạn mức theo NGÀY thiếu số liệu thì CỘNG 0 kèm cờ báo.
+        Hai lựa chọn trái nhau nhưng cùng một lý do: theo suất, câu hỏi là
+        "món này có an toàn không" nên không biết là không cho qua; theo ngày,
+        chặn khi không biết sẽ loại 248/318 món và hệ thống thành vô dụng.
+        """
+        return self.rule_type == "nutrient_limit" and self.gia_tri is None
+
+    @property
+    def bac(self) -> str:
+        """Bậc lý do, để giao diện nhóm lại.
+
+        · `nhan`          — món mang nhãn bị cấm, hoặc thiếu nhãn bắt buộc
+        · `nguong_suat`   — số đo mỗi suất vượt ngưỡng cứng
+        · `thieu_so_lieu` — không có số liệu nên không cho qua
+        """
+        if self.rule_type in ("exclude_tag", "require_tag"):
+            return "nhan"
+        return "thieu_so_lieu" if self.thieu_so_lieu else "nguong_suat"
+
+    @property
+    def vuot_bao_nhieu(self) -> float | None:
+        """Vượt ngưỡng bao nhiêu. `None` khi không tính được."""
+        if self.gia_tri is None or self.nguong is None:
+            return None
+        if self.comparator == "lte":
+            return self.gia_tri - self.nguong
+        return self.nguong - self.gia_tri
+
+
+_CHON_LY_DO = """
+SELECT f.id AS food_id, f.name, f.dish_role,
+       {loai} AS rule_type,
+       co.name_vi AS benh, cr.severity_min,
+       {the} AS the,
+       {nutrient} AS nutrient, {comparator} AS comparator,
+       {nguong} AS nguong, {gia_tri} AS gia_tri,
+       cr.note
+"""
+
+
+def ly_do_loai(
+    cn,
+    *,
+    user_id: str | None = None,
+    dieu_kien: Sequence[DieuKien] = (),
+    chi_mon_chung: bool = False,
+) -> dict[str, list[LyDoLoai]]:
+    """Món nào bị F1 loại, và vì luật nào.
+
+    Tham số giống `loc_f1` và phải được truyền giống nhau — cùng `user_id`,
+    cùng `dieu_kien`, cùng `chi_mon_chung` — nếu không thì hai bên đang nói
+    về hai tập món khác nhau.
+
+    Trả về `{food_id: [lý do...]}`. Một món có thể vi phạm nhiều luật, và
+    mọi luật bị vi phạm đều được nêu: biết một lý do không đủ để người dùng
+    hiểu, vì sửa được một luật chưa chắc món đó hợp.
+    """
+    if not dieu_kien and user_id is not None:
+        dieu_kien = dieu_kien_cua_nguoi_dung(cn, user_id)
+    if not dieu_kien:
+        # Không bệnh lý nào thì F1 không loại món nào.
+        return {}
+
+    pham_vi = (
+        "f.owner_id IS NULL"
+        if chi_mon_chung
+        else "(f.owner_id IS NULL OR f.owner_id <=> %s)"
+    )
+    mot_pham_vi: list[Any] = [] if chi_mon_chung else [user_id]
+
+    nhanh_the = (
+        _CHON_LY_DO.format(
+            loai="'exclude_tag'",
+            the="t.name_vi",
+            nutrient="NULL",
+            comparator="NULL",
+            nguong="NULL",
+            gia_tri="NULL",
+        )
+        + f"""
+FROM foods f
+JOIN food_tags       ft ON ft.food_id = f.id
+JOIN condition_rules cr ON cr.tag_id = ft.tag_id
+                       AND cr.rule_type = 'exclude_tag'
+                       AND cr.is_hard = 1
+JOIN dk                 ON dk.condition_id = cr.condition_id
+JOIN conditions      co ON co.id = cr.condition_id
+JOIN tags            t  ON t.id = cr.tag_id
+WHERE f.is_active = 1
+  AND {pham_vi}
+  AND {_DU_MUC_DO}
+"""
+    )
+
+    nhanh_bat_buoc = (
+        _CHON_LY_DO.format(
+            loai="'require_tag'",
+            the="t.name_vi",
+            nutrient="NULL",
+            comparator="NULL",
+            nguong="NULL",
+            gia_tri="NULL",
+        )
+        + f"""
+FROM foods f
+JOIN condition_rules cr ON cr.rule_type = 'require_tag' AND cr.is_hard = 1
+JOIN dk                 ON dk.condition_id = cr.condition_id
+JOIN conditions      co ON co.id = cr.condition_id
+JOIN tags            t  ON t.id = cr.tag_id
+WHERE f.is_active = 1
+  AND {pham_vi}
+  AND {_DU_MUC_DO}
+  AND NOT EXISTS (
+        SELECT 1 FROM food_tags ft
+        WHERE ft.food_id = f.id AND ft.tag_id = cr.tag_id
+      )
+"""
+    )
+
+    nhanh_nguong = (
+        _CHON_LY_DO.format(
+            loai="'nutrient_limit'",
+            the="NULL",
+            nutrient="cr.nutrient",
+            comparator="cr.comparator",
+            nguong="cr.threshold",
+            gia_tri=_CASE_CHAT,
+        )
+        + f"""
+FROM foods f
+JOIN food_nutrition  fn ON fn.food_id = f.id
+JOIN condition_rules cr ON cr.rule_type = 'nutrient_limit'
+                       AND cr.is_hard = 1
+                       AND cr.scope = 'per_serving'
+JOIN dk                 ON dk.condition_id = cr.condition_id
+JOIN conditions      co ON co.id = cr.condition_id
+WHERE f.is_active = 1
+  AND {pham_vi}
+  AND {_DU_MUC_DO}
+  AND (
+        {_CASE_CHAT} IS NULL
+        OR (cr.comparator = 'lte' AND {_CASE_CHAT} > cr.threshold)
+        OR (cr.comparator = 'gte' AND {_CASE_CHAT} < cr.threshold)
+      )
+"""
+    )
+
+    cte, tham_so_cte = _cte_dieu_kien(dieu_kien)
+    sql = (
+        cte
+        + nhanh_the
+        + "UNION ALL"
+        + nhanh_bat_buoc
+        + "UNION ALL"
+        + nhanh_nguong
+        + "ORDER BY name, food_id, rule_type"
+    )
+    tham_so = tham_so_cte + mot_pham_vi + mot_pham_vi + mot_pham_vi
+
+    with cn.cursor() as cur:
+        cur.execute(sql, tuple(tham_so))
+        dong = list(cur.fetchall())
+
+    ket_qua: dict[str, list[LyDoLoai]] = {}
+    for d in dong:
+        ket_qua.setdefault(d["food_id"], []).append(
+            LyDoLoai(
+                food_id=d["food_id"],
+                name=d["name"],
+                dish_role=d["dish_role"],
+                rule_type=d["rule_type"],
+                benh=d["benh"],
+                severity_min=d["severity_min"],
+                the=d["the"],
+                nutrient=d["nutrient"],
+                comparator=d["comparator"],
+                nguong=None if d["nguong"] is None else float(d["nguong"]),
+                gia_tri=None if d["gia_tri"] is None else float(d["gia_tri"]),
+                note=d["note"] or "",
+            )
+        )
+    return ket_qua
+
+
+def doi_chieu_loc_f1(
+    cn,
+    *,
+    user_id: str | None = None,
+    dieu_kien: Sequence[DieuKien] = (),
+    chi_mon_chung: bool = False,
+) -> dict[str, list[str]]:
+    """Soát `ly_do_loai` khớp `loc_f1` — hai câu SQL, một bộ quy tắc.
+
+    `loc_f1` và `ly_do_loai` đọc cùng `condition_rules` nhưng bằng hai câu
+    SQL viết tay khác nhau. Sửa một bên mà quên bên kia thì giao diện sẽ hiện
+    một món vừa nằm trong thực đơn vừa nằm trong danh sách bị loại, và không
+    có gì báo. Hàm này so hai tập:
+
+        · `thieu_ly_do` — bị `loc_f1` bỏ nhưng `ly_do_loai` không giải thích
+          được. Người dùng thấy món biến mất mà không có lý do nào.
+        · `ly_do_du`    — có lý do bị loại nhưng `loc_f1` vẫn cho qua. Hướng
+          này tệ hơn: một món bị coi là vi phạm vẫn vào được thực đơn.
+
+    Hai danh sách rỗng nghĩa là hai bên đang khớp.
+    """
+    con_lai = {
+        m["id"]
+        for m in loc_f1(
+            cn,
+            user_id=user_id,
+            dieu_kien=dieu_kien,
+            chi_mon_chung=chi_mon_chung,
+        )
+    }
+    co_ly_do = set(
+        ly_do_loai(
+            cn,
+            user_id=user_id,
+            dieu_kien=dieu_kien,
+            chi_mon_chung=chi_mon_chung,
+        )
+    )
+
+    pham_vi = (
+        "f.owner_id IS NULL"
+        if chi_mon_chung
+        else "(f.owner_id IS NULL OR f.owner_id <=> %s)"
+    )
+    with cn.cursor() as cur:
+        cur.execute(
+            f"SELECT f.id FROM foods f WHERE f.is_active = 1 AND {pham_vi}",
+            () if chi_mon_chung else (user_id,),
+        )
+        tat_ca = {d["id"] for d in cur.fetchall()}
+
+    return {
+        "thieu_ly_do": sorted((tat_ca - con_lai) - co_ly_do),
+        "ly_do_du": sorted(co_ly_do & con_lai),
+    }
+
+
 # ── Chạy thử ──────────────────────────────────────────────────────────
 
 

@@ -37,6 +37,7 @@ from ml.build_dataset import (  # noqa: E402
     nhan_split,
     nhan_tu_sao,
 )
+from ml.f1_filter import LyDoLoai  # noqa: E402
 from ml.dataset import NGUONG_THICH  # noqa: E402
 from ml.han_muc import (  # noqa: E402
     MotHanMuc,
@@ -824,6 +825,74 @@ def kiem_han_muc() -> None:
     kiem(tc.du_lieu_du("sodium_mg"), "chất không khuyết thì đủ")
 
 
+# ── 12. Lý do bị F1 loại ──────────────────────────────────────────────
+
+
+def kiem_ly_do_loai() -> None:
+    print("12. Phân loại lý do bị F1 loại")
+
+    def _ly_do(**ghi_de) -> LyDoLoai:
+        goc = dict(
+            food_id="f1",
+            name="Món thử",
+            dish_role="main",
+            rule_type="nutrient_limit",
+            benh="Tăng huyết áp",
+            severity_min="mild",
+        )
+        goc.update(ghi_de)
+        return LyDoLoai(**goc)
+
+    nhan_cam = _ly_do(rule_type="exclude_tag", the="Giàu purin", benh="Gút")
+    nhan_thieu = _ly_do(rule_type="require_tag", the="Món chay", benh="Ăn chay")
+    kiem(nhan_cam.bac == "nhan", "nhãn bị cấm → bậc `nhan`")
+    kiem(nhan_thieu.bac == "nhan", "thiếu nhãn bắt buộc → bậc `nhan`")
+
+    vuot = _ly_do(nutrient="sodium_mg", comparator="lte", nguong=500.0, gia_tri=879.4)
+    kiem(vuot.bac == "nguong_suat", "vượt ngưỡng theo suất → bậc `nguong_suat`")
+    gan(vuot.vuot_bao_nhieu, 379.4, "vượt trần: số đo − ngưỡng")
+
+    duoi_san = _ly_do(nutrient="fiber_g", comparator="gte", nguong=5.0, gia_tri=1.2)
+    kiem(duoi_san.bac == "nguong_suat", "dưới sàn cũng là `nguong_suat`")
+    gan(duoi_san.vuot_bao_nhieu, 3.8, "dưới sàn: ngưỡng − số đo, vẫn là số dương")
+
+    # Phân biệt quan trọng nhất của cả phần này. `loc_f1` loại món thiếu số
+    # liệu ở ngưỡng theo suất, và nói với người dùng "món này vượt ngưỡng"
+    # khi thật ra là "chúng tôi không biết" là sai sự thật.
+    khuyet = _ly_do(nutrient="purine_mg", comparator="lte", nguong=150.0, gia_tri=None)
+    kiem(khuyet.thieu_so_lieu, "`nutrient_limit` không có số đo → thiếu số liệu")
+    kiem(khuyet.bac == "thieu_so_lieu", "bậc riêng, không gộp vào `nguong_suat`")
+    kiem(
+        khuyet.vuot_bao_nhieu is None,
+        "không có số đo thì không bịa ra một lượng vượt",
+    )
+
+    # Bẫy: luật nhãn cũng có `gia_tri` rỗng, nhưng nó KHÔNG phải thiếu số
+    # liệu — nó không cần số liệu nào. Gộp hai thứ sẽ làm 181 món bị loại
+    # vì nhãn hiện ra như thể hệ thống không biết gì về chúng.
+    kiem(
+        not nhan_cam.thieu_so_lieu,
+        "luật nhãn có `gia_tri` rỗng nhưng KHÔNG phải thiếu số liệu",
+    )
+    kiem(
+        nhan_cam.vuot_bao_nhieu is None,
+        "luật nhãn không có lượng vượt — và không được nổ khi hỏi",
+    )
+    kiem(
+        not nhan_thieu.thieu_so_lieu,
+        "`require_tag` cũng vậy",
+    )
+
+    # Chiều của hai tầng trái nhau, và đó là chủ ý: xem docstring
+    # `LyDoLoai.thieu_so_lieu`. Giữ phép kiểm này để ai đổi một bên phải
+    # đọc lý do trước.
+    kiem(
+        khuyet.bac == "thieu_so_lieu",
+        "theo SUẤT: thiếu số liệu thì LOẠI (ngược với hạn mức theo NGÀY, "
+        "nơi thiếu số liệu thì cộng 0 kèm cờ)",
+    )
+
+
 def main() -> int:
     in_utf8()
     print("Kiểm phần học máy — hàm thuần, không cần CSDL")
@@ -839,6 +908,7 @@ def main() -> int:
         kiem_chi_so,
         kiem_pho_bien,
         kiem_han_muc,
+        kiem_ly_do_loai,
     ):
         ham()
     print("=" * 62)
