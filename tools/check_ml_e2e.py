@@ -1356,6 +1356,18 @@ def kiem_ly_do_loai_sql(db: str) -> None:
                 all(l.vuot_bao_nhieu is None for l in v2 if l.thieu_so_lieu),
                 "không bịa ra lượng vượt cho món không có số đo",
             )
+
+        # Dọn luật dựng riêng. Một phép kiểm để lại CSDL đã bị sửa thì mọi
+        # phép kiểm sau nó phụ thuộc thứ tự chạy — và mục 9 đã đếm 21 quy
+        # tắc thay vì 20 đúng vì chuyện này.
+        with cn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM condition_rules "
+                "WHERE note LIKE 'LUẬT DỰNG RIÊNG%'"
+            )
+            so_xoa = cur.rowcount
+        cn.commit()
+        kiem(so_xoa == 1, f"đã dọn luật dựng riêng, xóa {so_xoa} dòng")
     finally:
         cn.close()
 
@@ -1542,6 +1554,146 @@ def kiem_hinh_phat_mem_sql(db: str) -> None:
         cn.close()
 
 
+def kiem_muc_tin_cay_sql(db: str) -> None:
+    """Mức tin cậy trên bộ quy tắc thật — và ràng buộc giữ nó khỏi bị lạm dụng.
+
+    Điều quan trọng nhất ở đây không phải mấy con số đếm được, mà là
+    `chk_rule_evidence`: không có nó thì một ngưỡng dinh dưỡng có thể tự
+    khai `definitional` và thoát khỏi mọi yêu cầu dẫn nguồn.
+    """
+    print("\n9. Mức tin cậy của ngưỡng trên bộ quy tắc thật")
+
+    cn = ket_noi(db)
+    try:
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT evidence_level e, COUNT(*) n FROM condition_rules "
+                "GROUP BY e"
+            )
+            dem = {d["e"]: int(d["n"]) for d in cur.fetchall()}
+
+        kiem(sum(dem.values()) == 20, f"20 quy tắc, được {sum(dem.values())}")
+        kiem(
+            dem.get("definitional") == 9,
+            f"9 quy tắc nhãn là `definitional`, được {dem.get('definitional')}",
+        )
+        kiem(
+            dem.get("published") == 3,
+            f"3 ngưỡng lấy nguyên từ nguồn, được {dem.get('published')}",
+        )
+        kiem(
+            dem.get("derived") == 6,
+            f"6 ngưỡng suy ra kèm giả thiết, được {dem.get('derived')}",
+        )
+        kiem(
+            dem.get("unsupported") == 2,
+            f"2 ngưỡng không có nguồn đang hiệu lực, được {dem.get('unsupported')}",
+        )
+
+        # Mọi quy tắc nhãn phải là `definitional`, và ngược lại.
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) n FROM condition_rules "
+                "WHERE (rule_type IN ('exclude_tag','require_tag') "
+                "       AND evidence_level <> 'definitional') "
+                "   OR (rule_type = 'nutrient_limit' "
+                "       AND evidence_level = 'definitional')"
+            )
+            lech = int(cur.fetchone()["n"])
+        kiem(lech == 0, f"không quy tắc nào lệch loại ↔ mức, được {lech}")
+
+        # Ràng buộc CHECK phải thực sự chặn, không chỉ là chú thích.
+        with cn.cursor() as cur:
+            try:
+                cur.execute(
+                    "UPDATE condition_rules SET evidence_level = 'definitional' "
+                    "WHERE rule_type = 'nutrient_limit' LIMIT 1"
+                )
+                chan = False
+            except pymysql.err.OperationalError:
+                chan = True
+            except pymysql.err.IntegrityError:
+                chan = True
+        cn.rollback()
+        kiem(
+            chan,
+            "`chk_rule_evidence` CHẶN một ngưỡng tự khai `definitional` — "
+            "không có ràng buộc này thì nó thoát mọi yêu cầu dẫn nguồn",
+        )
+
+        # Ba ngưỡng `published` phải là đúng ba cái có nguồn trong `note`.
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT co.name_vi b, cr.nutrient, cr.threshold, cr.note "
+                "FROM condition_rules cr "
+                "JOIN conditions co ON co.id = cr.condition_id "
+                "WHERE cr.evidence_level = 'published' "
+                "ORDER BY co.name_vi, cr.nutrient"
+            )
+            pub = list(cur.fetchall())
+        kiem(
+            all(
+                "WHO" in d["note"] or "Nhật Bản" in d["note"] or "KDIGO" in d["note"]
+                for d in pub
+            ),
+            "mọi ngưỡng `published` nêu được tên nguồn trong `note`",
+        )
+        kiem(
+            all(float(d["threshold"]) in (400.0, 2000.0) for d in pub),
+            "ba ngưỡng đó là purin 400 mg và natri 2 000 mg (hai bệnh)",
+        )
+
+        # Hai ngưỡng `unsupported`: `note` phải nói rõ vì sao.
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT cr.note FROM condition_rules cr "
+                "WHERE cr.evidence_level = 'unsupported'"
+            )
+            un = [d["note"] for d in cur.fetchall()]
+        kiem(
+            any("BỊ RÚT" in n for n in un),
+            "một ngưỡng `unsupported` vì đã BỊ RÚT khỏi hướng dẫn",
+        )
+        kiem(
+            any("chưa xác minh" in n for n in un),
+            "ngưỡng còn lại vì CHƯA ai tra — hai lý do khác nhau, cùng một "
+            "cách trình bày",
+        )
+
+        # Mức đi tới được cả ba lớp đọc nó.
+        dk = dieu_kien_theo_ten(
+            cn, ["Gút", "Tăng huyết áp", "Rối loạn mỡ máu"], severity="severe"
+        )
+        ly = ly_do_loai(cn, dieu_kien=dk)
+        kiem(
+            all(
+                l.evidence_level == "definitional"
+                for v in ly.values()
+                for l in v
+            ),
+            "mọi lý do bị loại hiện tại đều từ quy tắc nhãn → `definitional`",
+        )
+        lm = luat_mem(cn, dk)
+        kiem(
+            {l.evidence_level for l in lm} == {"derived", "unsupported"},
+            f"luật mềm có hai mức, được {sorted({l.evidence_level for l in lm})}",
+        )
+        tt = trang_thai(cn, "khong-ai", dieu_kien=dk, ngay=date(2026, 11, 7))
+        cung = [h for h in tt.han_muc if h.la_cung]
+        kiem(
+            cung and all(h.dan_duoc_nguon for h in cung),
+            "mọi ngưỡng CỨNG theo ngày đều dẫn được nguồn — đúng như phải "
+            "thế: chặn món thì phải có nguồn",
+        )
+        mem = [h for h in tt.han_muc if not h.la_cung]
+        kiem(
+            mem and not any(h.dan_duoc_nguon for h in mem),
+            "còn ngưỡng MỀM thì không ngưỡng nào dẫn được nguồn",
+        )
+    finally:
+        cn.close()
+
+
 def main() -> int:
     in_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
@@ -1580,6 +1732,7 @@ def main() -> int:
         kiem_han_muc_ngay(t.db)
         kiem_ly_do_loai_sql(t.db)
         kiem_hinh_phat_mem_sql(t.db)
+        kiem_muc_tin_cay_sql(t.db)
     finally:
         if t.giu:
             print(f"\nGiữ lại CSDL {t.db!r} theo --giu.")

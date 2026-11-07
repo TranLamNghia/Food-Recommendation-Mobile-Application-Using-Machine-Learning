@@ -6,7 +6,7 @@ Khoảng trống này tồn tại khá lâu mà không ai thấy. `tools/check_d
 so CSDL với **ba** nguồn — `database_erd.html`, `DATABASE_DESIGN.md`,
 `ERD_REVIEW.md` — nhưng **không so với chính `db/schema.sql`**, dù đó là tệp
 dựng lại CSDL. `tools/test_schema_build.py` thì dựng schema.sql vào CSDL nháp
-và đếm tổng (22 bảng / 29 khóa ngoại / 15 CHECK / 211 cột), nên nó bắt được
+và đếm tổng (22 bảng / 29 khóa ngoại / 16 CHECK / 212 cột), nên nó bắt được
 lệch về **số lượng** nhưng không bắt được lệch về **nội dung**: đổi
 `VARCHAR(100)` thành `VARCHAR(200)`, bỏ một `NOT NULL`, thêm một giá trị
 ENUM — mọi con số vẫn đúng y nguyên.

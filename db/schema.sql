@@ -3,7 +3,7 @@
 --  Đồ án tốt nghiệp — Trần Lâm Nghĩa (22115053122231)
 --
 --  MySQL 8.x · InnoDB · utf8mb4_unicode_ci
---  22 bảng · 29 khóa ngoại · 15 ràng buộc CHECK
+--  22 bảng · 29 khóa ngoại · 16 ràng buộc CHECK
 --
 --  LƯU Ý: trong MySQL 8, tên ràng buộc CHECK phải duy nhất trên TOÀN CSDL,
 --  không phải trên từng bảng. Đặt trùng tên ở hai bảng khác nhau sẽ báo lỗi
@@ -421,6 +421,23 @@ CREATE TABLE condition_rules (
     -- is_hard = 1 -> loại bỏ ở Bước 2;  = 0 -> trừ điểm ở Bước 3
     is_hard      TINYINT(1)   NOT NULL DEFAULT 1,
     penalty      DECIMAL(4,3) NULL,
+
+    -- Mức tin cậy của NGƯỠNG, không phải của quy tắc. Giao diện dùng nó để
+    -- chọn giọng trình bày: một ứng dụng sức khỏe dẫn khuyến cáo của WHO và
+    -- một con số chưa ai tra bằng cùng một giọng là không trung thực.
+    --   definitional  Quy tắc LÀ định nghĩa, không có ngưỡng để dẫn nguồn
+    --                 ("dị ứng trứng thì loại món có trứng"). Mọi quy tắc
+    --                 nhãn thuộc nhóm này.
+    --   published     Con số lấy nguyên từ nguồn đang hiệu lực.
+    --   derived       Nguồn có thật nhưng con số là phép suy ra, nên chỉ
+    --                 đúng kèm giả thiết — 48 g đạm của KDIGO đúng cho
+    --                 người 60 kg, không đúng cho người 90 kg.
+    --   unsupported   Không có nguồn ĐANG hiệu lực: hoặc ngưỡng đã bị rút
+    --                 (cholesterol 300 mg/ngày), hoặc chưa ai tra.
+    -- Mặc định là `derived`, KHÔNG phải `published`: một quy tắc thêm vào mà
+    -- quên khai thì phải mặc định ở mức không được dẫn nguồn.
+    evidence_level ENUM('definitional','published','derived','unsupported')
+                 NOT NULL DEFAULT 'derived',
     note         VARCHAR(255) NULL,
 
     -- Bảng đa hình: mỗi `rule_type` dùng một bộ cột khác nhau. Không có
@@ -438,6 +455,17 @@ CREATE TABLE condition_rules (
     ),
     -- Quy tắc mềm phải có mức phạt, quy tắc cứng thì không cần.
     CONSTRAINT chk_rule_penalty CHECK (is_hard = 1 OR penalty IS NOT NULL),
+
+    -- `definitional` chỉ dành cho quy tắc nhãn, và mọi quy tắc nhãn phải là
+    -- `definitional`. Không có ràng buộc này thì một ngưỡng dinh dưỡng có
+    -- thể tự nhận là định nghĩa và thoát khỏi mọi yêu cầu dẫn nguồn.
+    CONSTRAINT chk_rule_evidence CHECK (
+        (rule_type IN ('exclude_tag','require_tag')
+             AND evidence_level = 'definitional')
+        OR
+        (rule_type = 'nutrient_limit'
+             AND evidence_level <> 'definitional')
+    ),
 
     FOREIGN KEY (condition_id) REFERENCES conditions(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id)       REFERENCES tags(id),

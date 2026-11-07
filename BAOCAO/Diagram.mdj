@@ -3667,6 +3667,21 @@
                     },
                     {
                       "_type": "ERDColumnView",
+                      "_id": "DATNERD00901X=",
+                      "_parent": {
+                        "$ref": "DATNERD00526X="
+                      },
+                      "model": {
+                        "$ref": "DATNERD00900X="
+                      },
+                      "font": "Arial;13;0",
+                      "left": 157,
+                      "top": 1353,
+                      "width": 1267.517578125,
+                      "height": 13
+                    },
+                    {
+                      "_type": "ERDColumnView",
                       "_id": "DATNERD00538X=",
                       "_parent": {
                         "$ref": "DATNERD00526X="
@@ -3676,7 +3691,7 @@
                       },
                       "font": "Arial;13;0",
                       "left": 157,
-                      "top": 1353,
+                      "top": 1368,
                       "width": 1267.517578125,
                       "height": 13
                     }
@@ -3685,14 +3700,14 @@
                   "left": 152,
                   "top": 1183,
                   "width": 1277.517578125,
-                  "height": 188
+                  "height": 203
                 }
               ],
               "font": "Arial;13;0",
               "left": 152,
               "top": 1160,
               "width": 1277.517578125,
-              "height": 211,
+              "height": 226,
               "nameLabel": {
                 "$ref": "DATNERD00525X="
               },
@@ -9933,6 +9948,16 @@
               "type": "DECIMAL",
               "length": 0,
               "nullable": true
+            },
+            {
+              "_type": "ERDColumn",
+              "_id": "DATNERD00900X=",
+              "_parent": {
+                "$ref": "AAAAAAGhMwzWI18hvT4="
+              },
+              "name": "evidence_level",
+              "type": "ENUM('definitional', 'published', 'derived', 'unsupported')",
+              "length": 0
             },
             {
               "_type": "ERDColumn",
@@ -24157,6 +24182,21 @@
                     },
                     {
                       "_type": "ERDColumnView",
+                      "_id": "DATNERD00903X=",
+                      "_parent": {
+                        "$ref": "AAAAAAGhXBhleorwnJc="
+                      },
+                      "model": {
+                        "$ref": "DATNERD00902X="
+                      },
+                      "font": "Arial;13;0",
+                      "left": 157,
+                      "top": 1353,
+                      "width": 1317.7783203125,
+                      "height": 13
+                    },
+                    {
+                      "_type": "ERDColumnView",
                       "_id": "AAAAAAGhXBhleor8CT8=",
                       "_parent": {
                         "$ref": "AAAAAAGhXBhleorwnJc="
@@ -24166,7 +24206,7 @@
                       },
                       "font": "Arial;13;0",
                       "left": 157,
-                      "top": 1353,
+                      "top": 1368,
                       "width": 1317.7783203125,
                       "height": 13
                     }
@@ -24175,14 +24215,14 @@
                   "left": 152,
                   "top": 1183,
                   "width": 1327.7783203125,
-                  "height": 188
+                  "height": 203
                 }
               ],
               "font": "Arial;13;0",
               "left": 152,
               "top": 1160,
               "width": 1327.7783203125,
-              "height": 211,
+              "height": 226,
               "nameLabel": {
                 "$ref": "AAAAAAGhXBhleorvkuc="
               },
@@ -30423,6 +30463,16 @@
               "type": "DECIMAL",
               "length": 0,
               "nullable": true
+            },
+            {
+              "_type": "ERDColumn",
+              "_id": "DATNERD00902X=",
+              "_parent": {
+                "$ref": "AAAAAAGhXBhlfIzLwcM="
+              },
+              "name": "mucTinCay",
+              "type": "ENUM('definitional', 'published', 'derived', 'unsupported')",
+              "length": 0
             },
             {
               "_type": "ERDColumn",

@@ -230,6 +230,7 @@ COT = {
         "severity_min": "mứcĐộNặngTốiThiểu",
         "is_hard": "làRàngBuộcCứng",
         "penalty": "điểmPhạt",
+        "evidence_level": "mứcTinCậy",
         "note": "ghiChú",
     },
     "food_nutrition": {

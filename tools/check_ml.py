@@ -38,6 +38,9 @@ from ml.build_dataset import (  # noqa: E402
     nhan_tu_sao,
 )
 from ml.f1_filter import (  # noqa: E402
+    DAN_DUOC_NGUON,
+    MUC_TIN_CAY,
+    NHAN_TIN_CAY,
     TANG_THI_HANH,
     LuatMem,
     LyDoLoai,
@@ -1175,6 +1178,83 @@ def kiem_cau_giai_thich() -> None:
     kiem(thieu_menh_de(kg) == [], "đã phục hồi bảng mệnh đề")
 
 
+# ── 15. Mức tin cậy của ngưỡng ────────────────────────────────────────
+
+
+def kiem_muc_tin_cay() -> None:
+    print("15. Mức tin cậy của ngưỡng — bốn mức, và mức nào dẫn được nguồn")
+
+    kiem(
+        set(MUC_TIN_CAY) == set(NHAN_TIN_CAY),
+        "mọi mức đều có nhãn tiếng Việt cho giao diện",
+    )
+    kiem(
+        DAN_DUOC_NGUON == {"published"},
+        "CHỈ `published` được dẫn như khuyến cáo có nguồn — `derived` kèm "
+        "giả thiết nên không, `unsupported` thì không có nguồn nào",
+    )
+    kiem(
+        "definitional" not in DAN_DUOC_NGUON,
+        "`definitional` không dẫn nguồn được vì nó không có ngưỡng nào — "
+        '"dị ứng trứng thì loại món có trứng" không cần WHO công bố',
+    )
+
+    def _ly(muc: str) -> LyDoLoai:
+        return LyDoLoai(
+            food_id="f",
+            name="Món",
+            dish_role="main",
+            rule_type="nutrient_limit",
+            benh="Tăng huyết áp",
+            severity_min="mild",
+            evidence_level=muc,
+        )
+
+    kiem(_ly("published").dan_duoc_nguon, "ngưỡng `published` dẫn được nguồn")
+    kiem(not _ly("derived").dan_duoc_nguon, "ngưỡng `derived` thì không")
+    kiem(not _ly("unsupported").dan_duoc_nguon, "ngưỡng `unsupported` thì không")
+    kiem(
+        _ly("unsupported").nhan_tin_cay == "không có nguồn đang hiệu lực",
+        f"nhãn của `unsupported`: được {_ly('unsupported').nhan_tin_cay!r}",
+    )
+
+    # Mặc định phải là mức KHÔNG dẫn được nguồn. Chọn `published` làm mặc
+    # định sẽ khiến mọi quy tắc thêm vào mà quên khai tự nhận là có nguồn.
+    mac_dinh = LyDoLoai(
+        food_id="f", name="Món", dish_role="main",
+        rule_type="nutrient_limit", benh="X", severity_min="mild",
+    )
+    kiem(
+        not mac_dinh.dan_duoc_nguon,
+        f"mặc định `{mac_dinh.evidence_level}` KHÔNG dẫn được nguồn",
+    )
+
+    # Một mức lạ không được làm hàm nổ, nhưng cũng không được dẫn nguồn.
+    la = _ly("muc_la_nao_do")
+    kiem(not la.dan_duoc_nguon, "mức lạ thì không dẫn nguồn được")
+    kiem(la.nhan_tin_cay == "muc_la_nao_do", "mức lạ hiện nguyên văn, không nổ")
+
+    # `LuatMem` và `MotHanMuc` dùng cùng một quy ước.
+    lm = LuatMem(
+        benh="Rối loạn mỡ máu", severity_min="mild", nutrient="cholesterol_mg",
+        comparator="lte", nguong=300.0, penalty=0.700, scope="per_day",
+        evidence_level="unsupported",
+    )
+    kiem(not lm.dan_duoc_nguon, "LuatMem `unsupported` không dẫn nguồn")
+    hm_ = MotHanMuc(
+        benh="Tăng huyết áp", chat="sodium_mg", comparator="lte",
+        nguong=2000.0, da_an=0.0, da_len_ke_hoach=0.0,
+        evidence_level="published",
+    )
+    kiem(hm_.dan_duoc_nguon, "MotHanMuc `published` dẫn được nguồn")
+    kiem(
+        hm_.nhan_tin_cay == lm.nhan_tin_cay.replace(
+            "không có nguồn đang hiệu lực", "có nguồn công bố"
+        ),
+        "ba lớp dùng cùng một bảng nhãn, không ai cài lại",
+    )
+
+
 def main() -> int:
     in_utf8()
     print("Kiểm phần học máy — hàm thuần, không cần CSDL")
@@ -1193,6 +1273,7 @@ def main() -> int:
         kiem_ly_do_loai,
         kiem_hinh_phat_mem,
         kiem_cau_giai_thich,
+        kiem_muc_tin_cay,
     ):
         ham()
     print("=" * 62)

@@ -4,7 +4,10 @@
 --  Gồm 4 bảng từ điển + BỘ QUY TẮC F1 + vài món mẫu để kiểm thử lược đồ.
 --  Dữ liệu món ăn thật (300–500 món) nạp riêng bằng script đọc CSV.
 --
---  ⚠ CÁC NGƯỠNG TRONG condition_rules LÀ SỐ MINH HỌA.
+--  ⚠ NGƯỠNG TRONG condition_rules CÓ BA MỨC TIN CẬY KHÁC NHAU —
+--    xem cột `evidence_level`. Chỉ 3/11 ngưỡng lấy nguyên từ nguồn
+--    đang hiệu lực; 6 là phép suy ra kèm giả thiết, 2 không có nguồn
+--    đang hiệu lực. Đừng dẫn chúng như nhau.
 --    Khi triển khai thật phải tra theo tài liệu
 --    "Nhu cầu dinh dưỡng khuyến nghị cho người Việt Nam" (NIN 2016)
 --    và ghi nguồn của từng ngưỡng vào cột `note`.
@@ -107,36 +110,36 @@ INSERT INTO food_categories (name, description) VALUES
 -- Quy tắc dị nguyên và chế độ ăn (mục 4b, 4c) vẫn CỨNG — dị ứng là tuyệt đối.
 
 INSERT INTO condition_rules
-    (condition_id, rule_type, nutrient, comparator, threshold, scope, severity_min, is_hard, penalty, note)
+    (condition_id, rule_type, nutrient, comparator, threshold, scope, severity_min, is_hard, penalty, evidence_level, note)
 SELECT c.id, 'nutrient_limit', v.nutrient, v.comparator, v.threshold, v.scope,
-       v.severity_min, v.is_hard, v.penalty, v.note
+       v.severity_min, v.is_hard, v.penalty, v.evidence_level, v.note
 FROM (
     -- ── Tăng huyết áp ──
-    SELECT 'Tăng huyết áp' AS code, 'sodium_mg' AS nutrient, 'lte' AS comparator, 2000.00 AS threshold, 'per_day' AS scope, 'mild' AS severity_min, 1 AS is_hard, NULL AS penalty, 'WHO: người lớn dưới 2000 mg natri/ngày (tương đương 5 g muối)' AS note
-    UNION ALL SELECT 'Tăng huyết áp', 'sodium_mg', 'lte',  700.00, 'per_serving', 'mild',   0, 0.600, 'Ràng buộc MỀM. 2000 mg/ngày chia theo tỷ lệ năng lượng bữa lớn nhất; không phải ngưỡng của hướng dẫn nào'
-    UNION ALL SELECT 'Tăng huyết áp', 'sodium_mg', 'lte',  500.00, 'per_serving', 'severe', 0, 0.400, 'Ràng buộc MỀM, phạt nặng hơn cho mức nặng. Ngưỡng theo ngày cho mức nặng CẦN TRA AHA/ESC — chưa xác minh'
+    SELECT 'Tăng huyết áp' AS code, 'sodium_mg' AS nutrient, 'lte' AS comparator, 2000.00 AS threshold, 'per_day' AS scope, 'mild' AS severity_min, 1 AS is_hard, NULL AS penalty, 'published' AS evidence_level, 'WHO: người lớn dưới 2000 mg natri/ngày (tương đương 5 g muối)' AS note
+    UNION ALL SELECT 'Tăng huyết áp', 'sodium_mg', 'lte',  700.00, 'per_serving', 'mild',   0, 0.600, 'derived', 'Ràng buộc MỀM. 2000 mg/ngày chia theo tỷ lệ năng lượng bữa lớn nhất; không phải ngưỡng của hướng dẫn nào'
+    UNION ALL SELECT 'Tăng huyết áp', 'sodium_mg', 'lte',  500.00, 'per_serving', 'severe', 0, 0.400, 'unsupported', 'Ràng buộc MỀM, phạt nặng hơn cho mức nặng. Ngưỡng theo ngày cho mức nặng CẦN TRA AHA/ESC — chưa xác minh'
 
     -- ── Gút ──
-    UNION ALL SELECT 'Gút', 'purine_mg', 'lte', 400.00, 'per_day',     'mild', 1, NULL,  'Hướng dẫn tăng acid uric máu và gút của Nhật Bản: dưới 400 mg purin/ngày'
-    UNION ALL SELECT 'Gút', 'purine_mg', 'lte', 150.00, 'per_serving', 'mild', 0, 0.500, 'Ràng buộc MỀM. 400 mg/ngày chia cho 3 bữa chính; là suy diễn, không phải ngưỡng công bố'
+    UNION ALL SELECT 'Gút', 'purine_mg', 'lte', 400.00, 'per_day',     'mild', 1, NULL,  'published', 'Hướng dẫn tăng acid uric máu và gút của Nhật Bản: dưới 400 mg purin/ngày'
+    UNION ALL SELECT 'Gút', 'purine_mg', 'lte', 150.00, 'per_serving', 'mild', 0, 0.500, 'derived', 'Ràng buộc MỀM. 400 mg/ngày chia cho 3 bữa chính; là suy diễn, không phải ngưỡng công bố'
 
     -- ── Bệnh thận mạn ──
-    UNION ALL SELECT 'Bệnh thận', 'protein_g', 'lte',   48.00, 'per_day', 'mild', 1, NULL, 'KDIGO 2024: 0,8 g đạm/kg/ngày. 48 g cho người 60 kg. KHẢ THI nhưng pha 5 chỉ đạt 4/12: sàn đạm của cấu trúc bữa là 34,5 g nên ngưỡng nằm trong tầm, song phép đổi một món bị kẹt ở cực trị cục bộ. Xem ML_PIPELINE mục 7.0.1'
-    UNION ALL SELECT 'Bệnh thận', 'sodium_mg', 'lte', 2000.00, 'per_day', 'mild', 1, NULL, 'Áp cùng ngưỡng natri của WHO; bệnh thận cũng cần hạn chế natri'
+    UNION ALL SELECT 'Bệnh thận', 'protein_g', 'lte',   48.00, 'per_day', 'mild', 1, NULL, 'derived', 'KDIGO 2024: 0,8 g đạm/kg/ngày. 48 g cho người 60 kg. KHẢ THI nhưng pha 5 chỉ đạt 4/12: sàn đạm của cấu trúc bữa là 34,5 g nên ngưỡng nằm trong tầm, song phép đổi một món bị kẹt ở cực trị cục bộ. Xem ML_PIPELINE mục 7.0.1'
+    UNION ALL SELECT 'Bệnh thận', 'sodium_mg', 'lte', 2000.00, 'per_day', 'mild', 1, NULL, 'published', 'Áp cùng ngưỡng natri của WHO; bệnh thận cũng cần hạn chế natri'
 
     -- ── Rối loạn mỡ máu ──
-    UNION ALL SELECT 'Rối loạn mỡ máu', 'cholesterol_mg', 'lte', 300.00, 'per_day', 'mild', 0, 0.700, 'Ràng buộc MỀM vì ngưỡng 300 mg/ngày ĐÃ BỊ RÚT khỏi Dietary Guidelines for Americans 2015 và AHA/ACC 2019. Giữ ở mức khuyến cáo, không chống chỉ định'
-    UNION ALL SELECT 'Rối loạn mỡ máu', 'fat_g',          'lte',  25.00, 'per_serving', 'mild', 0, 0.750, 'Ràng buộc MỀM. Mục tiêu THẬT của AHA là béo BÃO HÒA dưới 10% năng lượng, nhưng bảng thành phần thực phẩm không tách béo bão hòa nên dùng béo tổng làm thay'
+    UNION ALL SELECT 'Rối loạn mỡ máu', 'cholesterol_mg', 'lte', 300.00, 'per_day', 'mild', 0, 0.700, 'unsupported', 'Ràng buộc MỀM vì ngưỡng 300 mg/ngày ĐÃ BỊ RÚT khỏi Dietary Guidelines for Americans 2015 và AHA/ACC 2019. Giữ ở mức khuyến cáo, không chống chỉ định'
+    UNION ALL SELECT 'Rối loạn mỡ máu', 'fat_g',          'lte',  25.00, 'per_serving', 'mild', 0, 0.750, 'derived', 'Ràng buộc MỀM. Mục tiêu THẬT của AHA là béo BÃO HÒA dưới 10% năng lượng, nhưng bảng thành phần thực phẩm không tách béo bão hòa nên dùng béo tổng làm thay'
 
     -- ── Đái tháo đường ──
-    UNION ALL SELECT 'Đái tháo đường', 'sugar_g', 'lte', 25.00, 'per_day',  'mild', 0, 0.600, 'Ràng buộc MỀM. WHO khuyến cáo đường tự do dưới 10% năng lượng, lý tưởng dưới 5% (~25 g với khẩu phần 2000 kcal). ADA không đặt mốc gam cố định'
-    UNION ALL SELECT 'Đái tháo đường', 'carbs_g', 'lte', 60.00, 'per_meal', 'mild', 0, 0.700, 'Ràng buộc MỀM. ADA Standards of Care nêu rõ KHÔNG có tỷ lệ bột đường lý tưởng; 45–60 g mỗi bữa là cách làm cũ, giữ làm khuyến cáo chứ không phải ngưỡng'
+    UNION ALL SELECT 'Đái tháo đường', 'sugar_g', 'lte', 25.00, 'per_day',  'mild', 0, 0.600, 'derived', 'Ràng buộc MỀM. WHO khuyến cáo đường tự do dưới 10% năng lượng, lý tưởng dưới 5% (~25 g với khẩu phần 2000 kcal). ADA không đặt mốc gam cố định'
+    UNION ALL SELECT 'Đái tháo đường', 'carbs_g', 'lte', 60.00, 'per_meal', 'mild', 0, 0.700, 'derived', 'Ràng buộc MỀM. ADA Standards of Care nêu rõ KHÔNG có tỷ lệ bột đường lý tưởng; 45–60 g mỗi bữa là cách làm cũ, giữ làm khuyến cáo chứ không phải ngưỡng'
 ) v
 JOIN conditions c ON c.name_vi = v.code;
 
 -- 4b. Ràng buộc loại bỏ theo nhãn dị nguyên
-INSERT INTO condition_rules (condition_id, rule_type, tag_id, severity_min, is_hard, note)
-SELECT c.id, 'exclude_tag', t.id, 'mild', 1, CONCAT('Loại mọi món có nhãn ', t.name_vi)
+INSERT INTO condition_rules (condition_id, rule_type, tag_id, severity_min, is_hard, evidence_level, note)
+SELECT c.id, 'exclude_tag', t.id, 'mild', 1, 'definitional', CONCAT('Loại mọi món có nhãn ', t.name_vi)
 FROM (
     SELECT 'Dị ứng hải sản'     AS ccode, 'Có hải sản' AS tcode
     UNION ALL SELECT 'Dị ứng đậu phộng',      'Có đậu phộng'
@@ -153,8 +156,8 @@ JOIN tags       t ON t.name_vi = v.tcode;
 -- 6 % số món, vì bảng thành phần gốc thiếu số liệu purin và USDA không công
 -- bố chất này. Quy tắc theo nhãn phủ phần còn lại ở mức phân loại nhóm thực
 -- phẩm. Giữ CẢ HAI: có số đo thì dùng số, không có thì dùng nhãn.
-INSERT INTO condition_rules (condition_id, rule_type, tag_id, severity_min, is_hard, note)
-SELECT c.id, 'exclude_tag', t.id, 'moderate', 1,
+INSERT INTO condition_rules (condition_id, rule_type, tag_id, severity_min, is_hard, evidence_level, note)
+SELECT c.id, 'exclude_tag', t.id, 'moderate', 1, 'definitional',
        'Loại món giàu purin — dùng khi thiếu số liệu purine_mg'
 FROM conditions c
 JOIN tags t ON t.name_vi = 'Giàu purin'
@@ -162,8 +165,8 @@ WHERE c.name_vi = 'Gút';
 
 
 -- 4c. Ràng buộc bắt buộc theo nhãn chế độ ăn
-INSERT INTO condition_rules (condition_id, rule_type, tag_id, severity_min, is_hard, note)
-SELECT c.id, 'require_tag', t.id, 'mild', 1, CONCAT('Chỉ giữ món có nhãn ', t.name_vi)
+INSERT INTO condition_rules (condition_id, rule_type, tag_id, severity_min, is_hard, evidence_level, note)
+SELECT c.id, 'require_tag', t.id, 'mild', 1, 'definitional', CONCAT('Chỉ giữ món có nhãn ', t.name_vi)
 FROM (
     SELECT 'Ăn chay' AS ccode, 'Món chay' AS tcode
     UNION ALL SELECT 'Ăn thuần chay', 'Món thuần chay'

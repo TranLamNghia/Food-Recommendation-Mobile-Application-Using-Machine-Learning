@@ -79,7 +79,13 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable, Sequence
 
-from .f1_filter import COT_DINH_DUONG, DieuKien, han_muc_theo_ngay
+from .f1_filter import (
+    COT_DINH_DUONG,
+    DAN_DUOC_NGUON,
+    NHAN_TIN_CAY,
+    DieuKien,
+    han_muc_theo_ngay,
+)
 
 #: Trạng thái ô thực đơn được tính vào phần "đã lên kế hoạch".
 #:
@@ -127,6 +133,18 @@ class MotHanMuc:
     la_cung: bool = True
     #: Hệ số nhân khi vượt, chỉ có ở ngưỡng mềm. Xem `scoring.hinh_phat`.
     penalty: float | None = None
+    #: Mức tin cậy của ngưỡng — xem `f1_filter.MUC_TIN_CAY`. Thanh hạn mức
+    #: natri 2 000 mg dẫn được WHO; thanh cholesterol 300 mg thì không, vì
+    #: ngưỡng đó đã bị rút. Giao diện phải nói ra sự khác nhau đó.
+    evidence_level: str = "derived"
+
+    @property
+    def dan_duoc_nguon(self) -> bool:
+        return self.evidence_level in DAN_DUOC_NGUON
+
+    @property
+    def nhan_tin_cay(self) -> str:
+        return NHAN_TIN_CAY.get(self.evidence_level, self.evidence_level)
 
     @property
     def so_mon_thieu_so(self) -> int:
@@ -363,6 +381,7 @@ def trang_thai(
                 thieu_da_an=an.thieu[chat],
                 thieu_ke_hoach=ke_hoach.thieu[chat],
                 la_cung=bool(luat["is_hard"]),
+                evidence_level=luat["evidence_level"],
                 penalty=(
                     None if luat["penalty"] is None else float(luat["penalty"])
                 ),

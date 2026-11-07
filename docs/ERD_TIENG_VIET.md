@@ -2,7 +2,7 @@
 
 Ứng dụng di động khuyến nghị thực đơn dinh dưỡng cá nhân hóa — Trần Lâm Nghĩa (22115053122231).
 
-CSDL `nutrition_rec` · MySQL 8 · InnoDB · utf8mb4_unicode_ci · **22 bảng, 211 cột, 29 khóa ngoại, 30 cột ENUM**.
+CSDL `nutrition_rec` · MySQL 8 · InnoDB · utf8mb4_unicode_ci · **22 bảng, 212 cột, 29 khóa ngoại, 31 cột ENUM**.
 
 > Tài liệu này sinh tự động bằng `tools/baocao/build_erd_vi.py`. Kiểu dữ liệu và khóa đọc thẳng từ `information_schema`, tên tiếng Việt lấy từ `tools/baocao/erd_vi.py`. Sửa tay vào đây sẽ mất khi chạy lại.
 
@@ -40,7 +40,7 @@ Vài quy ước giữ giống nhau ở mọi bảng, để đọc tên là đoá
 | 9 | `user_preference_profiles` | `hồSơKhẩuVị` | 8 | Véc-tơ khẩu vị của người dùng, cập nhật sau mỗi tín hiệu tương tác. |
 | 10 | `body_logs` | `nhậtKýCơThể` | 6 | Người dùng tự ghi cân nặng theo ngày để theo dõi tiến triển. |
 | 11 | `foods` | `mónĂn` | 12 | Món ăn trong hệ thống, gồm cả món do người dùng tự thêm. |
-| 12 | `condition_rules` | `quyTắcBệnhLý` | 12 | Ràng buộc mà mỗi bệnh lý đặt ra: cấm nhãn, buộc có nhãn, hoặc giới hạn một chất. |
+| 12 | `condition_rules` | `quyTắcBệnhLý` | 13 | Ràng buộc mà mỗi bệnh lý đặt ra: cấm nhãn, buộc có nhãn, hoặc giới hạn một chất. |
 | 13 | `food_nutrition` | `dinhDưỡngMónĂn` | 18 | Thành phần dinh dưỡng của một khẩu phần, mỗi món một dòng. |
 | 14 | `food_tags` | `nhãnCủaMónĂn` | 2 | Bảng nối nhiều-nhiều giữa món ăn và nhãn. |
 | 15 | `meal_plans` | `thựcĐơnNgày` | 18 | Thực đơn hệ thống sinh cho một người trong một ngày. |
@@ -252,7 +252,8 @@ Ràng buộc mà mỗi bệnh lý đặt ra: cấm nhãn, buộc có nhãn, ho�
 | 9 | `severity_min` | `mứcĐộNặngTốiThiểu` | `ENUM('mild', 'moderate', 'severe')` |  | — |
 | 10 | `is_hard` | `làRàngBuộcCứng` | `TINYINT(1)` |  | — |
 | 11 | `penalty` | `điểmPhạt` | `DECIMAL(4,3)` |  | có |
-| 12 | `note` | `ghiChú` | `VARCHAR(255)` |  | có |
+| 12 | `evidence_level` | `mứcTinCậy` | `ENUM('definitional', 'published', 'derived', 'unsupported')` |  | — |
+| 13 | `note` | `ghiChú` | `VARCHAR(255)` |  | có |
 
 ### 3.13. `food_nutrition` — `dinhDưỡngMónĂn`
 
@@ -473,7 +474,7 @@ Từng món trong một thực đơn ngày, kèm việc người dùng giữ hay
 
 ## 5. Miền giá trị của các cột ENUM
 
-30 cột dùng kiểu liệt kê. Tập giá trị do CSDL quy định nên không thể nhập sai ở tầng ứng dụng.
+31 cột dùng kiểu liệt kê. Tập giá trị do CSDL quy định nên không thể nhập sai ở tầng ứng dụng.
 
 | Thực thể | Cột | Tên tiếng Việt | Giá trị |
 |---|---|---|---|
@@ -494,6 +495,7 @@ Từng món trong một thực đơn ngày, kèm việc người dùng giữ hay
 | `condition_rules` | `comparator` | `phépSoSánh` | `lte`, `gte` |
 | `condition_rules` | `scope` | `phạmViÁpDụng` | `per_serving`, `per_meal`, `per_day` |
 | `condition_rules` | `severity_min` | `mứcĐộNặngTốiThiểu` | `mild`, `moderate`, `severe` |
+| `condition_rules` | `evidence_level` | `mứcTinCậy` | `definitional`, `published`, `derived`, `unsupported` |
 | `meal_plans` | `generation_source` | `nguồnSinhThựcĐơn` | `rule_based`, `content_based`, `ml`, `hybrid` |
 | `meal_plans` | `status` | `trạngThái` | `draft`, `active`, `completed` |
 | `recommendations` | `context_meal_type` | `buổiĂnNgữCảnh` | `breakfast`, `lunch`, `dinner`, `snack` |

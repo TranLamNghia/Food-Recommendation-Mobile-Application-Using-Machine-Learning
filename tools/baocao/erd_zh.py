@@ -172,6 +172,7 @@ COT = {
         "severity_min": "最低严重程度",
         "is_hard": "是否硬约束",
         "penalty": "惩罚分",
+        "evidence_level": "证据等级",
         "note": "备注",
     },
     "food_nutrition": {

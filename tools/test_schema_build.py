@@ -54,8 +54,8 @@ SANDBOX = "nutrition_rec_buildtest"
 EXPECTED = {
     "tables": 22,
     "fk_columns": 29,
-    "checks": 15,
-    "columns": 211,
+    "checks": 16,
+    "columns": 212,
 }
 
 LOOKUP_ROWS = {

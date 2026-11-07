@@ -33,6 +33,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
+#: Mức tin cậy của một ngưỡng, từ `condition_rules.evidence_level`.
+#:
+#: Giao diện dùng nó để chọn giọng: dẫn khuyến cáo của WHO và một con số
+#: chưa ai tra bằng cùng một giọng là không trung thực. Trước đây mức này
+#: nằm trong văn xuôi cột `note`, nên muốn lọc phải tìm chuỗi "chưa xác
+#: minh" — hỏng ngay lần đầu ai sửa câu chữ.
+MUC_TIN_CAY = ("definitional", "published", "derived", "unsupported")
+
+#: Mức nào được phép dẫn như khuyến cáo có nguồn.
+DAN_DUOC_NGUON = frozenset({"published"})
+
+#: Câu ngắn cho giao diện, theo từng mức.
+NHAN_TIN_CAY = {
+    "definitional": "quy tắc định nghĩa",
+    "published": "có nguồn công bố",
+    "derived": "suy ra kèm giả thiết",
+    "unsupported": "không có nguồn đang hiệu lực",
+}
+
 #: Thứ tự mức độ. Dùng cả ở Python và trong SQL qua `FIELD()`.
 THU_TU_MUC_DO = ("mild", "moderate", "severe")
 
@@ -270,7 +289,7 @@ def hinh_phat_mem(cn, dieu_kien: Sequence[DieuKien]) -> list[dict[str, Any]]:
         + f"""
 SELECT co.name_vi, cr.rule_type, cr.tag_id, t.name_vi AS tag_name,
        cr.nutrient, cr.comparator, cr.threshold, cr.scope, cr.penalty,
-       cr.severity_min, cr.note
+       cr.severity_min, cr.evidence_level, cr.note
 FROM condition_rules cr
 JOIN dk         ON dk.condition_id = cr.condition_id
 JOIN conditions co ON co.id = cr.condition_id
@@ -311,7 +330,7 @@ def han_muc_theo_ngay(
         cte
         + f"""
 SELECT co.name_vi, cr.nutrient, cr.comparator, cr.threshold,
-       cr.is_hard, cr.penalty, cr.severity_min, cr.note
+       cr.is_hard, cr.penalty, cr.severity_min, cr.evidence_level, cr.note
 FROM condition_rules cr
 JOIN dk         ON dk.condition_id = cr.condition_id
 JOIN conditions co ON co.id = cr.condition_id
@@ -346,6 +365,16 @@ class LuatMem:
     penalty: float
     scope: str
     note: str = ""
+    evidence_level: str = "derived"
+
+    @property
+    def dan_duoc_nguon(self) -> bool:
+        """Ngưỡng này có được dẫn như khuyến cáo có nguồn hay không."""
+        return self.evidence_level in DAN_DUOC_NGUON
+
+    @property
+    def nhan_tin_cay(self) -> str:
+        return NHAN_TIN_CAY.get(self.evidence_level, self.evidence_level)
 
     def vi_pham(self, gia_tri: float) -> bool:
         if self.comparator == "lte":
@@ -379,6 +408,7 @@ def luat_mem(cn, dieu_kien: Sequence[DieuKien]) -> list[LuatMem]:
                 penalty=float(d["penalty"]),
                 scope=d["scope"],
                 note=d["note"] or "",
+                evidence_level=d["evidence_level"],
             )
         )
     return ra
@@ -459,6 +489,17 @@ class LyDoLoai:
     #: Số đo của món. `None` nghĩa là **thiếu số liệu**, không phải bằng 0.
     gia_tri: float | None = None
     note: str = ""
+    evidence_level: str = "derived"
+
+    @property
+    def dan_duoc_nguon(self) -> bool:
+        """Ngưỡng này có được dẫn như khuyến cáo có nguồn hay không."""
+        return self.evidence_level in DAN_DUOC_NGUON
+
+    @property
+    def nhan_tin_cay(self) -> str:
+        return NHAN_TIN_CAY.get(self.evidence_level, self.evidence_level)
+
 
     @property
     def thieu_so_lieu(self) -> bool:
@@ -506,7 +547,7 @@ SELECT f.id AS food_id, f.name, f.dish_role,
        {the} AS the,
        {nutrient} AS nutrient, {comparator} AS comparator,
        {nguong} AS nguong, {gia_tri} AS gia_tri,
-       cr.note
+       cr.evidence_level, cr.note
 """
 
 
@@ -649,6 +690,7 @@ WHERE f.is_active = 1
                 nguong=None if d["nguong"] is None else float(d["nguong"]),
                 gia_tri=None if d["gia_tri"] is None else float(d["gia_tri"]),
                 note=d["note"] or "",
+                evidence_level=d["evidence_level"],
             )
         )
     return ket_qua

@@ -619,6 +619,8 @@ CREATE TABLE condition_rules (
     severity_min ENUM('mild','moderate','severe') NOT NULL DEFAULT 'mild',
     is_hard      TINYINT(1)   NOT NULL DEFAULT 1,
     penalty      DECIMAL(4,3) NULL,
+    evidence_level ENUM('definitional','published','derived','unsupported')
+                 NOT NULL DEFAULT 'derived',
     note         VARCHAR(255) NULL,
 
     FOREIGN KEY (condition_id) REFERENCES conditions(id) ON DELETE CASCADE,
@@ -634,6 +636,7 @@ CREATE TABLE condition_rules (
 | `severity_min` | Quy tắc chỉ kích hoạt khi mức độ bệnh của người dùng đạt từ mức này trở lên |
 | `is_hard` | `1` = ràng buộc cứng, loại bỏ ở **Bước 2**. `0` = ràng buộc mềm, trừ điểm ở **Bước 3** |
 | `penalty` | **Hệ số nhân** điểm khi `is_hard = 0` — nhỏ hơn là phạt nặng hơn |
+| `evidence_level` | Mức tin cậy của **ngưỡng**: `definitional` (quy tắc nhãn, không có ngưỡng để dẫn nguồn) · `published` (lấy nguyên từ nguồn đang hiệu lực) · `derived` (suy ra kèm giả thiết) · `unsupported` (không có nguồn đang hiệu lực) |
 
 **Dữ liệu mẫu — đây chính là bảng sẽ in vào báo cáo:**
 

@@ -6,9 +6,9 @@
 -- Tệp này được SINH TỰ ĐỘNG từ mô hình ERD trong BAOCAO/Diagram.mdj
 -- bằng tools/baocao/xuat_sql_tu_erd.py. Sửa sơ đồ rồi chạy lại,
 -- đừng sửa tay vào đây.
--- Ngày sinh tệp: 02/11/2026
+-- Ngày sinh tệp: 07/11/2026
 --
--- 22 bảng · 211 cột · 29 khóa ngoại · 0 dòng dữ liệu
+-- 22 bảng · 212 cột · 29 khóa ngoại · 0 dòng dữ liệu
 -- Trong đó 2 cột là cột DẪN XUẤT, không lưu dữ liệu:
 --   health_profiles.bmi              = cân nặng / bình phương chiều cao
 --   meal_plans.calorie_deviation_pct = % lệch so với hạn mức năng lượng
@@ -147,18 +147,19 @@ CREATE TABLE body_logs (
 -- condition_rules  (phụ thuộc: conditions, tags)
 -- ──────────────────────────────────────────────────────────────────────
 CREATE TABLE condition_rules (
-    id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    condition_id  INT UNSIGNED NOT NULL,
-    rule_type     ENUM('exclude_tag','require_tag','nutrient_limit') NOT NULL,
-    tag_id        INT UNSIGNED NULL,
-    nutrient      ENUM('calories_kcal','protein_g','carbs_g','fat_g','fiber_g','sugar_g','sodium_mg','cholesterol_mg','purine_mg','calcium_mg','iron_mg','zinc_mg','vitamin_a_mcg','vitamin_c_mg') NULL,
-    comparator    ENUM('lte','gte') NULL,
-    threshold     DECIMAL(10,2) NULL,
-    scope         ENUM('per_serving','per_meal','per_day') NOT NULL,
-    severity_min  ENUM('mild','moderate','severe') NOT NULL,
-    is_hard       BIT(1) NOT NULL,
-    penalty       DECIMAL(10,2) NULL,
-    note          VARCHAR(255) NULL,
+    id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    condition_id    INT UNSIGNED NOT NULL,
+    rule_type       ENUM('exclude_tag','require_tag','nutrient_limit') NOT NULL,
+    tag_id          INT UNSIGNED NULL,
+    nutrient        ENUM('calories_kcal','protein_g','carbs_g','fat_g','fiber_g','sugar_g','sodium_mg','cholesterol_mg','purine_mg','calcium_mg','iron_mg','zinc_mg','vitamin_a_mcg','vitamin_c_mg') NULL,
+    comparator      ENUM('lte','gte') NULL,
+    threshold       DECIMAL(10,2) NULL,
+    scope           ENUM('per_serving','per_meal','per_day') NOT NULL,
+    severity_min    ENUM('mild','moderate','severe') NOT NULL,
+    is_hard         BIT(1) NOT NULL,
+    penalty         DECIMAL(10,2) NULL,
+    evidence_level  ENUM('definitional','published','derived','unsupported') NOT NULL,
+    note            VARCHAR(255) NULL,
     PRIMARY KEY (id),
     FOREIGN KEY (condition_id) REFERENCES conditions(id),
     FOREIGN KEY (tag_id) REFERENCES tags(id)
