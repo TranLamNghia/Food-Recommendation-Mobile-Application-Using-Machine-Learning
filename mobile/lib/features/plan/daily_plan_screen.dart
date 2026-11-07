@@ -257,7 +257,7 @@ class _ExplorationNote extends StatelessWidget {
           const Icon(
             Icons.auto_awesome_rounded,
             size: 19,
-            color: AppColors.accent,
+            color: AppColors.accentInk,
           ),
           const SizedBox(width: 12),
           Expanded(

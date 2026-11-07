@@ -92,7 +92,7 @@ class _CalculatingScreenState extends State<CalculatingScreen>
                   strokeCap: StrokeCap.round,
                   value: 0.22,
                   backgroundColor: AppColors.surfaceMuted,
-                  valueColor: AlwaysStoppedAnimation(AppColors.accent),
+                  valueColor: AlwaysStoppedAnimation(AppColors.accentInk),
                 ),
               ),
             ),

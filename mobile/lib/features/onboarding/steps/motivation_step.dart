@@ -78,7 +78,7 @@ class MotivationStep extends StatelessWidget {
                   TextSpan(text: h.before),
                   TextSpan(
                     text: formatNumber(value, digits) + h.unit,
-                    style: const TextStyle(color: AppColors.accent),
+                    style: const TextStyle(color: AppColors.accentInk),
                   ),
                   TextSpan(text: h.after),
                 ],

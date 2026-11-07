@@ -40,7 +40,7 @@ class SurveyIntroScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.accent,
+                    color: AppColors.accentInk,
                   ),
                 ),
               ),

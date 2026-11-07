@@ -332,7 +332,7 @@ class _NextStepNote extends StatelessWidget {
           const Icon(
             Icons.info_outline_rounded,
             size: 20,
-            color: AppColors.accent,
+            color: AppColors.accentInk,
           ),
           const SizedBox(width: 12),
           Expanded(
