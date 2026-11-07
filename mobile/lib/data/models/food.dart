@@ -20,6 +20,7 @@ class Food {
     required this.sodium,
     required this.fiber,
     required this.servingSizeG,
+    this.purine,
     required this.emoji,
     required this.gradient,
     this.imageAsset,
@@ -60,6 +61,19 @@ class Food {
   /// chiều này thu hẹp được 41,7 % khoảng cách tới tập 20 món giàu xơ nhất;
   /// thêm chiều này thì lên 59,7 %.
   final double fiber;
+
+  /// Purin tính bằng miligam trong một suất, **có thể khuyết**.
+  ///
+  /// Kiểu `double?` là cố ý, và `null` KHÔNG phải 0. Bảng thành phần thực
+  /// phẩm chỉ công bố purin cho 70 trong 318 món, nên với 248 món còn lại
+  /// câu trả lời đúng là "không biết", không phải "không có purin".
+  ///
+  /// Trước đây trường này bị bỏ hẳn, với lý do ghi trong
+  /// `NutrientTarget.valueOf`: thêm vào mà coi khuyết là 0 sẽ làm một thực
+  /// đơn chưa từng được kiểm purin hiện ra như đã đạt ngưỡng gút — kiểu sai
+  /// tệ hơn cả báo vi phạm. Nay nó có mặt được vì [DayBudget] **đếm số món
+  /// khuyết số liệu** và nói ra, thay vì cộng chúng thành 0 rồi im lặng.
+  final double? purine;
 
   /// Khối lượng một suất, tính bằng gam. Nguồn: `food_nutrition.serving_size_g`.
   ///

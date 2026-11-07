@@ -41,8 +41,16 @@ AppSession _readySession() {
 /// các `find` sẽ trượt. Đặt khung cao hơn hẳn để toàn bộ thực đơn nằm trong
 /// vùng vẽ, thay vì phải cuộn thủ công qua ba màn hình chồng nhau trong
 /// [IndexedStack].
+/// Khung nhìn cao giả lập, để cả màn dựng xong trong một lần `pump` mà
+/// không phải cuộn.
+///
+/// Chiều cao từng là 2600 px. Màn thực đơn cao thêm khoảng 600 px khi có
+/// thẻ hạn mức theo ngày, đường dẫn sang màn món bị bỏ qua, và một hàng lý
+/// do dưới mỗi suất — nên con số này phải tăng theo, nếu không phép kiểm
+/// "hiện đủ bốn bữa" sẽ sai vì bữa phụ nằm ngoài vùng được dựng chứ không
+/// vì màn hình thiếu nó.
 void _useTallViewport(WidgetTester tester) {
-  tester.view.physicalSize = const Size(412 * 3, 2600 * 3);
+  tester.view.physicalSize = const Size(412 * 3, 3400 * 3);
   tester.view.devicePixelRatio = 3.0;
   addTearDown(tester.view.reset);
 }

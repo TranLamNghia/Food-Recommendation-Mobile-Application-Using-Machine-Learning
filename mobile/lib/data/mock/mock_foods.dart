@@ -46,6 +46,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 0.9,
       servingSizeG: 307,
+      // purin: danh mục không công bố cho món này
       emoji: '🍜',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _broth,
@@ -65,6 +66,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.0,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 287,  // trung vị nhóm 'Món nước': món này chưa có trong danh mục
+      // purin: danh mục không công bố cho món này
       emoji: '🍢',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _warm,
@@ -84,6 +86,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 2.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 200,  // trung vị nhóm 'Cơm': món này chưa có trong danh mục
+      // purin: danh mục không công bố cho món này
       emoji: '🍚',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _warm,
@@ -103,6 +106,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 0.6,
       servingSizeG: 208,
+      purine: 145.1,
       emoji: '🥗',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _fresh,
@@ -122,6 +126,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.3,
       servingSizeG: 190,
+      // purin: danh mục không công bố cho món này
       emoji: '🍲',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _fresh,
@@ -141,6 +146,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 172,
+      // purin: danh mục không công bố cho món này
       emoji: '🥘',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _warm,
@@ -160,6 +166,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 2.1,
       servingSizeG: 224,
+      purine: 114.0,
       emoji: '🥬',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _fresh,
@@ -179,6 +186,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 142,
+      // purin: danh mục không công bố cho món này
       emoji: '🐟',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _warm,
@@ -198,6 +206,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 1.2,
       servingSizeG: 223,
+      purine: 81.9,
       emoji: '🥞',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _grain,
@@ -217,6 +226,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 0.5,
       servingSizeG: 161,
+      purine: 104.7,
       emoji: '🌯',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _grain,
@@ -236,6 +246,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.7,
       servingSizeG: 350,
+      // purin: danh mục không công bố cho món này
       emoji: '🌶️',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _spicy,
@@ -255,6 +266,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 0.1,
       servingSizeG: 322,
+      // purin: danh mục không công bố cho món này
       emoji: '🍜',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _broth,
@@ -274,6 +286,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 2.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 200,  // trung vị nhóm 'Cơm': món này chưa có trong danh mục
+      // purin: danh mục không công bố cho món này
       emoji: '🍗',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _grain,
@@ -293,6 +306,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.4,
       servingSizeG: 202,
+      purine: 4.2,
       emoji: '🥩',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _warm,
@@ -312,6 +326,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 1.2,
       servingSizeG: 248,
+      purine: 110.8,
       emoji: '🍅',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _fresh,
@@ -331,6 +346,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.8,
       servingSizeG: 228,
+      // purin: danh mục không công bố cho món này
       emoji: '🥒',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _fresh,
@@ -350,6 +366,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 0.0,
       servingSizeG: 128,
+      // purin: danh mục không công bố cho món này
       emoji: '🍡',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _warm,
@@ -369,6 +386,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 0.5,
       servingSizeG: 208,
+      purine: 119.0,
       emoji: '🥖',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _grain,
@@ -388,6 +406,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 2.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 200,  // trung vị nhóm 'Cơm': món này chưa có trong danh mục
+      // purin: danh mục không công bố cho món này
       emoji: '🍙',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _grain,
@@ -407,6 +426,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 0.3,
       servingSizeG: 185,
+      // purin: danh mục không công bố cho món này
       emoji: '🥣',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _broth,
@@ -426,6 +446,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.2,
       servingSizeG: 354,
+      // purin: danh mục không công bố cho món này
       emoji: '🍲',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _spicy,
@@ -445,6 +466,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.0,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 200,  // không có nhóm 'Lẩu' trong danh mục; dùng mặc định 200 g
+      // purin: danh mục không công bố cho món này
       emoji: '🦑',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _spicy,
@@ -464,6 +486,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 150,
+      purine: 176.4,
       emoji: '🦐',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _sea,
@@ -483,6 +506,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 138,
+      // purin: danh mục không công bố cho món này
       emoji: '🍗',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _warm,
@@ -502,6 +526,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 1.6,
       servingSizeG: 260,
+      purine: 26.7,
       emoji: '🥗',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _fresh,
@@ -521,6 +546,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 0.1,
       servingSizeG: 135,
+      // purin: danh mục không công bố cho món này
       emoji: '🍳',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _grain,
@@ -540,6 +566,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 1.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 180,  // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
+      // purin: danh mục không công bố cho món này
       emoji: '🍧',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _sweet,
@@ -559,6 +586,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 1.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
       servingSizeG: 180,  // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
+      // purin: danh mục không công bố cho món này
       emoji: '🍮',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _sweet,
@@ -578,6 +606,7 @@ abstract final class MockFoods {
       sodium: 180.0,
       fiber: 1.1,
       servingSizeG: 150,
+      purine: 76.2,
       emoji: '🫓',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _grain,
@@ -597,6 +626,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 3.8,
       servingSizeG: 198,
+      // purin: danh mục không công bố cho món này
       emoji: '🥬',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _fresh,
