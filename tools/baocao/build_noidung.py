@@ -69,7 +69,12 @@ import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from build_us import FONT, W, esc, para, table  # noqa: E402
-from noidung_data import CHUONG1, MO_DAU, TOM_TAT  # noqa: E402
+from noidung_data import (  # noqa: E402
+    CHUONG1,
+    MO_DAU,
+    TAI_LIEU,
+    TOM_TAT,
+)
 
 DOC = pathlib.Path("BAOCAO/BAOCAO_DATN_TranLamNghia.docx")
 
@@ -83,6 +88,20 @@ def chu(text: str) -> str:
 
 def dam(text: str) -> str:
     return para(text, bold=True)
+
+
+#: Danh sách đánh số của phần Tài liệu tham khảo trong biểu mẫu.
+#:
+#: Phải giữ đúng `numId` của tài liệu, nếu không Word coi đây là một danh
+#: sách khác và đánh số lại từ 1 — hoặc nối tiếp số của một danh sách không
+#: liên quan ở nơi khác trong bài.
+NUM_TAI_LIEU = ('<w:numPr><w:ilvl w:val="0"/>'
+                '<w:numId w:val="32"/></w:numPr>')
+
+
+def muc_tai_lieu(text: str) -> str:
+    """Một mục tài liệu tham khảo, style `ListParagraph` có đánh số."""
+    return para(text, "ListParagraph", extra=NUM_TAI_LIEU)
 
 
 def gach(items: list[str]) -> str:
@@ -141,6 +160,8 @@ def dung(khoi: list) -> str:
             out.append(dam(noi))
         elif kieu == "ul":
             out.append(gach(noi))
+        elif kieu == "tl":
+            out.append(muc_tai_lieu(noi))
         elif kieu == "bang":
             out.append(bang(noi))
         else:
@@ -228,8 +249,17 @@ def mu_vao_muc_luc(styles: str) -> str:
     return styles
 
 
-def doan_khop(xml: str, tu: int, style: str | None, chuoi: str):
-    """Biên của đoạn văn đầu tiên từ `tu` trở đi khớp style và chứa `chuoi`."""
+def doan_khop(xml: str, tu: int, style: str | None, chuoi: str | None):
+    """Biên của đoạn văn đầu tiên từ `tu` trở đi khớp style và chứa `chuoi`.
+
+    `chuoi=None` đòi đoạn **rỗng đúng nghĩa**, khác hẳn `chuoi=""`.
+
+    Phân biệt này cần vì `"" in bất_kỳ_chuỗi` luôn đúng: dùng `""` làm mốc
+    cuối thì nó khớp ngay chính đoạn bắt đầu, hoặc đoạn kế tiếp có chữ. Lỗi
+    đó chỉ không lộ ở hai khối Tóm tắt và Mở đầu vì ở đó đoạn mốc cuối mang
+    style riêng, không đoạn nào khác trong vùng có. Khối Tài liệu tham khảo
+    thì mọi đoạn đều là `ListParagraph`, nên phải đòi rỗng thật.
+    """
     for m in DOAN.finditer(xml, tu):
         s = m.group(0)
         if style is not None:
@@ -237,6 +267,10 @@ def doan_khop(xml: str, tu: int, style: str | None, chuoi: str):
             if not st or st.group(1) != style:
                 continue
         txt = "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", s))
+        if chuoi is None:
+            if not txt.strip():
+                return m.start(), m.end()
+            continue
         if chuoi in txt:
             return m.start(), m.end()
     return None
@@ -325,10 +359,19 @@ def _phang(khoi) -> list[str]:
     return [t for t in ra if t]
 
 
-def _vung(txt: list[str], dau: str, cuoi: str) -> list[str] | None:
-    """Các đoạn có chữ nằm giữa hai tiêu đề, không gồm hai tiêu đề."""
+def _vung(txt: list[str], dau: str, cuoi: str | None) -> list[str] | None:
+    """Các đoạn có chữ nằm giữa hai tiêu đề, không gồm hai tiêu đề.
+
+    `cuoi=None` nghĩa là lấy tới hết tài liệu — dùng cho khối cuối cùng,
+    vốn không có tiêu đề nào phía sau.
+    """
     try:
         i = next(j for j, t in enumerate(txt) if t == dau)
+    except StopIteration:
+        return None
+    if cuoi is None:
+        return [t for t in txt[i + 1:] if t]
+    try:
         k = next(j for j, t in enumerate(txt) if j > i and t == cuoi)
     except StopIteration:
         return None
@@ -423,6 +466,7 @@ def main() -> int:
         ("Tóm tắt", TOM_TAT, "TÓM TẮT", "LỜI CẢM ƠN"),
         ("Mở đầu", MO_DAU, "MỞ ĐẦU", "CƠ SỞ LÝ THUYẾT"),
         ("Chương 1 (1.1–1.3)", CHUONG1, "CƠ SỞ LÝ THUYẾT", "User story"),
+        ("Tài liệu tham khảo", TAI_LIEU, "TÀI LIỆU THAM KHẢO", None),
     ))
     print("\n" + "=" * 72)
 
@@ -500,6 +544,24 @@ def main() -> int:
                 ("Heading2", "Giới thiệu")],
                ("Heading2", "User story"),
                dung(CHUONG1))
+
+    # ── TÀI LIỆU THAM KHẢO ──
+    #
+    # Là khối CUỐI tài liệu, nên không có tiêu đề nào phía sau làm mốc. Mốc
+    # cuối là đoạn `ListParagraph` rỗng mà biểu mẫu để lại ngay sau danh sách
+    # mẫu; giữ nó thì phần `sectPr` và đoạn trống cuối bài không bị đụng tới.
+    d_tl = doan_khop(xml, 0, "ML-M-KLHPT", "TÀI LIỆU THAM KHẢO")
+    if not d_tl:
+        sys.exit("DỪNG — không thấy tiêu đề TÀI LIỆU THAM KHẢO.")
+    xml = thay(xml, "Tài liệu tham khảo", d_tl[1],
+               [("ListParagraph", "Tên tác giả"),
+                ("ListParagraph", "Viện Dinh dưỡng Quốc gia")],
+               # Đoạn `ListParagraph` RỖNG mà biểu mẫu để lại sau danh
+               # sách mẫu. Phải là `None` chứ không phải "": mọi đoạn trong
+               # vùng này đều cùng style, nên chuỗi rỗng sẽ khớp ngay đoạn
+               # đầu tiên và không thay được gì.
+               ("ListParagraph", None),
+               dung(TAI_LIEU))
 
     files["word/document.xml"] = xml.encode("utf-8")
     files["word/styles.xml"] = mu_vao_muc_luc(

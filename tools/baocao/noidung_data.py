@@ -623,3 +623,99 @@ CHUONG1 = [
         "các cách làm trên đều bỏ trống.",
     ]),
 ]
+
+
+# ── TÀI LIỆU THAM KHẢO ─────────────────────────────────────────────────────
+#
+# Chỉ gồm nguồn ĐƯỢC NÊU TÊN trong thân bài hoặc được dẫn trong
+# `condition_rules.note` và `rda_reference.source`. Không thêm nguồn cho dày
+# danh sách: một tài liệu có trong đây mà không chỗ nào dùng tới thì hội
+# đồng hỏi là không trả lời được.
+#
+# `tools/check_nguon.py` soát theo chiều ngược lại — mọi nguồn đang dẫn
+# trong CSDL phải có mặt ở đây — nên thêm một quy tắc bệnh lý với nguồn mới
+# mà quên bổ sung thì phép kiểm sai ngay.
+#
+# HAI MỤC CẦN BẠN BỔ SUNG, đã ghi rõ trong ngoặc: năm bản của ADA Standards
+# of Care và phiên bản hướng dẫn gút của Nhật Bản. Tôi không điền số mình
+# không chắc vào tài liệu tham khảo của đồ án.
+TAI_LIEU = [
+    # ── Nguồn số liệu dinh dưỡng ──
+    ("tl",
+     "Viện Dinh dưỡng Quốc gia, Bộ Y tế, “Bảng thành phần thực phẩm Việt "
+     "Nam”, Nhà xuất bản Y học, Hà Nội, 2007."),
+    ("tl",
+     "Viện Dinh dưỡng Quốc gia, Bộ Y tế, “Nhu cầu dinh dưỡng khuyến nghị "
+     "cho người Việt Nam”, 2016."),
+    ("tl",
+     "United States Department of Agriculture, “FoodData Central”, "
+     "https://fdc.nal.usda.gov (bộ dữ liệu SR Legacy và Foundation)."),
+
+    # ── Khuyến nghị và hướng dẫn điều trị ──
+    ("tl",
+     "World Health Organization, “Guideline: Sodium intake for adults and "
+     "children”, Geneva, 2012."),
+    ("tl",
+     "World Health Organization, “Carbohydrate intake for adults and "
+     "children: WHO guideline”, Geneva, 2023."),
+    ("tl",
+     "WHO Expert Consultation, “Appropriate body-mass index for Asian "
+     "populations and its implications for policy and intervention "
+     "strategies”, The Lancet, vol. 363, no. 9403, pp. 157–163, 2004."),
+    ("tl",
+     "Kidney Disease: Improving Global Outcomes (KDIGO), “2024 Clinical "
+     "Practice Guideline for the Evaluation and Management of Chronic Kidney "
+     "Disease”, Kidney International, vol. 105, no. 4S, 2024."),
+    ("tl",
+     "American Diabetes Association, “Standards of Care in Diabetes”, "
+     "Diabetes Care (xuất bản hằng năm) [bổ sung năm bản đã dùng]."),
+    ("tl",
+     "United States Department of Agriculture và Department of Health and "
+     "Human Services, “Dietary Guidelines for Americans 2015–2020”, 8th "
+     "edition, 2015."),
+    ("tl",
+     "American College of Cardiology và American Heart Association, “2019 "
+     "ACC/AHA Guideline on the Primary Prevention of Cardiovascular "
+     "Disease”, Circulation, vol. 140, no. 11, 2019."),
+    ("tl",
+     "Japanese Society of Gout and Uric & Nucleic Acids, “Guideline for the "
+     "Management of Hyperuricemia and Gout” [bổ sung phiên bản và năm]."),
+    ("tl",
+     "M. D. Mifflin, S. T. St Jeor, L. A. Hill, B. J. Scott, S. A. "
+     "Daugherty và Y. O. Koh, “A new predictive equation for resting energy "
+     "expenditure in healthy individuals”, The American Journal of Clinical "
+     "Nutrition, vol. 51, no. 2, pp. 241–247, 1990."),
+
+    # ── Hệ khuyến nghị và học máy ──
+    ("tl",
+     "J. J. Rocchio, “Relevance Feedback in Information Retrieval”, trong "
+     "G. Salton (chủ biên), The SMART Retrieval System: Experiments in "
+     "Automatic Document Processing, Prentice-Hall, pp. 313–323, 1971."),
+    ("tl",
+     "G. Salton, A. Wong và C. S. Yang, “A Vector Space Model for Automatic "
+     "Indexing”, Communications of the ACM, vol. 18, no. 11, pp. 613–620, "
+     "1975."),
+    ("tl",
+     "K. Järvelin và J. Kekäläinen, “Cumulated gain-based evaluation of IR "
+     "techniques”, ACM Transactions on Information Systems, vol. 20, no. 4, "
+     "pp. 422–446, 2002."),
+    ("tl",
+     "E. B. Wilson, “Probable Inference, the Law of Succession, and "
+     "Statistical Inference”, Journal of the American Statistical "
+     "Association, vol. 22, no. 158, pp. 209–212, 1927."),
+    ("tl",
+     "F. Ricci, L. Rokach và B. Shapira (chủ biên), “Recommender Systems "
+     "Handbook”, Springer, 2022."),
+    ("tl",
+     "F. Pedregosa và cộng sự, “Scikit-learn: Machine Learning in Python”, "
+     "Journal of Machine Learning Research, vol. 12, pp. 2825–2830, 2011."),
+
+    # ── Công cụ và nền tảng ──
+    ("tl", "Google, “Flutter documentation”, https://docs.flutter.dev."),
+    ("tl",
+     "Microsoft, “ASP.NET Core documentation”, "
+     "https://learn.microsoft.com/aspnet/core."),
+    ("tl",
+     "Oracle, “MySQL 8.0 Reference Manual”, "
+     "https://dev.mysql.com/doc/refman/8.0/en."),
+]
