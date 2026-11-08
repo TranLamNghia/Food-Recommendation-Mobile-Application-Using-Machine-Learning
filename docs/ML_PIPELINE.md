@@ -196,7 +196,7 @@ ba tầng và mỗi tầng trả lời một loại câu hỏi khác nhau:
 |---|---|---|---|
 | **Bước 2** — lọc F1 theo `condition_rules` | "món này có bị cấm không" | mỗi món / mỗi ngày | **Không loại món nào.** Thích ăn nhiều xơ không phải bệnh lý — xem mục dưới về vì sao lọc cứng ở đây là sai |
 | **Bước 3** — vector + Rocchio | "người này có hợp kiểu món này không" | mỗi món | **Có** — chiều `fiber_g`, và mục tiêu tự khai nhúng thẳng vào `p_u` |
-| **Bước 4** — cái túi đa chiều | "cả ngày đã đủ chưa" | **mỗi ngày** | **Chưa làm** — Bước 4 hiện chỉ bám `kcal` và ba macro |
+| **Bước 4** — cái túi đa chiều | "cả ngày đã đủ chưa" | **mỗi ngày** | **Có** — pha 5 của `menu_builder` thi hành ngưỡng natri và sàn xơ cấp ngày; xem mục 7.0 |
 
 **Mục tiêu tự khai phải tác động ở CẢ BA tầng, không chỉ tầng cuối.** Bản
 trước của mục này viết rằng "phép đo góc cosin không bao giờ trả lời được nó
