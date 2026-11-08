@@ -199,13 +199,80 @@ MO_DAU = [
         "trình và bài báo gốc.",
         "Khảo sát và phân tích hiện trạng: dùng thử và đối chiếu các ứng "
         "dụng dinh dưỡng đang phổ biến để xác định khoảng trống chức năng.",
-        "Phương pháp mô hình hóa: phân tích thiết kế hệ thống theo hướng đối "
-        "tượng với ngôn ngữ UML, thiết kế cơ sở dữ liệu theo mô hình thực "
-        "thể – liên kết.",
+        "Phương pháp mô hình hóa: mô hình hóa cấu trúc hệ thống bằng UML và "
+        "mô hình thực thể – liên kết, mô hình hóa khẩu vị người dùng bằng "
+        "vector đặc trưng, và mô hình hóa bài toán ghép thực đơn thành bài "
+        "toán tối ưu có ràng buộc — xem mục a dưới đây.",
         "Phương pháp thực nghiệm: cài đặt hệ thống, chạy bộ sinh thực đơn "
         "trên tập dữ liệu thật và đo kết quả theo các ngưỡng dinh dưỡng đã "
         "đặt ra, thay vì chỉ mô tả bằng lời.",
     ]),
+
+    ("mda", "Phương pháp mô hình hóa"),
+    ("p",
+     "Hệ thống được mô hình hóa ở ba tầng khác nhau, vì ba câu hỏi cần trả "
+     "lời không cùng một loại. Tầng thứ nhất là cấu trúc: phân tích và thiết "
+     "kế theo hướng đối tượng với UML, còn dữ liệu được mô hình hóa theo mô "
+     "hình thực thể – liên kết rồi hiện thực hóa thành lược đồ quan hệ gồm "
+     "22 bảng, 212 cột, 29 khóa ngoại và 16 ràng buộc kiểm tra. Điểm đáng "
+     "nói ở tầng này là bộ quy tắc bệnh lý được lưu dưới dạng dữ liệu trong "
+     "một bảng riêng chứ không viết cứng trong mã: thêm một "
+     "bệnh lý là thêm dòng, không phải sửa chương trình."),
+    ("p",
+     "Tầng thứ hai là khẩu vị người dùng. Mỗi món ăn được mô hình hóa thành "
+     "một vector 20 chiều gồm ba tỷ lệ năng lượng từ đạm – bột đường – chất "
+     "béo, bốn chiều cảm quan đã chuẩn hóa về đoạn [0, 1] (năng lượng, độ "
+     "ngọt, độ mặn, chất xơ), mức cay, và 12 chiều one-hot cho nhóm món. Sở "
+     "thích của một người được tổng hợp thành một vector cùng không gian đó "
+     "bằng thuật toán Rocchio: hồ sơ là trung bình có trọng số các vector "
+     "món người đó đã đánh giá, với trọng số +1 cho món thích, 0 cho món "
+     "bình thường và −1 cho món không thích; lượt “chưa từng ăn” bị loại "
+     "khỏi cả tử số và mẫu số, vì nó không nói gì về khẩu vị. Độ phù hợp "
+     "giữa người và món là độ tương đồng cosin, đưa về đoạn [0, 1] bằng phép "
+     "(1 + cos) / 2 để dùng chung thang với điểm của mô hình học máy."),
+    ("p",
+     "Vì một người dùng mới chưa để lại hành vi nào, mô hình khuyến nghị "
+     "không phải một mô hình duy nhất mà là bốn giai đoạn chuyển tiếp "
+     "theo số tín hiệu n mà người đó đã cung cấp: giai đoạn nguội (n = 0) "
+     "xếp hạng thuần theo luật dinh dưỡng và độ phổ biến; giai đoạn nội dung "
+     "(0 < n < 30) dùng lọc theo nội dung với hồ sơ Rocchio; giai đoạn pha "
+     "trộn (30 ≤ n ≤ 100) trộn tuyến tính hai nguồn điểm theo hệ số α tăng "
+     "dần đều từ 0 lên 1; giai đoạn học máy (n > 100) để mô hình học máy "
+     "chiếm toàn bộ trọng số. Cách bố trí này cho hệ thống hoạt động được "
+     "ngay từ người dùng đầu tiên thay vì chờ tích lũy dữ liệu, và chuyển "
+     "tiếp mượt thay vì đổi đột ngột khi vừa vượt ngưỡng."),
+    ("p",
+     "Tầng thứ ba là mô hình học máy. Đồ án so sánh ba thuật toán học có "
+     "giám sát — hồi quy logistic, rừng ngẫu nhiên và tăng cường gradient — "
+     "trên cùng một tập đặc trưng gồm thuộc tính người dùng, vector món, độ "
+     "phổ biến của món và các đặc trưng tương tác chéo giữa hồ sơ và món. "
+     "Cả ba được huấn luyện dưới dạng bài toán phân lớp nhị phân nên điểm "
+     "dự đoán của chúng cùng nằm trên thang [0, 1] với điểm cosin, điều kiện "
+     "bắt buộc để phép trộn theo α có nghĩa."),
+    ("p",
+     "Ràng buộc dinh dưỡng được mô hình hóa tách khỏi khẩu vị, theo ba mức "
+     "khác nhau về hệ quả. Ràng buộc cứng theo khẩu phần loại hẳn món khỏi "
+     "tập ứng viên trước mọi phép chấm điểm, nên một món chống chỉ định "
+     "không thể nổi lên nhờ điểm khẩu vị cao. Ràng buộc cứng theo ngày không "
+     "loại món nào mà được thi hành ở bước ghép thực đơn, vì mọi hướng dẫn "
+     "y khoa đều phát biểu theo ngày chứ không theo từng món — chia nhỏ "
+     "xuống mỗi suất là tự đặt ra một ràng buộc chặt hơn nguồn. Ràng buộc "
+     "mềm chỉ nhân điểm với một hệ số nhỏ hơn 1 để hạ bậc món, giữ nó lại "
+     "trong tập ứng viên làm đường xoay xở cho bước tối ưu."),
+    ("p",
+     "Bước ghép thực đơn được mô hình hóa thành bài toán cái túi đa chiều: "
+     "chọn tập món tối đa tổng điểm ưa thích, đồng thời thỏa hạn mức năng "
+     "lượng, ba hạn mức chất sinh năng lượng và các ngưỡng vi chất theo "
+     "ngày, dưới một cấu trúc bữa cho trước. Hàm mục tiêu cộng thêm hai số "
+     "hạng phạt theo độ lệch năng lượng và độ lệch macro so với mục tiêu."),
+    ("p",
+     "Hiệu quả của mô hình được đánh giá bằng kiểm định chéo chia theo người "
+     "dùng — mọi mẫu của một người nằm trọn trong một fold, vì chia "
+     "theo mẫu sẽ để lịch sử của chính người đó rò rỉ sang tập kiểm tra và "
+     "cho ra kết quả đẹp giả. Mô hình được đối chiếu với bốn phương án nền "
+     "(chỉ độ phổ biến, chỉ luật dinh dưỡng, chỉ lọc theo nội dung, và bản "
+     "pha trộn) trên tám chỉ số thuộc ba nhóm: xếp hạng (nDCG@k, Precision@k, "
+     "Recall@k, MAP), hồi quy (MAE, RMSE) và phân lớp (F1, AUC)."),
 
     ("md", "Giải pháp công nghệ"),
     ("ul", [
