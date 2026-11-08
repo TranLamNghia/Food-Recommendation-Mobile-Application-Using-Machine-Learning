@@ -1,5 +1,38 @@
 # -*- coding: utf-8 -*-
-"""Điền Tóm tắt, Nhiệm vụ đồ án, Mở đầu và các mục 1.1 – 1.3 vào báo cáo.
+"""Soát — và chỉ khi được yêu cầu, điền — Tóm tắt, Mở đầu, mục 1.1 – 1.3.
+
+## Vì sao mặc định là SOÁT, không phải ghi
+
+Script này vốn dùng để điền một lần vào biểu mẫu còn trống. Từ đó tới nay
+tác giả soạn tiếp trong Word, và hai bên đã lệch nhau theo CẢ HAI chiều.
+Đo được trên bản báo cáo hiện tại:
+
+    · 9 chỗ sửa chữ trong Tóm tắt và Chương 1
+      ("khởi đầu nguội" -> "cold-start", "cô-sin" -> "cosin", bỏ "về", …)
+    · 1 khẳng định bị XÓA khỏi Tóm tắt vì chưa có cơ sở: cụm "chất lượng gợi
+      ý được đánh giá bằng Precision@K, Recall@K và NDCG" — chưa thu dữ liệu
+      nên chưa có phép đánh giá nào
+    · 2 đoạn bị xóa khỏi Chương 1 ("Khảo sát các ứng dụng tương tự" và gạch
+      đầu dòng của nó)
+    · 2 BẢNG được thêm bằng Word, không có trong `noidung_data.py`
+    · nhãn "Nội dung tóm tắt" bị thay bằng ba dòng định danh
+    · trang NHIỆM VỤ ĐỒ ÁN bị bỏ hẳn khỏi báo cáo — nó là tệp riêng
+
+Chạy script ở chế độ ghi lúc này sẽ **ghi đè toàn bộ những thay đổi đó**.
+Nên mặc định nó chỉ so và báo; muốn ghi thì phải thêm `--ghi`, và nếu còn
+chỗ lệch thì vẫn phải thêm `--chap-nhan-ghi-de` để nói rõ là đã biết.
+
+Giữ script lại dưới dạng công cụ soát vẫn có ích: nó nói cho biết báo cáo và
+`noidung_data.py` đã rời nhau ở đâu, mà không đe dọa tài liệu.
+
+## Khi nào thì nên ghi
+
+Khi thêm một mục HOÀN TOÀN MỚI vào `noidung_data.py` và chưa sửa gì bằng tay
+ở khối đó. Lúc đó chạy `--ghi --chap-nhan-ghi-de`, rồi mở Word soát lại — và
+quan trọng hơn: kéo mọi chỗ lệch mà script báo về `noidung_data.py` TRƯỚC
+khi ghi, nếu không lần ghi này xóa chúng.
+
+## Phần điền (chỉ chạy với --ghi)
 
 Bốn khối, mỗi khối thay đúng phần chỗ trống của biểu mẫu:
 
@@ -26,6 +59,8 @@ Chạy lại được nhiều lần: lần sau tìm thấy nội dung đã sinh 
 lên chính nó.
 """
 import pathlib
+import argparse
+import difflib
 import re
 import shutil
 import sys
@@ -33,7 +68,7 @@ import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from build_us import FONT, W, esc, para, table  # noqa: E402
-from noidung_data import CHUONG1, MO_DAU, NHIEM_VU, TOM_TAT  # noqa: E402
+from noidung_data import CHUONG1, MO_DAU, TOM_TAT  # noqa: E402
 
 DOC = pathlib.Path("BAOCAO/BAOCAO_DATN_TranLamNghia.docx")
 
@@ -246,19 +281,148 @@ def _in_utf8() -> None:
         except Exception:  # pragma: no cover
             pass
 
+
+# ── Soát: báo cáo và noidung_data.py đã rời nhau ở đâu ────────────────────
+
+
+def _chu_doan(p_xml: str) -> str:
+    return "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p_xml)).strip()
+
+
+def _phang(khoi) -> list[str]:
+    """Mọi chuỗi văn bản của một khối dữ liệu, theo thứ tự."""
+    ra: list[str] = []
+    for kieu, noi in khoi:
+        if kieu == "ul":
+            ra.extend(noi)
+        elif kieu == "bang":
+            # Bảng so riêng thì rắc rối mà ít giá trị; bỏ qua ở bước soát.
+            continue
+        elif isinstance(noi, str) and noi:
+            ra.append(noi)
+    return ra
+
+
+def _vung(txt: list[str], dau: str, cuoi: str) -> list[str] | None:
+    """Các đoạn có chữ nằm giữa hai tiêu đề, không gồm hai tiêu đề."""
+    try:
+        i = next(j for j, t in enumerate(txt) if t == dau)
+        k = next(j for j, t in enumerate(txt) if j > i and t == cuoi)
+    except StopIteration:
+        return None
+    return [t for t in txt[i + 1:k] if t]
+
+
+def soat(xml: str, khoi_can_soat) -> int:
+    """So từng khối dữ liệu với báo cáo. Trả về số chỗ lệch.
+
+    Căn chỉnh theo **thứ tự đoạn** bằng `SequenceMatcher`, không theo độ
+    giống từng cặp. Lý do: báo cáo có đoạn bị đổi tên ("khởi đầu nguội" ->
+    "cold-start") lẫn đoạn bị xóa hẳn, và phép so theo độ giống sẽ ghép một
+    đoạn đã xóa với một đoạn khác rồi báo sai hoàn toàn.
+    """
+    txt = [_chu_doan(m.group(0)) for m in DOAN.finditer(xml)]
+    tong = 0
+
+    for ten, khoi, dau, cuoi in khoi_can_soat:
+        a = _phang(khoi)
+        b = _vung(txt, dau, cuoi)
+        if b is None:
+            print(f"\n  [?] {ten}: không xác định được vùng "
+                  f"({dau!r} … {cuoi!r}) — bỏ qua")
+            continue
+
+        sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+        lech = [op for op in sm.get_opcodes() if op[0] != "equal"]
+        if not lech:
+            print(f"\n  [ok] {ten}: khớp hoàn toàn ({len(a)} đoạn)")
+            continue
+
+        print(f"\n  [!] {ten}: {len(lech)} chỗ lệch "
+              f"(data {len(a)} đoạn, báo cáo {len(b)} đoạn)")
+        for tag, i1, i2, j1, j2 in lech:
+            tong += 1
+            if tag == "delete":
+                print(f"        chỉ có trong noidung_data.py — ghi sẽ THÊM lại:")
+                for x in a[i1:i2]:
+                    print(f"          + {x[:68]!r}")
+            elif tag == "insert":
+                print(f"        chỉ có trong báo cáo — ghi sẽ XÓA:")
+                for y in b[j1:j2]:
+                    print(f"          - {y[:68]!r}")
+            else:
+                print("        khác nội dung — ghi sẽ ghi đè bản trong báo cáo:")
+                for x, y in zip(a[i1:i2], b[j1:j2]):
+                    # So tới từng ký tự chỉ có nghĩa khi hai đoạn thật sự là
+                    # một đoạn đã bị sửa. Ghép "Nội dung tóm tắt" với "Tên đề
+                    # tài: …" rồi so ký tự thì ra một mớ vụn vô nghĩa, nên
+                    # dưới ngưỡng này thì in cả hai đoạn nguyên vẹn.
+                    if difflib.SequenceMatcher(None, x, y).ratio() < 0.70:
+                        print(f"          data    : {x[:66]!r}")
+                        print(f"          báo cáo : {y[:66]!r}")
+                        continue
+                    for t, i_1, i_2, j_1, j_2 in difflib.SequenceMatcher(
+                            None, x, y).get_opcodes():
+                        if t == "equal":
+                            continue
+                        print(f"          data    : {x[i_1:i_2][:56]!r}")
+                        print(f"          báo cáo : {y[j_1:j_2][:56]!r}")
+                chung = min(i2 - i1, j2 - j1)
+                for x in a[i1 + chung:i2]:
+                    print(f"          + {x[:68]!r}  (chỉ có trong data)")
+                for y in b[j1 + chung:j2]:
+                    print(f"          - {y[:68]!r}  (chỉ có trong báo cáo)")
+    return tong
+
+
 def main() -> int:
     _in_utf8()
+    bo = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    bo.add_argument(
+        "--ghi", action="store_true",
+        help="thực sự ghi vào .docx; không có thì chỉ soát và báo")
+    bo.add_argument(
+        "--chap-nhan-ghi-de", action="store_true",
+        help="cho phép ghi dù còn chỗ lệch — mọi sửa tay ở các khối đó sẽ MẤT")
+    tham_so = bo.parse_args()
+
     if not DOC.exists():
         sys.exit(f"Không thấy {DOC}")
-    backup = DOC.with_suffix(".docx.bak4")
-    if not backup.exists():
-        shutil.copy2(DOC, backup)
-        print(f"Đã sao lưu -> {backup.name}\n")
 
     with zipfile.ZipFile(DOC) as z:
         names = z.namelist()
         files = {n: z.read(n) for n in names}
     xml = files["word/document.xml"].decode("utf-8")
+
+    # ── Soát trước, luôn luôn ──
+    print(f"Soát {DOC.name} với noidung_data.py")
+    print("=" * 72)
+    so_lech = soat(xml, (
+        ("Tóm tắt", TOM_TAT, "TÓM TẮT", "LỜI CẢM ƠN"),
+        ("Mở đầu", MO_DAU, "MỞ ĐẦU", "CƠ SỞ LÝ THUYẾT"),
+        ("Chương 1 (1.1–1.3)", CHUONG1, "CƠ SỞ LÝ THUYẾT", "User story"),
+    ))
+    print("\n" + "=" * 72)
+
+    if not tham_so.ghi:
+        if so_lech:
+            print(f"{so_lech} chỗ lệch. KHÔNG ghi gì — đây là chế độ soát.")
+            print("Muốn ghi: thêm --ghi --chap-nhan-ghi-de, nhưng hãy kéo mọi")
+            print("chỗ lệch ở trên về noidung_data.py TRƯỚC, nếu không lần ghi")
+            print("này sẽ xóa chúng.")
+            return 1
+        print("Không có chỗ nào lệch. Thêm --ghi nếu muốn ghi lại y nguyên.")
+        return 0
+
+    if so_lech and not tham_so.chap_nhan_ghi_de:
+        sys.exit(
+            f"\nDỪNG — còn {so_lech} chỗ lệch mà chưa khai "
+            "--chap-nhan-ghi-de.\nGhi lúc này sẽ xóa những sửa tay nêu trên.")
+
+    backup = DOC.with_suffix(".docx.bak4")
+    if not backup.exists():
+        shutil.copy2(DOC, backup)
+        print(f"Đã sao lưu -> {backup.name}\n")
 
     def moc(chuoi: str, tu: int = 0) -> int:
         """Vị trí tiêu đề lớn, dùng làm điểm xuất phát cho mỗi khối."""
@@ -272,16 +436,21 @@ def main() -> int:
     # ── TÓM TẮT ──
     xml = bo_tab_cham(xml, moc("TÓM TẮT"))
     xml = thay(xml, "Tóm tắt", moc("TÓM TẮT"),
-               [(None, "{Ví dụ mẫu"), (None, "Nội dung tóm tắt")],
+               # Ứng viên thứ ba cho bản đã sửa tay: nhãn "Nội dung tóm
+               # tắt" bị thay bằng ba dòng định danh, nên mốc đầu giờ là
+               # dòng "Tên đề tài:".
+               [(None, "{Ví dụ mẫu"), (None, "Nội dung tóm tắt"),
+                (None, "Tên đề tài:")],
                ("ML-M-KLHPT", "NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP"),
                dung(TOM_TAT))
 
-    # ── NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP ──
-    xml = thay(xml, "Nhiệm vụ đồ án", moc("NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP"),
-               [(None, "{Trang trắng này dùng để dán bản Nhiệm vụ"),
-                (None, "Giảng viên hướng dẫn:")],
-               ("ML-M-KLHPT", "LỜI NÓI ĐẦU"),
-               dung(NHIEM_VU))
+    # ── NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP — KHÔNG điền nữa ──
+    #
+    # Tiêu đề "NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP" không còn trong báo cáo: thứ tự
+    # hiện tại là NHẬN XÉT → NHẬN XÉT → TÓM TẮT → LỜI CẢM ƠN. Trang đó vốn
+    # để dán bản nhiệm vụ đã ký, và nó đã thành tệp riêng
+    # `BAOCAO/NHIEM_VU_DATN_TranLamNghia.docx`. `NHIEM_VU` trong
+    # `noidung_data.py` giữ lại làm nguồn cho tệp đó, không chèn vào đây.
 
     # ── MỞ ĐẦU ──
     # Mốc cuối là đoạn style TTat-NXet-NVu-LN ngay trước Chương 1; đoạn đó
