@@ -954,6 +954,21 @@ luyện.
 | 8 | Cơ chế 70-30 cấp ngày | **Xong**, có test |
 | 9 | Tính `foods.popularity_score` từ tín hiệu thật | **Xong** — `tools/update_popularity.py`, chờ dữ liệu |
 | 10 | Thu dữ liệu từ người dùng thật | Bộ công cụ **xong**; **dữ liệu chờ thu** — xem §11.3 |
+| 11 | Hạn mức theo ngày từ nhật ký + thực đơn | **Xong** — `ml/han_muc.py` |
+| 12 | Lý do bị F1 loại, ba bậc | **Xong** — `f1_filter.ly_do_loai` |
+| 13 | Thi hành ràng buộc mềm | **Xong** — `scoring.hinh_phat`; phạm vi `per_meal` **chưa có tầng nhận** |
+| 14 | Giải thích gợi ý bằng câu | **Xong** — `serve.dong_gop`, `serve.cau_giai_thich` |
+| 15 | Bốn màn giải thích trong Flutter | **Xong** — `mobile/lib/features/plan/`, `mobile/lib/data/rules/` |
+
+**Mục 1–9 và 11–15 đã xong về mã. Mục 10 là thứ duy nhất còn chặn**, và nó
+không phải việc lập trình: đường ống chạy đầy đủ nhưng trên 0 người dùng, nên
+mọi con số nó sinh ra hiện giờ là của dữ liệu giả. Chạy
+`python -m ml.build_dataset --version v1` lúc này trả về:
+
+```
+tổng                0
+Chưa có tín hiệu nào trong CSDL — không có gì để dựng.
+```
 
 Toàn bộ phần Python nằm ở thư mục `ml/`, chạy theo thứ tự:
 
@@ -974,9 +989,10 @@ ml/dataset.py    — ghép ba khối đặc trưng thành ma trận đầu vào
 ### 12.0 Hai bộ kiểm, và vì sao cần cả hai
 
 ```
-tools/check_ml.py       134 mục · hàm thuần   · KHÔNG cần CSDL
-tools/check_ml_e2e.py    84 mục · cả đường ống · tự dựng CSDL riêng rồi tự xóa
-tools/check_feature_parity.py  →  flutter test (6 mục, đối chiếu Dart ↔ Python)
+tools/check_ml.py       262 mục · hàm thuần   · KHÔNG cần CSDL
+tools/check_ml_e2e.py   190 mục · cả đường ống · tự dựng CSDL riêng rồi tự xóa
+tools/check_contrast.py  20 cặp · tương phản bảng màu theo WCAG 2.1 AA
+cd mobile && flutter test  92 mục, gồm 6 mục đối chiếu Dart ↔ Python
 ```
 
 `check_ml.py` kiểm **ca biên** mà dữ liệu thật không có: cả tập chỉ một mức
