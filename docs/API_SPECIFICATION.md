@@ -584,11 +584,23 @@ Authorization: Bearer <accessToken>
 > đăng ký. Mục 7.1.2 đã giữ nguyên tắc đó cho đăng nhập; chỗ này phải giữ y hệt,
 > nếu không bịt một lối mà để hở lối kia thì coi như không bịt.
 
-> **Cần một bảng mới trong CSDL.** Mã đặt lại phải lưu được: một dòng gồm mã đã
-> băm, `user_id`, thời điểm hết hạn và thời điểm đã dùng. Lưu thẳng vào `users`
-> thì mỗi người chỉ có một mã sống và cột đó rỗng với gần như mọi dòng. Bảng
-> `password_resets` **chưa có trong `db/schema.sql`** — phải thêm trước khi
-> hiện thực nhóm này.
+> **Mã lưu trong bảng `password_resets`** (lược đồ ở DATABASE_DESIGN 3.6): mã
+> đã băm, `user_id`, thời điểm hết hạn, thời điểm đã dùng. Một bảng riêng chứ
+> không phải bốn cột trong `users`, để bấm "Gửi lại" không giết mã trong email
+> trước đó.
+
+> **Mã phải sinh bằng `SecureRandom`, 32 byte — không bằng `UUID()`.** `UUID()`
+> của MySQL là phiên bản 1, ghép từ thời điểm và địa chỉ MAC máy chủ, nên đoán
+> được: ai biết thời điểm gửi email là thu hẹp được không gian tìm kiếm xuống
+> còn vài nghìn khả năng. Nó chỉ đủ dùng cho cột `id`.
+
+> **Chỉ lưu mã đã băm** (SHA-256). Ai đọc được bảng đó mà mã nằm nguyên trong
+> đó thì đổi được mật khẩu của mọi tài khoản đang có mã sống.
+
+> Giới hạn 3 lần trong 15 phút đếm được từ `(user_id, created_at)`, nhưng nó
+> **chỉ che được email đã đăng ký**: email lạ không sinh dòng nào — cố ý, vì lưu
+> mọi địa chỉ người lạ nhập vào là tự dựng một danh sách email mà hệ thống không
+> cần. Nhóm đó phải giới hạn theo địa chỉ IP, ở tầng trước CSDL.
 
 ---
 
@@ -2061,12 +2073,12 @@ Bước dựng tập huấn luyện lấy đánh giá **gần nhất tính đế
 
 | Trường | Kiểu | Bắt buộc | Ràng buộc |
 |---|---|---|---|
-| `logDate` | date | ✗ | Mặc định hôm nay, không nhận ngày tương lai |
+| `loggedOn` | date | ✗ | Mặc định hôm nay, không nhận ngày tương lai |
 | `weightKg` | number | ✔ | 20 – 300 |
 | `note` | string | ✗ | Tối đa 255 ký tự |
 
 ```json
-{ "logDate": "2026-11-20", "weightKg": 68.5 }
+{ "loggedOn": "2026-11-20", "weightKg": 68.5 }
 ```
 
 **Response `201 Created`**
@@ -2074,7 +2086,7 @@ Bước dựng tập huấn luyện lấy đánh giá **gần nhất tính đế
 ```json
 {
   "id": "00000011-0000-4000-8000-000000000000",
-  "logDate": "2026-11-20",
+  "loggedOn": "2026-11-20",
   "weightKg": 68.5,
   "bmi": 22.4,
   "bmiCategory": "normal",
@@ -2091,7 +2103,7 @@ Bước dựng tập huấn luyện lấy đánh giá **gần nhất tính đế
 | `400` | `VALIDATION_FAILED` | Cân nặng ngoài 20–300, hoặc ngày ở tương lai |
 
 > **Mỗi ngày một dòng, ghi lại thì thay giá trị cũ.** Khóa là cặp
-> `(user_id, log_date)`. Cân ba lần trong ngày mà lưu cả ba thì đường tiến
+> `(user_id, logged_on)`. Cân ba lần trong ngày mà lưu cả ba thì đường tiến
 > triển có ba điểm cho một ngày, và dao động trong ngày — vốn phần lớn là
 > nước — đọc ra thành xu hướng.
 
@@ -2177,13 +2189,20 @@ thêm `missingNutrients` liệt kê những cột đang `NULL`.
   "byStage": { "cold": 4, "content": 18, "hybrid": 5, "ml": 0 },
   "onboardingCompletionPct": 85.2,
   "signalsByWeek": [ { "week": "2026-W46", "count": 412 } ],
-  "bySignalSource": { "rating": 96, "diary": 180, "onboarding_swipe": 1080 },
+  "bySignalSource": { "feedback": 96, "diary": 180, "swipe": 1080,
+                      "plan_kept": 210, "plan_replaced": 34,
+                      "plan_skipped": 18, "random_neg": 0 },
   "topConditions": [ { "conditionName": "Đái tháo đường type 2", "users": 6 } ]
 }
 ```
 
 > **Ẩn danh, không ngoại lệ.** Endpoint này trả số đếm, không trả email, họ tên
 > hay số đo. Ai cần xem một tài khoản cụ thể thì dùng 7.11.3.
+
+> Khóa của `bySignalSource` là **bảy giá trị của `ml_training_samples.source`**,
+> không phải tên do giao diện tự đặt. Bản trước của mục này viết `rating` và
+> `onboarding_swipe` — hai chuỗi không nằm trong ENUM đó, nên trang quản trị
+> đọc theo sẽ thấy mọi ô bằng `0` mà không có lỗi nào được báo.
 
 > Không người dùng nào trong khoảng đã chọn thì trả các số đếm bằng `0` kèm
 > `"empty": true`, để trang quản trị hiện bảng rỗng thay vì vẽ biểu đồ từ không
@@ -2472,7 +2491,7 @@ Thứ tự hiện thực đề xuất, theo mức độ phụ thuộc:
 | 4 | Khảo sát khẩu vị (2 endpoint) | Cần ML Service dựng vector sở thích |
 | 5 | Thực đơn | Cần đủ Bước 1 → Bước 4 |
 | 6 | Nhật ký + Đánh giá + Thống kê + Ghi cân nặng | Phụ thuộc thực đơn |
-| 7 | Quên / đổi mật khẩu | Cần bảng `password_resets` và dịch vụ gửi email — hai thứ chưa có |
+| 7 | Quên / đổi mật khẩu | Bảng `password_resets` đã có; còn thiếu dịch vụ gửi email |
 | 8 | Nhóm quản trị | Không màn hình người dùng nào chờ nó; làm cuối cùng |
 
 ### 10.3 Quy tắc bất di bất dịch

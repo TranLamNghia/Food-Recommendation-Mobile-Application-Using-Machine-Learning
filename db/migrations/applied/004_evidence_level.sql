@@ -43,7 +43,7 @@
 -- làm mặc định sẽ khiến mọi luật mới tự nhận là có nguồn.
 --
 -- Chạy:
---     python tools/run_sql.py db/migrations/004_evidence_level.sql --apply
+--     python tools/run_sql.py db/migrations/004_evidence_level.sql \n--            --database nutrition_rec
 -- ════════════════════════════════════════════════════════════════════════
 
 USE nutrition_rec;

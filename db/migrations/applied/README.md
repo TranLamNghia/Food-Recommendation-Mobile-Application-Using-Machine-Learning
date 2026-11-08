@@ -9,6 +9,8 @@ làm lịch sử thay đổi, không chạy nữa — chạy lại sẽ báo l�
 | `001_dataset_readiness.sql` | `dish_role` 5→7 giá trị · 4 cột dinh dưỡng cho NULL · thêm `source_url` · nhãn `high_purine` |
 | `002_food_name_unique.sql` | `UNIQUE (foods.name)` |
 | `003_null_breaks_unique.sql` | Ba khóa `UNIQUE` không chặn trùng vì có cột `NULL` — thêm cột sinh `foods.owner_key`, `rda_reference.qualifier_key`; `ml_evaluations.k_value`/`fold` thành `NOT NULL DEFAULT 0` |
+| `004_evidence_level.sql` | `condition_rules.evidence_level` 4 giá trị + `chk_rule_evidence` |
+| `005_password_resets.sql` | Bảng `password_resets` cho luồng Quên mật khẩu — lược đồ 22 → 23 bảng |
 
 Nguyên tắc từ nay: **`db/schema.sql` luôn là trạng thái hiện hành**. Dựng CSDL
 mới thì chạy `schema.sql` rồi `seed.sql`, không cần đụng tới thư mục này.

@@ -89,8 +89,8 @@ Tầng 0 — không phụ thuộc bảng nào
     users, conditions, food_categories, tags, rda_reference, ml_models
 
 Tầng 1
-    health_profiles, body_logs, user_conditions, foods, condition_rules,
-    user_preference_profiles
+    health_profiles, body_logs, password_resets, user_conditions, foods,
+    condition_rules, user_preference_profiles
 
 Tầng 2
     food_nutrition, food_tags, meal_plans, recommendations,
@@ -291,6 +291,54 @@ CREATE TABLE user_conditions (
 | `severity` | Mức độ — cho phép áp quy tắc chặt hay lỏng tùy tình trạng |
 
 > `severity` kết hợp với `condition_rules.severity_min`: một người tăng huyết áp mức nhẹ và một người mức nặng sẽ chịu ngưỡng natri khác nhau.
+
+---
+
+## 3.6 `password_resets` — Mã đặt lại mật khẩu
+
+```sql
+CREATE TABLE password_resets (
+    id          CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
+    token_hash  CHAR(64) NOT NULL,
+    expires_at  DATETIME NOT NULL,
+    used_at     DATETIME NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_reset_window CHECK (expires_at > created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+
+    UNIQUE KEY uq_reset_token (token_hash),
+    INDEX idx_reset_user_time (user_id, created_at)
+) ENGINE=InnoDB;
+```
+
+**Bài toán mà bảng này giải.** Luồng "Quên mật khẩu" có một nghịch lý: để đổi mật khẩu thì phải chứng minh mình là chủ tài khoản, mà bằng chứng duy nhất hệ thống có — chính mật khẩu — thì người dùng không nhớ. Nên hệ thống tạm thay nó bằng một bằng chứng khác: **quyền đọc hộp thư đã đăng ký**. Mã đặt lại là bằng chứng đó.
+
+| | |
+|---|---|
+| `POST /auth/forgot-password` | Sinh mã, băm, chèn một dòng, gửi liên kết chứa mã gốc vào email |
+| `POST /auth/reset-password` | Nhận mã gốc, băm lại, tra `token_hash`, kiểm `expires_at` và `used_at`, đổi mật khẩu, ghi `used_at` |
+
+**Vì sao một bảng riêng thay vì bốn cột trong `users`.** Một mã gồm bốn thứ: mã đã băm, thuộc về ai, hết hạn lúc nào, đã dùng chưa. Nhồi cả bốn vào `users` thì:
+
+- **Mỗi người chỉ có một mã sống được.** Email đến chậm nên người ta bấm "Gửi lại" là chuyện thường — và lúc đó mã trong email thứ nhất chết, trong khi đó mới là email họ đang mở.
+- **Bốn cột ấy rỗng với gần như mọi dòng.** Tại một thời điểm chỉ vài người đang đặt lại mật khẩu trong số hàng trăm tài khoản.
+- **Không có lịch sử.** Một tài khoản bị xin mã 50 lần trong một phút là dấu hiệu bị dò, mà cột bị ghi đè thì không nhìn thấy điều đó.
+
+**Vì sao lưu mã đã băm.** Lý do giống hệt chỗ `users.password_hash`: ai đọc được bảng này mà mã nằm nguyên trong đó thì đổi được mật khẩu của **mọi** tài khoản đang có mã sống. Băm thì bảng đó vô dụng với họ. Không truy vấn nào cần mã gốc, vì người dùng luôn nộp lại nó từ liên kết trong email.
+
+Dùng SHA-256 chứ không BCrypt, có chủ ý. BCrypt cố ý chậm để chống dò **mật khẩu do người đặt** — thứ có entropy thấp và nằm trong từ điển. Mã ở đây là 32 byte ngẫu nhiên, không dò được bằng từ điển, nên cái chậm đó chỉ còn là chi phí trên mỗi lượt gọi.
+
+**Mã phải sinh bằng bộ sinh số ngẫu nhiên mật mã.** Cột `id` dùng `UUID()` của MySQL, và điều đó **chỉ** đúng cho một khóa chính. `UUID()` sinh UUID phiên bản 1 — ghép từ thời điểm và địa chỉ MAC của máy chủ, nên đoán được. Dùng nó làm mã đặt lại thì ai biết thời điểm gửi email là thu hẹp được không gian tìm kiếm xuống còn vài nghìn khả năng. Backend phải dùng `SecureRandom`, 32 byte.
+
+**Vì sao `used_at` chứ không phải xóa dòng.** Mã dùng được đúng một lần. Nhưng đánh dấu đã dùng và xóa dòng đi không tương đương: một mã bị nộp **hai lần** là dấu hiệu liên kết đã rò ra ngoài, và nếu dòng đã bị xóa thì lần thứ hai không phân biệt được với một mã bịa.
+
+**`CHECK (expires_at > created_at)`.** Một mã hết hạn trước khi được tạo là chết ngay khi sinh ra, và lỗi đó không báo gì — người dùng chỉ thấy "mã không hợp lệ" với mọi mã, và không ai nối được hiện tượng ấy với một phép tính thời gian sai ở Backend.
+
+**Giới hạn số lần xin mã, và chỗ nó không che được.** `INDEX (user_id, created_at)` tồn tại để đếm số lần xin mã gần đây của một tài khoản, phục vụ mức `429 RATE_LIMITED`. Nhưng phép giới hạn này **chỉ che được email đã đăng ký**: email không có trong hệ thống không sinh dòng nào — cố ý, vì lưu lại mọi địa chỉ người lạ nhập vào là tự dựng một danh sách email mà hệ thống không cần. Nhóm đó phải giới hạn ở tầng trước CSDL, theo địa chỉ IP.
+
+**Dọn dòng cũ.** Mã sống 15 phút, nên gần như mọi dòng trong bảng này là rác sau một giờ. Xóa những dòng đã hết hạn **trên bảy ngày** bằng một việc định kỳ; giữ lại bảy ngày để còn tra được khi có nghi vấn về truy cập.
 
 ---
 

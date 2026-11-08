@@ -3,7 +3,7 @@
 --  Đồ án tốt nghiệp — Trần Lâm Nghĩa (22115053122231)
 --
 --  MySQL 8.x · InnoDB · utf8mb4_unicode_ci
---  22 bảng · 29 khóa ngoại · 16 ràng buộc CHECK
+--  23 bảng · 30 khóa ngoại · 17 ràng buộc CHECK
 --
 --  LƯU Ý: trong MySQL 8, tên ràng buộc CHECK phải duy nhất trên TOÀN CSDL,
 --  không phải trên từng bảng. Đặt trùng tên ở hai bảng khác nhau sẽ báo lỗi
@@ -189,6 +189,55 @@ CREATE TABLE ml_models (
 -- ╔═════════════════════════════════════════════════════════════════════════╗
 -- ║  TẦNG 1                                                                 ║
 -- ╚═════════════════════════════════════════════════════════════════════════╝
+
+-- ── password_resets ───────────────────────────────────────────────────────
+-- Mã đặt lại mật khẩu cho luồng "Quên mật khẩu" (API 7.1.5-7.1.6).
+--
+-- Người quên mật khẩu không chứng minh được mình là chủ tài khoản bằng thứ
+-- duy nhất hệ thống có — chính mật khẩu. Nên hệ thống tạm thay nó bằng quyền
+-- đọc hộp thư đã đăng ký; mã trong bảng này là bằng chứng đó.
+--
+-- Một bảng riêng chứ không phải bốn cột trong `users`: mỗi lần xin mã là một
+-- dòng, nên bấm "Gửi lại" không giết mã trong email trước đó, và 50 lần xin
+-- mã trong một phút nhìn thấy được thay vì bị ghi đè.
+--
+-- LƯU MÃ ĐÃ BĂM. Ai đọc được bảng này mà mã nằm nguyên trong đó thì đổi được
+-- mật khẩu của mọi tài khoản đang có mã sống.
+--
+-- Mã PHẢI do Backend sinh bằng `SecureRandom` (32 byte), KHÔNG bằng `UUID()`.
+-- `UUID()` của MySQL là phiên bản 1 — ghép từ thời điểm và địa chỉ MAC máy
+-- chủ, nên đoán được; nó chỉ đủ dùng cho cột `id`.
+CREATE TABLE password_resets (
+    id          CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
+
+    -- SHA-256 ở dạng hex: luôn đúng 64 ký tự, nên CHAR chứ không VARCHAR.
+    -- SHA-256 chứ không BCrypt: BCrypt cố ý chậm để chống dò mật khẩu do
+    -- người đặt, còn mã này là 32 byte ngẫu nhiên nên cái chậm đó vô ích.
+    token_hash  CHAR(64) NOT NULL,
+
+    expires_at  DATETIME NOT NULL,
+
+    -- NULL = chưa dùng. Dùng rồi thì ghi thời điểm chứ không xóa dòng: một mã
+    -- bị nộp hai lần là dấu hiệu liên kết đã rò ra ngoài, và xóa dòng đi thì
+    -- lần thứ hai không phân biệt được với mã bịa.
+    used_at     DATETIME NULL,
+
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_reset_window CHECK (expires_at > created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+
+    UNIQUE KEY uq_reset_token (token_hash),
+
+    -- Đếm số lần xin mã gần đây của một tài khoản, cho mức 429 RATE_LIMITED.
+    -- Giới hạn này chỉ che được email ĐÃ đăng ký: email không có trong hệ
+    -- thống không sinh dòng nào — cố ý, vì lưu mọi địa chỉ người lạ nhập vào
+    -- là tự dựng một danh sách email mà hệ thống không cần. Nhóm đó phải giới
+    -- hạn ở tầng trước CSDL, theo địa chỉ IP.
+    INDEX idx_reset_user_time (user_id, created_at)
+) ENGINE=InnoDB;
+
 
 -- ── health_profiles ───────────────────────────────────────────────────────
 CREATE TABLE health_profiles (

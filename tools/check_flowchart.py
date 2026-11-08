@@ -14,11 +14,19 @@ chính bộ sơ đồ vừa vẽ: `EMAIL_EXISTS` trong khi danh mục ghi
 `NOT_FOUND`, và ba mã nữa. Không mã nào gây lỗi gì — đó mới là lý do phải
 kiểm bằng máy.
 
-BỐN PHÉP KIỂM
+NĂM PHÉP KIỂM
     1. endpoint  sơ đồ -> đặc tả    mọi `METHOD /path` phải có trong §6
     2. mã lỗi    sơ đồ -> đặc tả    mọi mã phải có trong danh mục §4
     3. tên bảng  sơ đồ -> CSDL      mọi bảng phải có trong db/schema.sql
-    4. con số    đặc tả -> đặc tả   "N endpoint công khai" phải bằng số dòng
+    4. tên cột   sơ đồ -> CSDL      mọi cột phải có trong bảng đi kèm
+    5. con số    đặc tả -> đặc tả   "N endpoint công khai" phải bằng số dòng
+
+Phép thứ tư thêm sau, vì phép thứ ba để lọt đúng kiểu lỗi nó sinh ra để
+bắt. Sơ đồ viết `ORDER BY log_date` và `UPSERT body_logs theo (user_id,
+log_date)`, trong khi cột thật tên `logged_on`; đặc tả API cũng đã trả
+một trường `logDate` không ứng với cột nào. Tên BẢNG đúng nên phép thứ
+ba cho qua — và một truy vấn có tên bảng đúng với tên cột bịa vẫn đọc ra
+trôi chảy, nó chỉ không chạy được.
 
 Chạy:
     python tools/check_flowchart.py
@@ -57,6 +65,55 @@ RE_BANG_SQL = re.compile(
 
 #: Tên bảng nêu trong văn xuôi của khối, ví dụ "Đọc foods, food_nutrition".
 RE_BANG_VAN = re.compile(r"\b([a-z]+(?:_[a-z]+)+)\b")
+
+#: Từ khóa mở đầu một khai báo kiểu, để phân biệt dòng khai báo cột với dòng
+#: nối tiếp của một ENUM nhiều dòng hay một biểu thức CHECK.
+TU_KHOA_KIEU = (
+    "BIGINT", "INT", "SMALLINT", "TINYINT", "MEDIUMINT", "DECIMAL", "NUMERIC",
+    "FLOAT", "DOUBLE", "VARCHAR", "CHAR", "TEXT", "LONGTEXT", "MEDIUMTEXT",
+    "JSON", "ENUM", "SET", "DATE", "DATETIME", "TIMESTAMP", "TIME", "YEAR",
+    "BOOLEAN", "BOOL", "BLOB", "BINARY",
+)
+
+#: Chuỗi snake_case trong khối mà KHÔNG phải tên cột: tên trường JSON của API,
+#: hoặc một từ ghép dùng trong câu văn.
+BO_QUA_COT = {
+    "access_token", "refresh_token", "reset_token",
+}
+
+# Tên cột MỘT TỪ không lọt qua `RE_BANG_VAN` được, vì mẫu đó đòi ít nhất một
+# gạch dưới để không bắt mọi từ tiếng Anh trong câu văn. Đúng khoảng trống đó
+# đã để `interactions (source = ...)` đi qua: `source` không có gạch dưới, và
+# `interactions` KHÔNG CÓ cột nào tên vậy — cột thật là `action`.
+#
+# Nên thay vì nới mẫu tên (sẽ bắt cả "theo", "đã", "món"), ba mẫu dưới đây
+# bắt theo VỊ TRÍ CÚ PHÁP: chỗ nào trong một câu SQL thì một định danh chữ
+# thường chỉ có thể là tên cột. Từ khóa SQL viết hoa trong mọi sơ đồ nên mẫu
+# phân biệt hoa thường tự loại chúng, không cần danh sách từ khóa.
+
+#: `cot = ...`, `cot >= ...` — vế trái của một phép so sánh hoặc phép gán.
+RE_COT_SS = re.compile(r"\b([a-z][a-z0-9_]*)\s*(?:=|<>|!=|<=|>=|<|>)")
+
+#: `SELECT a, b, c FROM` — danh sách cột được chọn.
+RE_COT_SELECT = re.compile(r"\bSELECT\s+(.+?)\s+FROM\b")
+
+#: `INSERT INTO bang (a, b)` · `UPSERT bang (a, b)` — danh sách trong ngoặc.
+RE_COT_NGOAC = re.compile(
+    r"\b(?:INSERT INTO|UPSERT|UPDATE)\s+[a-z_][a-z0-9_]*\s*\((.+?)\)")
+
+#: `ORDER BY a, b` · `GROUP BY a` — chỉ nhận danh sách định danh ngăn bằng
+#: dấu phẩy, không nhận phần câu văn đứng sau. `SET` không cần mẫu riêng vì
+#: `RE_COT_SS` đã bắt vế trái của mỗi phép gán.
+RE_COT_SAU = re.compile(
+    r"\b(?:ORDER BY|GROUP BY)\s+"
+    r"([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)*)")
+
+#: Chuỗi trong dấu nháy đơn: GIÁ TRỊ, không phải tên cột. Gỡ trước khi bóc
+#: ứng viên, nếu không `(role = 'user')` sẽ cho ra một "cột" tên `user`.
+RE_HANG_CHU = re.compile(r"'[^']*'")
+
+#: Một phần tử trong danh sách cột: bỏ `*`, hằng số, dấu hỏi tham số.
+RE_DINH_DANH = re.compile(r"\b([a-z][a-z0-9_]*)\b")
 
 
 def chu_cac_khoi() -> list[tuple[str, str]]:
@@ -131,6 +188,73 @@ def kiem_bang(schema: str) -> list[str]:
     return loi
 
 
+def _cot_cua_bang(schema: str) -> dict[str, set[str]]:
+    """{tên bảng: tập tên cột} bóc từ db/schema.sql.
+
+    Không cần bóc kiểu hay ràng buộc — `tools/check_schema_sql.py` đã so từng
+    cột với CSDL thật. Ở đây chỉ cần biết một tên cột CÓ hay KHÔNG.
+    """
+    out: dict[str, set[str]] = {}
+    for m in re.finditer(r"CREATE TABLE (\w+)\s*\((.*?)\n\) ENGINE",
+                         schema, re.S):
+        ten, than = m.group(1), m.group(2)
+        cot = set()
+        for dong in than.split("\n"):
+            dong = dong.split("--")[0].strip()
+            phan = dong.split(None, 1)
+            if len(phan) < 2:
+                continue
+            if not re.fullmatch(r"[a-z_][a-z0-9_]*", phan[0]):
+                continue
+            if not phan[1].upper().startswith(TU_KHOA_KIEU):
+                continue
+            cot.add(phan[0])
+        out[ten] = cot
+    return out
+
+
+def kiem_cot(schema: str) -> list[str]:
+    """Mọi tên cột nêu trong một khối phải có trong bảng khối đó nhắc tới.
+
+    Phạm vi cố ý hẹp: chỉ xét khối nêu ĐÚNG MỘT bảng. Khối nêu hai bảng trở
+    lên là một phép JOIN, và ở đó một tên cột có thật ở bảng này mà không có ở
+    bảng kia vẫn hoàn toàn đúng — phép kiểm sẽ báo nhầm. Hẹp mà im lặng tốt
+    hơn rộng mà phải nuôi một danh sách ngoại lệ.
+    """
+    bang_cot = _cot_cua_bang(schema)
+    loi = []
+    da_xet = 0
+    for ma, chu in chu_cac_khoi():
+        if DAU_DE_XUAT in chu:
+            continue
+        bang = {x for x in RE_BANG_SQL.findall(chu) if x in bang_cot}
+        bang |= {x for x in RE_BANG_VAN.findall(chu) if x in bang_cot}
+        if len(bang) != 1:
+            continue
+        ten = bang.pop()
+        da_xet += 1
+
+        # Gỡ giá trị trong dấu nháy trước khi bóc: chúng không phải tên cột.
+        khong_nhay = RE_HANG_CHU.sub(" ", chu)
+
+        # Ứng viên 1 — mọi chuỗi snake_case trong khối.
+        ung = set(RE_BANG_VAN.findall(khong_nhay))
+        # Ứng viên 2 — định danh ở một vị trí cú pháp chỉ dành cho tên cột.
+        ung |= set(RE_COT_SS.findall(khong_nhay))
+        for mau in (RE_COT_SELECT, RE_COT_NGOAC, RE_COT_SAU):
+            for danh_sach in mau.findall(khong_nhay):
+                ung |= set(RE_DINH_DANH.findall(danh_sach))
+
+        for x in sorted(ung):
+            if x == ten or x in bang_cot or x in BO_QUA_COT:
+                continue
+            if x not in bang_cot[ten]:
+                loi.append(f"{ma}: sơ đồ nêu {x!r} như cột của {ten!r} mà "
+                           "bảng đó không có cột nào tên vậy")
+    print(f"   {da_xet} khối nêu đúng một bảng, đã soát tên cột trong đó")
+    return loi
+
+
 def kiem_con_so(spec: str) -> list[str]:
     m = re.search(r"\*\*(\d+) endpoint công khai \+ (\d+) endpoint nội bộ",
                   spec)
@@ -185,10 +309,12 @@ def main() -> int:
     loi += kiem_ma_loi(spec)
     print("\n3. Tên bảng trong sơ đồ phải có trong db/schema.sql")
     loi += kiem_bang(schema)
-    print("\n4. Con số khai ở mục 6 phải khớp số dòng")
+    print("\n4. Tên cột trong sơ đồ phải có trong bảng của nó")
+    loi += kiem_cot(schema)
+    print("\n5. Con số khai ở mục 6 phải khớp số dòng")
     loi += kiem_con_so(spec)
 
-    print("\n5. Còn chờ bổ sung")
+    print("\n6. Còn chờ bổ sung")
     cho = [(ma, chu) for ma, chu in chu_cac_khoi() if DAU_DE_XUAT in chu]
     for ma, chu in cho:
         print(f"   ! {ma}  {chu}")
@@ -203,7 +329,7 @@ def main() -> int:
         return 1
     print("Sơ đồ, đặc tả API và lược đồ CSDL mô tả cùng một hệ thống.")
     if cho:
-        print(f"Còn {len(cho)} chỗ chờ bổ sung — xem mục 5.")
+        print(f"Còn {len(cho)} chỗ chờ bổ sung — xem mục 6.")
     return 0
 
 

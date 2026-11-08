@@ -52,10 +52,10 @@ SANDBOX = "nutrition_rec_buildtest"
 # Số liệu mong đợi. Đối chiếu chứ không chỉ in ra, vì một thay đổi lược đồ
 # ngoài ý muốn thường chỉ lệch đúng một con số — in ra thì rất dễ đọc qua.
 EXPECTED = {
-    "tables": 22,
-    "fk_columns": 29,
-    "checks": 16,
-    "columns": 212,
+    "tables": 23,
+    "fk_columns": 30,
+    "checks": 17,
+    "columns": 218,
 }
 
 LOOKUP_ROWS = {
