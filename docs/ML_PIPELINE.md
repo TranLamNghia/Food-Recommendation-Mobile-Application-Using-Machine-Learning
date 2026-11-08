@@ -992,6 +992,7 @@ ml/dataset.py    — ghép ba khối đặc trưng thành ma trận đầu vào
 tools/check_ml.py       262 mục · hàm thuần   · KHÔNG cần CSDL
 tools/check_ml_e2e.py   190 mục · cả đường ống · tự dựng CSDL riêng rồi tự xóa
 tools/check_contrast.py  20 cặp · tương phản bảng màu theo WCAG 2.1 AA
+tools/check_flowchart.py 4 phép · sơ đồ ↔ đặc tả API ↔ lược đồ CSDL
 cd mobile && flutter test  92 mục, gồm 6 mục đối chiếu Dart ↔ Python
 ```
 

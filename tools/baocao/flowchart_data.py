@@ -10,16 +10,23 @@ MỤC ĐÍCH: chuẩn hóa phần backend TRƯỚC khi viết mã. Mỗi khối 
 Nhờ vậy đếm được khối là đếm được việc, và chỗ nào chưa có endpoint thì lộ
 ra ngay thay vì lộ ra lúc đang viết controller.
 
-TÁM USE CASE CHƯA CÓ ENDPOINT TRONG `docs/API_SPECIFICATION.md`
---------------------------------------------------------------
-Bản đặc tả hiện có 30 endpoint công khai, phủ 10 use case. Tám use case còn
-lại chưa có đường dẫn nào, và sơ đồ của chúng ghi rõ **(đề xuất)** ở khối
-gọi API. Đó không phải chú thích cho đẹp: nó là danh sách endpoint phải bổ
-sung vào đặc tả, và `tools/check_flowchart.py` đếm lại con số này mỗi lần
-chạy nên nó không âm thầm sai đi.
+MƯỜI BA ENDPOINT MÀ BỘ SƠ ĐỒ NÀY ĐÃ LÔI RA
+-------------------------------------------
+Lúc vẽ xong, `docs/API_SPECIFICATION.md` có 30 endpoint công khai và phủ
+đúng 10 trong 18 use case. Tám use case còn lại — quên mật khẩu, đổi mật
+khẩu, ghi cân nặng, thêm món riêng và bốn màn quản trị — không có một đường
+dẫn nào. Mười ba endpoint ấy nay đã nằm trong đặc tả (mục 7.1.5 – 7.1.7,
+7.5.3, 7.10.1 và cả mục 7.11).
 
-    Quên mật khẩu · Đổi mật khẩu · Theo dõi tình trạng cơ thể ·
-    Thêm món ăn của tôi · bốn use case của trang quản trị
+Từ đây hai bên phải khớp nhau, và `tools/check_flowchart.py` soát điều đó
+theo CẢ HAI CHIỀU: mọi endpoint, mọi mã lỗi và mọi tên bảng xuất hiện trong
+sơ đồ đều phải có thật trong đặc tả và trong `db/schema.sql`. Chiều ngược
+lại bắt được việc đổi tên một endpoint mà quên sửa sơ đồ.
+
+Lần soát đầu tiên bắt được **năm mã lỗi** tôi đặt sai trong chính bộ sơ đồ
+này: `EMAIL_EXISTS` (đúng là `EMAIL_ALREADY_EXISTS`), `ONBOARDING_DONE`,
+`INSUFFICIENT_SIGNALS`, `FOOD_NOT_FOUND` và `NOT_EATEN`. Không mã nào gây
+lỗi gì — chúng chỉ mô tả một hệ thống hơi khác hệ thống thật.
 
 QUY ƯỚC Ô LƯỚI — xem `flowchart_lib.py`. Cột 0 là trục chính, cột 1 là
 nhánh lỗi bên phải, cột −1 là nhánh phụ bên trái.
@@ -39,7 +46,7 @@ SO_DO = [
         ("e400",   "disp",  1, 3, "Hiện lỗi VALIDATION_FAILED"),
         ("tim",    "db",    0, 4, "SELECT id FROM users WHERE email = ?"),
         ("trung",  "dec",   0, 5, "Email đã có người dùng?"),
-        ("e409",   "disp",  1, 5, "Hiện lỗi EMAIL_EXISTS"),
+        ("e409",   "disp",  1, 5, "Hiện lỗi EMAIL_ALREADY_EXISTS"),
         ("bam",    "proc",  0, 6, "Băm mật khẩu bằng BCrypt"),
         ("them",   "db",    0, 7, "INSERT INTO users (role = 'user')"),
         ("token",  "proc",  0, 8, "Phát accessToken và refreshToken"),
@@ -97,8 +104,7 @@ SO_DO = [
     ("FC03", "Quên mật khẩu", [
         ("bd",    "term",  0, 0, "Bắt đầu"),
         ("nhap",  "input", 0, 1, "Nhập email đã đăng ký"),
-        ("goi",   "proc",  0, 2,
-         "POST /auth/forgot-password (đề xuất)"),
+        ("goi",   "proc",  0, 2, "POST /auth/forgot-password"),
         ("doc",   "db",    0, 3, "SELECT id FROM users WHERE email = ?"),
         ("co",    "dec",   0, 4, "Email có trong hệ thống?"),
         ("imlang", "proc", 1, 4,
@@ -110,10 +116,9 @@ SO_DO = [
          "INSERT INTO password_resets (đề xuất bảng mới)"),
         ("mail",  "call",  0, 7, "Gửi email chứa liên kết đặt lại"),
         ("cho",   "input", 0, 8, "Người dùng mở liên kết, nhập mật khẩu mới"),
-        ("gui",   "proc",  0, 9,
-         "POST /auth/reset-password (đề xuất)"),
+        ("gui",   "proc",  0, 9, "POST /auth/reset-password"),
         ("hopma", "dec",   0, 10, "Mã còn hạn và chưa dùng?"),
-        ("e410",  "disp",  1, 10, "Hiện lỗi RESET_TOKEN_EXPIRED"),
+        ("e410",  "disp",  1, 10, "Hiện lỗi RESET_TOKEN_INVALID"),
         ("doi",   "db",    0, 11,
          "UPDATE users SET password_hash = ?; đánh dấu mã đã dùng"),
         ("thanh", "disp",  0, 12, "Mở màn Đăng nhập"),
@@ -133,8 +138,7 @@ SO_DO = [
     ("FC04", "Đổi mật khẩu", [
         ("bd",    "term",  0, 0, "Bắt đầu — người dùng đã đăng nhập"),
         ("nhap",  "input", 0, 1, "Nhập mật khẩu hiện tại và mật khẩu mới"),
-        ("goi",   "proc",  0, 2,
-         "PUT /auth/password (đề xuất)"),
+        ("goi",   "proc",  0, 2, "PUT /auth/password"),
         ("doc",   "db",    0, 3,
          "SELECT password_hash FROM users WHERE id = ?"),
         ("cu",    "dec",   0, 4, "Mật khẩu hiện tại đúng?"),
@@ -202,7 +206,7 @@ SO_DO = [
         ("goi",   "proc",  0, 1, "GET /onboarding/survey"),
         ("daxong", "dec",  0, 2, "users.onboarding_completed_at còn NULL?"),
         ("e409",  "disp",  1, 2,
-         "Hiện lỗi ONBOARDING_DONE — phiên vuốt chỉ chạy một lần"),
+         "Hiện lỗi ONBOARDING_ALREADY_COMPLETED — phiên vuốt chỉ chạy một lần"),
         ("loc",   "proc",  0, 3,
          "Bước 2 — bộ lọc F1 bỏ món vi phạm bệnh lý đã khai"),
         ("docmon", "db",   0, 4,
@@ -215,7 +219,7 @@ SO_DO = [
         ("gui",   "proc",  0, 8, "POST /onboarding/survey"),
         ("dumin", "dec",   0, 9, "Có ít nhất 10 lượt vuốt?"),
         ("e422",  "disp",  1, 9,
-         "Hiện lỗi INSUFFICIENT_SIGNALS — chưa đủ để dựng hồ sơ"),
+         "Hiện lỗi ONBOARDING_INSUFFICIENT — chưa đủ để dựng hồ sơ"),
         ("ghitt", "db",    0, 10,
          "INSERT INTO interactions (source = 'onboarding_swipe')"),
         ("rocchio", "call", 0, 11,
@@ -355,7 +359,7 @@ SO_DO = [
         ("doc",   "db",    0, 3,
          "JOIN foods, food_nutrition, food_categories, food_tags"),
         ("thay",  "dec",   0, 4, "Món tồn tại và is_active = 1?"),
-        ("e404",  "disp",  1, 4, "Hiện lỗi FOOD_NOT_FOUND"),
+        ("e404",  "disp",  1, 4, "Hiện lỗi NOT_FOUND"),
         ("quyen", "dec",   0, 5,
          "owner_id là NULL hoặc bằng người gọi?"),
         ("e403",  "disp",  1, 5,
@@ -387,7 +391,8 @@ SO_DO = [
         ("daan",  "dec",   0, 4,
          "Món đã có trong food_diary hoặc meal_plan_items của người gọi?"),
         ("e422",  "disp",  1, 4,
-         "Hiện lỗi NOT_EATEN — chỉ đánh giá món đã được gợi ý hoặc đã ăn"),
+         "Hiện lỗi FEEDBACK_NOT_ALLOWED — chỉ đánh giá món đã được gợi ý "
+         "hoặc đã ăn"),
         ("cu",    "db",    0, 5,
          "SELECT id FROM feedbacks WHERE user_id = ? AND food_id = ?"),
         ("daco",  "dec",   0, 6, "Đã từng đánh giá món này?"),
@@ -465,8 +470,7 @@ SO_DO = [
         ("ve",    "disp",  0, 5,
          "Vẽ đường cân nặng, BMI và mức đạt hạn mức năng lượng theo ngày"),
         ("ghimoi", "dec",  0, 6, "Người dùng ghi cân nặng mới?"),
-        ("gui",   "proc",  0, 7,
-         "POST /body-logs (đề xuất)"),
+        ("gui",   "proc",  0, 7, "POST /body-logs"),
         ("hople", "dec",   0, 8,
          "Cân nặng 20–300 kg và ngày không ở tương lai?"),
         ("e400",  "disp",  1, 8, "Hiện lỗi VALIDATION_FAILED"),
@@ -498,14 +502,14 @@ SO_DO = [
          "Nhập tên món, nhóm, khối lượng suất, vai trò món, mức cay"),
         ("dinhd", "input", 0, 4,
          "Nhập năng lượng và thành phần dinh dưỡng biết được"),
-        ("goi",   "proc",  0, 5, "POST /foods (đề xuất)"),
+        ("goi",   "proc",  0, 5, "POST /foods"),
         ("hople", "dec",   0, 6,
          "Tên không rỗng, nhóm có thật, kcal > 0, mức cay 0–3?"),
         ("e400",  "disp",  1, 6, "Hiện lỗi VALIDATION_FAILED"),
         ("trung", "db",    0, 7,
          "Kiểm trùng tên trong món riêng của chính người dùng"),
         ("datco", "dec",   0, 8, "Người dùng đã có món cùng tên?"),
-        ("e409",  "disp",  1, 8, "Hiện lỗi FOOD_EXISTS"),
+        ("e409",  "disp",  1, 8, "Hiện lỗi FOOD_ALREADY_EXISTS"),
         ("ghi",   "db",    0, 9,
          "INSERT INTO foods (owner_id = người gọi) — món riêng, "
          "không vào danh mục chung"),
@@ -536,14 +540,13 @@ SO_DO = [
     ("FC14", "Cập nhật thông tin món ăn", [
         ("bd",    "term",  0, 0, "Bắt đầu — quản trị viên đã đăng nhập"),
         ("quyen", "dec",   0, 1, "users.role = 'admin'?"),
-        ("e403",  "disp",  1, 1, "Hiện lỗi FORBIDDEN"),
+        ("e403",  "disp",  1, 1, "Hiện lỗi ADMIN_REQUIRED"),
         ("tim",   "proc",  0, 2,
-         "GET /admin/foods (đề xuất) — lọc theo nhóm và trạng thái"),
+         "GET /admin/foods — lọc theo nhóm và trạng thái"),
         ("chon",  "input", 0, 3, "Chọn món cần sửa"),
         ("sua",   "input", 0, 4,
          "Sửa tên, nhóm, vai trò món, mức cay, số liệu dinh dưỡng, nhãn"),
-        ("goi",   "proc",  0, 5,
-         "PUT /admin/foods/{id} (đề xuất)"),
+        ("goi",   "proc",  0, 5, "PUT /admin/foods/{id}"),
         ("hople", "dec",   0, 6,
          "kcal > 0, mức cay 0–3, tổng ba macro không vượt năng lượng?"),
         ("e400",  "disp",  1, 6, "Hiện lỗi VALIDATION_FAILED"),
@@ -575,9 +578,9 @@ SO_DO = [
     ("FC15", "Quản lý tài khoản người dùng", [
         ("bd",    "term",  0, 0, "Bắt đầu — quản trị viên đã đăng nhập"),
         ("quyen", "dec",   0, 1, "users.role = 'admin'?"),
-        ("e403",  "disp",  1, 1, "Hiện lỗi FORBIDDEN"),
+        ("e403",  "disp",  1, 1, "Hiện lỗi ADMIN_REQUIRED"),
         ("ds",    "proc",  0, 2,
-         "GET /admin/users (đề xuất) — phân trang, lọc theo vai trò "
+         "GET /admin/users — phân trang, lọc theo vai trò "
          "và trạng thái"),
         ("doc",   "db",    0, 3,
          "SELECT users theo idx_role (role, is_active)"),
@@ -586,7 +589,7 @@ SO_DO = [
         ("xem",   "proc", -1, 6,
          "Xem hồ sơ, bệnh lý đã khai và số tín hiệu đã sinh"),
         ("khoa",  "proc",  0, 6,
-         "PATCH /admin/users/{id} (đề xuất) — đặt is_active = 0"),
+         "PATCH /admin/users/{id} — đặt is_active = 0"),
         ("canhbao", "proc", 1, 6,
          "Nhắc rõ: đây là XÓA MỀM. DELETE sẽ gỡ mẫu huấn luyện ra khỏi "
          "dataset_version đã đóng băng"),
@@ -610,9 +613,9 @@ SO_DO = [
     ("FC16", "Xem số liệu phân tích người dùng", [
         ("bd",    "term",  0, 0, "Bắt đầu — quản trị viên đã đăng nhập"),
         ("quyen", "dec",   0, 1, "users.role = 'admin'?"),
-        ("e403",  "disp",  1, 1, "Hiện lỗi FORBIDDEN"),
+        ("e403",  "disp",  1, 1, "Hiện lỗi ADMIN_REQUIRED"),
         ("goi",   "proc",  0, 2,
-         "GET /admin/stats/users (đề xuất) — chọn khoảng ngày"),
+         "GET /admin/stats/users — chọn khoảng ngày"),
         ("dem",   "db",    0, 3,
          "Đếm users theo giai đoạn trong user_preference_profiles"),
         ("tinhieu", "db",  0, 4,
@@ -646,9 +649,8 @@ SO_DO = [
     ("FC17", "Xem số liệu phân tích món ăn", [
         ("bd",    "term",  0, 0, "Bắt đầu — quản trị viên đã đăng nhập"),
         ("quyen", "dec",   0, 1, "users.role = 'admin'?"),
-        ("e403",  "disp",  1, 1, "Hiện lỗi FORBIDDEN"),
-        ("goi",   "proc",  0, 2,
-         "GET /admin/stats/foods (đề xuất)"),
+        ("e403",  "disp",  1, 1, "Hiện lỗi ADMIN_REQUIRED"),
+        ("goi",   "proc",  0, 2, "GET /admin/stats/foods"),
         ("dem",   "db",    0, 3,
          "Đếm foods theo nhóm và vai trò món, chỉ món danh mục chung"),
         ("khuyet", "db",   0, 4,
@@ -682,9 +684,9 @@ SO_DO = [
     ("FC18", "Quản lý bệnh lý và ngưỡng dinh dưỡng", [
         ("bd",    "term",  0, 0, "Bắt đầu — quản trị viên đã đăng nhập"),
         ("quyen", "dec",   0, 1, "users.role = 'admin'?"),
-        ("e403",  "disp",  1, 1, "Hiện lỗi FORBIDDEN"),
+        ("e403",  "disp",  1, 1, "Hiện lỗi ADMIN_REQUIRED"),
         ("ds",    "proc",  0, 2,
-         "GET /admin/conditions (đề xuất) — bệnh lý kèm quy tắc"),
+         "GET /admin/conditions — bệnh lý kèm quy tắc"),
         ("doc",   "db",    0, 3,
          "JOIN conditions với condition_rules"),
         ("chon",  "input", 0, 4, "Chọn bệnh lý, thêm hoặc sửa một quy tắc"),
@@ -696,7 +698,7 @@ SO_DO = [
         ("nguon", "input", 0, 7,
          "Ghi xuất xứ vào note và chọn evidence_level"),
         ("goi",   "proc",  0, 8,
-         "PUT /admin/condition-rules/{id} (đề xuất)"),
+         "PUT /admin/condition-rules/{id}"),
         ("hople", "dec",   0, 9,
          "Thỏa chk_rule_shape và chk_rule_evidence?"),
         ("e400",  "disp",  1, 9,
@@ -706,7 +708,8 @@ SO_DO = [
         ("quachat", "dec", 0, 11,
          "Còn đủ món ở cả bốn vai trò để ghép bữa?"),
         ("chan",  "disp",  1, 11,
-         "Chặn và báo rõ: quy tắc này làm Bước 4 không dựng nổi thực đơn"),
+         "Hiện lỗi RULE_TOO_RESTRICTIVE — quy tắc này làm Bước 4 "
+         "không dựng nổi thực đơn"),
         ("ghi",   "db",    0, 12,
          "UPSERT condition_rules trong một giao dịch"),
         ("anhhuong", "proc", 0, 13,
@@ -731,6 +734,7 @@ SO_DO = [
     ]),
 ]
 
-#: Khối có chữ "(đề xuất)" là endpoint CHƯA có trong đặc tả API.
-#: `check_flowchart.py` đếm lại con số này để nó không âm thầm sai đi.
-DAU_DE_XUAT = "(đề xuất)"
+#: Thứ duy nhất còn chờ bổ sung: bảng `password_resets` chưa có trong
+#: `db/schema.sql`. Không thêm thẳng vào lược đồ ở đây vì đó là việc của
+#: một migration, không phải của một sơ đồ.
+DAU_DE_XUAT = "(đề xuất"

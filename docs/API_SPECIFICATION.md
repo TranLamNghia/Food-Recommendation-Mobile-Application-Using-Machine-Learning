@@ -75,6 +75,7 @@ Payload của `accessToken`:
 {
   "sub": "1",
   "email": "nghia@example.com",
+  "role": "user",
   "onboarded": true,
   "exp": 1795000000,
   "iat": 1794996400
@@ -83,15 +84,22 @@ Payload của `accessToken`:
 
 > `onboarded` cho phép Frontend biết ngay có cần đẩy người dùng vào màn hình vuốt thăm dò hay không, mà không cần gọi thêm API.
 
-**Ba mức truy cập:**
+**Bốn mức truy cập:**
 
 | Ký hiệu | Nghĩa |
 |---|---|
 | 🌐 **Public** | Không cần token |
 | 🔒 **Protected** | Cần `accessToken` hợp lệ |
+| 🛡️ **Admin** | Cần `accessToken` của tài khoản có `role = "admin"` |
 | ⚙️ **Internal** | Chỉ Backend gọi ML Service, không lộ ra ngoài |
 
-Hệ thống **không có vai trò quản trị** — mọi endpoint `Protected` chỉ thao tác trên dữ liệu của chính người dùng đang đăng nhập. Backend lấy `userId` từ token, **không bao giờ nhận `userId` từ tham số**.
+Mọi endpoint `🔒 Protected` chỉ thao tác trên dữ liệu của **chính người dùng đang đăng nhập**. Backend lấy `userId` từ token, **không bao giờ nhận `userId` từ tham số**.
+
+Nhóm `🛡️ Admin` (mục 7.11) là ngoại lệ **duy nhất** của quy tắc đó: nó đọc và sửa dữ liệu của người khác. Chính vì vậy mỗi endpoint trong nhóm phải tự kiểm `role` ở tầng controller. Không được dựa vào việc trang quản trị không hiện nút — ai cũng gọi thẳng được vào API.
+
+`role` chỉ nhận hai giá trị, đúng bằng ENUM `users.role` trong CSDL: `user` và `admin`. Token không mang `role` thì coi như `user`.
+
+> Bản trước của mục này viết rằng *"hệ thống không có vai trò quản trị"*. Câu đó sai ngay từ lúc viết: `users.role` đã là `ENUM('user','admin')` và sơ đồ Use case đã có tác nhân Quản trị viên với bảy use case. Đặc tả chỉ đơn giản là chưa mô tả nhóm API tương ứng.
 
 ### 2.5 Định dạng lỗi
 
@@ -169,6 +177,11 @@ Danh sách ngắn và cố định (danh mục món, từ điển bệnh lý) tr
 | `FEEDBACK_NOT_ALLOWED` | 409 | Món chưa từng ở trong thực đơn, hoặc chưa ghi vào nhật ký | Ẩn nút đánh giá với món chưa đủ điều kiện |
 | `MEAL_PLAN_EXISTS` | 409 | Ngày đó đã có thực đơn | Gọi `GET` thay vì `POST`, hoặc hỏi có tạo lại không |
 | `NO_FEASIBLE_PLAN` | 422 | Ràng buộc quá chặt, không sinh nổi thực đơn | Xem mục 7.6.2 |
+| `ACCOUNT_DISABLED` | 403 | Tài khoản đã bị khóa (`users.is_active = 0`) | Báo liên hệ quản trị, không cho thử lại |
+| `ADMIN_REQUIRED` | 403 | Endpoint chỉ dành cho `role = "admin"` | Không hiện màn hình quản trị với tài khoản thường |
+| `RESET_TOKEN_INVALID` | 400 | Mã đặt lại mật khẩu sai, hết hạn hoặc đã dùng | Mời gửi lại yêu cầu quên mật khẩu |
+| `FOOD_ALREADY_EXISTS` | 409 | Người dùng đã có món riêng trùng tên | Gợi ý dùng lại món đã có |
+| `RULE_TOO_RESTRICTIVE` | 422 | Quy tắc mới làm tập ứng viên không đủ để ghép bữa | Xem mục 7.11.8 |
 | `RATE_LIMITED` | 429 | Gọi quá nhanh | Chờ theo header `Retry-After` |
 | `INTERNAL_ERROR` | 500 | Lỗi máy chủ | Báo lỗi chung, cho thử lại |
 
@@ -197,9 +210,14 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 
 | Trường | Giá trị hợp lệ |
 |---|---|
-| `dishRole` | `main` · `side` · `soup` · `dessert` · `drink` |
+| `dishRole` | `main` · `side_protein` · `side_veg` · `soup` · `snack` · `dessert` · `drink` |
 | `spiceLevel` | số nguyên `0` – `3` |
 | `tagType` | `allergen` · `diet` · `nutrition` · `taste` |
+
+> `side` đã tách thành `side_protein` và `side_veg` để khớp ENUM trong CSDL.
+> Gộp chung thì Bước 4 có thể chọn ra hai món rau và không có nguồn đạm nào,
+> mà mâm cơm Việt thiếu món mặn thì không còn là bữa ăn. Lý do đầy đủ ở
+> `db/schema.sql`, khối chú thích của cột `foods.dish_role`.
 
 > Bản thiết kế trước đây có thêm `cookingMethod` và `origin`; cả hai đã bỏ khỏi
 > lược đồ nên API không trả về nữa. Cách chế biến đã nằm trong `categoryName`
@@ -242,9 +260,16 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 
 ## 6. Bảng tổng hợp toàn bộ endpoint
 
-**30 endpoint công khai + 4 endpoint nội bộ.**
+**43 endpoint công khai + 4 endpoint nội bộ.**
 
-### Xác thực — 4
+Mười ba endpoint được bổ sung sau khi vẽ flowchart cho cả mười tám use case
+(`BAOCAO/Diagram.mdj`, nhánh `Flowchart`). Trước đó đặc tả chỉ phủ mười use
+case: tám use case còn lại — quên mật khẩu, đổi mật khẩu, ghi cân nặng, thêm
+món riêng và bốn màn quản trị — không có đường dẫn nào.
+`tools/check_flowchart.py` soát lại hai chiều, nên khoảng hở này không mở ra
+lần nữa mà không ai biết.
+
+### Xác thực — 7
 
 | # | Tên | Method | Đường dẫn | Quyền |
 |---|---|---|---|---|
@@ -252,6 +277,9 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 | 2 | Đăng nhập | `POST` | `/auth/login` | 🌐 |
 | 3 | Làm mới token | `POST` | `/auth/refresh` | 🌐 |
 | 4 | Thông tin tài khoản | `GET` | `/auth/me` | 🔒 |
+| 31 | Quên mật khẩu | `POST` | `/auth/forgot-password` | 🌐 |
+| 32 | Đặt lại mật khẩu | `POST` | `/auth/reset-password` | 🌐 |
+| 33 | Đổi mật khẩu | `PUT` | `/auth/password` | 🔒 |
 
 ### Hồ sơ sức khỏe — 5
 
@@ -278,12 +306,13 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 | 13 | Lấy gói món khảo sát | `GET` | `/onboarding/survey` | 🔒 |
 | 14 | Gửi kết quả khảo sát | `POST` | `/onboarding/survey` | 🔒 |
 
-### Món ăn — 2
+### Món ăn — 3
 
 | # | Tên | Method | Đường dẫn | Quyền |
 |---|---|---|---|---|
 | 15 | Tìm kiếm món ăn | `GET` | `/foods` | 🔒 |
 | 16 | Chi tiết món ăn | `GET` | `/foods/{id}` | 🔒 |
+| 34 | Thêm món riêng | `POST` | `/foods` | 🔒 |
 
 ### Thực đơn — 6
 
@@ -318,6 +347,27 @@ Hệ số nhân TDEE tương ứng `activityLevel`: `1.200` · `1.375` · `1.550
 | # | Tên | Method | Đường dẫn | Quyền |
 |---|---|---|---|---|
 | 30 | Tiến trình sức khỏe | `GET` | `/stats/progress` | 🔒 |
+
+### Theo dõi cơ thể — 1
+
+| # | Tên | Method | Đường dẫn | Quyền |
+|---|---|---|---|---|
+| 35 | Ghi cân nặng | `POST` | `/body-logs` | 🔒 |
+
+### Quản trị — 8
+
+Toàn bộ nhóm này đòi `role = "admin"`; thiếu thì trả `403 ADMIN_REQUIRED`.
+
+| # | Tên | Method | Đường dẫn | Quyền |
+|---|---|---|---|---|
+| 36 | Danh sách món để sửa | `GET` | `/admin/foods` | 🛡️ |
+| 37 | Cập nhật món | `PUT` | `/admin/foods/{id}` | 🛡️ |
+| 38 | Danh sách tài khoản | `GET` | `/admin/users` | 🛡️ |
+| 39 | Khóa hoặc mở tài khoản | `PATCH` | `/admin/users/{id}` | 🛡️ |
+| 40 | Số liệu người dùng | `GET` | `/admin/stats/users` | 🛡️ |
+| 41 | Số liệu món ăn | `GET` | `/admin/stats/foods` | 🛡️ |
+| 42 | Bệnh lý kèm quy tắc | `GET` | `/admin/conditions` | 🛡️ |
+| 43 | Thêm hoặc sửa quy tắc | `PUT` | `/admin/condition-rules/{id}` | 🛡️ |
 
 ### ML Service nội bộ — 4
 
@@ -494,6 +544,136 @@ Authorization: Bearer <accessToken>
 **Status codes:** `200` · `401`
 
 > Đây là endpoint Frontend gọi đầu tiên sau khi mở app, để quyết định điều hướng vào màn hình nào.
+
+---
+
+### 7.1.5 Quên mật khẩu
+
+| | |
+|---|---|
+| **Tên** | Gửi yêu cầu đặt lại mật khẩu |
+| **Loại** | 🌐 Public |
+| **Method** | `POST /auth/forgot-password` |
+
+**Body**
+
+| Trường | Kiểu | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `email` | string | ✔ | Đúng định dạng email |
+
+```json
+{ "email": "nghia@example.com" }
+```
+
+**Response `202 Accepted`**
+
+```json
+{ "message": "Nếu email này đã đăng ký, hướng dẫn đặt lại đã được gửi." }
+```
+
+**Status codes**
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| `202` | — | Luôn luôn, kể cả khi email không có trong hệ thống |
+| `400` | `VALIDATION_FAILED` | Email sai định dạng |
+| `429` | `RATE_LIMITED` | Quá 3 yêu cầu cho một email trong 15 phút |
+
+> **Email không tồn tại vẫn trả `202`, có chủ ý.** Trả `404` ở đây biến endpoint
+> công khai này thành một công cụ dò email: gọi lần lượt là biết địa chỉ nào đã
+> đăng ký. Mục 7.1.2 đã giữ nguyên tắc đó cho đăng nhập; chỗ này phải giữ y hệt,
+> nếu không bịt một lối mà để hở lối kia thì coi như không bịt.
+
+> **Cần một bảng mới trong CSDL.** Mã đặt lại phải lưu được: một dòng gồm mã đã
+> băm, `user_id`, thời điểm hết hạn và thời điểm đã dùng. Lưu thẳng vào `users`
+> thì mỗi người chỉ có một mã sống và cột đó rỗng với gần như mọi dòng. Bảng
+> `password_resets` **chưa có trong `db/schema.sql`** — phải thêm trước khi
+> hiện thực nhóm này.
+
+---
+
+### 7.1.6 Đặt lại mật khẩu
+
+| | |
+|---|---|
+| **Tên** | Đặt mật khẩu mới bằng mã đã gửi |
+| **Loại** | 🌐 Public |
+| **Method** | `POST /auth/reset-password` |
+
+**Body**
+
+| Trường | Kiểu | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `token` | string | ✔ | Mã trong liên kết đã gửi qua email |
+| `newPassword` | string | ✔ | Tối thiểu 8 ký tự, có chữ và số |
+
+```json
+{
+  "token": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "newPassword": "MatKhauMoi456"
+}
+```
+
+**Response `200 OK`**
+
+```json
+{ "message": "Đã đổi mật khẩu. Hãy đăng nhập lại." }
+```
+
+**Status codes**
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| `200` | — | Đổi thành công |
+| `400` | `VALIDATION_FAILED` | Mật khẩu mới quá ngắn |
+| `400` | `RESET_TOKEN_INVALID` | Mã sai, đã hết hạn hoặc đã dùng rồi |
+
+> Mã sống **15 phút** và dùng được **đúng một lần**. Đặt lại thành công thì thu
+> hồi mọi `refreshToken` của tài khoản đó — xem ghi chú ở 7.1.7, lý do giống hệt.
+
+---
+
+### 7.1.7 Đổi mật khẩu
+
+| | |
+|---|---|
+| **Tên** | Đổi mật khẩu khi đang đăng nhập |
+| **Loại** | 🔒 Protected |
+| **Method** | `PUT /auth/password` |
+
+**Body**
+
+| Trường | Kiểu | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `currentPassword` | string | ✔ | Mật khẩu đang dùng |
+| `newPassword` | string | ✔ | Tối thiểu 8 ký tự, khác mật khẩu cũ |
+
+```json
+{ "currentPassword": "MatKhau123", "newPassword": "MatKhauMoi456" }
+```
+
+**Response `200 OK`**
+
+```json
+{ "message": "Đã đổi mật khẩu. Hãy đăng nhập lại." }
+```
+
+**Status codes**
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| `200` | — | Đổi thành công |
+| `400` | `VALIDATION_FAILED` | Mật khẩu mới quá ngắn hoặc trùng mật khẩu cũ |
+| `401` | `INVALID_CREDENTIALS` | `currentPassword` sai |
+
+> **Vẫn phải hỏi mật khẩu hiện tại** dù đã có token hợp lệ. Token nằm trong máy,
+> và máy có thể đang mở trong tay người khác; không hỏi lại thì ai mượn được
+> điện thoại đang mở khóa là chiếm được tài khoản vĩnh viễn.
+
+> **Đổi xong thì thu hồi mọi `refreshToken`.** Người ta đổi mật khẩu chủ yếu vì
+> nghi có người khác đang truy cập; giữ nguyên các phiên cũ thì phiên của kẻ đó
+> sống thêm 30 ngày và việc đổi mật khẩu không giải quyết được gì.
+> Frontend nhận `200` thì xóa token trong máy và về màn hình đăng nhập.
 
 ---
 
@@ -1173,6 +1353,64 @@ Khi món vi phạm ràng buộc của người dùng:
 
 ---
 
+### 7.5.3 Thêm món riêng
+
+| | |
+|---|---|
+| **Tên** | Thêm một món của riêng người dùng |
+| **Loại** | 🔒 Protected |
+| **Method** | `POST /foods` |
+
+**Body**
+
+| Trường | Kiểu | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `name` | string | ✔ | 2–200 ký tự |
+| `categoryId` | string | ✔ | UUID có thật trong `food_categories` |
+| `dishRole` | string | ✔ | Xem mục 5.2 |
+| `servingSizeG` | number | ✔ | > 0 |
+| `spiceLevel` | number | ✗ | 0 – 3, mặc định `0` |
+| `nutrition` | object | ✔ | Ít nhất phải có `calories` |
+
+```json
+{
+  "name": "Bánh canh cua nhà nấu",
+  "categoryId": "00000007-0000-4000-8000-000000000000",
+  "dishRole": "main",
+  "servingSizeG": 450,
+  "spiceLevel": 1,
+  "nutrition": {
+    "calories": 480, "proteinG": 24.0, "carbsG": 58.0, "fatG": 16.0,
+    "fiberG": null, "sugarG": null, "sodiumMg": null, "purineMg": null
+  }
+}
+```
+
+**Response `201 Created`** — cấu trúc giống 7.5.2, kèm `"ownerId"` là người gọi.
+
+**Status codes**
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| `201` | — | Tạo thành công |
+| `400` | `VALIDATION_FAILED` | `calories` ≤ 0, `spiceLevel` ngoài 0–3, nhóm món không có thật |
+| `409` | `FOOD_ALREADY_EXISTS` | Người gọi đã có món riêng trùng tên |
+
+> **Món tạo ở đây luôn có `owner_id` là người gọi, không bao giờ là `NULL`.**
+> `NULL` nghĩa là món thuộc danh mục chung do quản trị viên duyệt, và chỉ những
+> món đó mới tính vào mốc 300–500 món của đề cương. Cho người dùng ghi `NULL`
+> là cho họ thêm thẳng vào danh mục chung.
+
+> **Chất chưa biết phải gửi `null`, không gửi `0`.** Người tự nhập hầu như không
+> biết lượng natri hay purin trong món mình nấu. `0` là một lời khẳng định *"món
+> này không có chất đó"*, và bộ lọc an toàn sẽ tin lời khẳng định đó: một người
+> bệnh gút sẽ được gợi ý một món purin cao vì nó khai `purineMg: 0`. Gửi `null`
+> thì bộ lọc F1 **loại món khỏi gợi ý tự động** và đánh dấu `thiếu số liệu` —
+> người dùng vẫn ghi nhật ký được, nhưng hệ thống không bao giờ chủ động đề xuất
+> một món mà nó không biết thành phần.
+
+---
+
 ## 7.6 Thực đơn
 
 ### 7.6.1 Lấy thực đơn theo ngày
@@ -1804,7 +2042,222 @@ Bước dựng tập huấn luyện lấy đánh giá **gần nhất tính đế
 
 **Status codes:** `200` · `400 VALIDATION_FAILED` · `401`
 
-> `compliancePct` là tỷ lệ món trong thực đơn được ăn thật, tính bằng ghép khóa tự nhiên với `food_diary`. `weightTrend` lấy từ lịch sử cập nhật `health_profiles`, chỉ có điểm dữ liệu vào những ngày người dùng sửa cân nặng.
+> `compliancePct` là tỷ lệ món trong thực đơn được ăn thật, tính bằng ghép khóa tự nhiên với `food_diary`. `weightTrend` lấy từ bảng `body_logs`, mỗi ngày nhiều nhất một điểm (xem 7.10.1).
+> Bản trước của câu này nói nó lấy từ lịch sử cập nhật `health_profiles`. Sai: `health_profiles` giữ **một dòng mỗi người** và bị ghi đè mỗi lần sửa, nên nó không có lịch sử nào để lấy. `body_logs` mới là nơi lưu từng lần cân.
+
+---
+
+## 7.10 Theo dõi cơ thể
+
+### 7.10.1 Ghi cân nặng
+
+| | |
+|---|---|
+| **Tên** | Ghi một lần cân |
+| **Loại** | 🔒 Protected |
+| **Method** | `POST /body-logs` |
+
+**Body**
+
+| Trường | Kiểu | Bắt buộc | Ràng buộc |
+|---|---|---|---|
+| `logDate` | date | ✗ | Mặc định hôm nay, không nhận ngày tương lai |
+| `weightKg` | number | ✔ | 20 – 300 |
+| `note` | string | ✗ | Tối đa 255 ký tự |
+
+```json
+{ "logDate": "2026-11-20", "weightKg": 68.5 }
+```
+
+**Response `201 Created`**
+
+```json
+{
+  "id": "00000011-0000-4000-8000-000000000000",
+  "logDate": "2026-11-20",
+  "weightKg": 68.5,
+  "bmi": 22.4,
+  "bmiCategory": "normal",
+  "note": null
+}
+```
+
+**Status codes**
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| `201` | — | Ghi thành công |
+| `200` | — | Ngày đó đã có bản ghi, giá trị được thay |
+| `400` | `VALIDATION_FAILED` | Cân nặng ngoài 20–300, hoặc ngày ở tương lai |
+
+> **Mỗi ngày một dòng, ghi lại thì thay giá trị cũ.** Khóa là cặp
+> `(user_id, log_date)`. Cân ba lần trong ngày mà lưu cả ba thì đường tiến
+> triển có ba điểm cho một ngày, và dao động trong ngày — vốn phần lớn là
+> nước — đọc ra thành xu hướng.
+
+> **Ghi cân nặng cũng cập nhật `health_profiles.weight_kg`.** Hạn mức năng
+> lượng ngày mai tính từ cân nặng trong hồ sơ; không đồng bộ thì người dùng cân
+> đều đặn suốt ba tháng mà hệ thống vẫn chia khẩu phần theo con số khai lúc
+> đăng ký. Thực đơn **đã sinh của hôm nay không đổi** — nó đã được ăn một phần.
+
+---
+
+# 7.11 Nhóm quản trị
+
+Toàn bộ mục này đòi `role = "admin"` trong `accessToken`. Kiểm ở **tầng
+controller**, từng endpoint một. Trả `403 ADMIN_REQUIRED` khi token thiếu vai
+trò và `401` khi thiếu token — phân biệt hai mã để trang quản trị biết nên mời
+đăng nhập lại hay báo không đủ quyền.
+
+### 7.11.1 Danh sách món để sửa — `GET /admin/foods`
+
+**Query:** `categoryId` · `dishRole` · `isActive` · `hasMissingNutrition`
+(bool) · `page` · `pageSize`
+
+**Response `200 OK`** — phân trang theo mục 2.6; mỗi phần tử như 7.5.1 kèm
+thêm `missingNutrients` liệt kê những cột đang `NULL`.
+
+> `hasMissingNutrition=true` là bộ lọc dùng nhiều nhất của màn này: nó ra đúng
+> danh sách món đang bị bộ lọc F1 bỏ qua vì thiếu số liệu.
+
+### 7.11.2 Cập nhật món — `PUT /admin/foods/{id}`
+
+**Body:** như 7.5.3, thêm `isActive` và `tagIds` (mảng, thay toàn bộ nhãn cũ).
+
+**Status codes:** `200` · `400 VALIDATION_FAILED` · `403 ADMIN_REQUIRED` ·
+`404 NOT_FOUND`
+
+> **Sửa số liệu dinh dưỡng, nhóm món hoặc mức cay là đổi vector đặc trưng của
+> món.** Bảy trong hai mươi chiều lấy thẳng từ những cột đó. Response trả thêm
+> `"featureVectorStale": true` khi điều đó xảy ra, và Backend phải dựng lại
+> vector trước lần sinh thực đơn kế tiếp. Bỏ qua thì mô hình chấm điểm món bằng
+> một vector không còn mô tả món đó nữa — không báo lỗi, chỉ sai.
+
+> Chỉ sửa được món danh mục chung (`owner_id IS NULL`). Món riêng của người
+> dùng trả `403`: quản trị viên không sửa dữ liệu cá nhân của ai.
+
+### 7.11.3 Danh sách tài khoản — `GET /admin/users`
+
+**Query:** `role` · `isActive` · `stage` · `q` (tìm theo email) · `page` ·
+`pageSize`
+
+**Response `200 OK`** — mỗi phần tử gồm `id`, `email`, `displayName`, `role`,
+`isActive`, `onboardingCompletedAt`, `stage`, `nSignals`, `createdAt`.
+
+> Không trả số đo cơ thể, bệnh lý hay nhật ký ăn uống. Màn quản lý tài khoản
+> cần biết ai đang hoạt động, không cần biết ai nặng bao nhiêu cân.
+
+### 7.11.4 Khóa hoặc mở tài khoản — `PATCH /admin/users/{id}`
+
+**Body:** `{ "isActive": false, "reason": "..." }`
+
+**Status codes:** `200` · `400 VALIDATION_FAILED` · `403 ADMIN_REQUIRED` ·
+`404 NOT_FOUND` · `409` khi tự khóa chính mình
+
+> **Đây là XÓA MỀM, và cố ý không có endpoint xóa cứng.** Mười một bảng tham
+> chiếu `users` đều `ON DELETE CASCADE`, trong đó có `ml_training_samples`. Một
+> lệnh `DELETE` gỡ mẫu huấn luyện ra khỏi một `dataset_version` **đã đóng
+> băng**, khiến `ml_models.n_train` không còn khớp dữ liệu và mọi con số trong
+> `ml_evaluations` không tái lập được — đúng thứ Chương 3 dựa vào. Yêu cầu xóa
+> dữ liệu thật sự của người dùng xử lý ngoài API, và khi đó phải sinh một
+> `dataset_version` mới chứ không sửa bản cũ.
+
+> Tài khoản bị khóa đăng nhập ra `403 ACCOUNT_DISABLED`; token đang sống bị thu
+> hồi ngay, không chờ hết hạn.
+
+### 7.11.5 Số liệu người dùng — `GET /admin/stats/users`
+
+**Query:** `from` · `to`
+
+**Response `200 OK`**
+
+```json
+{
+  "totalUsers": 27,
+  "byStage": { "cold": 4, "content": 18, "hybrid": 5, "ml": 0 },
+  "onboardingCompletionPct": 85.2,
+  "signalsByWeek": [ { "week": "2026-W46", "count": 412 } ],
+  "bySignalSource": { "rating": 96, "diary": 180, "onboarding_swipe": 1080 },
+  "topConditions": [ { "conditionName": "Đái tháo đường type 2", "users": 6 } ]
+}
+```
+
+> **Ẩn danh, không ngoại lệ.** Endpoint này trả số đếm, không trả email, họ tên
+> hay số đo. Ai cần xem một tài khoản cụ thể thì dùng 7.11.3.
+
+> Không người dùng nào trong khoảng đã chọn thì trả các số đếm bằng `0` kèm
+> `"empty": true`, để trang quản trị hiện bảng rỗng thay vì vẽ biểu đồ từ không
+> điểm dữ liệu nào.
+
+### 7.11.6 Số liệu món ăn — `GET /admin/stats/foods`
+
+**Response `200 OK`**
+
+```json
+{
+  "totalFoods": 318,
+  "byCategory": [ { "categoryName": "Cơm", "count": 24 } ],
+  "byDishRole": { "main": 96, "side_protein": 61, "side_veg": 58, "soup": 34,
+                  "snack": 21, "dessert": 28, "drink": 20 },
+  "missingNutrition": { "purineMg": 248, "fiberG": 12, "sodiumMg": 3 },
+  "spiceCoverage": { "nonZero": 24, "total": 318 },
+  "popularityUsable": false,
+  "mostSuggested": [], "mostReplaced": [], "neverShown": []
+}
+```
+
+> **`popularityUsable: false` là một kết luận, không phải một ô trống.** Khi
+> `foods.popularity_score` chưa được tính từ tín hiệu thật thì cả 318 món đều
+> bằng `0`, và mọi bảng xếp hạng dựa vào nó chỉ phản ánh **cách phá hòa**. Trang
+> quản trị phải hiện câu "phép so này chưa có hiệu lực" thay vì một bảng trông
+> có vẻ dùng được.
+
+> `spiceCoverage` có mặt vì chiều "Mức cay" của vector đang yếu: chỉ 24/318 món
+> khác `0`. Đây là hạn chế dữ liệu phải theo dõi, không phải số liệu trang trí.
+
+### 7.11.7 Bệnh lý kèm quy tắc — `GET /admin/conditions`
+
+**Response `200 OK`** — mỗi bệnh lý kèm mảng `rules`, mỗi quy tắc gồm
+`ruleType`, `nutrient`, `comparator`, `threshold`, `scope`, `isHard`,
+`penalty`, `severityMin`, `evidenceLevel`, `note` và `affectedUsers`.
+
+### 7.11.8 Thêm hoặc sửa quy tắc — `PUT /admin/condition-rules/{id}`
+
+**Body:** đúng các trường liệt kê ở 7.11.7.
+
+**Status codes**
+
+| Mã | `code` | Khi nào |
+|---|---|---|
+| `200` | — | Lưu thành công |
+| `400` | `VALIDATION_FAILED` | Vi phạm `chk_rule_shape` hoặc `chk_rule_evidence` |
+| `403` | `ADMIN_REQUIRED` | Thiếu vai trò |
+| `422` | `RULE_TOO_RESTRICTIVE` | Quy tắc mới làm tập ứng viên không đủ ghép bữa |
+
+**Response `200 OK`** kèm kết quả thử trước khi lưu:
+
+```json
+{
+  "rule": { "...": "..." },
+  "impact": {
+    "foodsRemaining": { "main": 71, "side_protein": 44,
+                        "side_veg": 51, "soup": 22 },
+    "affectedUsers": 6,
+    "plansToRegenerate": 6
+  }
+}
+```
+
+> **Phải thử trên toàn bộ danh mục trước khi lưu.** Một ngưỡng quá chặt không
+> gây lỗi nào lúc lưu — nó gây lỗi `NO_FEASIBLE_PLAN` cho từng người mắc bệnh
+> đó, vào sáng hôm sau, và lúc ấy không ai nối được hai sự kiện với nhau. Đo
+> trên 318 món thật: ngưỡng natri 600 mg mỗi suất loại 58/60 món `main`, Bước 4
+> không dựng nổi bữa ăn. Nên `422 RULE_TOO_RESTRICTIVE` chặn ngay, và
+> `foodsRemaining` nói rõ vai trò món nào đã cạn.
+
+> **`evidenceLevel` không phải trường tùy chọn.** Chỉ quy tắc `published` mới
+> dẫn được nguồn trong báo cáo. Ràng buộc `chk_rule_evidence` buộc quy tắc có
+> `note` dẫn nguồn phải khai đúng mức; khai sai trả `400`, không trả `422`.
 
 ---
 
@@ -1966,6 +2419,8 @@ Bảng này giúp Frontend biết thứ tự gọi, và giúp Backend biết end
 | **Khởi động app** | `GET /auth/me` → điều hướng theo `hasHealthProfile` và `onboardingCompletedAt` |
 | **Đăng ký** | `POST /auth/register` → màn hình khai báo hồ sơ |
 | **Đăng nhập** | `POST /auth/login` → `GET /auth/me` |
+| **Quên mật khẩu** | `POST /auth/forgot-password` → *(người dùng mở liên kết trong email)* → `POST /auth/reset-password` → màn hình đăng nhập |
+| **Đổi mật khẩu** | `PUT /auth/password` → xóa token trong máy → màn hình đăng nhập |
 | **Khai báo hồ sơ** | `GET /conditions` (tải danh mục) → `PUT /profile` → `PUT /profile/conditions` → màn hình vuốt |
 | **Khảo sát khẩu vị** | `GET /onboarding/survey` → *(vuốt hết, Flutter giữ trong bộ nhớ)* → `POST /onboarding/survey`. **Chỉ chạy một lần trong đời tài khoản** |
 | **Thực đơn hôm nay** | `GET /meal-plans?date=today` |
@@ -1975,7 +2430,13 @@ Bảng này giúp Frontend biết thứ tự gọi, và giúp Backend biết end
 | **Nhật ký** | `GET /food-diary?from=&to=` · `POST /food-diary` · `GET /food-diary/summary?date=` |
 | **Đánh giá món** | `POST /feedbacks` |
 | **Thống kê** | `GET /stats/progress?from=&to=` |
+| **Ghi cân nặng** | `POST /body-logs` → `GET /stats/progress` để vẽ lại đường tiến triển |
+| **Thêm món của tôi** | `GET /foods?q=` *(không thấy)* → `POST /foods` → `POST /food-diary` hoặc `PUT /meal-plan-items/{id}/replace` |
 | **Sửa hồ sơ** | `PUT /profile` → gợi ý `POST /meal-plans` với `regenerate=true` |
+| 🛡️ **Quản trị — món ăn** | `GET /admin/foods?hasMissingNutrition=true` → `PUT /admin/foods/{id}` |
+| 🛡️ **Quản trị — tài khoản** | `GET /admin/users` → `PATCH /admin/users/{id}` |
+| 🛡️ **Quản trị — số liệu** | `GET /admin/stats/users` · `GET /admin/stats/foods` |
+| 🛡️ **Quản trị — bệnh lý** | `GET /admin/conditions` → `PUT /admin/condition-rules/{id}` *(đọc `impact` trước khi xác nhận)* |
 
 ---
 
@@ -2010,7 +2471,9 @@ Thứ tự hiện thực đề xuất, theo mức độ phụ thuộc:
 | 3 | Món ăn | Cần dữ liệu 300–500 món đã nạp |
 | 4 | Khảo sát khẩu vị (2 endpoint) | Cần ML Service dựng vector sở thích |
 | 5 | Thực đơn | Cần đủ Bước 1 → Bước 4 |
-| 6 | Nhật ký + Đánh giá + Thống kê | Phụ thuộc thực đơn |
+| 6 | Nhật ký + Đánh giá + Thống kê + Ghi cân nặng | Phụ thuộc thực đơn |
+| 7 | Quên / đổi mật khẩu | Cần bảng `password_resets` và dịch vụ gửi email — hai thứ chưa có |
+| 8 | Nhóm quản trị | Không màn hình người dùng nào chờ nó; làm cuối cùng |
 
 ### 10.3 Quy tắc bất di bất dịch
 

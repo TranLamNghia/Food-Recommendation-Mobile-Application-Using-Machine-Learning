@@ -31068,7 +31068,7 @@
 												"$ref": "DATNFC00016M="
 											},
 											"font": "Arial;13;0",
-											"left": 436,
+											"left": 452,
 											"top": 351,
 											"width": 134,
 											"height": 32,
@@ -31077,7 +31077,7 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 388,
+									"left": 404,
 									"top": 341,
 									"width": 230,
 									"height": 52,
@@ -31182,19 +31182,19 @@
 												"$ref": "DATNFC00025M="
 											},
 											"font": "Arial;13;0",
-											"left": 431,
-											"top": 605,
-											"width": 144,
-											"height": 24,
-											"text": "Hiện lỗi EMAIL_EXISTS",
+											"left": 436,
+											"top": 601,
+											"width": 166,
+											"height": 32,
+											"text": "Hiện lỗi EMAIL_ALREADY_EXISTS",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
 									"left": 380,
-									"top": 595,
-									"width": 246,
-									"height": 44,
+									"top": 591,
+									"width": 278,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC00027L="
 									},
@@ -31545,7 +31545,7 @@
 												"$ref": "DATNFC00052W="
 											},
 											"font": "Arial;13;0",
-											"left": 388,
+											"left": 404,
 											"top": 367,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -31565,7 +31565,7 @@
 									"tail": {
 										"$ref": "DATNFC00014V="
 									},
-									"points": "310:367;388:367",
+									"points": "310:367;404:367",
 									"nameLabel": {
 										"$ref": "DATNFC00054G="
 									}
@@ -31635,7 +31635,7 @@
 												"$ref": "DATNFC00058W="
 											},
 											"font": "Arial;13;0",
-											"left": 660,
+											"left": 692,
 											"top": 172,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -31655,7 +31655,7 @@
 									"tail": {
 										"$ref": "DATNFC00017V="
 									},
-									"points": "618:367;660:367;660:172;282:172",
+									"points": "634:367;692:367;692:172;282:172",
 									"nameLabel": {
 										"$ref": "DATNFC00060G="
 									}
@@ -31815,7 +31815,7 @@
 												"$ref": "DATNFC00070W="
 											},
 											"font": "Arial;13;0",
-											"left": 690,
+											"left": 722,
 											"top": 172,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -31835,7 +31835,7 @@
 									"tail": {
 										"$ref": "DATNFC00026V="
 									},
-									"points": "626:617;690:617;690:172;282:172",
+									"points": "658:617;722:617;722:172;282:172",
 									"nameLabel": {
 										"$ref": "DATNFC00072G="
 									}
@@ -32224,7 +32224,7 @@
 							"_parent": {
 								"$ref": "DATNFC00002F="
 							},
-							"name": "Hiện lỗi EMAIL_EXISTS",
+							"name": "Hiện lỗi EMAIL_ALREADY_EXISTS",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -34535,19 +34535,19 @@
 												"$ref": "DATNFC00209M="
 											},
 											"font": "Arial;13;0",
-											"left": 93,
+											"left": 104,
 											"top": 250,
-											"width": 189,
-											"height": 32,
-											"text": "POST /auth/forgot-password (đề xuất)",
+											"width": 167,
+											"height": 24,
+											"text": "POST /auth/forgot-password",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 83,
+									"left": 94,
 									"top": 240,
-									"width": 209,
-									"height": 52,
+									"width": 187,
+									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC00211L="
 									},
@@ -34574,7 +34574,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 89,
-											"top": 368,
+											"top": 360,
 											"width": 197,
 											"height": 34,
 											"text": "SELECT id FROM users WHERE email = ?",
@@ -34583,7 +34583,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 79,
-									"top": 338,
+									"top": 330,
 									"width": 217,
 									"height": 84,
 									"nameLabel": {
@@ -34612,7 +34612,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 132,
-											"top": 486,
+											"top": 478,
 											"width": 109,
 											"height": 37,
 											"text": "Email có trong hệ thống?",
@@ -34621,7 +34621,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 78,
-									"top": 468,
+									"top": 460,
 									"width": 218,
 									"height": 74,
 									"nameLabel": {
@@ -34649,8 +34649,8 @@
 												"$ref": "DATNFC00218M="
 											},
 											"font": "Arial;13;0",
-											"left": 421,
-											"top": 481,
+											"left": 416,
+											"top": 473,
 											"width": 200,
 											"height": 48,
 											"text": "Trả 202 như trường hợp thành công — không tiết lộ email nào có tài khoản",
@@ -34658,8 +34658,8 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 411,
-									"top": 471,
+									"left": 406,
+									"top": 463,
 									"width": 220,
 									"height": 68,
 									"nameLabel": {
@@ -34688,7 +34688,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 96,
-											"top": 598,
+											"top": 590,
 											"width": 183,
 											"height": 32,
 											"text": "Sinh mã đặt lại một lần, hạn 15 phút",
@@ -34697,7 +34697,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 86,
-									"top": 588,
+									"top": 580,
 									"width": 203,
 									"height": 52,
 									"nameLabel": {
@@ -34726,7 +34726,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 94,
-											"top": 716,
+											"top": 708,
 											"width": 187,
 											"height": 34,
 											"text": "INSERT INTO password_resets (đề xuất bảng mới)",
@@ -34735,7 +34735,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 84,
-									"top": 686,
+									"top": 678,
 									"width": 207,
 									"height": 84,
 									"nameLabel": {
@@ -34764,7 +34764,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 101,
-											"top": 826,
+											"top": 818,
 											"width": 178,
 											"height": 24,
 											"text": "Gửi email chứa liên kết đặt lại",
@@ -34773,7 +34773,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 86,
-									"top": 816,
+									"top": 808,
 									"width": 203,
 									"height": 44,
 									"nameLabel": {
@@ -34802,7 +34802,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 99,
-											"top": 926,
+											"top": 918,
 											"width": 177,
 											"height": 33,
 											"text": "Người dùng mở liên kết, nhập mật khẩu mới",
@@ -34811,7 +34811,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 89,
-									"top": 906,
+									"top": 898,
 									"width": 197,
 									"height": 63,
 									"nameLabel": {
@@ -34839,19 +34839,19 @@
 												"$ref": "DATNFC00233M="
 											},
 											"font": "Arial;13;0",
-											"left": 95,
-											"top": 1025,
-											"width": 185,
-											"height": 32,
-											"text": "POST /auth/reset-password (đề xuất)",
+											"left": 106,
+											"top": 1017,
+											"width": 163,
+											"height": 24,
+											"text": "POST /auth/reset-password",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 85,
-									"top": 1015,
-									"width": 205,
-									"height": 52,
+									"left": 96,
+									"top": 1007,
+									"width": 183,
+									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC00235L="
 									},
@@ -34878,7 +34878,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 123,
-											"top": 1131,
+											"top": 1115,
 											"width": 127,
 											"height": 37,
 											"text": "Mã còn hạn và chưa dùng?",
@@ -34887,7 +34887,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 60,
-									"top": 1113,
+									"top": 1097,
 									"width": 254,
 									"height": 74,
 									"nameLabel": {
@@ -34915,18 +34915,18 @@
 												"$ref": "DATNFC00239M="
 											},
 											"font": "Arial;13;0",
-											"left": 439,
-											"top": 1134,
-											"width": 165,
+											"left": 438,
+											"top": 1118,
+											"width": 156,
 											"height": 32,
-											"text": "Hiện lỗi RESET_TOKEN_EXPIRED",
+											"text": "Hiện lỗi RESET_TOKEN_INVALID",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
 									"left": 384,
-									"top": 1124,
-									"width": 275,
+									"top": 1108,
+									"width": 264,
 									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC00241L="
@@ -34954,7 +34954,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 88,
-											"top": 1269,
+											"top": 1253,
 											"width": 198,
 											"height": 50,
 											"text": "UPDATE users SET password_hash = ?; đánh dấu mã đã dùng",
@@ -34963,7 +34963,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 78,
-									"top": 1233,
+									"top": 1217,
 									"width": 218,
 									"height": 109,
 									"nameLabel": {
@@ -34992,7 +34992,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 128,
-											"top": 1398,
+											"top": 1382,
 											"width": 118,
 											"height": 24,
 											"text": "Mở màn Đăng nhập",
@@ -35001,7 +35001,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 84,
-									"top": 1388,
+									"top": 1372,
 									"width": 206,
 									"height": 44,
 									"nameLabel": {
@@ -35030,7 +35030,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 140,
-											"top": 1488,
+											"top": 1472,
 											"width": 95,
 											"height": 24,
 											"text": "Kết thúc",
@@ -35039,7 +35039,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 130,
-									"top": 1478,
+									"top": 1462,
 									"width": 115,
 									"height": 44,
 									"nameLabel": {
@@ -35158,7 +35158,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 338,
+											"top": 330,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35177,7 +35177,7 @@
 									"tail": {
 										"$ref": "DATNFC00210V="
 									},
-									"points": "187:292;187:338",
+									"points": "187:284;187:330",
 									"nameLabel": {
 										"$ref": "DATNFC00259G="
 									}
@@ -35203,7 +35203,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 468,
+											"top": 460,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35222,7 +35222,7 @@
 									"tail": {
 										"$ref": "DATNFC00213V="
 									},
-									"points": "187:422;187:468",
+									"points": "187:414;187:460",
 									"nameLabel": {
 										"$ref": "DATNFC00262G="
 									}
@@ -35247,8 +35247,8 @@
 												"$ref": "DATNFC00263W="
 											},
 											"font": "Arial;13;0",
-											"left": 411,
-											"top": 505,
+											"left": 406,
+											"top": 497,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35267,7 +35267,7 @@
 									"tail": {
 										"$ref": "DATNFC00216V="
 									},
-									"points": "296:505;411:505",
+									"points": "296:497;406:497",
 									"nameLabel": {
 										"$ref": "DATNFC00265G="
 									}
@@ -35293,7 +35293,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 588,
+											"top": 580,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35312,7 +35312,7 @@
 									"tail": {
 										"$ref": "DATNFC00216V="
 									},
-									"points": "187:542;187:588",
+									"points": "187:534;187:580",
 									"nameLabel": {
 										"$ref": "DATNFC00268G="
 									}
@@ -35337,8 +35337,8 @@
 												"$ref": "DATNFC00269W="
 											},
 											"font": "Arial;13;0",
-											"left": 693,
-											"top": 1500,
+											"left": 682,
+											"top": 1484,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35357,7 +35357,7 @@
 									"tail": {
 										"$ref": "DATNFC00219V="
 									},
-									"points": "631:505;693:505;693:1500;245:1500",
+									"points": "626:497;682:497;682:1484;245:1484",
 									"nameLabel": {
 										"$ref": "DATNFC00271G="
 									}
@@ -35383,7 +35383,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 686,
+											"top": 678,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35402,7 +35402,7 @@
 									"tail": {
 										"$ref": "DATNFC00222V="
 									},
-									"points": "187:640;187:686",
+									"points": "187:632;187:678",
 									"nameLabel": {
 										"$ref": "DATNFC00274G="
 									}
@@ -35428,7 +35428,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 816,
+											"top": 808,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35447,7 +35447,7 @@
 									"tail": {
 										"$ref": "DATNFC00225V="
 									},
-									"points": "187:770;187:816",
+									"points": "187:762;187:808",
 									"nameLabel": {
 										"$ref": "DATNFC00277G="
 									}
@@ -35473,7 +35473,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 906,
+											"top": 898,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35492,7 +35492,7 @@
 									"tail": {
 										"$ref": "DATNFC00228V="
 									},
-									"points": "187:860;187:906",
+									"points": "187:852;187:898",
 									"nameLabel": {
 										"$ref": "DATNFC00280G="
 									}
@@ -35518,7 +35518,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 1015,
+											"top": 1007,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35537,7 +35537,7 @@
 									"tail": {
 										"$ref": "DATNFC00231V="
 									},
-									"points": "187:969;187:1015",
+									"points": "187:961;187:1007",
 									"nameLabel": {
 										"$ref": "DATNFC00283G="
 									}
@@ -35563,7 +35563,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 1113,
+											"top": 1097,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35582,7 +35582,7 @@
 									"tail": {
 										"$ref": "DATNFC00234V="
 									},
-									"points": "187:1067;187:1113",
+									"points": "187:1051;187:1097",
 									"nameLabel": {
 										"$ref": "DATNFC00286G="
 									}
@@ -35608,7 +35608,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 384,
-											"top": 1150,
+											"top": 1134,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35627,7 +35627,7 @@
 									"tail": {
 										"$ref": "DATNFC00237V="
 									},
-									"points": "314:1150;384:1150",
+									"points": "314:1134;384:1134",
 									"nameLabel": {
 										"$ref": "DATNFC00289G="
 									}
@@ -35653,7 +35653,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 1233,
+											"top": 1217,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35672,7 +35672,7 @@
 									"tail": {
 										"$ref": "DATNFC00237V="
 									},
-									"points": "187:1187;187:1233",
+									"points": "187:1171;187:1217",
 									"nameLabel": {
 										"$ref": "DATNFC00292G="
 									}
@@ -35697,7 +35697,7 @@
 												"$ref": "DATNFC00293W="
 											},
 											"font": "Arial;13;0",
-											"left": 723,
+											"left": 712,
 											"top": 172,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -35717,7 +35717,7 @@
 									"tail": {
 										"$ref": "DATNFC00240V="
 									},
-									"points": "659:1150;723:1150;723:172;265:172",
+									"points": "648:1134;712:1134;712:172;265:172",
 									"nameLabel": {
 										"$ref": "DATNFC00295G="
 									}
@@ -35743,7 +35743,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 1388,
+											"top": 1372,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35762,7 +35762,7 @@
 									"tail": {
 										"$ref": "DATNFC00243V="
 									},
-									"points": "187:1342;187:1388",
+									"points": "187:1326;187:1372",
 									"nameLabel": {
 										"$ref": "DATNFC00298G="
 									}
@@ -35788,7 +35788,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 187,
-											"top": 1478,
+											"top": 1462,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -35807,7 +35807,7 @@
 									"tail": {
 										"$ref": "DATNFC00246V="
 									},
-									"points": "187:1432;187:1478",
+									"points": "187:1416;187:1462",
 									"nameLabel": {
 										"$ref": "DATNFC00301G="
 									}
@@ -35868,7 +35868,7 @@
 							"_parent": {
 								"$ref": "DATNFC00201F="
 							},
-							"name": "POST /auth/forgot-password (đề xuất)",
+							"name": "POST /auth/forgot-password",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -36074,7 +36074,7 @@
 							"_parent": {
 								"$ref": "DATNFC00201F="
 							},
-							"name": "POST /auth/reset-password (đề xuất)",
+							"name": "POST /auth/reset-password",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -36136,7 +36136,7 @@
 							"_parent": {
 								"$ref": "DATNFC00201F="
 							},
-							"name": "Hiện lỗi RESET_TOKEN_EXPIRED",
+							"name": "Hiện lỗi RESET_TOKEN_INVALID",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -36325,18 +36325,18 @@
 												"$ref": "DATNFC00310M="
 											},
 											"font": "Arial;13;0",
-											"left": 113,
+											"left": 140,
 											"top": 269,
-											"width": 175,
+											"width": 120,
 											"height": 24,
-											"text": "PUT /auth/password (đề xuất)",
+											"text": "PUT /auth/password",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 103,
+									"left": 130,
 									"top": 259,
-									"width": 195,
+									"width": 140,
 									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC00312L="
@@ -37409,7 +37409,7 @@
 							"_parent": {
 								"$ref": "DATNFC00302F="
 							},
-							"name": "PUT /auth/password (đề xuất)",
+							"name": "PUT /auth/password",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -39670,18 +39670,18 @@
 												"$ref": "DATNFC00500M="
 											},
 											"font": "Arial;13;0",
-											"left": 568,
+											"left": 588,
 											"top": 250,
-											"width": 153,
+											"width": 247,
 											"height": 64,
-											"text": "Hiện lỗi ONBOARDING_DONE — phiên vuốt chỉ chạy một lần",
+											"text": "Hiện lỗi ONBOARDING_ALREADY_COMPLETED — phiên vuốt chỉ chạy một lần",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 516,
+									"left": 512,
 									"top": 240,
-									"width": 257,
+									"width": 399,
 									"height": 84,
 									"nameLabel": {
 										"$ref": "DATNFC00502L="
@@ -39974,18 +39974,18 @@
 												"$ref": "DATNFC00524M="
 											},
 											"font": "Arial;13;0",
-											"left": 566,
+											"left": 617,
 											"top": 995,
-											"width": 156,
+											"width": 189,
 											"height": 64,
-											"text": "Hiện lỗi INSUFFICIENT_SIGNALS — chưa đủ để dựng hồ sơ",
+											"text": "Hiện lỗi ONBOARDING_INSUFFICIENT — chưa đủ để dựng hồ sơ",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 512,
+									"left": 556,
 									"top": 985,
-									"width": 264,
+									"width": 311,
 									"height": 84,
 									"nameLabel": {
 										"$ref": "DATNFC00526L="
@@ -40330,7 +40330,7 @@
 												"$ref": "DATNFC00551W="
 											},
 											"font": "Arial;13;0",
-											"left": 516,
+											"left": 512,
 											"top": 282,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -40350,7 +40350,7 @@
 									"tail": {
 										"$ref": "DATNFC00498V="
 									},
-									"points": "442:282;516:282",
+									"points": "442:282;512:282",
 									"nameLabel": {
 										"$ref": "DATNFC00553G="
 									}
@@ -40420,7 +40420,7 @@
 												"$ref": "DATNFC00557W="
 											},
 											"font": "Arial;13;0",
-											"left": 840,
+											"left": 975,
 											"top": 1723,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -40440,7 +40440,7 @@
 									"tail": {
 										"$ref": "DATNFC00501V="
 									},
-									"points": "773:282;840:282;840:1723;309:1723",
+									"points": "911:282;975:282;975:1723;309:1723",
 									"nameLabel": {
 										"$ref": "DATNFC00559G="
 									}
@@ -40780,7 +40780,7 @@
 												"$ref": "DATNFC00581W="
 											},
 											"font": "Arial;13;0",
-											"left": 512,
+											"left": 556,
 											"top": 1027,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -40800,7 +40800,7 @@
 									"tail": {
 										"$ref": "DATNFC00522V="
 									},
-									"points": "362:1027;512:1027",
+									"points": "362:1027;556:1027",
 									"nameLabel": {
 										"$ref": "DATNFC00583G="
 									}
@@ -40870,7 +40870,7 @@
 												"$ref": "DATNFC00587W="
 											},
 											"font": "Arial;13;0",
-											"left": 810,
+											"left": 945,
 											"top": 727,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -40890,7 +40890,7 @@
 									"tail": {
 										"$ref": "DATNFC00525V="
 									},
-									"points": "776:1027;810:1027;810:727;343:727",
+									"points": "867:1027;945:1027;945:727;343:727",
 									"nameLabel": {
 										"$ref": "DATNFC00589G="
 									}
@@ -41214,7 +41214,7 @@
 							"_parent": {
 								"$ref": "DATNFC00489F="
 							},
-							"name": "Hiện lỗi ONBOARDING_DONE — phiên vuốt chỉ chạy một lần",
+							"name": "Hiện lỗi ONBOARDING_ALREADY_COMPLETED — phiên vuốt chỉ chạy một lần",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -41434,7 +41434,7 @@
 							"_parent": {
 								"$ref": "DATNFC00489F="
 							},
-							"name": "Hiện lỗi INSUFFICIENT_SIGNALS — chưa đủ để dựng hồ sơ",
+							"name": "Hiện lỗi ONBOARDING_INSUFFICIENT — chưa đủ để dựng hồ sơ",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -46754,19 +46754,19 @@
 												"$ref": "DATNFC00899M="
 											},
 											"font": "Arial;13;0",
-											"left": 434,
-											"top": 500,
-											"width": 126,
-											"height": 32,
-											"text": "Hiện lỗi FOOD_NOT_FOUND",
+											"left": 433,
+											"top": 504,
+											"width": 128,
+											"height": 24,
+											"text": "Hiện lỗi NOT_FOUND",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 388,
-									"top": 490,
-									"width": 218,
-									"height": 52,
+									"left": 386,
+									"top": 494,
+									"width": 222,
+									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC00901L="
 									},
@@ -47200,7 +47200,7 @@
 												"$ref": "DATNFC00932W="
 											},
 											"font": "Arial;13;0",
-											"left": 388,
+											"left": 386,
 											"top": 516,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -47220,7 +47220,7 @@
 									"tail": {
 										"$ref": "DATNFC00897V="
 									},
-									"points": "273:516;388:516",
+									"points": "273:516;386:516",
 									"nameLabel": {
 										"$ref": "DATNFC00934G="
 									}
@@ -47310,7 +47310,7 @@
 									"tail": {
 										"$ref": "DATNFC00900V="
 									},
-									"points": "606:516;653:516;653:1083;241:1083",
+									"points": "608:516;653:516;653:1083;241:1083",
 									"nameLabel": {
 										"$ref": "DATNFC00940G="
 									}
@@ -47727,7 +47727,7 @@
 							"_parent": {
 								"$ref": "DATNFC00882F="
 							},
-							"name": "Hiện lỗi FOOD_NOT_FOUND",
+							"name": "Hiện lỗi NOT_FOUND",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -48078,7 +48078,7 @@
 												"$ref": "DATNFC00973M="
 											},
 											"font": "Arial;13;0",
-											"left": 446,
+											"left": 471,
 											"top": 370,
 											"width": 134,
 											"height": 32,
@@ -48087,7 +48087,7 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 398,
+									"left": 423,
 									"top": 360,
 									"width": 230,
 									"height": 52,
@@ -48154,19 +48154,19 @@
 												"$ref": "DATNFC00979M="
 											},
 											"font": "Arial;13;0",
-											"left": 441,
-											"top": 514,
-											"width": 144,
-											"height": 48,
-											"text": "Hiện lỗi NOT_EATEN — chỉ đánh giá món đã được gợi ý hoặc đã ăn",
+											"left": 449,
+											"top": 506,
+											"width": 178,
+											"height": 64,
+											"text": "Hiện lỗi FEEDBACK_NOT_ALLOWED — chỉ đánh giá món đã được gợi ý hoặc đã ăn",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
 									"left": 390,
-									"top": 504,
-									"width": 246,
-									"height": 68,
+									"top": 496,
+									"width": 296,
+									"height": 84,
 									"nameLabel": {
 										"$ref": "DATNFC00981L="
 									},
@@ -48268,7 +48268,7 @@
 												"$ref": "DATNFC00988M="
 											},
 											"font": "Arial;13;0",
-											"left": 421,
+											"left": 446,
 											"top": 838,
 											"width": 185,
 											"height": 34,
@@ -48277,7 +48277,7 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 411,
+									"left": 436,
 									"top": 808,
 									"width": 205,
 									"height": 84,
@@ -48669,7 +48669,7 @@
 												"$ref": "DATNFC01018W="
 											},
 											"font": "Arial;13;0",
-											"left": 398,
+											"left": 423,
 											"top": 386,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -48689,7 +48689,7 @@
 									"tail": {
 										"$ref": "DATNFC00971V="
 									},
-									"points": "317:386;398:386",
+									"points": "317:386;423:386",
 									"nameLabel": {
 										"$ref": "DATNFC01020G="
 									}
@@ -48759,7 +48759,7 @@
 												"$ref": "DATNFC01024W="
 											},
 											"font": "Arial;13;0",
-											"left": 670,
+											"left": 720,
 											"top": 181,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -48779,7 +48779,7 @@
 									"tail": {
 										"$ref": "DATNFC00974V="
 									},
-									"points": "628:386;670:386;670:181;299:181",
+									"points": "653:386;720:386;720:181;299:181",
 									"nameLabel": {
 										"$ref": "DATNFC01026G="
 									}
@@ -48894,7 +48894,7 @@
 												"$ref": "DATNFC01033W="
 											},
 											"font": "Arial;13;0",
-											"left": 700,
+											"left": 750,
 											"top": 1520,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -48914,7 +48914,7 @@
 									"tail": {
 										"$ref": "DATNFC00980V="
 									},
-									"points": "636:538;700:538;700:1520;248:1520",
+									"points": "686:538;750:538;750:1520;248:1520",
 									"nameLabel": {
 										"$ref": "DATNFC01035G="
 									}
@@ -48984,7 +48984,7 @@
 												"$ref": "DATNFC01039W="
 											},
 											"font": "Arial;13;0",
-											"left": 411,
+											"left": 436,
 											"top": 850,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -49004,7 +49004,7 @@
 									"tail": {
 										"$ref": "DATNFC00986V="
 									},
-									"points": "297:850;411:850",
+									"points": "297:850;436:850",
 									"nameLabel": {
 										"$ref": "DATNFC01041G="
 									}
@@ -49074,7 +49074,7 @@
 												"$ref": "DATNFC01045W="
 											},
 											"font": "Arial;13;0",
-											"left": 513,
+											"left": 538,
 											"top": 1084,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -49094,7 +49094,7 @@
 									"tail": {
 										"$ref": "DATNFC00989V="
 									},
-									"points": "513:892;513:1084;302:1084",
+									"points": "538:892;538:1084;302:1084",
 									"nameLabel": {
 										"$ref": "DATNFC01047G="
 									}
@@ -49504,7 +49504,7 @@
 							"_parent": {
 								"$ref": "DATNFC00959F="
 							},
-							"name": "Hiện lỗi NOT_EATEN — chỉ đánh giá món đã được gợi ý hoặc đã ăn",
+							"name": "Hiện lỗi FEEDBACK_NOT_ALLOWED — chỉ đánh giá món đã được gợi ý hoặc đã ăn",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -51869,18 +51869,18 @@
 												"$ref": "DATNFC01190M="
 											},
 											"font": "Arial;13;0",
-											"left": 109,
+											"left": 136,
 											"top": 873,
-											"width": 157,
+											"width": 102,
 											"height": 24,
-											"text": "POST /body-logs (đề xuất)",
+											"text": "POST /body-logs",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 99,
+									"left": 126,
 									"top": 863,
-									"width": 177,
+									"width": 122,
 									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC01192L="
@@ -52702,7 +52702,7 @@
 									"tail": {
 										"$ref": "DATNFC01197V="
 									},
-									"points": "615:1006;649:1006;649:885;276:885",
+									"points": "615:1006;649:1006;649:885;248:885",
 									"nameLabel": {
 										"$ref": "DATNFC01249G="
 									}
@@ -53025,7 +53025,7 @@
 							"_parent": {
 								"$ref": "DATNFC01164F="
 							},
-							"name": "POST /body-logs (đề xuất)",
+							"name": "POST /body-logs",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -53314,7 +53314,7 @@
 												"$ref": "DATNFC01267M="
 											},
 											"font": "Arial;13;0",
-											"left": 412,
+											"left": 427,
 											"top": 265,
 											"width": 194,
 											"height": 24,
@@ -53323,7 +53323,7 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 402,
+									"left": 417,
 									"top": 255,
 									"width": 214,
 									"height": 44,
@@ -53428,18 +53428,18 @@
 												"$ref": "DATNFC01276M="
 											},
 											"font": "Arial;13;0",
-											"left": 123,
+											"left": 150,
 											"top": 588,
-											"width": 133,
+											"width": 78,
 											"height": 24,
-											"text": "POST /foods (đề xuất)",
+											"text": "POST /foods",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 113,
+									"left": 140,
 									"top": 578,
-									"width": 153,
+									"width": 98,
 									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC01278L="
@@ -53504,7 +53504,7 @@
 												"$ref": "DATNFC01282M="
 											},
 											"font": "Arial;13;0",
-											"left": 442,
+											"left": 457,
 											"top": 705,
 											"width": 134,
 											"height": 32,
@@ -53513,7 +53513,7 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 394,
+									"left": 409,
 									"top": 695,
 									"width": 230,
 									"height": 52,
@@ -53618,19 +53618,19 @@
 												"$ref": "DATNFC01291M="
 											},
 											"font": "Arial;13;0",
-											"left": 438,
-											"top": 975,
-											"width": 142,
-											"height": 24,
-											"text": "Hiện lỗi FOOD_EXISTS",
+											"left": 443,
+											"top": 971,
+											"width": 163,
+											"height": 32,
+											"text": "Hiện lỗi FOOD_ALREADY_EXISTS",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
 									"left": 388,
-									"top": 965,
-									"width": 242,
-									"height": 44,
+									"top": 961,
+									"width": 273,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01293L="
 									},
@@ -53974,7 +53974,7 @@
 												"$ref": "DATNFC01318W="
 											},
 											"font": "Arial;13;0",
-											"left": 402,
+											"left": 417,
 											"top": 277,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -53994,7 +53994,7 @@
 									"tail": {
 										"$ref": "DATNFC01265V="
 									},
-									"points": "315:277;402:277",
+									"points": "315:277;417:277",
 									"nameLabel": {
 										"$ref": "DATNFC01320G="
 									}
@@ -54064,7 +54064,7 @@
 												"$ref": "DATNFC01324W="
 											},
 											"font": "Arial;13;0",
-											"left": 724,
+											"left": 755,
 											"top": 1479,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -54084,7 +54084,7 @@
 									"tail": {
 										"$ref": "DATNFC01268V="
 									},
-									"points": "616:277;724:277;724:1479;297:1479",
+									"points": "631:277;755:277;755:1479;297:1479",
 									"nameLabel": {
 										"$ref": "DATNFC01326G="
 									}
@@ -54244,7 +54244,7 @@
 												"$ref": "DATNFC01336W="
 											},
 											"font": "Arial;13;0",
-											"left": 394,
+											"left": 409,
 											"top": 721,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -54264,7 +54264,7 @@
 									"tail": {
 										"$ref": "DATNFC01280V="
 									},
-									"points": "316:721;394:721",
+									"points": "316:721;409:721",
 									"nameLabel": {
 										"$ref": "DATNFC01338G="
 									}
@@ -54334,7 +54334,7 @@
 												"$ref": "DATNFC01342W="
 											},
 											"font": "Arial;13;0",
-											"left": 664,
+											"left": 695,
 											"top": 391,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -54354,7 +54354,7 @@
 									"tail": {
 										"$ref": "DATNFC01283V="
 									},
-									"points": "624:721;664:721;664:391;296:391",
+									"points": "639:721;695:721;695:391;296:391",
 									"nameLabel": {
 										"$ref": "DATNFC01344G="
 									}
@@ -54514,7 +54514,7 @@
 												"$ref": "DATNFC01354W="
 											},
 											"font": "Arial;13;0",
-											"left": 694,
+											"left": 725,
 											"top": 391,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -54534,7 +54534,7 @@
 									"tail": {
 										"$ref": "DATNFC01292V="
 									},
-									"points": "630:987;694:987;694:391;296:391",
+									"points": "661:987;725:987;725:391;296:391",
 									"nameLabel": {
 										"$ref": "DATNFC01356G="
 									}
@@ -54930,7 +54930,7 @@
 							"_parent": {
 								"$ref": "DATNFC01256F="
 							},
-							"name": "POST /foods (đề xuất)",
+							"name": "POST /foods",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -55078,7 +55078,7 @@
 							"_parent": {
 								"$ref": "DATNFC01256F="
 							},
-							"name": "Hiện lỗi FOOD_EXISTS",
+							"name": "Hiện lỗi FOOD_ALREADY_EXISTS",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -55302,7 +55302,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 139,
-											"top": 161,
+											"top": 165,
 											"width": 126,
 											"height": 22,
 											"text": "users.role = 'admin'?",
@@ -55311,7 +55311,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 76,
-									"top": 150,
+									"top": 154,
 									"width": 252,
 									"height": 44,
 									"nameLabel": {
@@ -55339,19 +55339,19 @@
 												"$ref": "DATNFC01380M="
 											},
 											"font": "Arial;13;0",
-											"left": 467,
+											"left": 470,
 											"top": 160,
-											"width": 126,
-											"height": 24,
-											"text": "Hiện lỗi FORBIDDEN",
+											"width": 121,
+											"height": 32,
+											"text": "Hiện lỗi ADMIN_REQUIRED",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 421,
+									"left": 426,
 									"top": 150,
-									"width": 218,
-									"height": 44,
+									"width": 209,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01382L="
 									},
@@ -55377,18 +55377,18 @@
 												"$ref": "DATNFC01383M="
 											},
 											"font": "Arial;13;0",
-											"left": 102,
-											"top": 250,
-											"width": 201,
+											"left": 115,
+											"top": 258,
+											"width": 175,
 											"height": 32,
-											"text": "GET /admin/foods (đề xuất) — lọc theo nhóm và trạng thái",
+											"text": "GET /admin/foods — lọc theo nhóm và trạng thái",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 92,
-									"top": 240,
-									"width": 221,
+									"left": 105,
+									"top": 248,
+									"width": 195,
 									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01385L="
@@ -55416,7 +55416,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 146,
-											"top": 355,
+											"top": 363,
 											"width": 113,
 											"height": 17,
 											"text": "Chọn món cần sửa",
@@ -55425,7 +55425,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 136,
-									"top": 338,
+									"top": 346,
 									"width": 133,
 									"height": 44,
 									"nameLabel": {
@@ -55454,7 +55454,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 104,
-											"top": 448,
+											"top": 456,
 											"width": 197,
 											"height": 33,
 											"text": "Sửa tên, nhóm, vai trò món, mức cay, số liệu dinh dưỡng, nhãn",
@@ -55463,7 +55463,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 94,
-									"top": 428,
+									"top": 436,
 									"width": 217,
 									"height": 63,
 									"nameLabel": {
@@ -55491,18 +55491,18 @@
 												"$ref": "DATNFC01392M="
 											},
 											"font": "Arial;13;0",
-											"left": 110,
-											"top": 547,
-											"width": 184,
+											"left": 138,
+											"top": 555,
+											"width": 129,
 											"height": 24,
-											"text": "PUT /admin/foods/{id} (đề xuất)",
+											"text": "PUT /admin/foods/{id}",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 100,
-									"top": 537,
-									"width": 204,
+									"left": 128,
+									"top": 545,
+									"width": 149,
 									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC01394L="
@@ -55530,7 +55530,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 142,
-											"top": 661,
+											"top": 669,
 											"width": 119,
 											"height": 69,
 											"text": "kcal > 0, mức cay 0–3, tổng ba macro không vượt năng lượng?",
@@ -55539,7 +55539,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 83,
-									"top": 627,
+									"top": 635,
 									"width": 238,
 									"height": 138,
 									"nameLabel": {
@@ -55568,7 +55568,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 463,
-											"top": 680,
+											"top": 688,
 											"width": 134,
 											"height": 32,
 											"text": "Hiện lỗi VALIDATION_FAILED",
@@ -55577,7 +55577,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 415,
-									"top": 670,
+									"top": 678,
 									"width": 230,
 									"height": 52,
 									"nameLabel": {
@@ -55606,7 +55606,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 112,
-											"top": 841,
+											"top": 849,
 											"width": 181,
 											"height": 34,
 											"text": "UPDATE foods, food_nutrition; thay toàn bộ food_tags",
@@ -55615,7 +55615,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 102,
-									"top": 811,
+									"top": 819,
 									"width": 201,
 									"height": 84,
 									"nameLabel": {
@@ -55644,7 +55644,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 144,
-											"top": 967,
+											"top": 975,
 											"width": 115,
 											"height": 53,
 											"text": "Có đổi số liệu dinh dưỡng, nhóm món hay mức cay?",
@@ -55653,7 +55653,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 87,
-									"top": 941,
+									"top": 949,
 									"width": 230,
 									"height": 106,
 									"nameLabel": {
@@ -55682,7 +55682,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 434,
-											"top": 978,
+											"top": 986,
 											"width": 197,
 											"height": 32,
 											"text": "Dựng lại vector đặc trưng — món đổi thì vector đổi",
@@ -55691,7 +55691,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 419,
-									"top": 968,
+									"top": 976,
 									"width": 222,
 									"height": 52,
 									"nameLabel": {
@@ -55720,7 +55720,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 109,
-											"top": 1123,
+											"top": 1131,
 											"width": 187,
 											"height": 34,
 											"text": "Ghi vết người sửa và thời điểm sửa",
@@ -55729,7 +55729,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 99,
-									"top": 1093,
+									"top": 1101,
 									"width": 207,
 									"height": 84,
 									"nameLabel": {
@@ -55758,7 +55758,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 128,
-											"top": 1233,
+											"top": 1241,
 											"width": 148,
 											"height": 48,
 											"text": "Hiện món đã cập nhật; cảnh báo nếu vector phải tính lại",
@@ -55767,7 +55767,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 76,
-									"top": 1223,
+									"top": 1231,
 									"width": 252,
 									"height": 68,
 									"nameLabel": {
@@ -55796,7 +55796,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 155,
-											"top": 1347,
+											"top": 1355,
 											"width": 95,
 											"height": 24,
 											"text": "Kết thúc",
@@ -55805,7 +55805,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 145,
-									"top": 1337,
+									"top": 1345,
 									"width": 115,
 									"height": 44,
 									"nameLabel": {
@@ -55834,7 +55834,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 150,
+											"top": 154,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -55853,7 +55853,7 @@
 									"tail": {
 										"$ref": "DATNFC01375V="
 									},
-									"points": "202:104;202:150",
+									"points": "202:104;202:154",
 									"nameLabel": {
 										"$ref": "DATNFC01421G="
 									}
@@ -55878,8 +55878,8 @@
 												"$ref": "DATNFC01422W="
 											},
 											"font": "Arial;13;0",
-											"left": 421,
-											"top": 172,
+											"left": 426,
+											"top": 176,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -55898,7 +55898,7 @@
 									"tail": {
 										"$ref": "DATNFC01378V="
 									},
-									"points": "328:172;421:172",
+									"points": "328:176;426:176",
 									"nameLabel": {
 										"$ref": "DATNFC01424G="
 									}
@@ -55924,7 +55924,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 240,
+											"top": 248,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -55943,7 +55943,7 @@
 									"tail": {
 										"$ref": "DATNFC01378V="
 									},
-									"points": "202:194;202:240",
+									"points": "202:198;202:248",
 									"nameLabel": {
 										"$ref": "DATNFC01427G="
 									}
@@ -55969,7 +55969,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 709,
-											"top": 1359,
+											"top": 1367,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -55988,7 +55988,7 @@
 									"tail": {
 										"$ref": "DATNFC01381V="
 									},
-									"points": "639:172;709:172;709:1359;260:1359",
+									"points": "635:176;709:176;709:1367;260:1367",
 									"nameLabel": {
 										"$ref": "DATNFC01430G="
 									}
@@ -56014,7 +56014,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 338,
+											"top": 346,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56033,7 +56033,7 @@
 									"tail": {
 										"$ref": "DATNFC01384V="
 									},
-									"points": "202:292;202:338",
+									"points": "202:300;202:346",
 									"nameLabel": {
 										"$ref": "DATNFC01433G="
 									}
@@ -56059,7 +56059,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 428,
+											"top": 436,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56078,7 +56078,7 @@
 									"tail": {
 										"$ref": "DATNFC01387V="
 									},
-									"points": "202:382;202:428",
+									"points": "202:390;202:436",
 									"nameLabel": {
 										"$ref": "DATNFC01436G="
 									}
@@ -56104,7 +56104,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 537,
+											"top": 545,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56123,7 +56123,7 @@
 									"tail": {
 										"$ref": "DATNFC01390V="
 									},
-									"points": "202:491;202:537",
+									"points": "202:499;202:545",
 									"nameLabel": {
 										"$ref": "DATNFC01439G="
 									}
@@ -56149,7 +56149,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 627,
+											"top": 635,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56168,7 +56168,7 @@
 									"tail": {
 										"$ref": "DATNFC01393V="
 									},
-									"points": "202:581;202:627",
+									"points": "202:589;202:635",
 									"nameLabel": {
 										"$ref": "DATNFC01442G="
 									}
@@ -56194,7 +56194,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 415,
-											"top": 696,
+											"top": 704,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56213,7 +56213,7 @@
 									"tail": {
 										"$ref": "DATNFC01396V="
 									},
-									"points": "321:696;415:696",
+									"points": "321:704;415:704",
 									"nameLabel": {
 										"$ref": "DATNFC01445G="
 									}
@@ -56239,7 +56239,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 811,
+											"top": 819,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56258,7 +56258,7 @@
 									"tail": {
 										"$ref": "DATNFC01396V="
 									},
-									"points": "202:765;202:811",
+									"points": "202:773;202:819",
 									"nameLabel": {
 										"$ref": "DATNFC01448G="
 									}
@@ -56284,7 +56284,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 679,
-											"top": 459,
+											"top": 467,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56303,7 +56303,7 @@
 									"tail": {
 										"$ref": "DATNFC01399V="
 									},
-									"points": "645:696;679:696;679:459;311:459",
+									"points": "645:704;679:704;679:467;311:467",
 									"nameLabel": {
 										"$ref": "DATNFC01451G="
 									}
@@ -56329,7 +56329,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 941,
+											"top": 949,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56348,7 +56348,7 @@
 									"tail": {
 										"$ref": "DATNFC01402V="
 									},
-									"points": "202:895;202:941",
+									"points": "202:903;202:949",
 									"nameLabel": {
 										"$ref": "DATNFC01454G="
 									}
@@ -56374,7 +56374,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 419,
-											"top": 994,
+											"top": 1002,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56393,7 +56393,7 @@
 									"tail": {
 										"$ref": "DATNFC01405V="
 									},
-									"points": "317:994;419:994",
+									"points": "317:1002;419:1002",
 									"nameLabel": {
 										"$ref": "DATNFC01457G="
 									}
@@ -56419,7 +56419,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1093,
+											"top": 1101,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56438,7 +56438,7 @@
 									"tail": {
 										"$ref": "DATNFC01405V="
 									},
-									"points": "202:1047;202:1093",
+									"points": "202:1055;202:1101",
 									"nameLabel": {
 										"$ref": "DATNFC01460G="
 									}
@@ -56464,7 +56464,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 530,
-											"top": 1135,
+											"top": 1143,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56483,7 +56483,7 @@
 									"tail": {
 										"$ref": "DATNFC01408V="
 									},
-									"points": "530:1020;530:1135;306:1135",
+									"points": "530:1028;530:1143;306:1143",
 									"nameLabel": {
 										"$ref": "DATNFC01463G="
 									}
@@ -56509,7 +56509,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1223,
+											"top": 1231,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56528,7 +56528,7 @@
 									"tail": {
 										"$ref": "DATNFC01411V="
 									},
-									"points": "202:1177;202:1223",
+									"points": "202:1185;202:1231",
 									"nameLabel": {
 										"$ref": "DATNFC01466G="
 									}
@@ -56554,7 +56554,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1337,
+											"top": 1345,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -56573,7 +56573,7 @@
 									"tail": {
 										"$ref": "DATNFC01414V="
 									},
-									"points": "202:1291;202:1337",
+									"points": "202:1299;202:1345",
 									"nameLabel": {
 										"$ref": "DATNFC01469G="
 									}
@@ -56648,7 +56648,7 @@
 							"_parent": {
 								"$ref": "DATNFC01372F="
 							},
-							"name": "Hiện lỗi FORBIDDEN",
+							"name": "Hiện lỗi ADMIN_REQUIRED",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -56672,7 +56672,7 @@
 							"_parent": {
 								"$ref": "DATNFC01372F="
 							},
-							"name": "GET /admin/foods (đề xuất) — lọc theo nhóm và trạng thái",
+							"name": "GET /admin/foods — lọc theo nhóm và trạng thái",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -56744,7 +56744,7 @@
 							"_parent": {
 								"$ref": "DATNFC01372F="
 							},
-							"name": "PUT /admin/foods/{id} (đề xuất)",
+							"name": "PUT /admin/foods/{id}",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -57044,7 +57044,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 428,
-											"top": 161,
+											"top": 165,
 											"width": 126,
 											"height": 22,
 											"text": "users.role = 'admin'?",
@@ -57053,7 +57053,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 365,
-									"top": 150,
+									"top": 154,
 									"width": 252,
 									"height": 44,
 									"nameLabel": {
@@ -57081,19 +57081,19 @@
 												"$ref": "DATNFC01478M="
 											},
 											"font": "Arial;13;0",
-											"left": 753,
+											"left": 756,
 											"top": 160,
-											"width": 126,
-											"height": 24,
-											"text": "Hiện lỗi FORBIDDEN",
+											"width": 121,
+											"height": 32,
+											"text": "Hiện lỗi ADMIN_REQUIRED",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 707,
+									"left": 712,
 									"top": 150,
-									"width": 218,
-									"height": 44,
+									"width": 209,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01480L="
 									},
@@ -57119,19 +57119,19 @@
 												"$ref": "DATNFC01481M="
 											},
 											"font": "Arial;13;0",
-											"left": 401,
-											"top": 250,
-											"width": 180,
-											"height": 48,
-											"text": "GET /admin/users (đề xuất) — phân trang, lọc theo vai trò và trạng thái",
+											"left": 394,
+											"top": 258,
+											"width": 194,
+											"height": 32,
+											"text": "GET /admin/users — phân trang, lọc theo vai trò và trạng thái",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 391,
-									"top": 240,
-									"width": 200,
-									"height": 68,
+									"left": 384,
+									"top": 248,
+									"width": 214,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01483L="
 									},
@@ -57158,7 +57158,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 391,
-											"top": 384,
+											"top": 376,
 											"width": 200,
 											"height": 34,
 											"text": "SELECT users theo idx_role (role, is_active)",
@@ -57167,7 +57167,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 381,
-									"top": 354,
+									"top": 346,
 									"width": 220,
 									"height": 84,
 									"nameLabel": {
@@ -57196,7 +57196,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 434,
-											"top": 501,
+											"top": 493,
 											"width": 115,
 											"height": 17,
 											"text": "Chọn một tài khoản",
@@ -57205,7 +57205,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 424,
-									"top": 484,
+									"top": 476,
 									"width": 135,
 									"height": 44,
 									"nameLabel": {
@@ -57234,7 +57234,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 446,
-											"top": 585,
+											"top": 577,
 											"width": 90,
 											"height": 22,
 											"text": "Thao tác nào?",
@@ -57243,7 +57243,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 401,
-									"top": 574,
+									"top": 566,
 									"width": 180,
 									"height": 44,
 									"nameLabel": {
@@ -57272,7 +57272,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 70,
-											"top": 682,
+											"top": 674,
 											"width": 199,
 											"height": 32,
 											"text": "Xem hồ sơ, bệnh lý đã khai và số tín hiệu đã sinh",
@@ -57281,7 +57281,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 60,
-									"top": 672,
+									"top": 664,
 									"width": 219,
 									"height": 52,
 									"nameLabel": {
@@ -57309,18 +57309,18 @@
 												"$ref": "DATNFC01496M="
 											},
 											"font": "Arial;13;0",
-											"left": 390,
-											"top": 682,
-											"width": 202,
+											"left": 398,
+											"top": 674,
+											"width": 186,
 											"height": 32,
-											"text": "PATCH /admin/users/{id} (đề xuất) — đặt is_active = 0",
+											"text": "PATCH /admin/users/{id} — đặt is_active = 0",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 380,
-									"top": 672,
-									"width": 222,
+									"left": 388,
+									"top": 664,
+									"width": 206,
 									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01498L="
@@ -57348,7 +57348,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 714,
-											"top": 674,
+											"top": 666,
 											"width": 204,
 											"height": 48,
 											"text": "Nhắc rõ: đây là XÓA MỀM. DELETE sẽ gỡ mẫu huấn luyện ra khỏi dataset_version đã đóng băng",
@@ -57357,7 +57357,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 704,
-									"top": 664,
+									"top": 656,
 									"width": 224,
 									"height": 68,
 									"nameLabel": {
@@ -57386,7 +57386,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 391,
-											"top": 808,
+											"top": 800,
 											"width": 200,
 											"height": 34,
 											"text": "UPDATE users SET is_active = 0 — KHÔNG dùng DELETE",
@@ -57395,7 +57395,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 381,
-									"top": 778,
+									"top": 770,
 									"width": 220,
 									"height": 84,
 									"nameLabel": {
@@ -57424,7 +57424,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 399,
-											"top": 932,
+											"top": 924,
 											"width": 184,
 											"height": 17,
 											"text": "Ghi vết người thao tác và lý do",
@@ -57433,7 +57433,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 389,
-									"top": 908,
+									"top": 900,
 									"width": 204,
 									"height": 58,
 									"nameLabel": {
@@ -57462,7 +57462,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 423,
-											"top": 1022,
+											"top": 1014,
 											"width": 137,
 											"height": 32,
 											"text": "Hiện danh sách đã cập nhật",
@@ -57471,7 +57471,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 375,
-									"top": 1012,
+									"top": 1004,
 									"width": 233,
 									"height": 52,
 									"nameLabel": {
@@ -57500,7 +57500,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 444,
-											"top": 1120,
+											"top": 1112,
 											"width": 95,
 											"height": 24,
 											"text": "Kết thúc",
@@ -57509,7 +57509,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 434,
-									"top": 1110,
+									"top": 1102,
 									"width": 115,
 									"height": 44,
 									"nameLabel": {
@@ -57538,7 +57538,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 150,
+											"top": 154,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57557,7 +57557,7 @@
 									"tail": {
 										"$ref": "DATNFC01473V="
 									},
-									"points": "491:104;491:150",
+									"points": "491:104;491:154",
 									"nameLabel": {
 										"$ref": "DATNFC01516G="
 									}
@@ -57582,8 +57582,8 @@
 												"$ref": "DATNFC01517W="
 											},
 											"font": "Arial;13;0",
-											"left": 707,
-											"top": 172,
+											"left": 712,
+											"top": 176,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57602,7 +57602,7 @@
 									"tail": {
 										"$ref": "DATNFC01476V="
 									},
-									"points": "617:172;707:172",
+									"points": "617:176;712:176",
 									"nameLabel": {
 										"$ref": "DATNFC01519G="
 									}
@@ -57628,7 +57628,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 240,
+											"top": 248,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57647,7 +57647,7 @@
 									"tail": {
 										"$ref": "DATNFC01476V="
 									},
-									"points": "491:194;491:240",
+									"points": "491:198;491:248",
 									"nameLabel": {
 										"$ref": "DATNFC01522G="
 									}
@@ -57673,7 +57673,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 962,
-											"top": 1132,
+											"top": 1124,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57692,7 +57692,7 @@
 									"tail": {
 										"$ref": "DATNFC01479V="
 									},
-									"points": "925:172;962:172;962:1132;549:1132",
+									"points": "921:176;962:176;962:1124;549:1124",
 									"nameLabel": {
 										"$ref": "DATNFC01525G="
 									}
@@ -57718,7 +57718,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 354,
+											"top": 346,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57737,7 +57737,7 @@
 									"tail": {
 										"$ref": "DATNFC01482V="
 									},
-									"points": "491:308;491:354",
+									"points": "491:300;491:346",
 									"nameLabel": {
 										"$ref": "DATNFC01528G="
 									}
@@ -57763,7 +57763,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 484,
+											"top": 476,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57782,7 +57782,7 @@
 									"tail": {
 										"$ref": "DATNFC01485V="
 									},
-									"points": "491:438;491:484",
+									"points": "491:430;491:476",
 									"nameLabel": {
 										"$ref": "DATNFC01531G="
 									}
@@ -57808,7 +57808,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 574,
+											"top": 566,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57827,7 +57827,7 @@
 									"tail": {
 										"$ref": "DATNFC01488V="
 									},
-									"points": "491:528;491:574",
+									"points": "491:520;491:566",
 									"nameLabel": {
 										"$ref": "DATNFC01534G="
 									}
@@ -57853,7 +57853,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 169,
-											"top": 596,
+											"top": 588,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57872,7 +57872,7 @@
 									"tail": {
 										"$ref": "DATNFC01491V="
 									},
-									"points": "401:596;169:596;169:672",
+									"points": "401:588;169:588;169:664",
 									"nameLabel": {
 										"$ref": "DATNFC01537G="
 									}
@@ -57898,7 +57898,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 672,
+											"top": 664,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57917,7 +57917,7 @@
 									"tail": {
 										"$ref": "DATNFC01491V="
 									},
-									"points": "491:618;491:672",
+									"points": "491:610;491:664",
 									"nameLabel": {
 										"$ref": "DATNFC01540G="
 									}
@@ -57943,7 +57943,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 169,
-											"top": 1038,
+											"top": 1030,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -57962,7 +57962,7 @@
 									"tail": {
 										"$ref": "DATNFC01494V="
 									},
-									"points": "169:724;169:1038;375:1038",
+									"points": "169:716;169:1030;375:1030",
 									"nameLabel": {
 										"$ref": "DATNFC01543G="
 									}
@@ -57988,7 +57988,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 704,
-											"top": 698,
+											"top": 690,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -58007,7 +58007,7 @@
 									"tail": {
 										"$ref": "DATNFC01497V="
 									},
-									"points": "602:698;704:698",
+									"points": "594:690;704:690",
 									"nameLabel": {
 										"$ref": "DATNFC01546G="
 									}
@@ -58033,7 +58033,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 816,
-											"top": 820,
+											"top": 812,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -58052,7 +58052,7 @@
 									"tail": {
 										"$ref": "DATNFC01500V="
 									},
-									"points": "816:732;816:820;601:820",
+									"points": "816:724;816:812;601:812",
 									"nameLabel": {
 										"$ref": "DATNFC01549G="
 									}
@@ -58078,7 +58078,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 908,
+											"top": 900,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -58097,7 +58097,7 @@
 									"tail": {
 										"$ref": "DATNFC01503V="
 									},
-									"points": "491:862;491:908",
+									"points": "491:854;491:900",
 									"nameLabel": {
 										"$ref": "DATNFC01552G="
 									}
@@ -58123,7 +58123,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 1012,
+											"top": 1004,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -58142,7 +58142,7 @@
 									"tail": {
 										"$ref": "DATNFC01506V="
 									},
-									"points": "491:966;491:1012",
+									"points": "491:958;491:1004",
 									"nameLabel": {
 										"$ref": "DATNFC01555G="
 									}
@@ -58168,7 +58168,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 491,
-											"top": 1110,
+											"top": 1102,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -58187,7 +58187,7 @@
 									"tail": {
 										"$ref": "DATNFC01509V="
 									},
-									"points": "491:1064;491:1110",
+									"points": "491:1056;491:1102",
 									"nameLabel": {
 										"$ref": "DATNFC01558G="
 									}
@@ -58262,7 +58262,7 @@
 							"_parent": {
 								"$ref": "DATNFC01470F="
 							},
-							"name": "Hiện lỗi FORBIDDEN",
+							"name": "Hiện lỗi ADMIN_REQUIRED",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -58286,7 +58286,7 @@
 							"_parent": {
 								"$ref": "DATNFC01470F="
 							},
-							"name": "GET /admin/users (đề xuất) — phân trang, lọc theo vai trò và trạng thái",
+							"name": "GET /admin/users — phân trang, lọc theo vai trò và trạng thái",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -58420,7 +58420,7 @@
 							"_parent": {
 								"$ref": "DATNFC01470F="
 							},
-							"name": "PATCH /admin/users/{id} (đề xuất) — đặt is_active = 0",
+							"name": "PATCH /admin/users/{id} — đặt is_active = 0",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -58620,7 +58620,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 139,
-											"top": 161,
+											"top": 165,
 											"width": 126,
 											"height": 22,
 											"text": "users.role = 'admin'?",
@@ -58629,7 +58629,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 76,
-									"top": 150,
+									"top": 154,
 									"width": 252,
 									"height": 44,
 									"nameLabel": {
@@ -58657,19 +58657,19 @@
 												"$ref": "DATNFC01567M="
 											},
 											"font": "Arial;13;0",
-											"left": 479,
+											"left": 482,
 											"top": 160,
-											"width": 126,
-											"height": 24,
-											"text": "Hiện lỗi FORBIDDEN",
+											"width": 121,
+											"height": 32,
+											"text": "Hiện lỗi ADMIN_REQUIRED",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 433,
+									"left": 438,
 									"top": 150,
-									"width": 218,
-									"height": 44,
+									"width": 209,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01569L="
 									},
@@ -58695,18 +58695,18 @@
 												"$ref": "DATNFC01570M="
 											},
 											"font": "Arial;13;0",
-											"left": 104,
-											"top": 250,
-											"width": 196,
+											"left": 107,
+											"top": 258,
+											"width": 190,
 											"height": 32,
-											"text": "GET /admin/stats/users (đề xuất) — chọn khoảng ngày",
+											"text": "GET /admin/stats/users — chọn khoảng ngày",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 94,
-									"top": 240,
-									"width": 216,
+									"left": 97,
+									"top": 248,
+									"width": 210,
 									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01572L="
@@ -58734,7 +58734,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 111,
-											"top": 368,
+											"top": 376,
 											"width": 183,
 											"height": 34,
 											"text": "Đếm users theo giai đoạn trong user_preference_profiles",
@@ -58743,7 +58743,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 101,
-									"top": 338,
+									"top": 346,
 									"width": 203,
 									"height": 84,
 									"nameLabel": {
@@ -58772,7 +58772,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 107,
-											"top": 498,
+											"top": 506,
 											"width": 190,
 											"height": 34,
 											"text": "Đếm interactions theo source và theo tuần",
@@ -58781,7 +58781,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 97,
-									"top": 468,
+									"top": 476,
 									"width": 210,
 									"height": 84,
 									"nameLabel": {
@@ -58810,7 +58810,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 103,
-											"top": 628,
+											"top": 636,
 											"width": 199,
 											"height": 34,
 											"text": "Đếm user_conditions theo bệnh lý và mức độ",
@@ -58819,7 +58819,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 93,
-									"top": 598,
+									"top": 606,
 									"width": 219,
 									"height": 84,
 									"nameLabel": {
@@ -58848,7 +58848,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 142,
-											"top": 754,
+											"top": 762,
 											"width": 119,
 											"height": 53,
 											"text": "Có người dùng nào trong khoảng đã chọn?",
@@ -58857,7 +58857,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 83,
-									"top": 728,
+									"top": 736,
 									"width": 238,
 									"height": 106,
 									"nameLabel": {
@@ -58886,7 +58886,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 467,
-											"top": 757,
+											"top": 765,
 											"width": 151,
 											"height": 48,
 											"text": "Hiện bảng rỗng và nói rõ chưa có dữ liệu — không vẽ biểu đồ từ 0 điểm",
@@ -58895,7 +58895,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 415,
-									"top": 747,
+									"top": 755,
 									"width": 255,
 									"height": 68,
 									"nameLabel": {
@@ -58924,7 +58924,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 100,
-											"top": 890,
+											"top": 898,
 											"width": 205,
 											"height": 48,
 											"text": "Gộp: phân bố giai đoạn, số tín hiệu mỗi người, tỷ lệ hoàn tất onboarding",
@@ -58933,7 +58933,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 90,
-									"top": 880,
+									"top": 888,
 									"width": 225,
 									"height": 68,
 									"nameLabel": {
@@ -58962,7 +58962,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 107,
-											"top": 1004,
+											"top": 1012,
 											"width": 191,
 											"height": 32,
 											"text": "Ẩn danh: không trả email, họ tên hay số đo cơ thể",
@@ -58971,7 +58971,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 97,
-									"top": 994,
+									"top": 1002,
 									"width": 211,
 									"height": 52,
 									"nameLabel": {
@@ -59000,7 +59000,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 132,
-											"top": 1102,
+											"top": 1110,
 											"width": 141,
 											"height": 48,
 											"text": "Vẽ biểu đồ phân bố giai đoạn và đường tăng tín hiệu theo tuần",
@@ -59009,7 +59009,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 83,
-									"top": 1092,
+									"top": 1100,
 									"width": 239,
 									"height": 68,
 									"nameLabel": {
@@ -59038,7 +59038,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 155,
-											"top": 1216,
+											"top": 1224,
 											"width": 95,
 											"height": 24,
 											"text": "Kết thúc",
@@ -59047,7 +59047,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 145,
-									"top": 1206,
+									"top": 1214,
 									"width": 115,
 									"height": 44,
 									"nameLabel": {
@@ -59076,7 +59076,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 150,
+											"top": 154,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59095,7 +59095,7 @@
 									"tail": {
 										"$ref": "DATNFC01562V="
 									},
-									"points": "202:104;202:150",
+									"points": "202:104;202:154",
 									"nameLabel": {
 										"$ref": "DATNFC01602G="
 									}
@@ -59120,8 +59120,8 @@
 												"$ref": "DATNFC01603W="
 											},
 											"font": "Arial;13;0",
-											"left": 433,
-											"top": 172,
+											"left": 438,
+											"top": 176,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59140,7 +59140,7 @@
 									"tail": {
 										"$ref": "DATNFC01565V="
 									},
-									"points": "328:172;433:172",
+									"points": "328:176;438:176",
 									"nameLabel": {
 										"$ref": "DATNFC01605G="
 									}
@@ -59166,7 +59166,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 240,
+											"top": 248,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59185,7 +59185,7 @@
 									"tail": {
 										"$ref": "DATNFC01565V="
 									},
-									"points": "202:194;202:240",
+									"points": "202:198;202:248",
 									"nameLabel": {
 										"$ref": "DATNFC01608G="
 									}
@@ -59211,7 +59211,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 704,
-											"top": 1228,
+											"top": 1236,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59230,7 +59230,7 @@
 									"tail": {
 										"$ref": "DATNFC01568V="
 									},
-									"points": "651:172;704:172;704:1228;260:1228",
+									"points": "647:176;704:176;704:1236;260:1236",
 									"nameLabel": {
 										"$ref": "DATNFC01611G="
 									}
@@ -59256,7 +59256,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 338,
+											"top": 346,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59275,7 +59275,7 @@
 									"tail": {
 										"$ref": "DATNFC01571V="
 									},
-									"points": "202:292;202:338",
+									"points": "202:300;202:346",
 									"nameLabel": {
 										"$ref": "DATNFC01614G="
 									}
@@ -59301,7 +59301,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 468,
+											"top": 476,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59320,7 +59320,7 @@
 									"tail": {
 										"$ref": "DATNFC01574V="
 									},
-									"points": "202:422;202:468",
+									"points": "202:430;202:476",
 									"nameLabel": {
 										"$ref": "DATNFC01617G="
 									}
@@ -59346,7 +59346,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 598,
+											"top": 606,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59365,7 +59365,7 @@
 									"tail": {
 										"$ref": "DATNFC01577V="
 									},
-									"points": "202:552;202:598",
+									"points": "202:560;202:606",
 									"nameLabel": {
 										"$ref": "DATNFC01620G="
 									}
@@ -59391,7 +59391,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 728,
+											"top": 736,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59410,7 +59410,7 @@
 									"tail": {
 										"$ref": "DATNFC01580V="
 									},
-									"points": "202:682;202:728",
+									"points": "202:690;202:736",
 									"nameLabel": {
 										"$ref": "DATNFC01623G="
 									}
@@ -59436,7 +59436,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 415,
-											"top": 781,
+											"top": 789,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59455,7 +59455,7 @@
 									"tail": {
 										"$ref": "DATNFC01583V="
 									},
-									"points": "321:781;415:781",
+									"points": "321:789;415:789",
 									"nameLabel": {
 										"$ref": "DATNFC01626G="
 									}
@@ -59481,7 +59481,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 880,
+											"top": 888,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59500,7 +59500,7 @@
 									"tail": {
 										"$ref": "DATNFC01583V="
 									},
-									"points": "202:834;202:880",
+									"points": "202:842;202:888",
 									"nameLabel": {
 										"$ref": "DATNFC01629G="
 									}
@@ -59526,7 +59526,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 542,
-											"top": 1228,
+											"top": 1236,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59545,7 +59545,7 @@
 									"tail": {
 										"$ref": "DATNFC01586V="
 									},
-									"points": "542:815;542:1228;260:1228",
+									"points": "542:823;542:1236;260:1236",
 									"nameLabel": {
 										"$ref": "DATNFC01632G="
 									}
@@ -59571,7 +59571,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 994,
+											"top": 1002,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59590,7 +59590,7 @@
 									"tail": {
 										"$ref": "DATNFC01589V="
 									},
-									"points": "202:948;202:994",
+									"points": "202:956;202:1002",
 									"nameLabel": {
 										"$ref": "DATNFC01635G="
 									}
@@ -59616,7 +59616,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1092,
+											"top": 1100,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59635,7 +59635,7 @@
 									"tail": {
 										"$ref": "DATNFC01592V="
 									},
-									"points": "202:1046;202:1092",
+									"points": "202:1054;202:1100",
 									"nameLabel": {
 										"$ref": "DATNFC01638G="
 									}
@@ -59661,7 +59661,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1206,
+											"top": 1214,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -59680,7 +59680,7 @@
 									"tail": {
 										"$ref": "DATNFC01595V="
 									},
-									"points": "202:1160;202:1206",
+									"points": "202:1168;202:1214",
 									"nameLabel": {
 										"$ref": "DATNFC01641G="
 									}
@@ -59755,7 +59755,7 @@
 							"_parent": {
 								"$ref": "DATNFC01559F="
 							},
-							"name": "Hiện lỗi FORBIDDEN",
+							"name": "Hiện lỗi ADMIN_REQUIRED",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -59779,7 +59779,7 @@
 							"_parent": {
 								"$ref": "DATNFC01559F="
 							},
-							"name": "GET /admin/stats/users (đề xuất) — chọn khoảng ngày",
+							"name": "GET /admin/stats/users — chọn khoảng ngày",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -60089,7 +60089,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 139,
-											"top": 161,
+											"top": 165,
 											"width": 126,
 											"height": 22,
 											"text": "users.role = 'admin'?",
@@ -60098,7 +60098,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 76,
-									"top": 150,
+									"top": 154,
 									"width": 252,
 									"height": 44,
 									"nameLabel": {
@@ -60126,19 +60126,19 @@
 												"$ref": "DATNFC01650M="
 											},
 											"font": "Arial;13;0",
-											"left": 481,
+											"left": 484,
 											"top": 160,
-											"width": 126,
-											"height": 24,
-											"text": "Hiện lỗi FORBIDDEN",
+											"width": 121,
+											"height": 32,
+											"text": "Hiện lỗi ADMIN_REQUIRED",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 435,
+									"left": 440,
 									"top": 150,
-									"width": 218,
-									"height": 44,
+									"width": 209,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01652L="
 									},
@@ -60164,18 +60164,18 @@
 												"$ref": "DATNFC01653M="
 											},
 											"font": "Arial;13;0",
-											"left": 104,
-											"top": 250,
-											"width": 196,
+											"left": 132,
+											"top": 258,
+											"width": 141,
 											"height": 24,
-											"text": "GET /admin/stats/foods (đề xuất)",
+											"text": "GET /admin/stats/foods",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 94,
-									"top": 240,
-									"width": 216,
+									"left": 122,
+									"top": 248,
+									"width": 161,
 									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC01655L="
@@ -60203,7 +60203,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 108,
-											"top": 360,
+											"top": 368,
 											"width": 188,
 											"height": 34,
 											"text": "Đếm foods theo nhóm và vai trò món, chỉ món danh mục chung",
@@ -60212,7 +60212,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 98,
-									"top": 330,
+									"top": 338,
 									"width": 208,
 									"height": 84,
 									"nameLabel": {
@@ -60241,7 +60241,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 101,
-											"top": 490,
+											"top": 498,
 											"width": 202,
 											"height": 34,
 											"text": "Đếm cột NULL trong food_nutrition theo từng chất",
@@ -60250,7 +60250,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 91,
-									"top": 460,
+									"top": 468,
 									"width": 222,
 									"height": 84,
 									"nameLabel": {
@@ -60279,7 +60279,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 103,
-											"top": 620,
+											"top": 628,
 											"width": 199,
 											"height": 34,
 											"text": "Đọc popularity_score và số người đã thấy từng món",
@@ -60288,7 +60288,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 93,
-									"top": 590,
+									"top": 598,
 									"width": 219,
 									"height": 84,
 									"nameLabel": {
@@ -60317,7 +60317,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 137,
-											"top": 746,
+											"top": 754,
 											"width": 129,
 											"height": 53,
 											"text": "popularity_score đã được tính từ tín hiệu thật?",
@@ -60326,7 +60326,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 73,
-									"top": 720,
+									"top": 728,
 									"width": 258,
 									"height": 106,
 									"nameLabel": {
@@ -60355,7 +60355,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 468,
-											"top": 741,
+											"top": 749,
 											"width": 152,
 											"height": 64,
 											"text": "Ghi rõ phép so CHƯA có hiệu lực — mọi món đang bằng 0, thứ tự chỉ phản ánh cách phá hòa",
@@ -60364,7 +60364,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 415,
-									"top": 731,
+									"top": 739,
 									"width": 258,
 									"height": 84,
 									"nameLabel": {
@@ -60393,7 +60393,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 99,
-											"top": 882,
+											"top": 890,
 											"width": 207,
 											"height": 48,
 											"text": "Gộp: món được gợi ý nhiều nhất, món bị đổi nhiều nhất, món chưa ai thấy",
@@ -60402,7 +60402,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 89,
-									"top": 872,
+									"top": 880,
 									"width": 227,
 									"height": 68,
 									"nameLabel": {
@@ -60431,7 +60431,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 105,
-											"top": 996,
+											"top": 1004,
 											"width": 195,
 											"height": 32,
 											"text": "Đánh dấu chiều đặc trưng yếu: hiện 24/318 món có mức cay > 0",
@@ -60440,7 +60440,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 95,
-									"top": 986,
+									"top": 994,
 									"width": 215,
 									"height": 52,
 									"nameLabel": {
@@ -60469,7 +60469,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 126,
-											"top": 1094,
+											"top": 1102,
 											"width": 152,
 											"height": 48,
 											"text": "Vẽ phân bố nhóm món, tỷ lệ số liệu khuyết và bảng xếp hạng",
@@ -60478,7 +60478,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 73,
-									"top": 1084,
+									"top": 1092,
 									"width": 258,
 									"height": 68,
 									"nameLabel": {
@@ -60507,7 +60507,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 155,
-											"top": 1208,
+											"top": 1216,
 											"width": 95,
 											"height": 24,
 											"text": "Kết thúc",
@@ -60516,7 +60516,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 145,
-									"top": 1198,
+									"top": 1206,
 									"width": 115,
 									"height": 44,
 									"nameLabel": {
@@ -60545,7 +60545,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 150,
+											"top": 154,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60564,7 +60564,7 @@
 									"tail": {
 										"$ref": "DATNFC01645V="
 									},
-									"points": "202:104;202:150",
+									"points": "202:104;202:154",
 									"nameLabel": {
 										"$ref": "DATNFC01685G="
 									}
@@ -60589,8 +60589,8 @@
 												"$ref": "DATNFC01686W="
 											},
 											"font": "Arial;13;0",
-											"left": 435,
-											"top": 172,
+											"left": 440,
+											"top": 176,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60609,7 +60609,7 @@
 									"tail": {
 										"$ref": "DATNFC01648V="
 									},
-									"points": "328:172;435:172",
+									"points": "328:176;440:176",
 									"nameLabel": {
 										"$ref": "DATNFC01688G="
 									}
@@ -60635,7 +60635,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 240,
+											"top": 248,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60654,7 +60654,7 @@
 									"tail": {
 										"$ref": "DATNFC01648V="
 									},
-									"points": "202:194;202:240",
+									"points": "202:198;202:248",
 									"nameLabel": {
 										"$ref": "DATNFC01691G="
 									}
@@ -60680,7 +60680,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 707,
-											"top": 1220,
+											"top": 1228,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60699,7 +60699,7 @@
 									"tail": {
 										"$ref": "DATNFC01651V="
 									},
-									"points": "653:172;707:172;707:1220;260:1220",
+									"points": "649:176;707:176;707:1228;260:1228",
 									"nameLabel": {
 										"$ref": "DATNFC01694G="
 									}
@@ -60725,7 +60725,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 330,
+											"top": 338,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60744,7 +60744,7 @@
 									"tail": {
 										"$ref": "DATNFC01654V="
 									},
-									"points": "202:284;202:330",
+									"points": "202:292;202:338",
 									"nameLabel": {
 										"$ref": "DATNFC01697G="
 									}
@@ -60770,7 +60770,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 460,
+											"top": 468,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60789,7 +60789,7 @@
 									"tail": {
 										"$ref": "DATNFC01657V="
 									},
-									"points": "202:414;202:460",
+									"points": "202:422;202:468",
 									"nameLabel": {
 										"$ref": "DATNFC01700G="
 									}
@@ -60815,7 +60815,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 590,
+											"top": 598,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60834,7 +60834,7 @@
 									"tail": {
 										"$ref": "DATNFC01660V="
 									},
-									"points": "202:544;202:590",
+									"points": "202:552;202:598",
 									"nameLabel": {
 										"$ref": "DATNFC01703G="
 									}
@@ -60860,7 +60860,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 720,
+											"top": 728,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60879,7 +60879,7 @@
 									"tail": {
 										"$ref": "DATNFC01663V="
 									},
-									"points": "202:674;202:720",
+									"points": "202:682;202:728",
 									"nameLabel": {
 										"$ref": "DATNFC01706G="
 									}
@@ -60905,7 +60905,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 415,
-											"top": 773,
+											"top": 781,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60924,7 +60924,7 @@
 									"tail": {
 										"$ref": "DATNFC01666V="
 									},
-									"points": "331:773;415:773",
+									"points": "331:781;415:781",
 									"nameLabel": {
 										"$ref": "DATNFC01709G="
 									}
@@ -60950,7 +60950,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 872,
+											"top": 880,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -60969,7 +60969,7 @@
 									"tail": {
 										"$ref": "DATNFC01666V="
 									},
-									"points": "202:826;202:872",
+									"points": "202:834;202:880",
 									"nameLabel": {
 										"$ref": "DATNFC01712G="
 									}
@@ -60995,7 +60995,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 544,
-											"top": 906,
+											"top": 914,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -61014,7 +61014,7 @@
 									"tail": {
 										"$ref": "DATNFC01669V="
 									},
-									"points": "544:815;544:906;316:906",
+									"points": "544:823;544:914;316:914",
 									"nameLabel": {
 										"$ref": "DATNFC01715G="
 									}
@@ -61040,7 +61040,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 986,
+											"top": 994,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -61059,7 +61059,7 @@
 									"tail": {
 										"$ref": "DATNFC01672V="
 									},
-									"points": "202:940;202:986",
+									"points": "202:948;202:994",
 									"nameLabel": {
 										"$ref": "DATNFC01718G="
 									}
@@ -61085,7 +61085,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1084,
+											"top": 1092,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -61104,7 +61104,7 @@
 									"tail": {
 										"$ref": "DATNFC01675V="
 									},
-									"points": "202:1038;202:1084",
+									"points": "202:1046;202:1092",
 									"nameLabel": {
 										"$ref": "DATNFC01721G="
 									}
@@ -61130,7 +61130,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 1198,
+											"top": 1206,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -61149,7 +61149,7 @@
 									"tail": {
 										"$ref": "DATNFC01678V="
 									},
-									"points": "202:1152;202:1198",
+									"points": "202:1160;202:1206",
 									"nameLabel": {
 										"$ref": "DATNFC01724G="
 									}
@@ -61224,7 +61224,7 @@
 							"_parent": {
 								"$ref": "DATNFC01642F="
 							},
-							"name": "Hiện lỗi FORBIDDEN",
+							"name": "Hiện lỗi ADMIN_REQUIRED",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -61248,7 +61248,7 @@
 							"_parent": {
 								"$ref": "DATNFC01642F="
 							},
-							"name": "GET /admin/stats/foods (đề xuất)",
+							"name": "GET /admin/stats/foods",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -61558,7 +61558,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 139,
-											"top": 161,
+											"top": 165,
 											"width": 126,
 											"height": 22,
 											"text": "users.role = 'admin'?",
@@ -61567,7 +61567,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 76,
-									"top": 150,
+									"top": 154,
 									"width": 252,
 									"height": 44,
 									"nameLabel": {
@@ -61595,19 +61595,19 @@
 												"$ref": "DATNFC01733M="
 											},
 											"font": "Arial;13;0",
-											"left": 473,
+											"left": 494,
 											"top": 160,
-											"width": 126,
-											"height": 24,
-											"text": "Hiện lỗi FORBIDDEN",
+											"width": 121,
+											"height": 32,
+											"text": "Hiện lỗi ADMIN_REQUIRED",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 427,
+									"left": 450,
 									"top": 150,
-									"width": 218,
-									"height": 44,
+									"width": 209,
+									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01735L="
 									},
@@ -61633,18 +61633,18 @@
 												"$ref": "DATNFC01736M="
 											},
 											"font": "Arial;13;0",
-											"left": 99,
-											"top": 250,
-											"width": 207,
+											"left": 103,
+											"top": 258,
+											"width": 198,
 											"height": 32,
-											"text": "GET /admin/conditions (đề xuất) — bệnh lý kèm quy tắc",
+											"text": "GET /admin/conditions — bệnh lý kèm quy tắc",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 89,
-									"top": 240,
-									"width": 227,
+									"left": 93,
+									"top": 248,
+									"width": 218,
 									"height": 52,
 									"nameLabel": {
 										"$ref": "DATNFC01738L="
@@ -61672,7 +61672,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 143,
-											"top": 368,
+											"top": 376,
 											"width": 118,
 											"height": 34,
 											"text": "JOIN conditions với condition_rules",
@@ -61681,7 +61681,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 133,
-									"top": 338,
+									"top": 346,
 									"width": 138,
 									"height": 84,
 									"nameLabel": {
@@ -61710,7 +61710,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 115,
-											"top": 488,
+											"top": 496,
 											"width": 174,
 											"height": 33,
 											"text": "Chọn bệnh lý, thêm hoặc sửa một quy tắc",
@@ -61719,7 +61719,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 105,
-									"top": 468,
+									"top": 476,
 									"width": 194,
 									"height": 63,
 									"nameLabel": {
@@ -61748,7 +61748,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 107,
-											"top": 600,
+											"top": 608,
 											"width": 190,
 											"height": 49,
 											"text": "Khai loại quy tắc, chất, phép so, ngưỡng, phạm vi, mức bệnh áp dụng",
@@ -61757,7 +61757,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 97,
-									"top": 577,
+									"top": 585,
 									"width": 210,
 									"height": 82,
 									"nameLabel": {
@@ -61786,7 +61786,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 106,
-											"top": 725,
+											"top": 733,
 											"width": 192,
 											"height": 33,
 											"text": "Chọn is_hard: cứng thì loại món, mềm thì nhân hệ số phạt",
@@ -61795,7 +61795,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 96,
-									"top": 705,
+									"top": 713,
 									"width": 212,
 									"height": 63,
 									"nameLabel": {
@@ -61824,7 +61824,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 115,
-											"top": 834,
+											"top": 842,
 											"width": 175,
 											"height": 33,
 											"text": "Ghi xuất xứ vào note và chọn evidence_level",
@@ -61833,7 +61833,7 @@
 									],
 									"font": "Arial;13;0",
 									"left": 105,
-									"top": 814,
+									"top": 822,
 									"width": 195,
 									"height": 63,
 									"nameLabel": {
@@ -61861,19 +61861,19 @@
 												"$ref": "DATNFC01754M="
 											},
 											"font": "Arial;13;0",
-											"left": 101,
-											"top": 933,
-											"width": 203,
-											"height": 32,
-											"text": "PUT /admin/condition-rules/{id} (đề xuất)",
+											"left": 112,
+											"top": 941,
+											"width": 181,
+											"height": 24,
+											"text": "PUT /admin/condition-rules/{id}",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 91,
-									"top": 923,
-									"width": 223,
-									"height": 52,
+									"left": 102,
+									"top": 931,
+									"width": 201,
+									"height": 44,
 									"nameLabel": {
 										"$ref": "DATNFC01756L="
 									},
@@ -61937,7 +61937,7 @@
 												"$ref": "DATNFC01760M="
 											},
 											"font": "Arial;13;0",
-											"left": 467,
+											"left": 485,
 											"top": 1042,
 											"width": 139,
 											"height": 64,
@@ -61946,7 +61946,7 @@
 										}
 									],
 									"font": "Arial;13;0",
-									"left": 418,
+									"left": 436,
 									"top": 1032,
 									"width": 237,
 									"height": 84,
@@ -62051,19 +62051,19 @@
 												"$ref": "DATNFC01769M="
 											},
 											"font": "Arial;13;0",
-											"left": 465,
-											"top": 1300,
-											"width": 142,
-											"height": 48,
-											"text": "Chặn và báo rõ: quy tắc này làm Bước 4 không dựng nổi thực đơn",
+											"left": 471,
+											"top": 1284,
+											"width": 166,
+											"height": 80,
+											"text": "Hiện lỗi RULE_TOO_RESTRICTIVE — quy tắc này làm Bước 4 không dựng nổi thực đơn",
 											"wordWrap": true
 										}
 									],
 									"font": "Arial;13;0",
 									"left": 415,
-									"top": 1290,
-									"width": 242,
-									"height": 68,
+									"top": 1274,
+									"width": 278,
+									"height": 100,
 									"nameLabel": {
 										"$ref": "DATNFC01771L="
 									},
@@ -62242,7 +62242,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 150,
+											"top": 154,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62261,7 +62261,7 @@
 									"tail": {
 										"$ref": "DATNFC01728V="
 									},
-									"points": "202:104;202:150",
+									"points": "202:104;202:154",
 									"nameLabel": {
 										"$ref": "DATNFC01786G="
 									}
@@ -62286,8 +62286,8 @@
 												"$ref": "DATNFC01787W="
 											},
 											"font": "Arial;13;0",
-											"left": 427,
-											"top": 172,
+											"left": 450,
+											"top": 176,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62306,7 +62306,7 @@
 									"tail": {
 										"$ref": "DATNFC01731V="
 									},
-									"points": "328:172;427:172",
+									"points": "328:176;450:176",
 									"nameLabel": {
 										"$ref": "DATNFC01789G="
 									}
@@ -62332,7 +62332,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 240,
+											"top": 248,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62351,7 +62351,7 @@
 									"tail": {
 										"$ref": "DATNFC01731V="
 									},
-									"points": "202:194;202:240",
+									"points": "202:198;202:248",
 									"nameLabel": {
 										"$ref": "DATNFC01792G="
 									}
@@ -62376,7 +62376,7 @@
 												"$ref": "DATNFC01793W="
 											},
 											"font": "Arial;13;0",
-											"left": 751,
+											"left": 787,
 											"top": 1787,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -62396,7 +62396,7 @@
 									"tail": {
 										"$ref": "DATNFC01734V="
 									},
-									"points": "645:172;751:172;751:1787;260:1787",
+									"points": "659:176;787:176;787:1787;260:1787",
 									"nameLabel": {
 										"$ref": "DATNFC01795G="
 									}
@@ -62422,7 +62422,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 338,
+											"top": 346,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62441,7 +62441,7 @@
 									"tail": {
 										"$ref": "DATNFC01737V="
 									},
-									"points": "202:292;202:338",
+									"points": "202:300;202:346",
 									"nameLabel": {
 										"$ref": "DATNFC01798G="
 									}
@@ -62467,7 +62467,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 468,
+											"top": 476,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62486,7 +62486,7 @@
 									"tail": {
 										"$ref": "DATNFC01740V="
 									},
-									"points": "202:422;202:468",
+									"points": "202:430;202:476",
 									"nameLabel": {
 										"$ref": "DATNFC01801G="
 									}
@@ -62512,7 +62512,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 577,
+											"top": 585,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62531,7 +62531,7 @@
 									"tail": {
 										"$ref": "DATNFC01743V="
 									},
-									"points": "202:531;202:577",
+									"points": "202:539;202:585",
 									"nameLabel": {
 										"$ref": "DATNFC01804G="
 									}
@@ -62557,7 +62557,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 705,
+											"top": 713,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62576,7 +62576,7 @@
 									"tail": {
 										"$ref": "DATNFC01746V="
 									},
-									"points": "202:659;202:705",
+									"points": "202:667;202:713",
 									"nameLabel": {
 										"$ref": "DATNFC01807G="
 									}
@@ -62602,7 +62602,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 814,
+											"top": 822,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62621,7 +62621,7 @@
 									"tail": {
 										"$ref": "DATNFC01749V="
 									},
-									"points": "202:768;202:814",
+									"points": "202:776;202:822",
 									"nameLabel": {
 										"$ref": "DATNFC01810G="
 									}
@@ -62647,7 +62647,7 @@
 											},
 											"font": "Arial;13;0",
 											"left": 202,
-											"top": 923,
+											"top": 931,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62666,7 +62666,7 @@
 									"tail": {
 										"$ref": "DATNFC01752V="
 									},
-									"points": "202:877;202:923",
+									"points": "202:885;202:931",
 									"nameLabel": {
 										"$ref": "DATNFC01813G="
 									}
@@ -62736,7 +62736,7 @@
 												"$ref": "DATNFC01817W="
 											},
 											"font": "Arial;13;0",
-											"left": 418,
+											"left": 436,
 											"top": 1074,
 											"height": 13,
 											"alpha": 1.5707963267948966,
@@ -62756,7 +62756,7 @@
 									"tail": {
 										"$ref": "DATNFC01758V="
 									},
-									"points": "333:1074;418:1074",
+									"points": "333:1074;436:1074",
 									"nameLabel": {
 										"$ref": "DATNFC01819G="
 									}
@@ -62826,8 +62826,8 @@
 												"$ref": "DATNFC01823W="
 											},
 											"font": "Arial;13;0",
-											"left": 691,
-											"top": 618,
+											"left": 727,
+											"top": 626,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -62846,7 +62846,7 @@
 									"tail": {
 										"$ref": "DATNFC01761V="
 									},
-									"points": "655:1074;691:1074;691:618;307:618",
+									"points": "673:1074;727:1074;727:626;307:626",
 									"nameLabel": {
 										"$ref": "DATNFC01825G="
 									}
@@ -63006,8 +63006,8 @@
 												"$ref": "DATNFC01835W="
 											},
 											"font": "Arial;13;0",
-											"left": 721,
-											"top": 618,
+											"left": 757,
+											"top": 626,
 											"height": 13,
 											"alpha": 1.5707963267948966,
 											"distance": 15,
@@ -63026,7 +63026,7 @@
 									"tail": {
 										"$ref": "DATNFC01770V="
 									},
-									"points": "657:1324;721:1324;721:618;307:618",
+									"points": "693:1324;757:1324;757:626;307:626",
 									"nameLabel": {
 										"$ref": "DATNFC01837G="
 									}
@@ -63236,7 +63236,7 @@
 							"_parent": {
 								"$ref": "DATNFC01725F="
 							},
-							"name": "Hiện lỗi FORBIDDEN",
+							"name": "Hiện lỗi ADMIN_REQUIRED",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -63260,7 +63260,7 @@
 							"_parent": {
 								"$ref": "DATNFC01725F="
 							},
-							"name": "GET /admin/conditions (đề xuất) — bệnh lý kèm quy tắc",
+							"name": "GET /admin/conditions — bệnh lý kèm quy tắc",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -63404,7 +63404,7 @@
 							"_parent": {
 								"$ref": "DATNFC01725F="
 							},
-							"name": "PUT /admin/condition-rules/{id} (đề xuất)",
+							"name": "PUT /admin/condition-rules/{id}",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",
@@ -63552,7 +63552,7 @@
 							"_parent": {
 								"$ref": "DATNFC01725F="
 							},
-							"name": "Chặn và báo rõ: quy tắc này làm Bước 4 không dựng nổi thực đơn",
+							"name": "Hiện lỗi RULE_TOO_RESTRICTIVE — quy tắc này làm Bước 4 không dựng nổi thực đơn",
 							"ownedElements": [
 								{
 									"_type": "FCFlow",

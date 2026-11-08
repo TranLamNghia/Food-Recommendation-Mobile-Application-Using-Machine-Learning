@@ -276,13 +276,16 @@ def main() -> int:
     print("\n2. Khớp với sơ đồ Use case")
     loi += kiem_use_case(goc)
 
-    print("\n3. Endpoint còn phải bổ sung vào đặc tả API")
+    # Đối chiếu sơ đồ với đặc tả API và lược đồ CSDL là việc của
+    # `tools/check_flowchart.py`. Ở đây chỉ nhắc lại những chỗ chính sơ đồ
+    # tự đánh dấu là còn thiếu, để chúng không nằm im trong bản nộp.
+    print("\n3. Chỗ sơ đồ tự đánh dấu là còn chờ bổ sung")
     de_xuat = [(ma, k[4]) for ma, _, khoi, _ in SO_DO for k in khoi
                if DAU_DE_XUAT in k[4]]
     for ma, t in de_xuat:
         print(f"   ! {ma}  {t.replace(chr(10), ' ')[:66]}")
-    print(f"   {len(de_xuat)} endpoint chưa có trong "
-          "docs/API_SPECIFICATION.md")
+    if not de_xuat:
+        print("   ✓ không còn chỗ nào")
 
     # ── Dựng nhánh mới ──
     da_co = next((e for e in goc["ownedElements"]
