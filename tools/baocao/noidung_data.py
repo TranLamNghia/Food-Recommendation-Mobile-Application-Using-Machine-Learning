@@ -24,7 +24,11 @@ TEN_DE_TAI = ("Ứng dụng di động khuyến nghị thực đơn dinh dưỡn
 
 # ── TÓM TẮT ───────────────────────────────────────────────────────────────
 TOM_TAT = [
-    ("b", "Nội dung tóm tắt"),
+    # Ba dòng định danh thay cho nhãn "Nội dung tóm tắt" của biểu mẫu,
+    # theo bản đã soạn trong Word.
+    ("p", f"Tên đề tài: {TEN_DE_TAI}"),
+    ("p", "Sinh viên thực hiện: Trần Lâm Nghĩa"),
+    ("p2", "Mã SV: 22115053122231 	Lớp: 22T2"),
     ("p",
      f"Đề tài “{TEN_DE_TAI}” xây dựng một ứng dụng di động sinh thực đơn cho "
      "từng ngày, phù hợp với thể trạng, bệnh lý và khẩu vị của riêng từng "
@@ -35,13 +39,13 @@ TOM_TAT = [
      "Hệ thống được xây dựng theo mô hình client – server. Ứng dụng di động "
      "đa nền tảng viết bằng Flutter, dịch vụ phía máy chủ dạng RESTful viết "
      "bằng ASP.NET Core, dữ liệu lưu trên hệ quản trị cơ sở dữ liệu MySQL, "
-     "mô-đun khuyến nghị cài đặt bằng Python với thư viện scikit-learn."),
+     "model khuyến nghị cài đặt bằng Python với thư viện scikit-learn."),
     ("p",
      "Thuật toán khuyến nghị gồm bốn bước. Bước một tính hạn mức năng lượng "
      "và các ràng buộc dinh dưỡng của người dùng từ chỉ số khối cơ thể, công "
      "thức Mifflin-St Jeor và tổng năng lượng tiêu hao. Bước hai loại khỏi "
      "danh mục những món không an toàn với bệnh lý và dị ứng đã khai. Bước "
-     "ba xếp hạng các món còn lại theo độ tương đồng cô-sin giữa vector đặc "
+     "ba xếp hạng các món còn lại theo độ tương đồng cosin giữa vector đặc "
      "trưng món ăn hai mươi chiều và vector sở thích của người dùng. Bước "
      "bốn ghép các món đã xếp hạng thành thực đơn một ngày sao cho tổng năng "
      "lượng lệch không quá 10 % so với hạn mức và các ngưỡng vi chất tính "
@@ -56,8 +60,7 @@ TOM_TAT = [
     ("p",
      "Hệ thống có khả năng mở rộng: khi lịch sử tương tác của người dùng đủ "
      "lớn, mô hình khuyến nghị chuyển dần từ lọc theo nội dung sang mô hình "
-     "học máy có giám sát, và chất lượng gợi ý được đánh giá bằng các độ đo "
-     "Precision@K, Recall@K và NDCG."),
+     "học máy có giám sát."),
 ]
 
 # ── NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP ─────────────────────────────────────────────
@@ -315,7 +318,7 @@ CHUONG1 = [
         "Cá nhân hóa gợi ý theo khẩu vị của từng người, để thực đơn đúng về "
         "dinh dưỡng nhưng vẫn là món người dùng thực sự muốn ăn.",
         "Giảm công sức ra quyết định hằng ngày: người dùng mở ứng dụng là có "
-        "ngay thực đơn cho cả bốn bữa, thay vì phải tự nghĩ và tự tra cứu.",
+        "ngay thực đơn cho cả ba bữa, thay vì phải tự nghĩ và tự tra cứu.",
         "Ghi nhận phản hồi của người dùng để gợi ý của những lần sau sát hơn "
         "với khẩu vị và thói quen ăn uống thực tế.",
         "Cung cấp cho quản trị viên công cụ quản lý danh mục món ăn và bộ "
@@ -350,8 +353,7 @@ CHUONG1 = [
         "cao, cân nặng, mức vận động, mục tiêu cân nặng, bệnh lý và dị ứng.",
         "Thực hiện phiên khảo sát khẩu vị để hệ thống hiểu sở thích ngay từ "
         "lần dùng đầu tiên.",
-        "Xem thực đơn gợi ý cho từng ngày, chia theo bữa sáng, trưa, tối và "
-        "bữa phụ.",
+        "Xem thực đơn gợi ý cho từng ngày, chia theo bữa sáng, trưa, tối.",
         "Xem chi tiết thành phần dinh dưỡng và nhãn của từng món.",
         "Đổi một món trong thực đơn sang món khác cùng vai trò trong bữa.",
         "Thêm món ăn của riêng mình và đưa món đó vào thực đơn.",
@@ -365,7 +367,7 @@ CHUONG1 = [
         "Quản lý danh mục bệnh lý, chế độ ăn và bộ quy tắc dinh dưỡng đi "
         "kèm từng bệnh lý.",
         "Quản lý tài khoản người dùng: tra cứu, khóa và mở lại tài khoản.",
-        "Xem số liệu phân tích về người dùng và về danh mục món ăn.",
+        "Xem số liệu phân tích về người dùng và danh mục món ăn.",
     ]),
 
     ("h3", "Yêu cầu phi chức năng"),
@@ -379,7 +381,7 @@ CHUONG1 = [
     ]),
     ("b", "Hiệu năng:"),
     ("ul", [
-        "Thời gian sinh một thực đơn ngày không vượt quá vài giây trên tập "
+        "Thời gian sinh thực đơn ngày không vượt quá vài giây trên tập "
         "dữ liệu hiện có.",
         "Giao diện phản hồi mượt, không để người dùng chờ mà không có thông "
         "báo trạng thái.",
@@ -415,7 +417,7 @@ CHUONG1 = [
         "mặn, chất xơ, mức cay và nhóm món.",
         "Hồ sơ sở thích của người dùng cũng là một vector cùng không gian, "
         "cập nhật dần theo thuật toán Rocchio sau mỗi lượt phản hồi.",
-        "Độ phù hợp giữa món ăn và người dùng tính bằng độ tương đồng cô-sin "
+        "Độ phù hợp giữa món ăn và người dùng tính bằng độ tương đồng cosin "
         "giữa hai vector đó.",
     ]),
     ("b", "Ghép thực đơn có ràng buộc dinh dưỡng theo ngày:"),
@@ -428,7 +430,7 @@ CHUONG1 = [
         "thực đơn nhưng ghi rõ ngưỡng nào chưa đạt và số liệu thực tế là bao "
         "nhiêu, thay vì trình bày như đã đạt.",
     ]),
-    ("b", "Giải quyết bài toán khởi đầu nguội:"),
+    ("b", "Giải quyết bài toán cold-start:"),
     ("ul", [
         "Người dùng mới chưa có lịch sử vẫn nhận được gợi ý hợp khẩu vị nhờ "
         "một phiên khảo sát ngắn thực hiện một lần lúc khởi tạo tài khoản.",
@@ -468,12 +470,8 @@ CHUONG1 = [
      "dưỡng từ tài liệu của Viện Dinh dưỡng Quốc gia, khuyến nghị của Tổ "
      "chức Y tế Thế giới và các hướng dẫn điều trị chuyên ngành, để xác định "
      "những ràng buộc mà hệ thống bắt buộc phải tôn trọng."),
-    ("b", "Khảo sát các ứng dụng tương tự:"),
-    ("p",
-     "Dùng thử và đối chiếu một số ứng dụng dinh dưỡng đang phổ biến, xem "
-     "chúng giải quyết tới đâu các khâu tính nhu cầu, lọc theo bệnh lý, cá "
-     "nhân hóa khẩu vị và sinh thực đơn, từ đó xác định khoảng trống mà đề "
-     "tài hướng tới."),
+    # Mục "Khảo sát các ứng dụng tương tự" đã bỏ khỏi báo cáo; phần đối
+    # chiếu với các cách làm hiện nay nằm trong bảng so sánh ở dưới.
     ("b", "Khảo sát người dùng:"),
     ("p",
      "Thu thập ý kiến của những người đang hoặc từng theo một chế độ ăn — "
@@ -521,7 +519,7 @@ CHUONG1 = [
              "quản lý danh mục bệnh lý cùng bộ quy tắc dinh dưỡng, quản lý "
              "tài khoản người dùng và xem các số liệu phân tích."],
             ["3", "Hệ thống (System)",
-             "Tự động thực hiện các phần việc không cần người can thiệp: "
+             "Tự động thực hiện phần việc không cần người can thiệp: "
              "tính nhu cầu năng lượng từ hồ sơ, lọc món theo bệnh lý và dị "
              "ứng, xếp hạng món theo khẩu vị, ghép thực đơn ngày và cập "
              "nhật hồ sơ sở thích sau mỗi lượt phản hồi."],

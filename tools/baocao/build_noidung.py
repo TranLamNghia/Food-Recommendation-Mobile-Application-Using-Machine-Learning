@@ -61,6 +61,7 @@ lên chính nó.
 import pathlib
 import argparse
 import difflib
+import html
 import re
 import shutil
 import sys
@@ -286,7 +287,19 @@ def _in_utf8() -> None:
 
 
 def _chu_doan(p_xml: str) -> str:
-    return "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", p_xml)).strip()
+    """Chữ của một đoạn, dấu tab trả về thành "\t".
+
+    Phải lấy cả `<w:tab/>` chứ không chỉ `<w:t>`: `doan_tab` mã hóa dấu tab
+    trong dữ liệu thành "\t", nên bỏ qua nó ở phía báo cáo sẽ làm dòng
+    "Mã SV: … <tab> Lớp: …" bị báo là lệch mãi mãi.
+    """
+    phan = re.findall(r"<w:t[^>]*>([^<]*)</w:t>|(<w:tab/>)", p_xml)
+    tho = "".join("	" if tab else t for t, tab in phan)
+    # Giải mã thực thể XML, nếu không thì mọi đoạn có dấu "<", ">" hay "&"
+    # sẽ bị báo lệch mãi mãi: văn bản "0 < n < 30" nằm trong tệp dưới dạng
+    # "0 &lt; n &lt; 30", và tiêu đề "KẾT LUẬN &amp; HƯỚNG PHÁT TRIỂN" cũng
+    # vậy. Tài liệu đúng, chỉ phép so là sai.
+    return html.unescape(tho).strip()
 
 
 def _phang(khoi) -> list[str]:
@@ -296,11 +309,20 @@ def _phang(khoi) -> list[str]:
         if kieu == "ul":
             ra.extend(noi)
         elif kieu == "bang":
-            # Bảng so riêng thì rắc rối mà ít giá trị; bỏ qua ở bước soát.
-            continue
+            # Phải phẳng bảng ra theo ĐÚNG thứ tự `bang()` sinh: ô tiêu đề,
+            # rồi từng hàng, rồi chú thích. Bỏ qua bảng ở bước soát từng là
+            # một lỗi có hậu quả: hai bảng vốn đã có trong dữ liệu bị báo là
+            # "chỉ có trong báo cáo, ghi sẽ xóa", và con số lệch bị thổi lên.
+            ra.extend(noi["head"])
+            for hang in noi["rows"]:
+                ra.extend(hang)
+            ra.append(noi["caption"])
         elif isinstance(noi, str) and noi:
             ra.append(noi)
-    return ra
+    # Lọc chuỗi rỗng để khớp `_vung`, vốn bỏ đoạn không có chữ. Ô trống của
+    # bảng so sánh (những ô không có dấu "X") từng bị báo là đoạn thiếu
+    # trong báo cáo — năm chỗ lệch giả.
+    return [t for t in ra if t]
 
 
 def _vung(txt: list[str], dau: str, cuoi: str) -> list[str] | None:
@@ -441,7 +463,13 @@ def main() -> int:
                # dòng "Tên đề tài:".
                [(None, "{Ví dụ mẫu"), (None, "Nội dung tóm tắt"),
                 (None, "Tên đề tài:")],
-               ("ML-M-KLHPT", "NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP"),
+               # Mốc cuối từng là tiêu đề "NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP",
+               # nay không còn trong báo cáo. Đoạn ML-M-KLHPT rỗng ngay sau
+               # phần Tóm tắt GIỮ NGẮT TRANG, nên lấy chính nó làm mốc cuối
+               # để chỉ thay phần phía trước — đúng cách khối Mở đầu đang
+               # làm với `TTat-NXet-NVu-LN`. Lấy "LỜI CẢM ƠN" làm mốc cuối
+               # thì đoạn giữ ngắt trang nằm trong vùng bị thay và mất.
+               ("ML-M-KLHPT", ""),
                dung(TOM_TAT))
 
     # ── NHIỆM VỤ ĐỒ ÁN TỐT NGHIỆP — KHÔNG điền nữa ──
