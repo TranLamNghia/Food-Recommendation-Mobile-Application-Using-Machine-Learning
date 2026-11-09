@@ -1,0 +1,354 @@
+[
+  {
+    "name": "Cơm trắng",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 80,
+        "label": "gạo tẻ"
+      }
+    ],
+    "note": "Khối lượng tính GẠO KHÔ; một bát cơm chín khoảng 200 g nở ra từ 80 g gạo"
+  },
+  {
+    "name": "Cơm gạo lứt",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 80,
+        "label": "gạo lứt"
+      }
+    ],
+    "note": "Khối lượng tính gạo khô"
+  },
+  {
+    "name": "Xôi trắng",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 90,
+        "label": "gạo nếp"
+      }
+    ],
+    "note": "Khối lượng tính gạo nếp khô"
+  },
+  {
+    "name": "Cơm gạo tẻ với trứng luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có trứng"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 80,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "9001",
+        "g": 50,
+        "label": "trứng gà"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Không nêm nước mắm"
+  },
+  {
+    "name": "Cơm gạo lứt với đậu đũa luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 80,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "4030",
+        "g": 120,
+        "label": "đậu đũa"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo nếp với đậu Hà Lan luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 80,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "4031",
+        "g": 120,
+        "label": "đậu Hà Lan"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo tẻ với đậu rồng luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 80,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "4032",
+        "g": 120,
+        "label": "đậu rồng"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo lứt với giá đậu nành luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 80,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "4035",
+        "g": 120,
+        "label": "giá đậu nành"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo nếp với giá đỗ luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 80,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "4036",
+        "g": 120,
+        "label": "giá đỗ"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo lứt với măng tây luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 80,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "4052",
+        "g": 120,
+        "label": "măng tây"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo nếp với măng luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 80,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "4053",
+        "g": 120,
+        "label": "măng"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo tẻ với mướp luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 80,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "4054",
+        "g": 120,
+        "label": "mướp"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo lứt với khổ qua luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 80,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "4055",
+        "g": 120,
+        "label": "khổ qua"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo nếp với ngải cứu luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 80,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "4057",
+        "g": 120,
+        "label": "ngải cứu"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo tẻ với ngô bao tử luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 80,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "4058",
+        "g": 120,
+        "label": "ngô bao tử"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  },
+  {
+    "name": "Cơm gạo lứt với củ sen luộc",
+    "category": "Cơm",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 80,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "4059",
+        "g": 120,
+        "label": "củ sen"
+      }
+    ],
+    "note": "Khối lượng gạo tính khô. Rau luộc không nêm"
+  }
+]

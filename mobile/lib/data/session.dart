@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import 'mock/mock_foods.dart';
+import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
 import 'models/food.dart';
 import 'models/health_profile.dart';
@@ -10,7 +11,10 @@ import 'models/meal_plan.dart';
 import 'models/swipe_action.dart';
 import 'recommender/food_vector.dart';
 import 'recommender/menu_builder.dart';
+import 'recommender/nutrient_target.dart';
 import 'recommender/preference_profile.dart';
+import 'rules/day_budget.dart';
+import 'rules/dish_screening.dart';
 
 /// Trạng thái dùng chung của cả phiên sử dụng.
 ///
@@ -49,6 +53,28 @@ class AppSession extends ChangeNotifier {
   /// màn hình thực nghiệm đổi được khi cần so sánh hai cấu hình.
   double explorationRatio = 0.3;
 
+  /// Ràng buộc vi chất ở cấp **ngày** mà Bước 4 phải thỏa.
+  ///
+  /// Trong hệ thống thật, danh sách này ghép từ hai nguồn — không có nguồn
+  /// nào là do lập trình viên tự đặt:
+  ///
+  /// * `condition_rules` với `scope = 'per_day'` và `is_hard = 1`, lọc theo
+  ///   bệnh lý người dùng đã khai. Hiện là bốn dòng: natri ≤ 2000 mg (WHO,
+  ///   áp cho tăng huyết áp và bệnh thận), purin ≤ 400 mg, đạm ≤ 48 g
+  ///   (KDIGO 2024).
+  /// * `rda_reference`, tra theo giới tính và tuổi, cho những mục tiêu người
+  ///   dùng **tự khai**. Hiện là chất xơ ≥ 25 g/ngày với người từ 10 tuổi
+  ///   (WHO 2023).
+  ///
+  /// Mặc định rỗng: không bệnh lý, không mục tiêu thì Bước 4 chạy đúng như
+  /// trước. Bản mock chưa có luồng khai bệnh nên màn hình thực nghiệm gán
+  /// trực tiếp vào đây.
+  ///
+  /// Lưu ý `purine_mg` **không** thi hành được — xem
+  /// `NutrientTarget.valueOf`. Truyền vào vẫn hợp lệ và sẽ hiện ra ở
+  /// `DailyPlan.unenforceableTargets` thay vì bị lặng lẽ coi là đã thỏa.
+  List<NutrientTarget> nutrientTargets = const [];
+
   // ── Khởi đầu nguội ───────────────────────────────────────────────
 
   /// Nhận kết quả phiên vuốt, dựng hồ sơ sở thích rồi sinh thực đơn đầu tiên.
@@ -83,6 +109,7 @@ class AppSession extends ChangeNotifier {
     candidates: candidates,
     profile: preference,
     explorationRatio: explorationRatio,
+    nutrientTargets: nutrientTargets,
     rng: _rng,
   );
 
@@ -90,7 +117,7 @@ class AppSession extends ChangeNotifier {
   List<Food> alternativesFor(MealPlanItem item) {
     final plan = _plan;
     final exclude = plan == null
-        ? <int>{}
+        ? <String>{}
         : plan.allItems.map((i) => i.food.id).toSet();
 
     return _builder().alternativesFor(item, excludeIds: exclude);
@@ -124,6 +151,57 @@ class AppSession extends ChangeNotifier {
       return;
     }
   }
+
+  // ── Hạn mức theo ngày và sàng món ────────────────────────────────
+
+  /// Bệnh lý người dùng đã khai, ở dạng bộ quy tắc hiểu được.
+  List<UserCondition> get userConditions =>
+      conditionsFromCodes(profile.conditions);
+
+  /// Món **đã ăn** hôm nay — theo nhật ký.
+  ///
+  /// Nhật ký là nguồn duy nhất của phần đã ăn. Suất mang trạng thái `eaten`
+  /// KHÔNG được cộng thêm: [logMeal] ghi cả hai nơi cùng lúc, nên cộng cả
+  /// hai là đếm hai lần cùng một suất.
+  List<Food> get eatenToday {
+    final homNay = DateTime.now();
+    return [
+      for (final e in diary)
+        if (e.ateAt.year == homNay.year &&
+            e.ateAt.month == homNay.month &&
+            e.ateAt.day == homNay.day)
+          e.food,
+    ];
+  }
+
+  /// Món **đang nằm trong thực đơn**, chưa ăn.
+  ///
+  /// Tách khỏi [eatenToday] chứ không gộp: khi một món không vừa hạn mức,
+  /// người dùng đang chọn giữa *bỏ món đã lên kế hoạch* và *chịu vượt*. Một
+  /// tổng duy nhất làm họ tưởng cả hai phần đều đã cố định.
+  List<Food> get plannedToday => [
+    for (final item in _plan?.allItems ?? const <MealPlanItem>[])
+      if (item.status == MealItemStatus.planned) item.food,
+  ];
+
+  /// Hạn mức theo ngày của hôm nay, đã trừ phần đã dùng.
+  DayBudget get dayBudget => DayBudget.from(
+    thresholds: dayThresholdsFor(userConditions),
+    eaten: eatenToday,
+    planned: plannedToday,
+  );
+
+  /// Sàng toàn bộ danh mục theo bệnh lý và hạn mức còn lại.
+  ///
+  /// Tính lại mỗi lần gọi là cố ý: hạn mức phụ thuộc vào việc hôm nay đã ăn
+  /// gì, nên một kết quả được nhớ lại sẽ sai ngay sau lần ghi nhật ký kế
+  /// tiếp — và sai theo hướng nới lỏng.
+  ScreeningResult get screening => screenDishes(
+    foods: candidates,
+    conditions: userConditions,
+    budget: dayBudget,
+    softRules: softRulesFor(userConditions),
+  );
 
   // ── Nhật ký ──────────────────────────────────────────────────────
 

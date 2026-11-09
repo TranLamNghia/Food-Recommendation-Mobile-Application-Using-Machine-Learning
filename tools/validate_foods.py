@@ -25,15 +25,39 @@ import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _env  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "foods"
 
 # ── Vốn từ hợp lệ, phải khớp enum trong db/schema.sql ────────────────────
 
 CATEGORIES = {
-    "mon_nuoc", "com", "mon_kho", "mon_xao", "mon_canh", "mon_chien",
-    "mon_nuong", "mon_luoc_hap", "mon_cuon", "mon_goi", "trang_mieng",
-    "do_uong",
+    "Món nước", "Cơm", "Món kho",
+    "Món xào", "Món canh", "Món chiên rán",
+    "Món nướng", "Món luộc hấp", "Món cuốn",
+    "Món gỏi / nộm", "Tráng miệng", "Đồ uống",
+}
+
+# Tên tệp CSV → tên danh mục trong CSDL.
+#
+# Tệp vẫn đặt tên không dấu cho dễ gõ và dễ dùng trong dòng lệnh, còn cột
+# `category` trong tệp mang **tên tiếng Việt** — đúng giá trị mà
+# `food_categories.name` lưu, vì cột `code` đã được bỏ khỏi lược đồ.
+FILE_TO_CATEGORY = {
+    "mon_nuoc": "Món nước",
+    "com": "Cơm",
+    "mon_kho": "Món kho",
+    "mon_xao": "Món xào",
+    "mon_canh": "Món canh",
+    "mon_chien": "Món chiên rán",
+    "mon_nuong": "Món nướng",
+    "mon_luoc_hap": "Món luộc hấp",
+    "mon_cuon": "Món cuốn",
+    "mon_goi": "Món gỏi / nộm",
+    "trang_mieng": "Tráng miệng",
+    "do_uong": "Đồ uống",
 }
 
 # Vai trò món. Rộng hơn enum `foods.dish_role` hiện tại (main/side/soup/
@@ -50,27 +74,22 @@ DISH_ROLES = {
     "drink",         # đồ uống
 }
 
-COOKING_METHODS = {
-    "luoc", "hap", "xao", "chien", "nuong", "kho",
-    "nau_canh", "tron", "song", "khac",
-}
 
-MEALS = {"breakfast", "lunch", "dinner", "snack"}
 
 TAGS = {
-    "contains_seafood", "contains_peanut", "contains_egg", "contains_dairy",
-    "contains_gluten", "contains_soy",
-    "vegetarian", "vegan",
-    "low_sodium", "low_sugar", "high_protein", "high_fiber",
-    "salty", "sweet", "sour", "fatty", "light",
-}
+    "Có hải sản", "Có đậu phộng", "Có trứng",
+    "Có sữa / chế phẩm sữa", "Có gluten", "Có đậu nành",
+    "Món chay", "Món thuần chay", "Ít natri",
+    "Ít đường", "Giàu đạm", "Giàu chất xơ",
+    "Giàu purin",
+    }
 
 # ── Cột: bắt buộc, nên có, tùy chọn ─────────────────────────────────────
 
 REQUIRED = [
-    "name", "category", "dish_role", "cooking_method", "spice_level",
-    "suitable_meals", "serving_size_g", "calories_kcal",
-    "protein_g", "carbs_g", "fat_g", "data_source",
+    "name", "category", "dish_role", "spice_level",
+    "serving_size_g", "calories_kcal",
+    "protein_g", "carbs_g", "fat_g",
 ]
 
 # Bộ quy tắc F1 trong db/seed.sql tham chiếu tới các cột này. Để trống thì
@@ -167,7 +186,9 @@ def check_row(issues, filename, lineno, row, expected_category):
     category = row.get("category", "").strip()
     if category and category not in CATEGORIES:
         issues.append(Issue("LỖI", filename, lineno, name, f"`category` lạ: {category!r}"))
-    elif category and category != expected_category:
+    elif category and category != FILE_TO_CATEGORY.get(
+        expected_category, expected_category
+    ):
         issues.append(
             Issue(
                 "LỖI", filename, lineno, name,
@@ -178,17 +199,6 @@ def check_row(issues, filename, lineno, row, expected_category):
     role = row.get("dish_role", "").strip()
     if role and role not in DISH_ROLES:
         issues.append(Issue("LỖI", filename, lineno, name, f"`dish_role` lạ: {role!r}"))
-
-    method = row.get("cooking_method", "").strip()
-    if method and method not in COOKING_METHODS:
-        issues.append(
-            Issue("LỖI", filename, lineno, name, f"`cooking_method` lạ: {method!r}")
-        )
-
-    meals = [m.strip() for m in row.get("suitable_meals", "").split("|") if m.strip()]
-    for meal in meals:
-        if meal not in MEALS:
-            issues.append(Issue("LỖI", filename, lineno, name, f"bữa lạ: {meal!r}"))
 
     for tag in [t.strip() for t in row.get("tags", "").split("|") if t.strip()]:
         if tag not in TAGS:
@@ -238,44 +248,62 @@ def check_row(issues, filename, lineno, row, expected_category):
                 )
             )
 
-    # Đường là một phần của bột đường, xơ cũng vậy — không được vượt.
+    # Đường và xơ đều là một phần của bột đường nên về lý không được vượt.
+    #
+    # Nhưng trong Bảng thành phần thực phẩm Việt Nam 2007, **29 trong 211 mục**
+    # có đường lớn hơn bột đường — ví dụ dưa hấu ghi bột đường 2,3 g mà đường
+    # 6,2 g. Đây là mâu thuẫn của CHÍNH BẢNG GỐC, không phải lỗi chép số: cột
+    # "Glucid" thường tính bằng hiệu số, còn "Đường tổng số" đo trực tiếp, và
+    # hai phương pháp lệch nhau ở quả nhiều nước.
+    #
+    # Vì vậy đây là CẢNH BÁO chứ không phải LỖI. Báo lỗi cho một thứ không sửa
+    # được sẽ khiến người đọc quen bỏ qua kết quả kiểm — lúc đó lỗi thật cũng
+    # trôi theo. Mã dùng tỷ lệ đường đã chặn trên ở 1,0 nên vẫn an toàn.
     for part in ("sugar_g", "fiber_g"):
         if part in values and carbs is not None and values[part] > carbs + 0.01:
             issues.append(
                 Issue(
-                    "LỖI", filename, lineno, name,
-                    f"`{part}` = {values[part]:g} lớn hơn `carbs_g` = {carbs:g}",
+                    "CẢNH BÁO", filename, lineno, name,
+                    f"`{part}` = {values[part]:g} lớn hơn `carbs_g` = {carbs:g}"
+                    f" — mâu thuẫn có sẵn trong bảng gốc, giữ nguyên số nguồn",
                 )
             )
 
     # ── Nhất quán nhãn với số liệu ──
+    # Ba phép kiểm dưới đây từng tra nhãn bằng tên tiếng Anh — `vegan`,
+    # `vegetarian`, `contains_seafood`, `low_sodium` — trong khi từ vựng nhãn
+    # đã chuyển sang tên tiếng Việt từ lúc bỏ cột `code`. Không nhãn nào khớp
+    # nữa, nên **cả ba đều không bao giờ chạy**, kể cả phép kiểm mức LỖI
+    # "vừa là món chay vừa có hải sản".
+    #
+    # Đáng chú ý vì đúng loại lỗi này đã để hai món gắn nhãn `Món chay` mà
+    # trong công thức có nước mắm đi qua được: phép kiểm vẫn nằm trong mã
+    # nguồn, trông như đang bảo vệ, mà thực ra là một câu `if` chết.
     tags = {t.strip() for t in row.get("tags", "").split("|") if t.strip()}
-    if "vegan" in tags and "vegetarian" not in tags:
+    if "Món thuần chay" in tags and "Món chay" not in tags:
         issues.append(
-            Issue("CẢNH BÁO", filename, lineno, name, "có nhãn `vegan` nhưng thiếu `vegetarian`")
+            Issue("CẢNH BÁO", filename, lineno, name,
+                  "có nhãn `Món thuần chay` nhưng thiếu `Món chay`")
         )
-    if "vegetarian" in tags and tags & {"contains_seafood"}:
+    if "Món chay" in tags and tags & {"Có hải sản"}:
         issues.append(
             Issue("LỖI", filename, lineno, name, "vừa là món chay vừa có hải sản")
         )
-    if "low_sodium" in tags and values.get("sodium_mg", 0) > 400:
+    if "Ít natri" in tags and values.get("sodium_mg", 0) > 400:
         issues.append(
             Issue(
                 "CẢNH BÁO", filename, lineno, name,
-                f"gắn `low_sodium` nhưng natri {values['sodium_mg']:g} mg",
+                f"gắn `Ít natri` nhưng natri {values['sodium_mg']:g} mg",
             )
         )
 
     # ── Truy xuất nguồn ──
-    if row.get("data_source", "").strip() and not row.get("source_url", "").strip():
-        issues.append(
-            Issue("CẢNH BÁO", filename, lineno, name, "có `data_source` nhưng thiếu `source_url`")
-        )
 
-    return {"name": name, "values": values, "role": role, "meals": meals}
+    return {"name": name, "values": values, "role": role}
 
 
 def main() -> int:
+    _env.in_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--strict", action="store_true", help="coi cảnh báo là lỗi"

@@ -1,19 +1,10 @@
 [
   {
     "name": "Phở bò tái",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1013",
@@ -50,19 +41,10 @@
   },
   {
     "name": "Phở gà",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1013",
@@ -94,19 +76,10 @@
   },
   {
     "name": "Bún bò Huế",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 2,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Huế",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -143,20 +116,13 @@
   },
   {
     "name": "Bún riêu cua",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Bắc",
     "tags": [
-      "contains_egg",
-      "contains_seafood",
-      "sour"
+      "Có trứng",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -194,19 +160,10 @@
   },
   {
     "name": "Bún mọc",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -238,20 +195,13 @@
   },
   {
     "name": "Hủ tiếu Nam Vang",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_egg",
-      "contains_seafood",
-      "salty"
+      "Có trứng",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -289,19 +239,10 @@
   },
   {
     "name": "Miến gà",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "light"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -333,20 +274,13 @@
   },
   {
     "name": "Bánh canh cua",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_egg",
-      "contains_seafood",
-      "salty"
+      "Có trứng",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -379,20 +313,14 @@
   },
   {
     "name": "Mì Quảng",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Quảng Nam",
     "tags": [
-      "contains_egg",
-      "contains_peanut",
-      "contains_seafood",
-      "salty"
+      "Có trứng",
+      "Có đậu phộng",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -440,18 +368,10 @@
   },
   {
     "name": "Cháo gà",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
-    "tags": [
-      "light"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1004",
@@ -483,19 +403,11 @@
   },
   {
     "name": "Bún thang",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_egg",
-      "salty"
+      "Có trứng"
     ],
     "ingredients": [
       {
@@ -533,19 +445,12 @@
   },
   {
     "name": "Bún ốc",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_seafood",
-      "sour"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -578,18 +483,12 @@
   },
   {
     "name": "Bánh đa cua Hải Phòng",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hải Phòng",
     "tags": [
-      "contains_seafood"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -627,18 +526,10 @@
   },
   {
     "name": "Bún măng vịt",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -670,18 +561,12 @@
   },
   {
     "name": "Miến lươn",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Nghệ An",
     "tags": [
-      "contains_seafood"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -714,19 +599,12 @@
   },
   {
     "name": "Bún cá rô đồng",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hải Dương",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -759,19 +637,12 @@
   },
   {
     "name": "Bún chả cá",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Nha Trang",
     "tags": [
-      "contains_seafood",
-      "salty"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -809,17 +680,12 @@
   },
   {
     "name": "Canh bún",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_seafood"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -852,17 +718,11 @@
   },
   {
     "name": "Cháo lòng",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "salty"
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -895,18 +755,10 @@
   },
   {
     "name": "Cháo sườn",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "light"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1004",
@@ -933,18 +785,12 @@
   },
   {
     "name": "Cháo cá chép",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -977,18 +823,13 @@
   },
   {
     "name": "Súp cua",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "snack",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "snack",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_egg",
-      "contains_seafood"
+      "Có trứng",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1021,19 +862,10 @@
   },
   {
     "name": "Hủ tiếu bò kho",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1013",
@@ -1065,21 +897,14 @@
   },
   {
     "name": "Mì vằn thắn",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_egg",
-      "contains_gluten",
-      "contains_seafood",
-      "salty"
+      "Có trứng",
+      "Có gluten",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1117,19 +942,10 @@
   },
   {
     "name": "Phở bò chín",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1013",
@@ -1166,20 +982,10 @@
   },
   {
     "name": "Phở sốt vang",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty",
-      "fatty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1013",
@@ -1211,20 +1017,13 @@
   },
   {
     "name": "Bún riêu ốc",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_seafood",
-      "contains_soy",
-      "sour"
+      "Có hải sản",
+      "Có đậu nành",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1262,19 +1061,10 @@
   },
   {
     "name": "Bún sườn chua",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "sour"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -1306,18 +1096,12 @@
   },
   {
     "name": "Bún cá Hải Phòng",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hải Phòng",
     "tags": [
-      "contains_seafood"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1350,19 +1134,12 @@
   },
   {
     "name": "Bún mực",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Nha Trang",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1395,18 +1172,10 @@
   },
   {
     "name": "Bún ếch",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 2,
-    "suitable_meals": [
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Bắc",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -1438,19 +1207,10 @@
   },
   {
     "name": "Miến măng gà",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "light"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -1482,19 +1242,10 @@
   },
   {
     "name": "Miến ngan",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -1526,20 +1277,10 @@
   },
   {
     "name": "Bánh canh giò heo",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Trung",
-    "tags": [
-      "salty",
-      "fatty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1013",
@@ -1566,19 +1307,12 @@
   },
   {
     "name": "Bánh canh cá lóc",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Trung",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1606,20 +1340,13 @@
   },
   {
     "name": "Hủ tiếu mì",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_gluten",
-      "contains_seafood",
-      "salty"
+      "Có gluten",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1657,18 +1384,12 @@
   },
   {
     "name": "Cháo trai",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1696,17 +1417,12 @@
   },
   {
     "name": "Cháo hàu",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Quảng Ninh",
     "tags": [
-      "contains_seafood"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1734,18 +1450,12 @@
   },
   {
     "name": "Cháo tôm",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -1773,18 +1483,10 @@
   },
   {
     "name": "Cháo vịt",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1004",
@@ -1811,21 +1513,14 @@
   },
   {
     "name": "Cháo đậu xanh",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_soy",
-      "high_fiber",
-      "light",
-      "vegan",
-      "vegetarian"
+      "Có đậu nành",
+      "Giàu chất xơ",
+      "Món thuần chay",
+      "Món chay"
     ],
     "ingredients": [
       {
@@ -1848,18 +1543,11 @@
   },
   {
     "name": "Súp gà ngô non",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "snack",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "snack",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_egg",
-      "light"
+      "Có trứng"
     ],
     "ingredients": [
       {
@@ -1887,20 +1575,12 @@
   },
   {
     "name": "Phở chay",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_soy",
-      "light",
-      "vegetarian"
+      "Có đậu nành",
+      "Món chay"
     ],
     "ingredients": [
       {
@@ -1943,21 +1623,13 @@
   },
   {
     "name": "Bún riêu chay",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_soy",
-      "sour",
-      "vegan",
-      "vegetarian"
+      "Có đậu nành",
+      "Món thuần chay",
+      "Món chay"
     ],
     "ingredients": [
       {
@@ -1995,19 +1667,12 @@
   },
   {
     "name": "Bánh đa cá rô",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hải Dương",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2040,18 +1705,12 @@
   },
   {
     "name": "Cháo lươn Nghệ An",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 2,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Nghệ An",
     "tags": [
-      "contains_seafood",
-      "salty"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2079,18 +1738,12 @@
   },
   {
     "name": "Cháo hến",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Huế",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2118,19 +1771,13 @@
   },
   {
     "name": "Súp lươn",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "snack",
-    "cooking_method": "khac",
     "spice_level": 2,
-    "suitable_meals": [
-      "snack",
-      "dinner"
-    ],
-    "origin": "Nghệ An",
     "tags": [
-      "contains_gluten",
-      "contains_seafood",
-      "salty"
+      "Có gluten",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2158,20 +1805,11 @@
   },
   {
     "name": "Hủ tiếu sa tế",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 3,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_peanut",
-      "salty",
-      "fatty"
+      "Có đậu phộng"
     ],
     "ingredients": [
       {
@@ -2204,19 +1842,10 @@
   },
   {
     "name": "Bún bung",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Thái Bình",
-    "tags": [
-      "salty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -2248,19 +1877,12 @@
   },
   {
     "name": "Bánh canh chả cá",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Nha Trang",
     "tags": [
-      "contains_seafood",
-      "salty"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2288,18 +1910,10 @@
   },
   {
     "name": "Cháo thịt bằm",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
-    "tags": [
-      "light"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1004",
@@ -2326,18 +1940,13 @@
   },
   {
     "name": "Súp hải sản",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "snack",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "snack",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_egg",
-      "contains_seafood"
+      "Có trứng",
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2375,19 +1984,12 @@
   },
   {
     "name": "Bún nước lèo",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 2,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Sóc Trăng",
     "tags": [
-      "contains_seafood",
-      "salty"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2425,18 +2027,12 @@
   },
   {
     "name": "Miến cua",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_seafood"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2469,20 +2065,13 @@
   },
   {
     "name": "Bún riêu tôm",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 1,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Miền Nam",
     "tags": [
-      "contains_seafood",
-      "contains_soy",
-      "sour"
+      "Có hải sản",
+      "Có đậu nành",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2515,18 +2104,12 @@
   },
   {
     "name": "Cháo cá bống",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Miền Trung",
     "tags": [
-      "contains_seafood",
-      "light"
+      "Có hải sản",
+      "Giàu purin"
     ],
     "ingredients": [
       {
@@ -2554,18 +2137,11 @@
   },
   {
     "name": "Mì gà tần",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
     "tags": [
-      "contains_gluten",
-      "salty"
+      "Có gluten"
     ],
     "ingredients": [
       {
@@ -2593,20 +2169,10 @@
   },
   {
     "name": "Bún chân giò",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "lunch",
-      "dinner"
-    ],
-    "origin": "Hà Nội",
-    "tags": [
-      "salty",
-      "fatty"
-    ],
+    "tags": [],
     "ingredients": [
       {
         "code": "1020",
@@ -2638,20 +2204,13 @@
   },
   {
     "name": "Cháo nấm chay",
-    "category": "mon_nuoc",
+    "category": "Món nước",
     "dish_role": "main",
-    "cooking_method": "khac",
     "spice_level": 0,
-    "suitable_meals": [
-      "breakfast",
-      "dinner"
-    ],
-    "origin": "Toàn quốc",
     "tags": [
-      "contains_soy",
-      "light",
-      "vegan",
-      "vegetarian"
+      "Có đậu nành",
+      "Món thuần chay",
+      "Món chay"
     ],
     "ingredients": [
       {
@@ -2676,5 +2235,413 @@
       }
     ],
     "note": "Nêm nước tương nên thuần chay; gạo tính theo khối lượng khô"
+  },
+  {
+    "name": "Cháo thịt bò nạc",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 55,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7003",
+        "g": 60,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo thăn bò",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 55,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "7005",
+        "g": 60,
+        "label": "thăn bò"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo thịt dê",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 55,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "7011",
+        "g": 60,
+        "label": "thịt dê"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo thịt gà",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 55,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7013",
+        "g": 60,
+        "label": "thịt gà"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo thịt lợn nạc",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 55,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "7017",
+        "g": 60,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo thịt lợn",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 55,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "7018",
+        "g": 60,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo thịt thỏ",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 55,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "7021",
+        "g": 60,
+        "label": "thịt thỏ"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo cá hồi",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 55,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "8011",
+        "g": 60,
+        "label": "cá hồi"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo cá ngừ",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 55,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8019",
+        "g": 60,
+        "label": "cá ngừ"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo cá lóc",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 55,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "8022",
+        "g": 60,
+        "label": "cá lóc"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo cá rô",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1001",
+        "g": 55,
+        "label": "gạo nếp"
+      },
+      {
+        "code": "8023",
+        "g": 60,
+        "label": "cá rô"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo cá rô phi",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1004",
+        "g": 55,
+        "label": "gạo tẻ"
+      },
+      {
+        "code": "8024",
+        "g": 60,
+        "label": "cá rô phi"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
+  },
+  {
+    "name": "Cháo cá thu",
+    "category": "Món nước",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "1005",
+        "g": 55,
+        "label": "gạo lứt"
+      },
+      {
+        "code": "8026",
+        "g": 60,
+        "label": "cá thu"
+      },
+      {
+        "code": "4037",
+        "g": 12,
+        "label": "hành lá"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Cháo nấu nhừ, khối lượng gạo tính khô"
   }
 ]

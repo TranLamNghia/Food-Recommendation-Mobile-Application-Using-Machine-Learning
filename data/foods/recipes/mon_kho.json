@@ -1,0 +1,690 @@
+[
+  {
+    "name": "Thịt kho tàu",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có trứng"
+    ],
+    "ingredients": [
+      {
+        "code": "7016",
+        "g": 100,
+        "label": "thịt ba chỉ"
+      },
+      {
+        "code": "9001",
+        "g": 50,
+        "label": "trứng gà"
+      },
+      {
+        "code": "12014",
+        "g": 10,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho nước dừa, đường kho tính riêng"
+  },
+  {
+    "name": "Cá kho tộ",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8003",
+        "g": 120,
+        "label": "cá chép"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 14,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho tộ đậm vị"
+  },
+  {
+    "name": "Đậu hũ sốt cà chua",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "3025",
+        "g": 150,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "4005",
+        "g": 80,
+        "label": "cà chua"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Sốt cà chua, món mặn nhẹ"
+  },
+  {
+    "name": "Gà kho gừng",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7003",
+        "g": 120,
+        "label": "thịt gà"
+      },
+      {
+        "code": "12014",
+        "g": 6,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho gừng, gừng không tính khối lượng"
+  },
+  {
+    "name": "Thịt lợn kho củ cải",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7017",
+        "g": 100,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "4020",
+        "g": 80,
+        "label": "củ cải trắng"
+      },
+      {
+        "code": "12014",
+        "g": 6,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho cùng củ cải"
+  },
+  {
+    "name": "Thịt bò nạc kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7003",
+        "g": 110,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Thăn bò kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7005",
+        "g": 110,
+        "label": "thăn bò"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Thịt dê kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7011",
+        "g": 110,
+        "label": "thịt dê"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Thịt gà kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7013",
+        "g": 110,
+        "label": "thịt gà"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Thịt lợn nạc kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7017",
+        "g": 110,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Thịt lợn kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7018",
+        "g": 110,
+        "label": "thịt lợn"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Thịt thỏ kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7021",
+        "g": 110,
+        "label": "thịt thỏ"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá chép kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8003",
+        "g": 110,
+        "label": "cá chép"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá hồi kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8011",
+        "g": 110,
+        "label": "cá hồi"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá ngừ kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8019",
+        "g": 110,
+        "label": "cá ngừ"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá lóc kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8022",
+        "g": 110,
+        "label": "cá lóc"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá rô kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8023",
+        "g": 110,
+        "label": "cá rô"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá rô phi kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8024",
+        "g": 110,
+        "label": "cá rô phi"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá thu kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8026",
+        "g": 110,
+        "label": "cá thu"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cá trê kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8030",
+        "g": 110,
+        "label": "cá trê"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Tôm biển kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8051",
+        "g": 110,
+        "label": "tôm biển"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Cua biển kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8033",
+        "g": 110,
+        "label": "cua biển"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Mực kho",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8040",
+        "g": 110,
+        "label": "mực"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 12,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước mắm và đường"
+  },
+  {
+    "name": "Đậu phụ kho nước tương",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay",
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "3025",
+        "g": 120,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "13010",
+        "g": 12,
+        "label": "nước tương"
+      },
+      {
+        "code": "12014",
+        "g": 6,
+        "label": "đường"
+      }
+    ],
+    "note": "Kho đậm vị, nêm nước tương và đường"
+  },
+  {
+    "name": "Nấm rơm kho tiêu",
+    "category": "Món kho",
+    "dish_role": "side_protein",
+    "spice_level": 1,
+    "tags": [
+      "Món chay",
+      "Món thuần chay",
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "4125",
+        "g": 140,
+        "label": "nấm rơm"
+      },
+      {
+        "code": "13010",
+        "g": 10,
+        "label": "nước tương"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Kho tiêu, nêm nước tương"
+  }
+]

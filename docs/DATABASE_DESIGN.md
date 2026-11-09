@@ -6,11 +6,11 @@
 **Storage engine:** InnoDB
 **Charset:** `utf8mb4` — **Collation:** `utf8mb4_unicode_ci`
 
-Cơ sở dữ liệu gồm **21 bảng**, chia thành 6 nhóm chức năng:
+Cơ sở dữ liệu gồm **22 bảng**, chia thành 6 nhóm chức năng:
 
 | Nhóm | Số bảng | Bảng |
 |---|---|---|
-| 👤 Người dùng | 4 | `users`, `health_profiles`, `conditions`, `user_conditions` |
+| 👤 Người dùng | 5 | `users`, `health_profiles`, `body_logs`, `conditions`, `user_conditions` |
 | 🍜 Món ăn | 5 | `food_categories`, `foods`, `food_nutrition`, `tags`, `food_tags` |
 | 📏 Quy tắc dinh dưỡng | 2 | `condition_rules`, `rda_reference` |
 | 🤝 Tương tác & Phản hồi | 4 | `interactions`, `food_diary`, `feedbacks`, `recommendations` |
@@ -89,8 +89,8 @@ Tầng 0 — không phụ thuộc bảng nào
     users, conditions, food_categories, tags, rda_reference, ml_models
 
 Tầng 1
-    health_profiles, user_conditions, foods, condition_rules,
-    user_preference_profiles
+    health_profiles, body_logs, password_resets, user_conditions, foods,
+    condition_rules, user_preference_profiles
 
 Tầng 2
     food_nutrition, food_tags, meal_plans, recommendations,
@@ -110,29 +110,39 @@ Tầng 3
 
 ```sql
 CREATE TABLE users (
-    id                      BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id                      CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
     email                   VARCHAR(255) NOT NULL UNIQUE,
+    role                    ENUM('user','admin') NOT NULL DEFAULT 'user',
+    is_active               TINYINT(1)   NOT NULL DEFAULT 1,
     password_hash           VARCHAR(255) NOT NULL,
     display_name            VARCHAR(100) NOT NULL,
     avatar_url              VARCHAR(500) NULL,
     onboarding_completed_at DATETIME     NULL,
     created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                         ON UPDATE CURRENT_TIMESTAMP
+                                         ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_role (role, is_active)
 ) ENGINE=InnoDB;
 ```
 
 | Cột | Mô tả |
 |---|---|
-| `onboarding_completed_at` | Mốc hoàn tất phiên vuốt thăm dò. `NULL` nghĩa là người dùng còn ở **Giai đoạn 0** |
+| `role` | `user` — người dùng ứng dụng Android · `admin` — tài khoản trang quản trị web |
+| `is_active` | Khóa tài khoản mà không xóa dữ liệu |
+| `onboarding_completed_at` | Mốc hoàn tất phiên vuốt thăm dò. `NULL` nghĩa là người dùng còn ở **Giai đoạn 0**. Tài khoản `admin` luôn để `NULL` vì không đi qua luồng này |
 
 > `onboarding_completed_at` là cột đánh dấu ranh giới Giai đoạn 0 → Giai đoạn 1. Backend dựa vào cột này để quyết định có cần đẩy người dùng vào màn hình vuốt thăm dò hay không.
 
-**Không có cột `role`.** Hệ thống hướng hoàn toàn tới người dùng cuối, không có ứng dụng quản trị. Việc nhập 300–500 món ăn, nạp bộ quy tắc và từ điển nhãn đều làm bằng **script seed**; việc xem kết quả huấn luyện làm bằng **truy vấn SQL** trên các bảng `ml_models` và `ml_evaluations`. Không thao tác nào cần tài khoản quyền cao.
+**Cột `role`.** Hệ thống có **hai giao diện**: ứng dụng Android cho người dùng cuối, và trang quản trị trên web dành cho việc quản lý danh mục món ăn, bộ quy tắc dinh dưỡng và theo dõi kết quả huấn luyện mô hình. Cả hai dùng chung bảng `users`, phân biệt bằng `role` nhận một trong hai giá trị `user` hoặc `admin`.
 
-**Không có cột `is_active`.** Không có nghiệp vụ khóa tài khoản. Khi cần xóa tài khoản thì `DELETE` trực tiếp, các khóa ngoại `ON DELETE CASCADE` sẽ dọn dữ liệu liên quan.
+**Vì sao không tách bảng `admins` riêng.** Hệ thống chỉ có đúng hai vai trò và không có phân quyền chi tiết theo chức năng. Tách thành bảng riêng sẽ sinh ra hai luồng xác thực, hai cơ chế đổi mật khẩu và một thực thể nữa trong ERD, mà không đổi lại được gì về mặt nghiệp vụ. Tài khoản quản trị đơn giản là không có dòng trong `health_profiles`, không có `meal_plans`, không có `interactions` — mọi khóa ngoại đều cho phép điều đó mà không cần sửa gì thêm.
 
-> **Lưu ý phân biệt:** `foods.is_active` vẫn được giữ và mang vai trò hoàn toàn khác — ẩn một món khỏi danh sách gợi ý **mà không xóa dữ liệu**. Xóa cứng một món sẽ `CASCADE` xóa luôn lịch sử tương tác, nhật ký ăn uống và mẫu huấn luyện liên quan, làm hỏng tập dữ liệu ML.
+**Cột `is_active`.** Khóa tài khoản mà không xóa dữ liệu. Cột này chỉ có nghĩa khi đã có trang quản trị để thao tác; không có giao diện quản trị thì nó là cột chết.
+
+Chỉ mục `idx_role (role, is_active)` phục vụ truy vấn liệt kê tài khoản trong trang quản trị.
+
+> **Lưu ý phân biệt:** `foods.is_active` mang vai trò khác — ẩn một món khỏi danh sách gợi ý **mà không xóa dữ liệu**. Xóa cứng một món sẽ `CASCADE` xóa luôn lịch sử tương tác, nhật ký ăn uống và mẫu huấn luyện liên quan, làm hỏng tập dữ liệu ML.
 
 ---
 
@@ -140,14 +150,14 @@ CREATE TABLE users (
 
 ```sql
 CREATE TABLE health_profiles (
-    id                    BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id               BIGINT UNSIGNED NOT NULL UNIQUE,
+    id                    CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id               CHAR(36) NOT NULL UNIQUE,
     gender                ENUM('male','female','other') NOT NULL,
     date_of_birth         DATE         NOT NULL,
     height_cm             DECIMAL(5,2) NOT NULL,
     weight_kg             DECIMAL(5,2) NOT NULL,
     bmi                   DECIMAL(5,2) GENERATED ALWAYS AS
-                              (weight_kg / ((height_cm / 100) * (height_cm / 100))) STORED,
+                              (weight_kg / ((height_cm / 100) * (height_cm / 100))) VIRTUAL,
     activity_level        ENUM('sedentary','light','moderate','active','very_active')
                               NOT NULL DEFAULT 'moderate',
     goal                  ENUM('lose_weight','maintain','gain_weight','healthy_eating')
@@ -160,7 +170,6 @@ CREATE TABLE health_profiles (
     target_protein_pct    TINYINT UNSIGNED NOT NULL DEFAULT 15,
     target_carbs_pct      TINYINT UNSIGNED NOT NULL DEFAULT 60,
     target_fat_pct        TINYINT UNSIGNED NOT NULL DEFAULT 25,
-    computed_at           DATETIME     NULL,
 
     created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -181,7 +190,6 @@ CREATE TABLE health_profiles (
 | `tdee_kcal` | Tổng năng lượng tiêu hao ngày = BMR × hệ số vận động |
 | `daily_calories_target` | Hạn mức năng lượng theo mục tiêu (TDEE ± 500) |
 | `target_*_pct` | Tỷ lệ phân bổ ba chất sinh năng lượng, tổng luôn bằng 100 |
-| `computed_at` | Thời điểm tính lại hạn mức — dùng để phát hiện hồ sơ đã cũ |
 
 **Vì sao lưu BMR/TDEE thay vì tính mỗi lần cần?**
 
@@ -191,13 +199,50 @@ Ba lý do. Thứ nhất, người dùng thay đổi cân nặng theo thời gian
 
 ---
 
-## 3.3 `conditions` — Từ điển bệnh lý, dị ứng, chế độ ăn
+## 3.3 `body_logs` — Lịch sử cân nặng
+
+```sql
+CREATE TABLE body_logs (
+    id         CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id    CHAR(36) NOT NULL,
+    logged_on  DATE NOT NULL,
+    weight_kg  DECIMAL(5,2) NOT NULL,
+    note       VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_log_weight CHECK (weight_kg BETWEEN 20 AND 300),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+
+    UNIQUE KEY uq_user_day (user_id, logged_on),
+    INDEX idx_user_time (user_id, logged_on)
+) ENGINE=InnoDB;
+```
+
+**Vì sao cần bảng riêng thay vì dùng `health_profiles`.**
+
+`health_profiles.user_id` là `UNIQUE`, tức mỗi người dùng có **đúng một dòng**. Cột `weight_kg` ở đó bị ghi đè mỗi lần người dùng cập nhật cân nặng, nên không còn dấu vết của những lần trước.
+
+Hệ quả: đề cương liệt kê "theo dõi tiến trình sức khỏe" là một chức năng của ứng dụng di động, nhưng nếu không có bảng này thì màn hình tiến trình chỉ hiện được con số hôm nay — không vẽ được biểu đồ cân nặng theo thời gian, vốn là thứ người dùng mong đợi nhất ở một ứng dụng dinh dưỡng.
+
+**Phân vai giữa hai bảng:**
+
+| | Vai trò |
+|---|---|
+| `health_profiles.weight_kg` | Cân nặng **hiện hành** — đầu vào để tính BMI, BMR, TDEE và hạn mức năng lượng |
+| `body_logs.weight_kg` | **Lịch sử** — chỉ dùng để hiển thị biểu đồ và tính mức thay đổi |
+
+Khi người dùng ghi cân nặng mới, Backend ghi vào **cả hai**: cập nhật `health_profiles` để hạn mức tính lại cho đúng, và chèn thêm một dòng `body_logs` để giữ lịch sử.
+
+**Vì sao `UNIQUE (user_id, logged_on)`.** Mỗi ngày tối đa một bản ghi. Người dùng cân hai lần trong ngày — sáng và tối, chênh nhau cả kilogram vì ăn uống — sẽ tạo ra hai điểm trên biểu đồ và làm đường cong răng cưa vô nghĩa. Ghi lại trong cùng ngày thì cập nhật dòng cũ bằng `ON DUPLICATE KEY UPDATE`.
+
+---
+
+## 3.4 `conditions` — Từ điển bệnh lý, dị ứng, chế độ ăn
 
 ```sql
 CREATE TABLE conditions (
     id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    code           VARCHAR(50)  NOT NULL UNIQUE,
-    name_vi        VARCHAR(100) NOT NULL,
+    name_vi        VARCHAR(100) NOT NULL UNIQUE,
     condition_type ENUM('disease','allergy','intolerance','diet') NOT NULL,
     description    VARCHAR(255) NULL
 ) ENGINE=InnoDB;
@@ -224,12 +269,12 @@ CREATE TABLE conditions (
 
 ---
 
-## 3.4 `user_conditions` — Bệnh lý của từng người dùng
+## 3.5 `user_conditions` — Bệnh lý của từng người dùng
 
 ```sql
 CREATE TABLE user_conditions (
-    id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id      BIGINT UNSIGNED NOT NULL,
+    id           CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id      CHAR(36) NOT NULL,
     condition_id INT UNSIGNED    NOT NULL,
     severity     ENUM('mild','moderate','severe') NOT NULL DEFAULT 'moderate',
     note         VARCHAR(255) NULL,
@@ -249,15 +294,62 @@ CREATE TABLE user_conditions (
 
 ---
 
+## 3.6 `password_resets` — Mã đặt lại mật khẩu
+
+```sql
+CREATE TABLE password_resets (
+    id          CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
+    token_hash  CHAR(64) NOT NULL,
+    expires_at  DATETIME NOT NULL,
+    used_at     DATETIME NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_reset_window CHECK (expires_at > created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+
+    UNIQUE KEY uq_reset_token (token_hash),
+    INDEX idx_reset_user_time (user_id, created_at)
+) ENGINE=InnoDB;
+```
+
+**Bài toán mà bảng này giải.** Luồng "Quên mật khẩu" có một nghịch lý: để đổi mật khẩu thì phải chứng minh mình là chủ tài khoản, mà bằng chứng duy nhất hệ thống có — chính mật khẩu — thì người dùng không nhớ. Nên hệ thống tạm thay nó bằng một bằng chứng khác: **quyền đọc hộp thư đã đăng ký**. Mã đặt lại là bằng chứng đó.
+
+| | |
+|---|---|
+| `POST /auth/forgot-password` | Sinh mã, băm, chèn một dòng, gửi liên kết chứa mã gốc vào email |
+| `POST /auth/reset-password` | Nhận mã gốc, băm lại, tra `token_hash`, kiểm `expires_at` và `used_at`, đổi mật khẩu, ghi `used_at` |
+
+**Vì sao một bảng riêng thay vì bốn cột trong `users`.** Một mã gồm bốn thứ: mã đã băm, thuộc về ai, hết hạn lúc nào, đã dùng chưa. Nhồi cả bốn vào `users` thì:
+
+- **Mỗi người chỉ có một mã sống được.** Email đến chậm nên người ta bấm "Gửi lại" là chuyện thường — và lúc đó mã trong email thứ nhất chết, trong khi đó mới là email họ đang mở.
+- **Bốn cột ấy rỗng với gần như mọi dòng.** Tại một thời điểm chỉ vài người đang đặt lại mật khẩu trong số hàng trăm tài khoản.
+- **Không có lịch sử.** Một tài khoản bị xin mã 50 lần trong một phút là dấu hiệu bị dò, mà cột bị ghi đè thì không nhìn thấy điều đó.
+
+**Vì sao lưu mã đã băm.** Lý do giống hệt chỗ `users.password_hash`: ai đọc được bảng này mà mã nằm nguyên trong đó thì đổi được mật khẩu của **mọi** tài khoản đang có mã sống. Băm thì bảng đó vô dụng với họ. Không truy vấn nào cần mã gốc, vì người dùng luôn nộp lại nó từ liên kết trong email.
+
+Dùng SHA-256 chứ không BCrypt, có chủ ý. BCrypt cố ý chậm để chống dò **mật khẩu do người đặt** — thứ có entropy thấp và nằm trong từ điển. Mã ở đây là 32 byte ngẫu nhiên, không dò được bằng từ điển, nên cái chậm đó chỉ còn là chi phí trên mỗi lượt gọi.
+
+**Mã phải sinh bằng bộ sinh số ngẫu nhiên mật mã.** Cột `id` dùng `UUID()` của MySQL, và điều đó **chỉ** đúng cho một khóa chính. `UUID()` sinh UUID phiên bản 1 — ghép từ thời điểm và địa chỉ MAC của máy chủ, nên đoán được. Dùng nó làm mã đặt lại thì ai biết thời điểm gửi email là thu hẹp được không gian tìm kiếm xuống còn vài nghìn khả năng. Backend phải dùng `SecureRandom`, 32 byte.
+
+**Vì sao `used_at` chứ không phải xóa dòng.** Mã dùng được đúng một lần. Nhưng đánh dấu đã dùng và xóa dòng đi không tương đương: một mã bị nộp **hai lần** là dấu hiệu liên kết đã rò ra ngoài, và nếu dòng đã bị xóa thì lần thứ hai không phân biệt được với một mã bịa.
+
+**`CHECK (expires_at > created_at)`.** Một mã hết hạn trước khi được tạo là chết ngay khi sinh ra, và lỗi đó không báo gì — người dùng chỉ thấy "mã không hợp lệ" với mọi mã, và không ai nối được hiện tượng ấy với một phép tính thời gian sai ở Backend.
+
+**Giới hạn số lần xin mã, và chỗ nó không che được.** `INDEX (user_id, created_at)` tồn tại để đếm số lần xin mã gần đây của một tài khoản, phục vụ mức `429 RATE_LIMITED`. Nhưng phép giới hạn này **chỉ che được email đã đăng ký**: email không có trong hệ thống không sinh dòng nào — cố ý, vì lưu lại mọi địa chỉ người lạ nhập vào là tự dựng một danh sách email mà hệ thống không cần. Nhóm đó phải giới hạn ở tầng trước CSDL, theo địa chỉ IP.
+
+**Dọn dòng cũ.** Mã sống 15 phút, nên gần như mọi dòng trong bảng này là rác sau một giờ. Xóa những dòng đã hết hạn **trên bảy ngày** bằng một việc định kỳ; giữ lại bảy ngày để còn tra được khi có nghi vấn về truy cập.
+
+---
+
 # 4. Nhóm Món ăn
 
 ## 4.1 `food_categories` — Danh mục
 
 ```sql
 CREATE TABLE food_categories (
-    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    code        VARCHAR(50)  NOT NULL UNIQUE,
-    name        VARCHAR(100) NOT NULL,
+    id          CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
     description VARCHAR(255) NULL,
     icon_url    VARCHAR(500) NULL
 ) ENGINE=InnoDB;
@@ -273,47 +365,145 @@ CREATE TABLE food_categories (
 
 ```sql
 CREATE TABLE foods (
-    id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    category_id      INT UNSIGNED NOT NULL,
+    id               CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    category_id      CHAR(36) NOT NULL,
     name             VARCHAR(200) NOT NULL,
     description      TEXT         NULL,
     image_url        VARCHAR(500) NULL,
-    origin           VARCHAR(100) NULL,
 
     -- ══ Đặc trưng phục vụ vector ML (theo đề cương) ══
-    cooking_method   ENUM('luoc','hap','xao','chien','nuong','kho',
-                          'nau_canh','tron','song','khac')
-                         NOT NULL DEFAULT 'khac',
     spice_level      TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    dish_role        ENUM('main','side','soup','dessert','drink')
+    dish_role        ENUM('main','side_protein','side_veg','soup',
+                          'snack','dessert','drink')
                          NOT NULL DEFAULT 'main',
-    suitable_meals   SET('breakfast','lunch','dinner','snack')
-                         NOT NULL DEFAULT 'breakfast,lunch,dinner,snack',
 
     popularity_score DECIMAL(5,4) NOT NULL DEFAULT 0,
     is_active        TINYINT(1)   NOT NULL DEFAULT 1,
+    owner_id         CHAR(36) NULL,
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                               ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_spice CHECK (spice_level BETWEEN 0 AND 3),
     FOREIGN KEY (category_id) REFERENCES food_categories(id),
-    INDEX idx_active_category (is_active, category_id),
+    FOREIGN KEY (owner_id)    REFERENCES users(id) ON DELETE CASCADE,
+
+    UNIQUE KEY uq_food_name ((COALESCE(owner_id, '')), name),
+    INDEX idx_active_category (owner_id, is_active, category_id),
     INDEX idx_dish_role (dish_role)
 ) ENGINE=InnoDB;
 ```
 
 | Cột | Mô tả | Dùng ở đâu |
 |---|---|---|
-| `cooking_method` | Phương pháp chế biến | **Vector đặc trưng ML** — đề cương nêu đích danh |
 | `spice_level` | Độ cay 0–3 | Vector đặc trưng ML |
-| `dish_role` | Vai trò trong bữa: món chính / món phụ / canh / tráng miệng / đồ uống | **Bước 4** — ràng buộc cấu trúc bữa ăn |
-| `suitable_meals` | Bữa ăn phù hợp | **Bước 2** — lọc món không hợp bữa |
+| `dish_role` | Vai trò trong bữa: `main` món chính · `side_protein` món mặn · `side_veg` món rau · `soup` canh · `snack` món phụ · `dessert` tráng miệng · `drink` đồ uống | **Bước 4** — ràng buộc cấu trúc bữa ăn |
+| `owner_id` | `NULL` — món thuộc **danh mục chung**; có giá trị — món **riêng** của người dùng đó | **Bước 2** — giới hạn tập ứng viên |
 | `popularity_score` | Độ phổ biến chung, tính từ tỷ lệ thích toàn hệ thống | **Giai đoạn 0** — chấm điểm khi chưa biết gì về người dùng |
+
+**Vì sao khóa `uq_food_name` đi theo biểu thức chứ không theo `owner_id` trần.**
+MySQL coi **mọi `NULL` là khác nhau** trong chỉ mục `UNIQUE`. Mọi món của danh
+mục chung đều có `owner_id` là `NULL` — đo trên CSDL thật là **318/318 dòng** —
+nên khóa `(owner_id, name)` không chặn trùng ở một dòng nào trong toàn bộ danh
+mục công khai.
+
+Đây không phải lỗi lý thuyết. Bản lược đồ trước ghi chú rằng phần chặn trùng
+của danh mục chung "do trình nạp và trang quản trị kiểm", và chính trình nạp là
+thứ vỡ: `tools/load_foods.py --apply` chết ngay ở món đầu tiên với
+
+```
+(1242, 'Subquery returns more than 1 row')
+```
+
+vì `ON DUPLICATE KEY UPDATE` không thấy khóa nào trùng nên **chèn thêm** một
+món `Cơm trắng` thứ hai, rồi câu lệnh tiếp theo tra
+`SELECT id FROM foods WHERE name = 'Cơm trắng'` thì nhận về hai dòng.
+
+Cách vá: đặt khóa lên **biểu thức** `COALESCE(owner_id, '')` — MySQL 8.0.13
+trở lên cho phép. Phép quy đổi biến `NULL` thành chuỗi rỗng, là một giá trị
+thật, nên khóa chặn được trùng tên ở cả món danh mục chung lẫn món riêng, mà
+hai người dùng khác nhau vẫn đặt trùng tên món của mình được.
+
+Không điền thẳng chuỗi rỗng vào `owner_id` được: cột đó có khóa ngoại sang
+`users(id)`, nên giá trị rỗng đòi phải có một dòng `users` mang `id` rỗng —
+thử thì MySQL báo `(1452, 'a foreign key constraint fails')`. Tạo một tài
+khoản giả để làm chỗ dựa thì tốn hơn nhiều: một dòng không phải người thật nằm
+trong `users`, lọt vào mọi phép đếm người dùng, và vì khóa ngoại là
+`ON DELETE CASCADE` nên xóa nhầm nó là mất sạch danh mục món.
+
+Trước đây phép quy đổi nằm ở một cột sinh tên `owner_key`. Cột đó **đã bỏ**:
+nó không mang thông tin nào mà `owner_id` chưa có, nên trên sơ đồ ERD nó là
+một dòng thừa phải giải thích. Bên trong, MySQL vẫn dựng một cột ảo ẩn cho
+khóa biểu thức — cơ chế y hệt, chỉ khác là không hiện ra trong danh sách
+cột.
+
+Bài học mang tính thiết kế: một ràng buộc toàn vẹn giao cho tầng ứng dụng chỉ
+còn đúng tới khi xuất hiện tầng ứng dụng thứ hai. Ở đây tầng thứ hai là trang
+quản trị, nơi admin nhập món bằng tay.
 
 **Vì sao cần `dish_role`.** Bước 4 phải bảo đảm mỗi bữa có cấu trúc hợp lý — một món chính, một món canh, có thể thêm món phụ. Không có cột này thì thuật toán tham lam có thể chọn ra ba món tráng miệng vì cả ba đều điểm cao.
 
-**Vì sao dùng `SET` cho `suitable_meals`.** Đây là tập cố định 4 giá trị, mỗi món có thể hợp nhiều bữa. Dùng `SET` giữ được tính đọc-hiểu (`FIND_IN_SET('breakfast', suitable_meals)`) mà không cần thêm một bảng phụ.
+**Vì sao cần `owner_id` — món ngoài danh mục.**
+
+Người dùng ăn ở hàng quán, ăn cơm nhà nấu, ăn đồ đóng gói — luôn có những món không nằm trong danh mục đã dựng. Nếu không ghi được, tổng năng lượng trong ngày sẽ thiếu hụt, tỷ lệ tuân thủ sai theo, và màn hình tiến trình nói dối người dùng.
+
+`owner_id` giải quyết bằng cách cho phép món tồn tại ở **hai phạm vi**:
+
+| Giá trị | Ý nghĩa |
+|---|---|
+| `NULL` | Món thuộc **danh mục chung**, do quản trị viên duyệt, mọi người dùng đều thấy. Chỉ những món này mới tính vào mốc 300–500 món của đề cương |
+| có giá trị | Món **riêng** của người dùng đó, tự thêm khi ăn thứ ngoài danh mục. Chỉ người đó thấy |
+
+Bộ lọc F1 ở Bước 2 vì vậy thêm đúng một mệnh đề:
+
+```sql
+WHERE f.is_active = 1
+  AND (f.owner_id IS NULL OR f.owner_id = :current_user_id)
+```
+
+**Vì sao cách này tốt hơn việc cho `food_diary.food_id` nhận `NULL`.** Giữ được `NOT NULL` và khóa ngoại nguyên vẹn, không sinh ra cột `NULL` tạo đường đi vòng — đúng nguyên tắc đã áp dụng khi từ chối `meal_plan_item_id`. Quan trọng hơn: món riêng **vẫn có đầy đủ vector đặc trưng** (nhóm món, cách chế biến, mức cay, macro) nên vẫn sinh được tín hiệu học, khác hẳn một dòng nhật ký nhập tự do không trỏ tới món nào.
+
+**Ba chi tiết trong ràng buộc:**
+
+`UNIQUE (owner_id, name)` chứ không chỉ `name` — hai người dùng hoàn toàn có thể cùng tự thêm một món tên *"Cơm gà bà Năm"*; ràng buộc chỉ trên `name` sẽ chặn oan người thứ hai. Lưu ý MySQL coi mọi `NULL` là khác nhau, nên ràng buộc này **không** chặn trùng tên trong danh mục chung; phần đó do trình nạp và trang quản trị kiểm.
+
+`ON DELETE CASCADE` chứ không `SET NULL` — xóa tài khoản mà để `owner_id` thành `NULL` là **đẩy món chưa kiểm duyệt vào danh mục chung** của mọi người dùng khác.
+
+`owner_id` đứng **đầu** chỉ mục `idx_active_category` vì mệnh đề lọc phạm vi luôn có mặt trong mọi truy vấn lấy tập ứng viên.
+
+**Nguyên tắc với dữ liệu huấn luyện.** Món riêng cập nhật **vector sở thích cá nhân** (Rocchio) nhưng **không vào tập huấn luyện của mô hình toàn cục**. Mô hình toàn cục dùng chung cho mọi người dùng; nhiễm số liệu dinh dưỡng phỏng đoán của một cá nhân là làm hại tất cả, trong khi vector cá nhân chỉ ảnh hưởng đúng người đó.
+
+**Vì sao cần `side_protein` tách khỏi `side_veg`.** Bản thiết kế đầu gộp cả hai vào một giá trị `side`. Nhưng mâm cơm Việt thiếu món mặn thì không còn là bữa ăn, mà khi gộp chung thì bộ sinh thực đơn hoàn toàn có thể chọn ra hai món rau và không có nguồn đạm nào. Giá trị `snack` cũng được thêm vì món phụ như gỏi cuốn hay bánh mì không phải `side` cũng không phải `dessert`.
+
+**Vì sao không có cột "phương pháp chế biến".** Bản thiết kế trước đây có cột `cooking_method` kiểu `ENUM` 10 giá trị, đã bỏ.
+
+Đề cương nêu vector đặc trưng gồm "thành phần dinh dưỡng, nhóm thực phẩm, phương pháp chế biến và khẩu vị". **Cả bốn thành phần đó vẫn còn**: phương pháp chế biến nay do `category_id` đại diện, vì 8 trong 12 mã nhóm *chính là* phương pháp chế biến — `mon_chien` là chiên, `mon_nuong` là nướng, `mon_xao` là xào, `mon_kho` là kho, `mon_luoc_hap` là luộc và hấp, `mon_canh` là nấu canh, `mon_goi` là trộn và sống, `mon_nuoc` là nấu nước. Bốn mã còn lại — `com`, `trang_mieng`, `do_uong`, `mon_cuon` — phân theo vai trò hoặc dạng món chứ không theo cách tác động nhiệt.
+
+Nói cách khác, bỏ `cooking_method` **không làm mất tín hiệu cách chế biến**, nó chỉ bỏ một trục *trùng lặp* với trục đã có. Ba lý do:
+
+Thứ nhất, **`food_categories` đã mang thông tin đó**. Nhóm `mon_chien` thì cách chế biến là chiên, `mon_nuong` thì là nướng — 12 nhóm món của hệ thống phần lớn *chính là* phương pháp chế biến. Hai one-hot gần như trùng nhau, và trong mã nguồn điều này đã lộ ra từ trước: hàm tổng hợp đặc trưng ở màn hình kết quả khảo sát phải có cơ chế khử trùng, vì hai nhãn `Chiên` và `Món chiên` cùng lọt vào danh sách và nói đi nói lại một ý.
+
+Thứ hai, **hai trục độc lập cho phép những trạng thái vô nghĩa**. Mì tôm nấu nước và mì tôm xào khô là *hai món khác nhau* với thành phần dinh dưỡng khác nhau, không phải một món với hai cách chế biến. Để `cooking_method` tách khỏi `category_id` thì không gì ngăn một dòng thuộc nhóm `mon_nuoc` lại mang `cooking_method = 'xao'` — dữ liệu tự mâu thuẫn mà không ràng buộc nào bắt được. Gộp về một trục thì mỗi cách chế biến là một món riêng, một dòng riêng, một bộ số dinh dưỡng riêng.
+
+Thứ ba, **nó gần như không mang thông tin**. Trong 83 món của tập dữ liệu, 63 món mang giá trị `khac`.
+
+Thống kê sở thích theo cách chế biến vẫn làm được: tra `popularity_score` hoặc `food_diary` rồi nhóm theo `category_id`.
+
+**Vì sao không có cột "bữa ăn phù hợp".** Bản thiết kế trước đây có cột `suitable_meals` kiểu `SET`, đã bỏ vì hai lý do.
+
+Thứ nhất, **không có nguồn nào để điền nó**. Bảng thành phần thực phẩm không nói món nào ăn bữa nào, và không có chuẩn nào về chuyện này. Giá trị điền vào chỉ là phán đoán của người nhập, mà `validate_foods.py` chỉ kiểm được *từ vựng* hợp lệ chứ không kiểm được *gán đúng hay sai*. Lọc cứng dựa trên dữ liệu phỏng đoán là khuếch đại sai số của chính mình.
+
+Thứ hai, **`dish_role` đã mang thông tin đó**. `main` là món của bữa chính, `snack` là món ăn lúc nào cũng được, `dessert` và `drink` đi kèm chứ không đứng một mình. Hai cột cùng diễn đạt một điều thì cột yếu hơn phải đi.
+
+Nếu sau này cần biết món nào thường ăn vào bữa nào, câu trả lời **đo được** từ `food_diary`:
+
+```sql
+SELECT meal_type, COUNT(*) AS so_lan
+FROM food_diary WHERE food_id = :food_id
+GROUP BY meal_type ORDER BY so_lan DESC;
+```
+
+Con số này là sự thật quan sát được, khác hẳn một cột phỏng đoán điền sẵn.
 
 ---
 
@@ -321,8 +511,8 @@ CREATE TABLE foods (
 
 ```sql
 CREATE TABLE food_nutrition (
-    id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    food_id         BIGINT UNSIGNED NOT NULL UNIQUE,
+    id              CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    food_id         CHAR(36) NOT NULL UNIQUE,
     serving_size_g  SMALLINT UNSIGNED NOT NULL DEFAULT 100,
 
     -- ══ Năng lượng và ba chất sinh năng lượng ══
@@ -332,10 +522,10 @@ CREATE TABLE food_nutrition (
     fat_g           DECIMAL(6,2) NOT NULL DEFAULT 0,
 
     -- ══ Thành phần liên quan ràng buộc bệnh lý ══
-    fiber_g         DECIMAL(6,2) NOT NULL DEFAULT 0,
-    sugar_g         DECIMAL(6,2) NOT NULL DEFAULT 0,
-    sodium_mg       DECIMAL(7,2) NOT NULL DEFAULT 0,
-    cholesterol_mg  DECIMAL(7,2) NOT NULL DEFAULT 0,
+    fiber_g         DECIMAL(6,2) NULL,
+    sugar_g         DECIMAL(6,2) NULL,
+    sodium_mg       DECIMAL(7,2) NULL,
+    cholesterol_mg  DECIMAL(7,2) NULL,
     purine_mg       DECIMAL(7,2) NULL,
 
     -- ══ Vi chất ══
@@ -345,7 +535,6 @@ CREATE TABLE food_nutrition (
     vitamin_a_mcg   DECIMAL(7,2) NULL,
     vitamin_c_mg    DECIMAL(6,2) NULL,
 
-    data_source     VARCHAR(150) NULL,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                              ON UPDATE CURRENT_TIMESTAMP,
 
@@ -358,11 +547,16 @@ CREATE TABLE food_nutrition (
 | Bắt buộc | `calories_kcal`, `protein_g`, `carbs_g`, `fat_g` | Đề cương yêu cầu 300–500 món có đủ 4 trường này |
 | Ràng buộc bệnh lý | `sugar_g`, `sodium_mg`, `cholesterol_mg`, `purine_mg` | Đầu vào cho `condition_rules` |
 | Vi chất | `calcium_mg` → `vitamin_c_mg` | Cho phép `NULL` — không phải món nào cũng có số liệu |
-| Truy xuất nguồn | `data_source` | Ghi rõ nguồn: Bảng thành phần thực phẩm Việt Nam, USDA... |
 
 > **Vì sao vi chất cho phép NULL còn macro thì không.** Mục tiêu đề tài nêu "calo, protein, vi chất", nhưng thực tế thu thập dữ liệu 300–500 món Việt Nam thì số liệu vi chất khuyết khá nhiều. Cho `NULL` là trung thực; bước tiền xử lý của ML sẽ xử lý dữ liệu khuyết theo phương pháp đã trình bày ở Chương 1. Ngược lại 4 trường macro là bắt buộc vì thiếu chúng thì Bước 4 không chạy được.
 
-> `data_source` là cột nhỏ nhưng đắt giá khi bảo vệ — hội đồng thường hỏi "số liệu dinh dưỡng em lấy ở đâu".
+> **Vì sao không có cột truy xuất nguồn.** Bản thiết kế trước có `data_source`
+> và `source_url`. Đã bỏ cả hai: đây là đồ án công nghệ thông tin, trọng tâm là
+> thuật toán khuyến nghị, không phải chứng minh độ chính xác của số liệu thực
+> phẩm. Quy tắc **không vay số liệu ba chất sinh năng lượng từ nguồn khác** vẫn
+> được thực thi trong `tools/fill_gaps_usda.py` (danh sách `BORROWABLE` loại
+> macro); chỉ là không còn lưu lại vết trong CSDL. Nguồn chung của tập dữ liệu
+> ghi ở `data/reference/SOURCING_POLICY.md`.
 
 ---
 
@@ -371,9 +565,8 @@ CREATE TABLE food_nutrition (
 ```sql
 CREATE TABLE tags (
     id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    code        VARCHAR(50)  NOT NULL UNIQUE,
-    name_vi     VARCHAR(100) NOT NULL,
-    tag_type    ENUM('allergen','diet','nutrition','taste') NOT NULL,
+    name_vi     VARCHAR(100) NOT NULL UNIQUE,
+    tag_type    ENUM('allergen','diet','nutrition') NOT NULL,
     description VARCHAR(255) NULL,
     INDEX idx_tag_type (tag_type)
 ) ENGINE=InnoDB;
@@ -381,25 +574,44 @@ CREATE TABLE tags (
 
 **Dữ liệu mẫu theo từng loại:**
 
-| tag_type | code | name_vi | Dùng làm gì |
+Không còn cột `code`: `name_vi` đã là `UNIQUE` và làm luôn khóa tự nhiên.
+**13 nhãn**, đúng bằng số dòng trong `db/seed.sql`:
+
+| tag_type | name_vi | Số món đang gắn | Dùng làm gì |
 |---|---|---|---|
-| `allergen` | `contains_seafood` | Có hải sản | Ràng buộc cứng — dị ứng |
-| `allergen` | `contains_peanut` | Có đậu phộng | Ràng buộc cứng |
-| `allergen` | `contains_egg` | Có trứng | Ràng buộc cứng |
-| `allergen` | `contains_dairy` | Có sữa / chế phẩm sữa | Ràng buộc cứng |
-| `allergen` | `contains_gluten` | Có gluten | Ràng buộc cứng |
-| `allergen` | `contains_soy` | Có đậu nành | Ràng buộc cứng |
-| `diet` | `vegetarian` | Món chay | Ràng buộc cứng |
-| `diet` | `vegan` | Món thuần chay | Ràng buộc cứng |
-| `nutrition` | `low_sodium` | Ít natri | Quy tắc bệnh lý |
-| `nutrition` | `low_sugar` | Ít đường | Quy tắc bệnh lý |
-| `nutrition` | `high_protein` | Giàu đạm | Vector đặc trưng ML |
-| `nutrition` | `high_fiber` | Giàu chất xơ | Vector đặc trưng ML |
-| `taste` | `salty` | Mặn | **Vector đặc trưng ML — khẩu vị** |
-| `taste` | `sweet` | Ngọt | Vector đặc trưng ML |
-| `taste` | `sour` | Chua | Vector đặc trưng ML |
-| `taste` | `fatty` | Béo | Vector đặc trưng ML |
-| `taste` | `light` | Thanh đạm | Vector đặc trưng ML |
+| `allergen` | Có hải sản | 90 | Ràng buộc cứng — dị ứng |
+| `allergen` | Có đậu nành | 20 | Ràng buộc cứng |
+| `allergen` | Có trứng | 15 | Ràng buộc cứng |
+| `allergen` | Có gluten | 8 | Ràng buộc cứng |
+| `allergen` | Có đậu phộng | 2 | Ràng buộc cứng |
+| `allergen` | Có sữa / chế phẩm sữa | 0 | Ràng buộc cứng |
+| `diet` | Món chay | 117 | Ràng buộc cứng |
+| `diet` | Món thuần chay | 116 | Ràng buộc cứng |
+| `nutrition` | Giàu purin | 91 | Quy tắc bệnh gút |
+| `nutrition` | Giàu chất xơ | 1 | *chưa quy tắc nào dùng* |
+| `nutrition` | Ít natri | 0 | *chưa quy tắc nào dùng* |
+| `nutrition` | Ít đường | 0 | *chưa quy tắc nào dùng* |
+| `nutrition` | Giàu đạm | 0 | *chưa quy tắc nào dùng* |
+
+**Nhãn `Có đậu nành` từng là nhãn dị nguyên duy nhất không bệnh nào dùng tới**
+— 6 nhãn dị nguyên mà chỉ 5 bệnh trong `conditions`, nên người dị ứng đậu nành
+không khai được và Bộ lọc F1 không loại gì cho họ. Phát hiện khi chạy
+`tools/check_f1.py`. Đã thêm bệnh `Dị ứng đậu nành` kèm quy tắc `exclude_tag`;
+giờ cả 6 nhãn đều có bệnh tương ứng.
+
+**Nhóm `taste` đã bị bỏ hoàn toàn** (`Mặn`, `Ngọt`, `Chua`, `Béo`, `Thanh
+đạm`). Khi đối chiếu nhãn gắn tay với số đo thì chúng mâu thuẫn với dữ liệu:
+món gắn `Mặn` trung bình 1041 mg natri (thấp nhất 805), món **không** gắn
+trung bình 959 mg nhưng cao nhất tới 1378. Và 0/20 quy tắc nào dùng tới một
+nhãn vị. Vị mặn và vị ngọt nay là **chiều số** trong vector, lấy thẳng từ
+`sodium_mg` và `sugar_g`.
+
+**Bốn nhãn `nutrition` cuối bảng đang là ứng viên bị bỏ nốt** — cùng lý do:
+cả bốn đều suy được từ cột số (`sodium_mg`, `sugar_g`, `protein_g`,
+`fiber_g` phủ 95–100 %), không quy tắc nào dùng, và ngưỡng "ít" hay "giàu" là
+bao nhiêu thì nhãn không nói. `Giàu purin` thì **giữ**, vì `purine_mg` chỉ
+phủ 70/318 món nên nhãn mang thông tin mà cột số không có. Đó cũng là phép
+thử chung: giữ nhãn khi con số thiếu hoặc không suy ra được.
 
 **Vì sao dùng nhãn dị ứng thay vì bảng nguyên liệu chi tiết.**
 
@@ -415,7 +627,7 @@ Cái mất là độ chi tiết với các dị ứng hiếm. **Ghi nhận thẳ
 
 ```sql
 CREATE TABLE food_tags (
-    food_id BIGINT UNSIGNED NOT NULL,
+    food_id CHAR(36) NOT NULL,
     tag_id  INT UNSIGNED    NOT NULL,
     PRIMARY KEY (food_id, tag_id),
     FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
@@ -436,7 +648,7 @@ CREATE TABLE food_tags (
 
 ```sql
 CREATE TABLE condition_rules (
-    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id           CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
     condition_id INT UNSIGNED NOT NULL,
     rule_type    ENUM('exclude_tag','require_tag','nutrient_limit') NOT NULL,
 
@@ -445,7 +657,9 @@ CREATE TABLE condition_rules (
 
     -- Dùng khi rule_type = 'nutrient_limit'
     nutrient     ENUM('calories_kcal','protein_g','carbs_g','fat_g','fiber_g',
-                      'sugar_g','sodium_mg','cholesterol_mg','purine_mg') NULL,
+                      'sugar_g','sodium_mg','cholesterol_mg','purine_mg',
+                      'calcium_mg','iron_mg','zinc_mg','vitamin_a_mcg',
+                      'vitamin_c_mg') NULL,
     comparator   ENUM('lte','gte') NULL,
     threshold    DECIMAL(8,2) NULL,
     scope        ENUM('per_serving','per_meal','per_day') NOT NULL DEFAULT 'per_serving',
@@ -453,6 +667,8 @@ CREATE TABLE condition_rules (
     severity_min ENUM('mild','moderate','severe') NOT NULL DEFAULT 'mild',
     is_hard      TINYINT(1)   NOT NULL DEFAULT 1,
     penalty      DECIMAL(4,3) NULL,
+    evidence_level ENUM('definitional','published','derived','unsupported')
+                 NOT NULL DEFAULT 'derived',
     note         VARCHAR(255) NULL,
 
     FOREIGN KEY (condition_id) REFERENCES conditions(id) ON DELETE CASCADE,
@@ -467,28 +683,69 @@ CREATE TABLE condition_rules (
 | `scope` | Ngưỡng áp cho một khẩu phần, một bữa, hay cả ngày |
 | `severity_min` | Quy tắc chỉ kích hoạt khi mức độ bệnh của người dùng đạt từ mức này trở lên |
 | `is_hard` | `1` = ràng buộc cứng, loại bỏ ở **Bước 2**. `0` = ràng buộc mềm, trừ điểm ở **Bước 3** |
-| `penalty` | Hệ số trừ điểm khi `is_hard = 0` |
+| `penalty` | **Hệ số nhân** điểm khi `is_hard = 0` — nhỏ hơn là phạt nặng hơn |
+| `evidence_level` | Mức tin cậy của **ngưỡng**: `definitional` (quy tắc nhãn, không có ngưỡng để dẫn nguồn) · `published` (lấy nguyên từ nguồn đang hiệu lực) · `derived` (suy ra kèm giả thiết) · `unsupported` (không có nguồn đang hiệu lực) |
 
 **Dữ liệu mẫu — đây chính là bảng sẽ in vào báo cáo:**
 
-| Bệnh lý | rule_type | Nhãn / Chất | So sánh | Ngưỡng | scope | is_hard |
-|---|---|---|---|---|---|---|
-| Đái tháo đường | `nutrient_limit` | `sugar_g` | `lte` | 10.00 | per_serving | 1 |
-| Đái tháo đường | `nutrient_limit` | `carbs_g` | `lte` | 60.00 | per_meal | 0 |
-| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 600.00 | per_serving | 1 |
-| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 2000.00 | per_day | 1 |
-| Rối loạn mỡ máu | `nutrient_limit` | `cholesterol_mg` | `lte` | 200.00 | per_serving | 1 |
-| Rối loạn mỡ máu | `nutrient_limit` | `fat_g` | `lte` | 20.00 | per_serving | 0 |
-| Bệnh thận | `nutrient_limit` | `protein_g` | `lte` | 15.00 | per_serving | 1 |
-| Bệnh thận | `nutrient_limit` | `sodium_mg` | `lte` | 500.00 | per_serving | 1 |
-| Gút | `nutrient_limit` | `purine_mg` | `lte` | 100.00 | per_serving | 1 |
-| Dị ứng hải sản | `exclude_tag` | `contains_seafood` | — | — | per_serving | 1 |
-| Dị ứng đậu phộng | `exclude_tag` | `contains_peanut` | — | — | per_serving | 1 |
-| Không dung nạp lactose | `exclude_tag` | `contains_dairy` | — | — | per_serving | 1 |
-| Ăn chay | `require_tag` | `vegetarian` | — | — | per_serving | 1 |
-| Ăn thuần chay | `require_tag` | `vegan` | — | — | per_serving | 1 |
+| Bệnh lý | rule_type | Nhãn / Chất | So sánh | Ngưỡng | scope | is_hard | penalty | severity_min |
+|---|---|---|---|---|---|---|---|---|
+| Ăn chay | `require_tag` | `Món chay` | — | — | per_serving | 1 | — | mild |
+| Ăn thuần chay | `require_tag` | `Món thuần chay` | — | — | per_serving | 1 | — | mild |
+| Bệnh thận | `nutrient_limit` | `protein_g` | `lte` | 48.00 | per_day | 1 | — | mild |
+| Bệnh thận | `nutrient_limit` | `sodium_mg` | `lte` | 2000.00 | per_day | 1 | — | mild |
+| Dị ứng đậu nành | `exclude_tag` | `Có đậu nành` | — | — | per_serving | 1 | — | mild |
+| Dị ứng đậu phộng | `exclude_tag` | `Có đậu phộng` | — | — | per_serving | 1 | — | mild |
+| Dị ứng hải sản | `exclude_tag` | `Có hải sản` | — | — | per_serving | 1 | — | mild |
+| Dị ứng trứng | `exclude_tag` | `Có trứng` | — | — | per_serving | 1 | — | mild |
+| Đái tháo đường | `nutrient_limit` | `carbs_g` | `lte` | 60.00 | per_meal | 0 | 0.700 | mild |
+| Đái tháo đường | `nutrient_limit` | `sugar_g` | `lte` | 25.00 | per_day | 0 | 0.600 | mild |
+| Gút | `exclude_tag` | `Giàu purin` | — | — | per_serving | 1 | — | **moderate** |
+| Gút | `nutrient_limit` | `purine_mg` | `lte` | 400.00 | per_day | 1 | — | mild |
+| Gút | `nutrient_limit` | `purine_mg` | `lte` | 150.00 | per_serving | 0 | 0.500 | mild |
+| Không dung nạp gluten | `exclude_tag` | `Có gluten` | — | — | per_serving | 1 | — | mild |
+| Không dung nạp lactose | `exclude_tag` | `Có sữa / chế phẩm sữa` | — | — | per_serving | 1 | — | mild |
+| Rối loạn mỡ máu | `nutrient_limit` | `cholesterol_mg` | `lte` | 300.00 | per_day | 0 | 0.700 | mild |
+| Rối loạn mỡ máu | `nutrient_limit` | `fat_g` | `lte` | 25.00 | per_serving | 0 | 0.750 | mild |
+| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 2000.00 | per_day | 1 | — | mild |
+| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 700.00 | per_serving | 0 | 0.600 | mild |
+| Tăng huyết áp | `nutrient_limit` | `sodium_mg` | `lte` | 500.00 | per_serving | 0 | 0.400 | **severe** |
 
-> **Giá trị ngưỡng trong bảng trên là số minh họa.** Khi triển khai thật phải tra theo tài liệu *Nhu cầu dinh dưỡng khuyến nghị cho người Việt Nam (NIN 2016)* — chính là tài liệu ban đầu ghi trong file nhiệm vụ — và ghi rõ nguồn của từng ngưỡng trong cột `note`.
+Hai mươi dòng trên là **dữ liệu thật trong `nutrition_rec`**, không phải số minh họa. Mỗi ngưỡng ghi nguồn trong cột `note`, và nguồn chia làm ba mức tin cậy khác nhau — tài liệu không được trình bày chúng như nhau:
+
+| Mức | Ví dụ `note` |
+|---|---|
+| **Có nguồn công bố** | `WHO: người lớn dưới 2000 mg natri/ngày`; `KDIGO 2024: 0,8 g đạm/kg/ngày`; hướng dẫn gút Nhật Bản dưới 400 mg/ngày |
+| **Suy diễn** | `400 mg/ngày chia cho 3 bữa chính; là suy diễn, không phải ngưỡng công bố` |
+| **Chưa xác minh** | `Ngưỡng theo ngày cho mức nặng CẦN TRA AHA/ESC — chưa xác minh` |
+
+Hai dòng in đậm ở cột `severity_min` là hai quy tắc duy nhất **không** áp từ mức nhẹ. Luật `Giàu purin` cần mức vừa, nên người bị gút mức nhẹ không bị loại món nào (318 món đi qua F1), còn mức vừa thì bị loại 91 món.
+
+Ba ghi chú đáng nhớ về nhóm `is_hard = 0`:
+
+- Ngưỡng cholesterol 300 mg/ngày **đã bị rút** khỏi *Dietary Guidelines for Americans 2015* và AHA/ACC 2019, nên nó được giữ ở mức khuyến cáo chứ không phải chống chỉ định.
+- Mục tiêu thật của AHA là **béo bão hòa** dưới 10% năng lượng, nhưng bảng thành phần thực phẩm Việt Nam không tách béo bão hòa, nên `fat_g` tổng được dùng thay.
+- ADA *Standards of Care* nêu rõ **không có** tỷ lệ bột đường lý tưởng; mốc 45–60 g mỗi bữa là cách làm cũ, giữ làm khuyến cáo.
+
+**Hai ràng buộc ép tính nhất quán.**
+
+`condition_rules` là một **bảng đa hình**: mỗi `rule_type` dùng một bộ cột khác nhau, các cột còn lại để `NULL`. Không có ràng buộc thì một dòng `nutrient_limit` bỏ trống `threshold` vẫn chèn được bình thường, và quy tắc đó **lặng lẽ không bao giờ kích hoạt** — người bệnh vẫn nhận món lẽ ra phải bị lọc, mà hệ thống tưởng đã lọc.
+
+```sql
+CONSTRAINT chk_rule_shape CHECK (
+    (rule_type IN ('exclude_tag','require_tag')
+         AND tag_id IS NOT NULL
+         AND nutrient IS NULL AND comparator IS NULL AND threshold IS NULL)
+    OR
+    (rule_type = 'nutrient_limit'
+         AND tag_id IS NULL
+         AND nutrient IS NOT NULL AND comparator IS NOT NULL
+         AND threshold IS NOT NULL)
+),
+CONSTRAINT chk_rule_penalty CHECK (is_hard = 1 OR penalty IS NOT NULL)
+```
+
+Ràng buộc thứ hai ép quy tắc mềm phải khai mức phạt — quy tắc mềm không có `penalty` thì bước chấm điểm không biết nhân bao nhiêu.
 
 **Vì sao tách `is_hard`.** Không phải quy tắc dinh dưỡng nào cũng tuyệt đối. "Không được ăn tôm khi dị ứng hải sản" là cứng. "Nên hạn chế chất béo khi rối loạn mỡ máu" là mềm — nếu xử lý như ràng buộc cứng, tập ứng viên sẽ bị thu hẹp quá mức và Bước 4 không tìm nổi tổ hợp thỏa hạn mức năng lượng. Cột này cho phép diễn đạt đúng sự khác biệt đó.
 
@@ -498,19 +755,40 @@ CREATE TABLE condition_rules (
 
 ```sql
 CREATE TABLE rda_reference (
-    id        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id        CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
     gender    ENUM('male','female','all') NOT NULL,
     age_min   TINYINT UNSIGNED NOT NULL,
     age_max   TINYINT UNSIGNED NOT NULL,
-    nutrient  VARCHAR(30)  NOT NULL,
+    nutrient  ENUM('calories_kcal','protein_g','carbs_g','fat_g','fiber_g',
+                   'sugar_g','sodium_mg','cholesterol_mg','purine_mg',
+                   'calcium_mg','iron_mg','zinc_mg','vitamin_a_mcg',
+                   'vitamin_c_mg') NOT NULL,
+    qualifier VARCHAR(30)  NULL,
     rda_value DECIMAL(8,2) NOT NULL,
     unit      VARCHAR(10)  NOT NULL,
     source    VARCHAR(150) NOT NULL DEFAULT 'NIN Vietnamese RDAs 2016',
 
-    UNIQUE KEY uq_rda (gender, age_min, age_max, nutrient),
+    UNIQUE KEY uq_rda (gender, age_min, age_max, nutrient,
+                       (COALESCE(qualifier, ''))),
     INDEX idx_lookup (gender, age_min, age_max)
 ) ENGINE=InnoDB;
 ```
+
+**Vì sao khóa `uq_rda` phải đi qua `COALESCE`.** `qualifier` để trống ở mọi
+chất không phân mức hấp thu — hiện là 12/12 dòng. MySQL coi **mọi `NULL` là
+khác nhau**, nên một khóa `UNIQUE` đi thẳng qua `qualifier` sẽ không chặn
+trùng ở đúng những dòng đó. Đổi `NULL` thành chuỗi rỗng thì khóa mới cắn:
+chèn lại y nguyên một dòng đã có nay báo
+`1062 Duplicate entry 'male-19-30-protein_g-' for key 'rda_reference.uq_rda'`,
+trong khi ba mức giá trị sinh học của chất sắt — cùng `(giới, tuổi,
+'iron_mg')` nhưng khác `qualifier` — vẫn chèn được cả ba.
+
+Phép quy đổi nằm **ngay trong khóa**, dạng khóa hàm (MySQL 8.0.13 trở lên).
+Trước đây nó nằm ở một cột sinh tên `qualifier_key`. Cột đó **đã bỏ**, cùng
+lý do và cùng cách làm như `foods.owner_key`: nó không mang ý nghĩa nghiệp vụ
+nào, chỉ tồn tại để phục vụ khóa, nên nó làm ERD dài thêm một dòng mà không
+nói thêm gì về bài toán. Hai chỗ trong cùng một lược đồ cần cùng một phép quy
+đổi thì nên giải giống nhau — xem `foods.uq_food_name`.
 
 Bảng tra cứu tĩnh, nạp một lần từ tài liệu NIN 2016. Dùng để đối chiếu thực đơn sinh ra có đáp ứng nhu cầu vi chất hay không, và để hiển thị "bạn đã nạp đủ bao nhiêu phần trăm nhu cầu canxi hôm nay" ở màn hình thống kê.
 
@@ -522,9 +800,9 @@ Bảng tra cứu tĩnh, nạp một lần từ tài liệu NIN 2016. Dùng để
 
 ```sql
 CREATE TABLE interactions (
-    id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id       BIGINT UNSIGNED NOT NULL,
-    food_id       BIGINT UNSIGNED NOT NULL,
+    id            CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id       CHAR(36) NOT NULL,
+    food_id       CHAR(36) NOT NULL,
     action        ENUM('like','dislike','neutral','unknown') NOT NULL,
     -- Mã phiên khảo sát. Cả gói vuốt được ghi trong một giao dịch,
     -- nên mọi dòng của một người dùng chia sẻ cùng một session_id.
@@ -583,12 +861,12 @@ Cách này còn đúng hơn về mặt nghiệp vụ: một món "được gợi
 
 ```sql
 CREATE TABLE food_diary (
-    id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id        BIGINT UNSIGNED NOT NULL,
-    food_id        BIGINT UNSIGNED NOT NULL,
+    id             CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id        CHAR(36) NOT NULL,
+    food_id        CHAR(36) NOT NULL,
     ate_on         DATE NOT NULL,
     meal_type      ENUM('breakfast','lunch','dinner','snack') NOT NULL,
-    serving_size_g SMALLINT UNSIGNED NOT NULL DEFAULT 100,
+    portion_multiplier DECIMAL(4,2) NOT NULL DEFAULT 1.00,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -629,9 +907,9 @@ Bộ bốn `(user_id, ate_on, meal_type, food_id)` là duy nhất trong một th
 
 ```sql
 CREATE TABLE feedbacks (
-    id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id    BIGINT UNSIGNED NOT NULL,
-    food_id    BIGINT UNSIGNED NOT NULL,
+    id         CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id    CHAR(36) NOT NULL,
+    food_id    CHAR(36) NOT NULL,
     rating     TINYINT UNSIGNED NOT NULL,
     comment    TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -728,10 +1006,10 @@ WHERE EXISTS (
 
 ```sql
 CREATE TABLE recommendations (
-    id                BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id                CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
     batch_id          CHAR(36) NOT NULL,
-    user_id           BIGINT UNSIGNED NOT NULL,
-    food_id           BIGINT UNSIGNED NOT NULL,
+    user_id           CHAR(36) NOT NULL,
+    food_id           CHAR(36) NOT NULL,
     context_meal_type ENUM('breakfast','lunch','dinner','snack') NULL,
 
     -- ══ Điểm số, tách theo từng thành phần ══
@@ -785,8 +1063,8 @@ Công thức chuyển tiếp là `score = α · score_ml + (1 − α) · score_c
 
 ```sql
 CREATE TABLE meal_plans (
-    id                     BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id                BIGINT UNSIGNED NOT NULL,
+    id                     CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id                CHAR(36) NOT NULL,
     plan_date              DATE NOT NULL,
 
     -- ══ Hạn mức từ Bước 1, chụp lại tại thời điểm sinh thực đơn ══
@@ -806,7 +1084,7 @@ CREATE TABLE meal_plans (
 
     calorie_deviation_pct  DECIMAL(6,2) GENERATED ALWAYS AS
         (100 * (actual_calories_kcal - target_calories_kcal)
-             / target_calories_kcal) STORED,
+             / target_calories_kcal) VIRTUAL,
 
     total_preference_score DECIMAL(8,4) NULL,
     exploration_ratio      DECIMAL(4,3) NULL,
@@ -837,7 +1115,7 @@ CREATE TABLE meal_plans (
 | `exploration_ratio` | Tỷ lệ thăm dò **mục tiêu** của cơ chế 70-30. Trần `0.5` |
 | `generation_source` | Ghi rõ thực đơn này sinh bằng phương pháp nào — nền tảng cho toàn bộ phần so sánh ở Chương 3 |
 
-> `calorie_deviation_pct` là cột `GENERATED ... STORED` nên MySQL tự tính và tự cập nhật, đồng thời **đánh chỉ mục được** nếu cần lọc nhanh các thực đơn vi phạm ngưỡng. `chk_target_positive` chặn lỗi chia cho 0.
+> `calorie_deviation_pct` là cột `GENERATED ... VIRTUAL` nên MySQL tự tính lúc đọc và **không lưu trữ byte nào**. Chọn `VIRTUAL` thay vì `STORED` để không có dư thừa lưu trữ — đây là một **thuộc tính dẫn xuất**, phụ thuộc hoàn toàn vào `actual_calories_kcal` và `target_calories_kcal`, nên lưu lại là vi phạm chuẩn 3. MySQL 8 vẫn đánh được chỉ mục trên cột `VIRTUAL` nếu sau này cần lọc nhanh. `chk_target_positive` chặn lỗi chia cho 0.
 
 ### Vì sao bốn cột `actual_*` phải cho phép `NULL`
 
@@ -861,16 +1139,16 @@ Cho phép `NULL` thì mọi phép tính có `NULL` đều cho `NULL`, nên `calo
 
 ```sql
 CREATE TABLE meal_plan_items (
-    id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    meal_plan_id        BIGINT UNSIGNED NOT NULL,
-    food_id             BIGINT UNSIGNED NOT NULL,
+    id                  CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    meal_plan_id        CHAR(36) NOT NULL,
+    food_id             CHAR(36) NOT NULL,
     meal_type           ENUM('breakfast','lunch','dinner','snack') NOT NULL,
-    serving_size_g      SMALLINT UNSIGNED NOT NULL DEFAULT 100,
+    portion_multiplier  DECIMAL(4,2) NOT NULL DEFAULT 1.00,
 
     predicted_score     DECIMAL(6,4) NULL,
     status              ENUM('suggested','kept','replaced','eaten','skipped')
                             NOT NULL DEFAULT 'suggested',
-    replaced_by_food_id BIGINT UNSIGNED NULL,
+    replaced_by_food_id CHAR(36) NULL,
     replaced_at         DATETIME NULL,
     exploration_delta   DECIMAL(4,3) NULL,
     position            TINYINT UNSIGNED NULL,
@@ -935,7 +1213,7 @@ Hai cột ghi lại tham số của cơ chế này:
 
 ```sql
 CREATE TABLE user_preference_profiles (
-    user_id         BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    user_id         CHAR(36) NOT NULL PRIMARY KEY,
     feature_version VARCHAR(20)   NOT NULL,
     weights         JSON          NOT NULL,
     sum_abs_weight  DECIMAL(10,4) NOT NULL DEFAULT 0,
@@ -951,13 +1229,58 @@ CREATE TABLE user_preference_profiles (
 
 Đây là hiện thực của **hồ sơ sở thích dạng vector trọng số** mà đề cương nêu đích danh, tính theo thuật toán Rocchio.
 
+> **`weights` KHÔNG phải cân nặng.** Đây là **hệ số** của vector khẩu vị — nghĩa
+> toán học của chữ "trọng số", không liên quan gì tới `weight_kg`. Trong lược đồ
+> có 5 cột chứa chữ `weight` với hai nghĩa khác nhau; xem bảng phân biệt ở cuối
+> mục này.
+
+Nội dung thật của cột, đúng 20 khóa khớp với 20 chiều của vector đặc trưng:
+
+```json
+{
+  "protein_share":  0.31,
+  "carb_share":    -0.08,
+  "fat_share":      0.12,
+  "kcal_norm":      0.22,
+  "sugar_share":    0.09,
+  "sodium_norm":   -0.52,
+  "fiber_norm":     0.41,
+  "spice":         -0.44,
+
+  "cat_com":            0.05,
+  "cat_do_uong":       -0.11,
+  "cat_mon_canh":       0.18,
+  "cat_mon_chien":     -0.37,
+  "cat_mon_cuon":       0.02,
+  "cat_mon_goi":        0.24,
+  "cat_mon_kho":        0.09,
+  "cat_mon_luoc_hap":   0.15,
+  "cat_mon_nuoc":       0.35,
+  "cat_mon_nuong":     -0.06,
+  "cat_mon_xao":       -0.21,
+  "cat_trang_mieng":    0.03
+}
+```
+
+Đọc vector này ra tiếng người: *người dùng thiên về món nước (0,35) và món gỏi
+(0,24), tránh món chiên (−0,37) và món xào (−0,21), không thích đồ cay (−0,44),
+ưa món giàu đạm (0,31) hơn giàu bột đường (−0,08).*
+
+Chính khả năng diễn giải này là lý do dùng Rocchio ở Giai đoạn 1 — nó cho phép
+nói với người dùng *vì sao* một món được gợi ý.
+
 | Cột | Mô tả |
 |---|---|
-| `weights` | Vector `p_u`, lưu dạng JSON: `{"protein_g": 0.31, "cat_mon_nuoc": 0.12, "taste_spicy": -0.44, ...}` |
+| `user_id` | Vừa là khóa chính vừa là khóa ngoại — quan hệ 1:1 với `users`, mỗi người đúng một hồ sơ sở thích |
+| `feature_version` | Phiên bản định nghĩa đặc trưng mà `weights` được dựng theo. **Bắt buộc**: đổi tập nhóm món là đổi số chiều, nên mọi vector cũ phải dựng lại — cột này cho biết vector nào đã lạc hậu |
+| `weights` | Vector `p_u` — **19 hệ số** của thuật toán Rocchio, lưu dạng JSON. Xem ví dụ đầy đủ bên dưới |
 | `sum_abs_weight` | Tổng `Σ|w|` — **bắt buộc phải lưu**, xem giải thích bên dưới |
 | `n_signals` | Số tín hiệu đã tích lũy, dùng tính hệ số trộn `α` |
 | `stage` | Giai đoạn hiện tại của người dùng |
 | `alpha` | Hệ số trộn đã hiệu lực, lưu sẵn để Backend không phải tính lại mỗi request |
+| `updated_at` | Lần cuối vector được cập nhật. Dùng để phát hiện hồ sơ "chết" — người dùng không tương tác nhiều tháng |
+
+> **Bảng này KHÔNG chứa dữ liệu cơ thể.** Chiều cao, cân nặng, tuổi, giới tính nằm ở `health_profiles`; chúng là dữ liệu **cơ thể**, không phải dữ liệu **khẩu vị**. Nhưng dữ liệu cơ thể vẫn tham gia mô hình ở Giai đoạn 2 — khối "đặc trưng người dùng" trong vector đầu vào được JOIN từ `health_profiles` lúc trích xuất đặc trưng, không phải lưu trùng ở đây.
 
 ### Vì sao bắt buộc lưu `sum_abs_weight`
 
@@ -983,6 +1306,24 @@ Chi phí `O(d)` cho mỗi lượt tương tác, `d` là số chiều đặc trư
 
 **Nếu chỉ lưu `weights` mà không lưu `W`, phép cập nhật tăng dần này không khôi phục được `S`** — buộc phải đọc lại toàn bộ `interactions` và tính lại từ đầu mỗi lần người dùng vuốt. Một cột `DECIMAL` đổi lấy việc đó.
 
+### Năm cột chứa chữ `weight` — hai nghĩa khác nhau
+
+Đây là chỗ dễ nhầm nhất của toàn bộ lược đồ, vì trong một ứng dụng dinh dưỡng
+thì "weight" gần như luôn có nghĩa là cân nặng.
+
+| Cột | Nghĩa | Kiểu |
+|---|---|---|
+| `health_profiles.weight_kg` | **Cân nặng** cơ thể, hiện tại | `DECIMAL(5,2)` |
+| `body_logs.weight_kg` | **Cân nặng** cơ thể theo thời gian | `DECIMAL(5,2)` |
+| `user_preference_profiles.weights` | **Hệ số** vector khẩu vị (17 số) | `JSON` |
+| `user_preference_profiles.sum_abs_weight` | **Mẫu số** `Σ\|w\|` của công thức Rocchio | `DECIMAL(10,4)` |
+| `ml_training_samples.sample_weight` | **Độ tin cậy** của một mẫu huấn luyện | `DECIMAL(4,3)` |
+
+Hai cột đầu là cân nặng. Ba cột sau là trọng số theo nghĩa toán học — hệ số
+trong một tổ hợp tuyến tính — và không liên quan gì tới cơ thể người dùng.
+
+Phân biệt bằng một câu: **`weight_kg` có đơn vị, `weights` thì không.**
+
 > **`stage` và `alpha` là dữ liệu dẫn xuất, cố ý lưu dư.** Về lý thuyết cả hai suy ra được từ `n_signals`. Nhưng lưu sẵn giúp gỡ lỗi dễ hơn nhiều — nhìn thẳng vào bảng là biết người dùng đang ở giai đoạn nào, không phải đọc ngược logic trong mã nguồn.
 
 ---
@@ -991,10 +1332,10 @@ Chi phí `O(d)` cho mỗi lượt tương tác, `d` là số chiều đặc trư
 
 ```sql
 CREATE TABLE ml_training_samples (
-    id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id               CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
     dataset_version  VARCHAR(20) NOT NULL,
-    user_id          BIGINT UNSIGNED NOT NULL,
-    food_id          BIGINT UNSIGNED NOT NULL,
+    user_id          CHAR(36) NOT NULL,
+    food_id          CHAR(36) NOT NULL,
 
     label            DECIMAL(4,3) NOT NULL,
     sample_weight    DECIMAL(4,3) NOT NULL DEFAULT 1.000,
@@ -1013,11 +1354,33 @@ CREATE TABLE ml_training_samples (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
 
+    UNIQUE KEY uq_sample (dataset_version, user_id, food_id, source),
     INDEX idx_dataset_split (dataset_version, split),
     INDEX idx_dataset_user  (dataset_version, user_id),
     INDEX idx_collected     (collected_at)
 ) ENGINE=InnoDB;
 ```
+
+| Cột | Ý nghĩa |
+|---|---|
+| `dataset_version` | Nhãn phiên bản tập dữ liệu, ví dụ `ds_2026_10_v1`. Mọi kết quả đánh giá truy về được đúng tập đã sinh ra nó |
+| `user_id` / `food_id` | Cặp (người, món) mà mẫu này nói về |
+| `label` | Mức độ ưa thích `∈ [0,1]` — **biến mục tiêu** của mô hình |
+| `sample_weight` | **Độ tin cậy** của nhãn `∈ [0,1]` — khác hẳn `label`, xem bên dưới |
+| `source` | Tín hiệu đến từ bảng nào, 7 giá trị |
+| `context_meal_type` | Bữa ăn lúc thu tín hiệu. Cùng một món có thể được thích ở bữa sáng mà không ở bữa tối |
+| `split` | `train` / `val` / `test` — **đóng băng**, không chia lại mỗi lần chạy |
+| `fold` | Số thứ tự lần gập khi kiểm định chéo |
+| `collected_at` | Thời điểm thu tín hiệu **gốc**, không phải thời điểm tạo dòng này |
+| `profile_snapshot` | Vector sở thích **tại thời điểm thu tín hiệu** — chống rò rỉ dữ liệu |
+
+**`label` và `sample_weight` trả lời hai câu khác nhau.** `label` là *người dùng thích món này đến mức nào*; `sample_weight` là *ta tin con số đó đến mức nào*. Một đánh giá 5 sao (trọng số 1,0) đáng tin hơn hẳn một suất bị bỏ không ăn (0,3), vì bỏ bữa là tín hiệu nhập nhằng — có thể không thích, có thể hôm đó không có thời gian.
+
+**`profile_snapshot` tồn tại để chống rò rỉ dữ liệu.** Đặc trưng chéo `cos(p_u, vᵢ)` là đầu vào của mô hình. Nếu dựng tập huấn luyện bằng `p_u` *hiện tại* — vector đã được cập nhật bởi chính tín hiệu đang xét — thì đặc trưng đã chứa thông tin về nhãn. Mô hình sẽ cho kết quả đánh giá rất đẹp mà vô dụng khi chạy thật.
+
+**`split` phải đóng băng.** Chia lại mỗi lần chạy thì một mẫu hôm nay ở `test`, mai ở `train`; khi đó hai mô hình không so sánh được với nhau vì chúng được đánh giá trên hai tập khác nhau.
+
+**`collected_at` khác `created_at`.** Một tín hiệu từ tháng 8 có thể được đưa vào tập dữ liệu dựng tháng 10. Chia tập theo thời gian — huấn luyện trên quá khứ, kiểm tra trên tương lai — cần `collected_at`.
 
 ### Bảng quy đổi nhãn từ các nguồn tín hiệu
 
@@ -1086,9 +1449,18 @@ CREATE TABLE ml_models (
 
 | Cột | Mô tả |
 |---|---|
+| `version` | Nhãn phiên bản mô hình, `UNIQUE`. Ví dụ `v1.2.0`. Là thứ `meal_plans.model_id` truy về để biết thực đơn do mô hình nào sinh |
+| `algorithm` | Thuật toán đã dùng. Ba giá trị tương ứng ba mô hình sẽ thử và so sánh |
+| `feature_version` | Phiên bản định nghĩa đặc trưng. Phải khớp với `user_preference_profiles.feature_version` của người dùng, nếu không thì vector đầu vào có số chiều khác với lúc huấn luyện |
+| `dataset_version` | Phiên bản tập dữ liệu đã huấn luyện trên. Trỏ về `ml_training_samples.dataset_version` — nhờ vậy mọi kết quả đều truy lại được chính xác tập dữ liệu nào tạo ra nó |
+| `hyperparams` | Siêu tham số, ví dụ `{"n_estimators": 200, "max_depth": 8}`. Cần để tái lập lại đúng mô hình |
 | `scaler_params` | Tham số chuẩn hóa (min/max hoặc mean/std) **đóng băng tại lúc huấn luyện** |
 | `feature_importance` | Độ quan trọng của từng đặc trưng — vẽ thẳng thành biểu đồ cho Chương 3 |
+| `n_train` / `n_test` | Cỡ tập huấn luyện và tập kiểm tra. `NOT NULL` — buộc phải là số thật, không được để trống. Đây là con số hội đồng sẽ hỏi đầu tiên |
 | `artifact_path` | Đường dẫn file `.joblib`. **Không lưu mô hình dạng BLOB trong CSDL** |
+| `is_active` | Đúng **một** mô hình mang giá trị 1 — mô hình đang phục vụ. Các mô hình cũ giữ lại để so sánh và để quay về nếu bản mới kém hơn |
+| `trained_at` | Thời điểm huấn luyện |
+| `note` | Ghi chú tự do, ví dụ *"thêm đặc trưng chéo cosin"* — để sau ba tháng còn biết bản này khác bản trước ở đâu |
 
 > **`scaler_params` là cột hay bị quên nhất và gây lỗi âm thầm nhất.** Lúc huấn luyện, đặc trưng được chuẩn hóa min-max theo min/max của tập huấn luyện. Lúc chấm điểm cho món mới, **phải dùng đúng bộ min/max đó**, không phải min/max của dữ liệu hiện tại. Nếu tính lại, cùng một món sẽ cho ra hai vector khác nhau ở hai thời điểm, và mô hình dự đoán sai mà không báo lỗi gì.
 
@@ -1113,6 +1485,22 @@ CREATE TABLE ml_evaluations (
     UNIQUE KEY uq_eval (model_id, variant, metric, k_value, fold)
 ) ENGINE=InnoDB;
 ```
+
+| Cột | Ý nghĩa |
+|---|---|
+| `model_id` | Mô hình được đánh giá |
+| `variant` | **Phương án nào** được đo — xem bảng dưới |
+| `metric` | Chỉ số: `precision` / `recall` / `ndcg` / `map` / `mae` / `rmse` / `f1` / `auc` |
+| `k_value` | Giá trị `k` của chỉ số top-k. `NULL` với chỉ số không cần `k` |
+| `value` | Con số đo được |
+| `fold` | Lần gập thứ mấy. `NULL` nếu không kiểm định chéo |
+| `evaluated_at` | Thời điểm đo |
+
+**Vì sao cần `k_value`.** Người dùng chỉ thấy 4–6 suất mỗi ngày, nên `precision@5` nói đúng điều ta quan tâm; `precision` trên toàn bộ 500 món thì không nói gì.
+
+**Vì sao `ndcg@k` quan trọng hơn `precision@k` với hệ này.** `precision` chỉ đếm bao nhiêu món trong top-k là đúng, bỏ qua thứ tự. `ndcg` có tính thứ tự — gợi ý đúng món nhưng xếp cuối danh sách thì người dùng không bao giờ thấy.
+
+**Vì sao `fold` là cột riêng chứ không lưu sẵn giá trị trung bình.** Lưu từng lần gập cho phép báo cáo **trung bình ± độ lệch chuẩn**. Một mô hình đạt 0,72 ± 0,02 khác hẳn một mô hình đạt 0,72 ± 0,15 — cái thứ hai không ổn định và không đáng tin.
 
 **Cột `variant` là chìa khóa của toàn bộ phần thực nghiệm.** Đề cương yêu cầu *"so sánh với phương án khuyến nghị chỉ dựa trên quy tắc dinh dưỡng để làm rõ đóng góp của thành phần học máy"*.
 
@@ -1302,8 +1690,12 @@ HAVING thuc_te < muc_tieu * 0.8;
 | Bộ quy tắc F1 lưu thành dữ liệu | Là sản phẩm phải nộp, đồng thời là phương án đối chứng ở Chương 3 |
 | `condition_rules.is_hard` | Phân biệt ràng buộc tuyệt đối với khuyến cáo nên hạn chế |
 | `interactions` không `UNIQUE (user, food)` | Lịch sử thay đổi khẩu vị theo thời gian là dữ liệu quý |
-| `users` không có `role` | Không có ứng dụng quản trị — nhập liệu bằng script seed, xem kết quả bằng truy vấn SQL |
-| `users` không có `is_active` | Không có nghiệp vụ khóa tài khoản. Nhưng `foods.is_active` thì giữ, vai trò khác hẳn |
+| `users.role` chỉ hai giá trị, không tách bảng `admins` | Chỉ có hai vai trò và không phân quyền chi tiết; tách bảng sinh hai luồng xác thực mà không đổi lại được gì |
+| `users.is_active` | Khóa tài khoản từ trang quản trị. Khác vai trò với `foods.is_active` — cột kia là ẩn món khỏi gợi ý |
+| `foods.owner_id` dùng `ON DELETE CASCADE` | Để `NULL` là đẩy món chưa kiểm duyệt vào danh mục chung của mọi người |
+| `UNIQUE (owner_id, name)` thay vì chỉ `name` | Hai người dùng có thể cùng tự thêm món trùng tên; ràng buộc chỉ trên `name` chặn oan người thứ hai |
+| Bỏ `foods.origin` | Món phổ biến ở mọi miền nên vùng xuất xứ không chứng minh được gì; không mã nào đọc tới cột này |
+| `body_logs` tách khỏi `health_profiles` | `health_profiles` chỉ có một dòng mỗi người nên `weight_kg` bị ghi đè; không tách thì không vẽ được biểu đồ tiến trình |
 | `meal_plans.actual_*` cho phép `NULL` | Số `0` là giá trị hợp lệ về mặt số học, dùng nó để nói "chưa có dữ liệu" sẽ khiến cột dẫn xuất tính ra −100 % |
 | `food_diary` không có `meal_plan_item_id` | Đường đi vòng tới `foods` và `users`. Thay bằng ghép khóa tự nhiên |
 | `feedbacks` không có `food_diary_id` | Cùng lỗi đường đi vòng. Đánh giá là ý kiến về **món ăn**, không phải về một **lần ăn** |
@@ -1336,4 +1728,4 @@ Ghi lại để tránh phình lược đồ và để trả lời được khi h
 | Bảng `ingredients` / `food_ingredients` | Chi phí nhập liệu vượt phạm vi đồ án. Ghi vào hướng phát triển |
 | Bảng lịch sử hồ sơ sức khỏe | Đã thay bằng `profile_snapshot` trong `ml_training_samples` — gọn hơn, đủ dùng |
 | Nhật ký huấn luyện chi tiết theo epoch | Mô hình cây quyết định không cần; tổng kết trong `ml_models` là đủ |
-| Bảng embedding / vector database | Vector đặc trưng chỉ khoảng 30 chiều |
+| Bảng embedding / vector database | Vector đặc trưng chỉ 20 chiều |

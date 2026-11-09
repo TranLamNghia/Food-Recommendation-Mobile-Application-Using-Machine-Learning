@@ -46,24 +46,51 @@ ANIMAL_GROUPS = ("7", "8", "9", "10")
 # có đậu phộng, và không phép kiểm nào khác nhìn thấy vì bảng CSV chỉ có con
 # số dinh dưỡng, không có danh sách nguyên liệu.
 ALLERGEN_INGREDIENTS = {
-    "3017": "contains_peanut",   # đậu phộng hạt khô
-    "3024": "contains_peanut",   # bột đậu phộng
-    "3007": "contains_soy",      # đậu tương hạt
-    "3021": "contains_soy",
-    "3022": "contains_soy",
-    "3025": "contains_soy",      # đậu phụ
-    "3026": "contains_soy",
-    "3027": "contains_soy",
-    "3032": "contains_soy",
-    "13010": "contains_soy",     # nước tương
-    "13022": "contains_soy",
-    "9001": "contains_egg",
-    "9002": "contains_egg",
-    "9004": "contains_egg",
-    "1022": "contains_gluten",   # mì trứng lúa mì
-    "1012": "contains_gluten",   # bánh mì
-    "1018": "contains_gluten",   # bột mì
+    "3017": "Có đậu phộng",   # đậu phộng hạt khô
+    "3024": "Có đậu phộng",   # bột đậu phộng
+    "3007": "Có đậu nành",      # đậu tương hạt
+    "3021": "Có đậu nành",
+    "3022": "Có đậu nành",
+    "3025": "Có đậu nành",      # đậu phụ
+    "3026": "Có đậu nành",
+    "3027": "Có đậu nành",
+    "3032": "Có đậu nành",
+    "13010": "Có đậu nành",     # nước tương
+    "13022": "Có đậu nành",
+    "9001": "Có trứng",
+    "9002": "Có trứng",
+    "9004": "Có trứng",
+    "1022": "Có gluten",   # mì trứng lúa mì
+    "1012": "Có gluten",   # bánh mì
+    "1018": "Có gluten",   # bột mì
 }
+# Nguyên liệu giàu purin — cơ sở của nhãn `Giàu purin` cho người bệnh gút.
+#
+# Vì sao phải có danh sách này thay vì dùng cột `purine_mg`: bảng gốc chỉ công
+# bố purin cho 82/526 nguyên liệu, và thiếu đúng ở nhóm quan trọng nhất — tôm,
+# cua, mực, ốc, hến đều không có số. Hệ quả: chỉ 64/305 món tính được purin,
+# tức quy tắc ngưỡng theo ngày chỉ phủ 21 % danh mục. Nhãn mới là cơ chế bảo
+# vệ chính.
+#
+# Phân loại theo hướng dẫn dinh dưỡng cho bệnh gút:
+#   · nội tạng, tiết      — purin rất cao, phải tránh
+#   · hải sản vỏ cứng     — purin cao, phải tránh
+#   · cá                  — purin cao, cần hạn chế mạnh
+#
+# Thịt đỏ (bò, lợn, dê) CỐ Ý không nằm trong danh sách: purin ở mức trung bình
+# 130–170 mg, hướng dẫn nói *hạn chế* chứ không *tránh*. Gắn nhãn cả thịt đỏ sẽ
+# loại 154/305 món và chỉ còn 8 món đạm — người bệnh gút gần như không còn gì
+# để ăn, đúng kiểu thất bại của ngưỡng natri 600 mg trước đây.
+HIGH_PURINE_INGREDIENTS = {
+    # Nội tạng và tiết
+    "7059",
+    # Hải sản vỏ cứng: tôm, cua, ốc, hến, mực, hàu
+    "8033", "8034", "8037", "8040", "8041", "8048", "8049", "8051",
+    # Cá
+    "8003", "8010", "8011", "8019", "8022", "8023", "8024", "8026",
+    "8030", "8038",
+}
+
 ANIMAL_SEASONINGS = {
     "13011", "13012", "13013", "13014", "13015", "13016", "13017", "13018",
 }
@@ -81,17 +108,21 @@ SOURCE_URL = (
 SUMMABLE = [
     "calories_kcal", "protein_g", "carbs_g", "fat_g",
     "fiber_g", "sugar_g", "sodium_mg", "cholesterol_mg",
-    "purine_mg", "calcium_mg", "iron_mg", "zinc_mg", "vitamin_c_mg",
+    "purine_mg", "calcium_mg", "iron_mg", "zinc_mg",
+    # `vitamin_a_mcg` là cột **suy ra** trong bảng nguyên liệu: hoạt tính RAE
+    # quy từ retinol và ba carotenoid (xem `extract_fct.py`). Cộng dồn RAE là
+    # hợp lệ vì RAE đã là một đơn vị hoạt tính chung — không được cộng trực
+    # tiếp retinol với beta-caroten khi chưa quy đổi.
+    "vitamin_a_mcg", "vitamin_c_mg",
 ]
 
 CSV_COLUMNS = [
-    "name", "category", "dish_role", "cooking_method", "spice_level",
-    "suitable_meals", "origin",
+    "name", "category", "dish_role", "spice_level",
     "serving_size_g", "calories_kcal", "protein_g", "carbs_g", "fat_g",
     "fiber_g", "sugar_g", "sodium_mg", "cholesterol_mg",
     "purine_mg", "calcium_mg", "iron_mg", "zinc_mg",
     "vitamin_a_mcg", "vitamin_c_mg",
-    "tags", "data_source", "source_url", "note",
+    "tags", "note",
 ]
 
 
@@ -181,7 +212,7 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
     # này vì nó chỉ thấy dòng kết quả, không thấy nguyên liệu; mà đây lại là
     # lỗi an toàn — người ăn chay được gợi ý món nêm mắm cá.
     tags = set(recipe.get("tags", []))
-    if tags & {"vegetarian", "vegan"}:
+    if tags & {"Món chay", "Món thuần chay"}:
         offenders = []
         for item in recipe["ingredients"]:
             code = str(item["code"])
@@ -189,7 +220,7 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
             is_dairy_or_egg = group in ("9", "10")
             if code in ANIMAL_SEASONINGS or group in ANIMAL_GROUPS:
                 # Trứng và sữa vẫn hợp lệ với `vegetarian`, chỉ phạm `vegan`.
-                if is_dairy_or_egg and "vegan" not in tags:
+                if is_dairy_or_egg and "Món thuần chay" not in tags:
                     continue
                 offenders.append(item.get("label", code))
         if offenders:
@@ -211,33 +242,56 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
 
     # Thủy sản trong công thức cũng phải khai báo.
     if any(str(i["code"]).startswith("8") for i in recipe["ingredients"]):
-        if "contains_seafood" not in tags:
+        if "Có hải sản" not in tags:
             warnings.append("THIẾU NHÃN DỊ NGUYÊN: contains_seafood")
+
+    # Nguyên liệu giàu purin phải kéo theo nhãn cho người bệnh gút.
+    purine_src = [
+        i.get("label", i["code"]) for i in recipe["ingredients"]
+        if str(i["code"]) in HIGH_PURINE_INGREDIENTS
+    ]
+    if purine_src and "Giàu purin" not in tags:
+        warnings.append(
+            "THIẾU NHÃN GIÀU PURIN: " + ", ".join(sorted(set(purine_src)))
+        )
 
     row.update({
         "name": recipe["name"],
         "category": recipe["category"],
         "dish_role": recipe["dish_role"],
-        "cooking_method": recipe["cooking_method"],
         "spice_level": str(recipe.get("spice_level", 0)),
-        "suitable_meals": "|".join(recipe["suitable_meals"]),
-        "origin": recipe.get("origin", ""),
         "serving_size_g": f"{weight:.0f}",
         "tags": "|".join(recipe.get("tags", [])),
-        "data_source": SOURCE_NAME,
-        "source_url": SOURCE_URL,
+        # `note` đi vào `foods.description` — trường HIỂN THỊ cho người dùng,
+        # nên không chứa siêu dữ liệu xuất xứ. Trước đây nó nối thêm
+        # ". Vay USDA: zinc_mg", một câu chỉ có nghĩa với người làm dữ liệu.
+        # Cột truy xuất nguồn đã bỏ khỏi lược đồ, nên thông tin này cũng không
+        # còn chỗ chứa trong CSDL; `borrowed_fields` giờ chỉ dùng để cảnh báo
+        # khi chạy công cụ.
         "note": "Công thức: " + " + ".join(parts)
-                + (
-                    ". Vay USDA: " + ", ".join(sorted(borrowed_fields))
-                    if borrowed_fields else ""
-                )
                 + (". " + recipe["note"] if recipe.get("note") else ""),
     })
 
     return row, warnings
 
 
+
+def _in_utf8() -> None:
+    """Bắt stdout nhận tiếng Việt trên Windows (mặc định cp1252).
+
+    Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
+    đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
+    Bản sao của `tools/_env.in_utf8`; để ở đây vì `tools/baocao/` không chắc
+    có `tools/` trên `sys.path`.
+    """
+    for luong in (sys.stdout, sys.stderr):
+        try:
+            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except Exception:  # pragma: no cover
+            pass
+
 def main() -> int:
+    _in_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("recipes", nargs="+", type=Path)
     parser.add_argument(
@@ -277,8 +331,14 @@ def main() -> int:
                 total_warnings += 1
 
     if args.write:
+        # Tên tệp CSV lấy từ tên tệp CÔNG THỨC, không lấy từ giá trị
+        # `category`. Từ khi cột `code` bị bỏ, `category` mang tên tiếng Việt
+        # có dấu và có khoảng trắng — dùng nó làm tên tệp sẽ sinh ra
+        # "Món luộc hấp.csv" nằm cạnh "mon_luoc_hap.csv", tức hai tệp cho
+        # cùng một nhóm và dữ liệu đếm hai lần.
+        stem = args.recipes[0].stem if len(args.recipes) == 1 else None
         for category, rows in by_category.items():
-            path = FOODS_DIR / f"{category}.csv"
+            path = FOODS_DIR / f"{stem or category}.csv"
             with path.open("w", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
                 writer.writeheader()

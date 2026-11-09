@@ -1,5 +1,26 @@
-name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
-Thịt kho tàu,mon_kho,side_protein,kho,0,breakfast|lunch|dinner|snack,,,480,26,12,36,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
-Cá kho tộ,mon_kho,side_protein,kho,1,breakfast|lunch|dinner|snack,,,320,30,8,18,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
-Đậu hũ sốt cà chua,mon_kho,side_protein,kho,0,breakfast|lunch|dinner|snack,,,220,14,16,12,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
-Gà kho gừng,mon_kho,side_protein,kho,1,breakfast|lunch|dinner|snack,,,380,31,10,24,,,,,,,,,,,,,,Chuyen tu bo mock giao dien — SO LIEU CHUA DOI CHIEU NGUON
+name,category,dish_role,spice_level,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,note
+Thịt kho tàu,Món kho,side_protein,0,172,520.9,22.5,10.6,43.1,0.0,0.4,1047.4,309.0,,40.7,1.8,2.1,352.5,0.1,Có trứng,"Công thức: thịt ba chỉ 100g + trứng gà 50g + đường 10g + nước mắm 12g. Kho nước dừa, đường kho tính riêng"
+Cá kho tộ,Món kho,side_protein,0,142,151.9,19.9,8.4,4.3,0.0,0.0,1139.6,84.0,,26.4,1.2,1.8,217.8,0.1,Có hải sản|Giàu purin,Công thức: cá chép 120g + đường 8g + nước mắm 14g. Kho tộ đậm vị
+Đậu hũ sốt cà chua,Món kho,side_protein,0,248,251.0,17.2,4.5,18.2,1.2,2.1,637.7,0.0,110.8,49.0,4.5,1.8,30.3,32.1,Có đậu nành,"Công thức: đậu phụ 150g + cà chua 80g + dầu thực vật 10g + nước mắm 8g. Sốt cà chua, món mặn nhẹ"
+Gà kho gừng,Món kho,side_protein,0,138,169.6,25.8,6.4,4.6,0.0,0.0,1026.0,70.8,,19.6,3.8,2.7,14.9,1.3,,"Công thức: thịt gà 120g + đường 6g + nước mắm 12g. Kho gừng, gừng không tính khối lượng"
+Thịt lợn kho củ cải,Món kho,side_protein,0,196,204.7,20.6,15.0,7.0,0.7,0.0,848.0,67.0,,33.7,2.2,2.5,3.5,17.1,,Công thức: thịt lợn nạc 100g + củ cải trắng 80g + đường 6g + nước mắm 10g. Kho cùng củ cải
+Thịt bò nạc kho,Món kho,side_protein,0,130,165.8,23.7,8.4,4.2,0.0,0.0,1017.7,64.9,,18.4,3.5,2.4,13.7,1.2,,"Công thức: thịt bò nạc 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Thăn bò kho,Món kho,side_protein,0,130,175.7,26.0,8.4,4.3,0.0,0.0,989.1,44.0,,30.5,1.9,4.5,0.5,0.1,,"Công thức: thăn bò 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Thịt dê kho,Món kho,side_protein,0,130,170.2,23.4,8.4,4.7,0.0,0.0,1016.6,62.7,,17.3,2.3,4.4,100.6,1.2,,"Công thức: thịt dê 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Thịt gà kho,Món kho,side_protein,0,130,254.9,22.9,8.4,14.4,0.0,0.0,1003.4,82.5,,18.4,1.7,1.7,132.5,4.5,,"Công thức: thịt gà 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Thịt lợn nạc kho,Món kho,side_protein,0,130,188.9,21.5,8.4,7.7,0.0,0.0,1010.0,73.7,,12.9,1.2,2.8,2.7,1.2,,"Công thức: thịt lợn nạc 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Thịt lợn kho,Món kho,side_protein,0,130,322.0,18.8,8.4,23.7,0.0,0.0,986.9,74.8,,15.1,1.7,2.1,11.5,2.3,,"Công thức: thịt lợn 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Thịt thỏ kho,Món kho,side_protein,0,130,209.8,24.3,8.4,8.8,0.0,,971.5,62.7,,28.3,1.9,1.8,11.5,0.1,,"Công thức: thịt thỏ 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá chép kho,Món kho,side_protein,0,130,141.6,18.2,8.4,4.0,0.0,0.0,980.3,77.0,,23.9,1.1,1.7,199.6,0.1,Có hải sản|Giàu purin,"Công thức: cá chép 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá hồi kho,Món kho,side_protein,0,130,185.6,24.8,8.4,5.8,0.0,0.0,977.0,49.5,,19.5,1.3,0.5,33.5,0.1,Có hải sản|Giàu purin,"Công thức: cá hồi 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá ngừ kho,Món kho,side_protein,0,130,131.7,23.7,8.4,0.3,0.0,0.0,1012.2,49.5,,53.6,1.2,0.6,6.0,1.2,Có hải sản|Giàu purin,"Công thức: cá ngừ 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá lóc kho,Món kho,side_protein,0,130,142.7,20.6,8.4,3.0,0.0,0.0,,660.0,,104.2,0.1,,0.5,0.1,Có hải sản|Giàu purin,"Công thức: cá lóc 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá rô kho,Món kho,side_protein,0,130,174.6,21.6,8.4,6.1,0.0,0.0,983.6,55.0,,33.8,0.4,0.4,0.5,0.1,Có hải sản|Giàu purin,"Công thức: cá rô 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá rô phi kho,Món kho,side_protein,0,130,146.0,22.3,8.4,2.5,0.0,0.0,,0.0,,60.2,0.7,,0.5,0.1,Có hải sản|Giàu purin,"Công thức: cá rô phi 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá thu kho,Món kho,side_protein,0,130,218.6,20.6,8.4,11.3,0.0,0.0,1047.4,77.0,,60.2,1.5,0.7,11.5,0.1,Có hải sản|Giàu purin,"Công thức: cá thu 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cá trê kho,Món kho,side_protein,0,130,226.3,18.8,8.4,13.1,0.0,0.0,984.7,51.7,,27.2,1.2,0.8,102.8,0.1,Có hải sản|Giàu purin,"Công thức: cá trê 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Tôm biển kho,Món kho,side_protein,0,130,126.2,20.0,9.4,1.0,0.0,,1089.2,167.2,,92.1,1.9,1.2,22.9,0.1,Có hải sản|Giàu purin,"Công thức: tôm biển 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Cua biển kho,Món kho,side_protein,0,130,149.3,19.9,16.1,0.7,0.0,,1274.0,85.8,,160.3,4.3,1.6,40.1,0.1,Có hải sản|Giàu purin,"Công thức: cua biển 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Mực kho,Món kho,side_protein,0,130,116.3,18.5,8.4,1.0,0.0,,974.8,256.3,,20.6,0.8,0.8,11.5,5.6,Có hải sản|Giàu purin,"Công thức: mực 110g + đường 8g + nước mắm 12g. Kho đậm vị, nêm nước mắm và đường"
+Đậu phụ kho nước tương,Món kho,side_protein,0,138,145.6,14.3,7.5,6.5,0.5,,678.7,0.0,,31.2,2.9,1.0,0.0,0.0,Món chay|Món thuần chay|Có đậu nành,"Công thức: đậu phụ 120g + nước tương 12g + đường 6g. Kho đậm vị, nêm nước tương và đường"
+Nấm rơm kho tiêu,Món kho,side_protein,1,155,106.2,6.1,10.3,4.5,1.5,,,0.0,,41.2,1.9,,0.0,2.8,Món chay|Món thuần chay|Có đậu nành,"Công thức: nấm rơm 140g + nước tương 10g + đường 5g. Kho tiêu, nêm nước tương"

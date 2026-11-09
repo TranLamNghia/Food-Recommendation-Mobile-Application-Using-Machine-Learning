@@ -1,4 +1,5 @@
 import 'food.dart';
+import '../recommender/nutrient_target.dart';
 
 /// Bữa ăn trong ngày — enum `meal_type` trong đặc tả API mục 5.4.
 ///
@@ -104,6 +105,7 @@ class DailyPlan {
     required this.targetFat,
     required this.slots,
     required this.explorationRatio,
+    this.nutrientTargets = const [],
   });
 
   final DateTime date;
@@ -121,6 +123,13 @@ class DailyPlan {
   /// là gợi ý cá nhân hóa nữa.
   final double explorationRatio;
 
+  /// Ràng buộc vi chất cấp ngày mà thực đơn này được dựng dưới.
+  ///
+  /// Giữ lại trong kết quả chứ không chỉ dùng xong rồi bỏ, vì phải trả lời
+  /// được câu "thực đơn này có thỏa ngưỡng natri của tôi không" ở cả giao
+  /// diện và báo cáo — xem [nutrientViolations].
+  final List<NutrientTarget> nutrientTargets;
+
   List<MealPlanItem> get allItems => [for (final s in slots) ...s.items];
 
   double get actualKcal => slots.fold(0, (sum, s) => sum + s.actualKcal);
@@ -136,6 +145,47 @@ class DailyPlan {
       targetKcal <= 0 ? 0 : (actualKcal - targetKcal) / targetKcal * 100;
 
   bool get withinTolerance => deviationPct.abs() <= 10;
+
+  /// Tổng một chất trên cả ngày.
+  double totalOf(String nutrient) => allItems.fold(
+    0,
+    (sum, i) => sum + (NutrientTarget.valueOf(i.food, nutrient) ?? 0),
+  );
+
+  /// Những ràng buộc vi chất **chưa** thỏa, kèm lượng thực tế.
+  ///
+  /// Rỗng là tốt. Không rỗng nghĩa là pha 5 của Bước 4 đã hết phép đổi khả
+  /// dụng — thường vì danh mục không có món nào đủ để lấp, chứ không phải
+  /// thuật toán bỏ cuộc sớm. Phải hiện ra chứ không được ỉm đi: một thực đơn
+  /// vi phạm ngưỡng mà trông như bình thường là đúng kiểu lỗi nguy hiểm nhất
+  /// với người có bệnh.
+  ///
+  /// Chỉ xét những chất **thi hành được** — xem [unenforceableTargets].
+  List<({NutrientTarget target, double actual})> get nutrientViolations => [
+    for (final t in nutrientTargets)
+      if (NutrientTarget.supported.contains(t.nutrient) &&
+          !t.isSatisfiedBy(totalOf(t.nutrient)))
+        (target: t, actual: totalOf(t.nutrient)),
+  ];
+
+  /// Ràng buộc mà hệ thống **không thi hành được** vì [Food] không mang chất
+  /// đó — hiện chỉ có `purine_mg`.
+  ///
+  /// Phải tách khỏi [nutrientViolations] chứ không gộp vào, và tuyệt đối
+  /// không được lặng lẽ coi là đã thỏa. Nếu gộp chung thì
+  /// `atMost('purine_mg', 400)` sẽ báo **thỏa** vì tổng đọc ra bằng 0 — một
+  /// thực đơn chưa từng được kiểm purin lại hiện ra như đã đạt ngưỡng gút.
+  /// Đó là kiểu sai tệ hơn cả báo vi phạm.
+  List<NutrientTarget> get unenforceableTargets => [
+    for (final t in nutrientTargets)
+      if (!NutrientTarget.supported.contains(t.nutrient)) t,
+  ];
+
+  /// Thỏa mọi ràng buộc thi hành được, **và** không còn ràng buộc nào ngoài
+  /// tầm thi hành. Điều kiện thứ hai cố ý nghiêm: không khẳng định "đạt" khi
+  /// có thứ chưa kiểm được.
+  bool get meetsNutrientTargets =>
+      nutrientViolations.isEmpty && unenforceableTargets.isEmpty;
 
   /// Tỷ lệ suất thăm dò **thực tế** đạt được. Thấp hơn nhiều so với
   /// [explorationRatio] nghĩa là bước chọn tổ hợp không tìm đủ món thăm dò

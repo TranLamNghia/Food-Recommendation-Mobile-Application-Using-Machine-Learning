@@ -1,0 +1,842 @@
+[
+  {
+    "name": "Rau muống xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4083",
+        "g": 200,
+        "label": "rau muống"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn. Có nước mắm nên KHÔNG phải món chay"
+  },
+  {
+    "name": "Bò lúc lắc",
+    "category": "Món xào",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7003",
+        "g": 120,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "4027",
+        "g": 60,
+        "label": "dưa chuột"
+      },
+      {
+        "code": "6002",
+        "g": 12,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bò xào áp chảo"
+  },
+  {
+    "name": "Tôm rang me",
+    "category": "Món xào",
+    "dish_role": "side_protein",
+    "spice_level": 1,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8051",
+        "g": 120,
+        "label": "tôm biển"
+      },
+      {
+        "code": "12014",
+        "g": 10,
+        "label": "đường"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Rang me, lượng me không đáng kể"
+  },
+  {
+    "name": "Giá đỗ xào",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4036",
+        "g": 180,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "6002",
+        "g": 8,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào nhanh. Có nước mắm nên KHÔNG phải món chay"
+  },
+  {
+    "name": "Bắp cải tím xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4011",
+        "g": 180,
+        "label": "bắp cải tím"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Cải thảo xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4015",
+        "g": 180,
+        "label": "cải thảo"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Cải bẹ xanh xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4016",
+        "g": 180,
+        "label": "cải bẹ xanh"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Củ cải trắng xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4021",
+        "g": 180,
+        "label": "củ cải trắng"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Dưa chuột xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4027",
+        "g": 180,
+        "label": "dưa chuột"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Đậu đũa xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4030",
+        "g": 180,
+        "label": "đậu đũa"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Đậu hà lan xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4031",
+        "g": 180,
+        "label": "đậu Hà Lan"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Đậu rồng xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4032",
+        "g": 180,
+        "label": "đậu rồng"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Giá đậu nành xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4035",
+        "g": 180,
+        "label": "giá đậu nành"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Giá đỗ xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4036",
+        "g": 180,
+        "label": "giá đỗ"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Hẹ xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4042",
+        "g": 180,
+        "label": "hẹ"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Măng tây xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4052",
+        "g": 180,
+        "label": "măng tây"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Măng xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4053",
+        "g": 180,
+        "label": "măng"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Mướp xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4054",
+        "g": 180,
+        "label": "mướp"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Khổ qua xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4055",
+        "g": 180,
+        "label": "khổ qua"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Ngải cứu xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4057",
+        "g": 180,
+        "label": "ngải cứu"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Ngô bao tử xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4058",
+        "g": 180,
+        "label": "ngô bao tử"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Củ sen xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4059",
+        "g": 180,
+        "label": "củ sen"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Ớt chuông xanh xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4063",
+        "g": 180,
+        "label": "ớt chuông xanh"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Rong biển xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4068",
+        "g": 180,
+        "label": "rong biển"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nhẹ"
+  },
+  {
+    "name": "Rau lang xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4076",
+        "g": 180,
+        "label": "rau lang"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào lửa lớn"
+  },
+  {
+    "name": "Su su xào",
+    "category": "Món xào",
+    "dish_role": "side_veg",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "4098",
+        "g": 180,
+        "label": "su su"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13017",
+        "g": 6,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Xào chín tới"
+  },
+  {
+    "name": "Đậu phụ xào nấm hương",
+    "category": "Món xào",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay",
+      "Có đậu nành"
+    ],
+    "ingredients": [
+      {
+        "code": "3025",
+        "g": 90,
+        "label": "đậu phụ"
+      },
+      {
+        "code": "4123",
+        "g": 50,
+        "label": "nấm hương"
+      },
+      {
+        "code": "6002",
+        "g": 8,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13010",
+        "g": 8,
+        "label": "nước tương"
+      }
+    ],
+    "note": "Xào lửa lớn, nêm nước tương"
+  },
+  {
+    "name": "Nấm hương xào tỏi",
+    "category": "Món xào",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Món chay",
+      "Món thuần chay"
+    ],
+    "ingredients": [
+      {
+        "code": "4123",
+        "g": 120,
+        "label": "nấm hương"
+      },
+      {
+        "code": "4103",
+        "g": 8,
+        "label": "tỏi"
+      },
+      {
+        "code": "6002",
+        "g": 10,
+        "label": "dầu thực vật"
+      },
+      {
+        "code": "13005",
+        "g": 1.5,
+        "label": "muối"
+      }
+    ],
+    "note": "Xào tỏi, nêm muối. KHÔNG dùng đậu nành"
+  }
+]

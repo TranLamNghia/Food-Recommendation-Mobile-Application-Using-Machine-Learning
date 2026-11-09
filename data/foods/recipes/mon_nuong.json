@@ -1,0 +1,327 @@
+[
+  {
+    "name": "Nem nướng Nha Trang",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7017",
+        "g": 110,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "12014",
+        "g": 8,
+        "label": "đường"
+      },
+      {
+        "code": "13017",
+        "g": 10,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Thịt quết nướng que"
+  },
+  {
+    "name": "Bánh mì thịt nướng",
+    "category": "Món nướng",
+    "dish_role": "main",
+    "spice_level": 0,
+    "tags": [
+      "Có gluten"
+    ],
+    "ingredients": [
+      {
+        "code": "1012",
+        "g": 90,
+        "label": "bánh mì"
+      },
+      {
+        "code": "7017",
+        "g": 70,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "4027",
+        "g": 40,
+        "label": "dưa chuột"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      }
+    ],
+    "note": "Bánh mì kẹp thịt nướng"
+  },
+  {
+    "name": "Cá nướng giấy bạc",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8026",
+        "g": 130,
+        "label": "cá thu"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "4037",
+        "g": 15,
+        "label": "hành lá"
+      }
+    ],
+    "note": "Nướng giấy bạc, ít dầu"
+  },
+  {
+    "name": "Thịt bò nạc nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7003",
+        "g": 120,
+        "label": "thịt bò nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Thịt dê nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7011",
+        "g": 120,
+        "label": "thịt dê"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Thịt lợn nạc nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7017",
+        "g": 120,
+        "label": "thịt lợn nạc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Thịt thỏ nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [],
+    "ingredients": [
+      {
+        "code": "7021",
+        "g": 120,
+        "label": "thịt thỏ"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Cá hồi nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8011",
+        "g": 120,
+        "label": "cá hồi"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Cá lóc nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8022",
+        "g": 120,
+        "label": "cá lóc"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Cá rô phi nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8024",
+        "g": 120,
+        "label": "cá rô phi"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Cá trê nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8030",
+        "g": 120,
+        "label": "cá trê"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  },
+  {
+    "name": "Cua biển nướng",
+    "category": "Món nướng",
+    "dish_role": "side_protein",
+    "spice_level": 0,
+    "tags": [
+      "Có hải sản",
+      "Giàu purin"
+    ],
+    "ingredients": [
+      {
+        "code": "8033",
+        "g": 120,
+        "label": "cua biển"
+      },
+      {
+        "code": "13017",
+        "g": 8,
+        "label": "nước mắm"
+      },
+      {
+        "code": "12014",
+        "g": 5,
+        "label": "đường"
+      }
+    ],
+    "note": "Nướng than, ướp nhẹ"
+  }
+]

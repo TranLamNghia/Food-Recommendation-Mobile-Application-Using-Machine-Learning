@@ -1,1 +1,22 @@
-name,category,dish_role,cooking_method,spice_level,suitable_meals,origin,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,data_source,source_url,note
+name,category,dish_role,spice_level,serving_size_g,calories_kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,sodium_mg,cholesterol_mg,purine_mg,calcium_mg,iron_mg,zinc_mg,vitamin_a_mcg,vitamin_c_mg,tags,note
+Nước cam ép,Đồ uống,drink,0,250,57.5,1.8,11.2,0.5,0.5,9.9,2.5,0.0,,65.0,0.8,0.1,25.1,135.0,Món chay|Món thuần chay,"Công thức: nước cam ép 250g. Ép từ cam tươi, không thêm đường"
+Sữa đậu nành,Đồ uống,drink,0,250,70.0,7.8,1.0,4.0,0.2,,137.5,0.0,,45.0,3.0,1.1,0.0,0.0,Có đậu nành|Món chay|Món thuần chay,Công thức: sữa đậu nành 250g. Không thêm đường
+Sinh tố xoài,Đồ uống,drink,0,270,116.4,5.4,17.5,2.8,2.3,17.8,84.9,0.0,,39.0,2.3,1.3,45.9,36.0,Có đậu nành|Món chay|Món thuần chay,"Công thức: xoài chín 120g + sữa đậu nành 150g. Xay xoài với sữa đậu nành, không thêm đường"
+Nước ép ổi,Đồ uống,drink,0,220,83.6,1.3,15.0,2.2,13.2,19.6,8.8,0.0,,22.0,2.9,5.3,68.6,136.4,Món chay|Món thuần chay,"Công thức: ổi 220g. Ép từ ổi tươi, không thêm đường"
+Nước ép cà rốt,Đồ uống,drink,0,220,85.8,3.3,17.2,0.4,2.6,10.0,114.4,0.0,37.4,94.6,1.8,2.4,1849.1,17.6,Món chay|Món thuần chay,"Công thức: cà rốt 220g. Ép từ cà rốt tươi, không thêm đường"
+Nước ép bưởi,Đồ uống,drink,0,220,66.0,0.4,16.1,0.0,1.5,,6.6,0.0,,50.6,1.1,0.4,0.9,209.0,Món chay|Món thuần chay,"Công thức: bưởi 220g. Ép từ quả tươi, không thêm đường"
+Nước ép chôm chôm,Đồ uống,drink,0,220,158.4,3.3,36.1,0.0,2.9,,,0.0,,61.6,1.1,,0.0,,Món chay|Món thuần chay,"Công thức: chôm chôm 220g. Ép từ quả tươi, không thêm đường"
+Nước ép dâu tây,Đồ uống,drink,0,220,94.6,4.0,17.8,0.9,8.8,,81.4,0.0,46.2,48.4,1.5,,5.5,132.0,Món chay|Món thuần chay,"Công thức: dâu tây 220g. Ép từ quả tươi, không thêm đường"
+Nước ép dưa lưới,Đồ uống,drink,0,220,39.6,1.1,7.9,0.4,1.5,17.4,0.0,0.0,72.6,79.2,0.7,0.4,36.5,19.8,Món chay|Món thuần chay,"Công thức: dưa lưới 220g. Ép từ quả tươi, không thêm đường"
+Nước ép dưa bở,Đồ uống,drink,0,220,37.4,0.7,8.1,0.2,0.9,17.9,39.6,0.0,,59.4,0.9,0.2,5.5,15.4,Món chay|Món thuần chay,"Công thức: dưa bở 220g. Ép từ quả tươi, không thêm đường"
+Nước ép dứa,Đồ uống,drink,0,220,83.6,1.1,19.4,0.2,0.9,20.4,2.2,0.0,41.8,70.4,0.7,0.2,6.2,57.2,Món chay|Món thuần chay,"Công thức: dứa 220g. Ép từ quả tươi, không thêm đường"
+Nước ép đào,Đồ uống,drink,0,220,68.2,2.0,13.9,0.4,3.3,18.5,0.0,0.0,46.2,44.0,1.0,0.4,35.8,22.0,Món chay|Món thuần chay,"Công thức: đào 220g. Ép từ quả tươi, không thêm đường"
+Nước ép hồng,Đồ uống,drink,0,220,63.8,1.5,13.2,0.4,5.5,27.6,8.8,0.0,,22.0,0.4,0.4,179.0,35.2,Món chay|Món thuần chay,"Công thức: hồng 220g. Ép từ quả tươi, không thêm đường"
+Nước ép hồng xiêm,Đồ uống,drink,0,220,105.6,1.1,22.0,1.5,5.5,,26.4,0.0,,114.4,5.1,0.2,0.0,17.6,Món chay|Món thuần chay,"Công thức: hồng xiêm 220g. Ép từ quả tươi, không thêm đường"
+Nước ép lê,Đồ uống,drink,0,220,99.0,1.5,22.4,0.4,1.3,21.6,11.0,0.0,26.4,41.8,5.1,0.3,5.5,8.8,Món chay|Món thuần chay,"Công thức: lê 220g. Ép từ quả tươi, không thêm đường"
+Nước ép lựu,Đồ uống,drink,0,220,154.0,1.3,35.6,0.7,5.5,36.5,6.6,0.0,,28.6,1.5,0.3,11.9,13.2,Món chay|Món thuần chay,"Công thức: lựu 220g. Ép từ quả tươi, không thêm đường"
+Nước ép mãng cầu xiêm,Đồ uống,drink,0,220,116.6,4.0,22.2,1.3,4.2,,8.8,0.0,,83.6,1.5,,0.0,41.8,Món chay|Món thuần chay,"Công thức: mãng cầu xiêm 220g. Ép từ quả tươi, không thêm đường"
+Nước ép mận,Đồ uống,drink,0,220,44.0,1.3,8.6,0.4,1.5,21.8,0.0,0.0,52.8,61.6,0.9,0.2,19.4,6.6,Món chay|Món thuần chay,"Công thức: mận 220g. Ép từ quả tươi, không thêm đường"
+Nước ép mít,Đồ uống,drink,0,220,110.0,1.3,24.4,0.7,2.6,,6.6,0.0,,46.2,0.9,1.5,33.0,11.0,Món chay|Món thuần chay,"Công thức: mít 220g. Ép từ quả tươi, không thêm đường"
+Nước ép cà chua,Đồ uống,drink,0,220,44.0,1.3,8.8,0.4,1.8,5.8,26.4,0.0,24.2,26.4,3.1,1.6,82.3,88.0,Món chay|Món thuần chay,"Công thức: cà chua 220g. Ép tươi, không thêm muối hay đường"
+Sinh tố bơ,Đồ uống,drink,0,270,130.8,6.8,4.0,9.8,0.6,,82.5,0.0,,85.8,3.5,0.7,0.0,0.0,Có đậu nành|Món chay|Món thuần chay,"Công thức: bơ 120g + sữa đậu nành 150g. Xay bơ với sữa đậu nành, không thêm đường"

@@ -170,6 +170,10 @@ Mô hình cần một nhãn duy nhất trong đoạn [0, 1], nhưng tín hiệu 
 
 ---
 
+> **Chi tiết phần học máy** — vector đặc trưng, Rocchio, mô hình toàn cục,
+> tập huấn luyện bảy nguồn, quy trình đánh giá và phạm vi thực nghiệm:
+> xem [`ML_PIPELINE.md`](ML_PIPELINE.md).
+
 ## 3. Thuật toán khuyến nghị thực đơn — bốn bước
 
 Đây là phần lõi của đề tài. Đầu vào là hồ sơ người dùng, đầu ra là thực đơn hoàn chỉnh cho một ngày.
@@ -278,7 +282,7 @@ Ràng buộc cứng là ràng buộc **không được phép vi phạm trong b�
 | Dị ứng thực phẩm | Dị ứng hải sản, đậu phộng, gluten | Loại món chứa nguyên liệu tương ứng |
 | Bệnh lý | Đái tháo đường, tăng huyết áp, bệnh thận | Áp ngưỡng dinh dưỡng và loại nhãn bị cấm |
 | Chế độ ăn bắt buộc | Ăn chay, ăn kiêng theo tôn giáo | Chỉ giữ món có nhãn phù hợp |
-| Phù hợp bữa ăn | Món tráng miệng không dùng làm món chính bữa trưa | Đối chiếu nhãn bữa ăn phù hợp của món |
+| Vai trò món trong bữa | Món tráng miệng không dùng làm món chính bữa trưa | Đối chiếu `dish_role` với cấu trúc bữa |
 | Tránh lặp lại | Món đã ăn trong N ngày gần đây | Đối chiếu nhật ký ăn uống |
 
 **Nguyên tắc thiết kế quan trọng:** bộ quy tắc này phải được lưu **dưới dạng dữ liệu trong cơ sở dữ liệu**, không hard-code trong mã nguồn. Hai lý do:

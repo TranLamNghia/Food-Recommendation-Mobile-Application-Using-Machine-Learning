@@ -1,0 +1,68 @@
+﻿# PHIẾU KHẢO SÁT KHẨU VỊ
+#
+# Điền cột `lua_chon` bằng MỘT trong bốn giá trị:
+#     thich        — thích món này
+#     khong_thich  — không thích
+#     binh_thuong  — thấy bình thường
+#     chua_biet    — CHƯA TỪNG ĂN món này
+#
+# `chua_biet` khác `binh_thuong`: lượt `chua_biet` bị loại khỏi phép
+# tính vector sở thích, còn `binh_thuong` thì được đếm là một tín hiệu
+# trung tính. Chọn `binh_thuong` cho món chưa từng ăn sẽ làm loãng mọi
+# sở thích thật — xem ML_PIPELINE.md §5.1.
+#
+# Điền cả phần thông tin dưới đây rồi nhập bằng:
+#     python tools/import_swipes.py --phieu <tệp này>
+#
+# ho_ten: 
+# email: 
+# gioi_tinh: male            # male | female | other
+# ngay_sinh: 2004-01-01      # YYYY-MM-DD
+# chieu_cao_cm: 170
+# can_nang_kg: 60
+# muc_van_dong: moderate     # sedentary | light | moderate | active | very_active
+# muc_tieu: maintain         # lose_weight | maintain | gain_weight | healthy_eating
+# benh_ly:                   # cách nhau bằng dấu ;  để trống nếu không có
+# ngay_khao_sat: 2026-11-02
+#
+stt,ma_mon,ten_mon,nhom,muc_cay,lua_chon
+1,6420f9d1-cfc9-11f1-88ca-d49390348b80,Giá đậu nành luộc,Món luộc hấp,0,
+2,643e78a7-cfc9-11f1-88ca-d49390348b80,Phở bò chín,Món nước,0,
+3,64010c80-cfc9-11f1-88ca-d49390348b80,Canh cải thảo nấu cá chép,Món canh,0,
+4,640e1964-cfc9-11f1-88ca-d49390348b80,Gỏi cuốn tôm thịt,Món cuốn,0,
+5,64134ac0-cfc9-11f1-88ca-d49390348b80,Cá rô kho,Món kho,0,
+6,64517849-cfc9-11f1-88ca-d49390348b80,Nem nướng Nha Trang,Món nướng,0,
+7,6456a4c5-cfc9-11f1-88ca-d49390348b80,Cải thảo xào tỏi,Món xào,0,
+8,63f285ba-cfc9-11f1-88ca-d49390348b80,Cơm gạo nếp với ngải cứu luộc,Cơm,0,
+9,640c121e-cfc9-11f1-88ca-d49390348b80,Cá rô rang,Món chiên rán,0,
+10,640f367e-cfc9-11f1-88ca-d49390348b80,Salad rau trộn dầu giấm,Món gỏi / nộm,0,
+11,63fbd4b1-cfc9-11f1-88ca-d49390348b80,Nước ép mãng cầu xiêm,Đồ uống,0,
+12,6466832c-cfc9-11f1-88ca-d49390348b80,Đào,Tráng miệng,0,
+13,64180139-cfc9-11f1-88ca-d49390348b80,Trứng luộc,Món luộc hấp,0,
+14,64466363-cfc9-11f1-88ca-d49390348b80,Hủ tiếu sa tế,Món nước,3,
+15,646bce4d-cfc9-11f1-88ca-d49390348b80,Bơ,Tráng miệng,0,
+16,63f3c28a-cfc9-11f1-88ca-d49390348b80,Sữa đậu nành,Đồ uống,0,
+17,642287aa-cfc9-11f1-88ca-d49390348b80,Măng luộc,Món luộc hấp,0,
+18,640f955f-cfc9-11f1-88ca-d49390348b80,Gỏi bắp cải gà,Món gỏi / nộm,0,
+19,6425e685-cfc9-11f1-88ca-d49390348b80,Thịt lợn hấp hành,Món luộc hấp,0,
+20,64101f2d-cfc9-11f1-88ca-d49390348b80,Thịt kho tàu,Món kho,0,
+21,644787a3-cfc9-11f1-88ca-d49390348b80,Súp hải sản,Món nước,0,
+22,641ca9ae-cfc9-11f1-88ca-d49390348b80,Bắp cải tím luộc,Món luộc hấp,0,
+23,64283833-cfc9-11f1-88ca-d49390348b80,Cá ngừ hấp hành,Món luộc hấp,0,
+24,6455c28c-cfc9-11f1-88ca-d49390348b80,Tôm rang me,Món xào,1,
+25,6458f330-cfc9-11f1-88ca-d49390348b80,Măng xào tỏi,Món xào,0,
+26,63f4f306-cfc9-11f1-88ca-d49390348b80,Nước ép ổi,Đồ uống,0,
+27,64109576-cfc9-11f1-88ca-d49390348b80,Đậu hũ sốt cà chua,Món kho,0,
+28,6416a054-cfc9-11f1-88ca-d49390348b80,Khoai lang luộc,Món luộc hấp,0,
+29,640665c5-cfc9-11f1-88ca-d49390348b80,Canh củ sen nấu thịt lợn,Món canh,0,
+30,6409da0e-cfc9-11f1-88ca-d49390348b80,Bánh xèo miền Tây,Món chiên rán,0,
+31,64069131-cfc9-11f1-88ca-d49390348b80,Canh hẹ đậu phụ,Món canh,0,
+32,6451ad70-cfc9-11f1-88ca-d49390348b80,Bánh mì thịt nướng,Món nướng,0,
+33,645a10d6-cfc9-11f1-88ca-d49390348b80,Củ sen xào tỏi,Món xào,0,
+34,641ffcdf-cfc9-11f1-88ca-d49390348b80,Đậu hà lan luộc,Món luộc hấp,0,
+35,644137a6-cfc9-11f1-88ca-d49390348b80,Bánh canh giò heo,Món nước,0,
+36,64557f09-cfc9-11f1-88ca-d49390348b80,Bò lúc lắc,Món xào,0,
+37,64409a49-cfc9-11f1-88ca-d49390348b80,Bún ếch,Món nước,2,
+38,640a7c66-cfc9-11f1-88ca-d49390348b80,Trứng chiên hành,Món chiên rán,0,
+39,645a83e3-cfc9-11f1-88ca-d49390348b80,Rong biển xào tỏi,Món xào,0,
+40,64616ada-cfc9-11f1-88ca-d49390348b80,Ổi,Tráng miệng,0,

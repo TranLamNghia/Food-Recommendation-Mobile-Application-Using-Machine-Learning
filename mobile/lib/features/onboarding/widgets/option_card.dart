@@ -130,7 +130,7 @@ class _OptionCardState extends State<OptionCard> {
                     fontFamily: 'Afacad',
                     fontVariations: [FontVariation('wght', 700)],
                     fontSize: 17,
-                    color: AppColors.accent,
+                    color: AppColors.accentInk,
                   ),
                 ),
               ],

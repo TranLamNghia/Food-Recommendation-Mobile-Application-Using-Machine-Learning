@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
+import 'package:nutrition_app/data/models/food.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 import 'package:nutrition_app/data/models/meal_plan.dart';
 import 'package:nutrition_app/data/models/swipe_action.dart';
@@ -20,6 +21,148 @@ HealthProfile _sampleProfile() => HealthProfile()
 
 void main() {
   final space = FoodVectorSpace.fromFoods(MockFoods.surveyDeck);
+
+  group('Vector đặc trưng món ăn', () {
+    test('số chiều và nhãn khớp nhau, và có chiều chất xơ', () {
+      // Giữ hai thứ này đi cùng nhau: thêm một chiều mà quên thêm nhãn thì
+      // phần "vì sao món này được gợi ý" sẽ chú thích lệch cột, không báo lỗi.
+      expect(space.labels.length, equals(space.length));
+      expect(space.length, equals(8 + space.categories.length));
+      expect(space.labels, contains('Chất xơ'));
+
+      final v = space.encode(MockFoods.surveyDeck.first);
+      expect(v.length, equals(space.length));
+    });
+
+    test('chất xơ thật sự đổi được vector — chiều này không phải cột chết', () {
+      // Phép kiểm này tồn tại vì lỗi đã từng xảy ra ở chiều khác: một cột có
+      // mặt trong lược đồ và trong tài liệu nhưng không món nào mang giá trị,
+      // nên nó im lặng không đóng góp gì. Ở đây bắt bằng cách so hai món chỉ
+      // khác nhau đúng lượng chất xơ.
+      final base = MockFoods.surveyDeck.first;
+      final low = Food(
+        id: '9001', name: 'thử xơ thấp', category: base.category,
+        dishRole: base.dishRole, spiceLevel: base.spiceLevel, kcal: base.kcal,
+        protein: base.protein, carb: base.carb, fat: base.fat,
+        sugar: base.sugar, sodium: base.sodium, fiber: 0,
+        servingSizeG: base.servingSizeG,
+        emoji: base.emoji, gradient: base.gradient,
+      );
+      final high = Food(
+        id: '9002', name: 'thử xơ cao', category: base.category,
+        dishRole: base.dishRole, spiceLevel: base.spiceLevel, kcal: base.kcal,
+        protein: base.protein, carb: base.carb, fat: base.fat,
+        sugar: base.sugar, sodium: base.sodium, fiber: 12,
+        servingSizeG: base.servingSizeG,
+        emoji: base.emoji, gradient: base.gradient,
+      );
+
+      final spaceWithBoth =
+          FoodVectorSpace.fromFoods([...MockFoods.surveyDeck, low, high]);
+      final vLow = spaceWithBoth.encode(low);
+      final vHigh = spaceWithBoth.encode(high);
+
+      final i = spaceWithBoth.labels.indexOf('Chất xơ');
+      expect(vHigh[i], greaterThan(vLow[i]));
+
+      // Và khác biệt phải nằm ĐÚNG ở chiều đó, không rò sang chiều khác.
+      for (var d = 0; d < spaceWithBoth.length; d++) {
+        if (d == i) continue;
+        expect(vHigh[d], equals(vLow[d]), reason: 'lệch ở ${spaceWithBoth.labels[d]}');
+      }
+    });
+  });
+
+  group('Mục tiêu dinh dưỡng tự khai', () {
+    /// Hai món giống hệt nhau trừ chất xơ, để tách hiệu ứng của mục tiêu ra
+    /// khỏi mọi đặc trưng khác.
+    (Food low, Food high, FoodVectorSpace space) fiberPair() {
+      final base = MockFoods.surveyDeck.first;
+      Food make(String id, String name, double fiber) => Food(
+        id: id, name: name, category: base.category, dishRole: base.dishRole,
+        spiceLevel: base.spiceLevel, kcal: base.kcal, protein: base.protein,
+        carb: base.carb, fat: base.fat, sugar: base.sugar,
+        sodium: base.sodium, fiber: fiber, servingSizeG: base.servingSizeG,
+        emoji: base.emoji, gradient: base.gradient,
+      );
+      final low = make('9101', 'xơ thấp', 0);
+      final high = make('9102', 'xơ cao', 12);
+      return (
+        low, high,
+        FoodVectorSpace.fromFoods([...MockFoods.surveyDeck, low, high]),
+      );
+    }
+
+    test('khai mục tiêu nhiều xơ thì món nhiều xơ được chấm cao hơn', () {
+      final (low, high, sp) = fiberPair();
+      final neutral = PreferenceProfile.fromSwipes(
+        space: sp,
+        swipes: [(food: MockFoods.surveyDeck[1], action: SwipeAction.like)],
+      );
+
+      final withGoal = neutral.withNutrientGoals({'fiber_g': 0.6});
+
+      // Mục tiêu phải LÀM ĐỔI thứ hạng, không chỉ đổi điểm tuyệt đối.
+      expect(
+        withGoal.score(high) - withGoal.score(low),
+        greaterThan(neutral.score(high) - neutral.score(low)),
+      );
+    });
+
+    test('dấu âm nghĩa là muốn ít hơn', () {
+      final (low, high, sp) = fiberPair();
+      final neutral = PreferenceProfile.fromSwipes(
+        space: sp,
+        swipes: [(food: MockFoods.surveyDeck[1], action: SwipeAction.like)],
+      );
+
+      final avoid = neutral.withNutrientGoals({'fiber_g': -0.6});
+      expect(avoid.score(high), lessThan(avoid.score(low)));
+    });
+
+    test('khai mục tiêu TRƯỚC khi vuốt lượt nào vẫn xếp hạng được', () {
+      // Trường hợp này trước đây hỏng: `isEmpty` còn xét `signalCount == 0`
+      // nên hồ sơ chỉ-có-mục-tiêu trả về 0,5 cho mọi món, và mục tiêu người
+      // dùng vừa khai bị bỏ qua hoàn toàn.
+      final (low, high, sp) = fiberPair();
+      final coldStart =
+          PreferenceProfile.empty(sp).withNutrientGoals({'fiber_g': 0.6});
+
+      expect(coldStart.isEmpty, isFalse);
+      expect(coldStart.signalCount, equals(0));
+      expect(coldStart.score(high), greaterThan(coldStart.score(low)));
+    });
+
+    test('chất không có chiều riêng thì bỏ qua, không làm hỏng hồ sơ', () {
+      final (_, _, sp) = fiberPair();
+      final profile = PreferenceProfile.fromSwipes(
+        space: sp,
+        swipes: [(food: MockFoods.surveyDeck[1], action: SwipeAction.like)],
+      );
+
+      // `protein_g` cố ý KHÔNG có chiều riêng — ba chiều macro là tỷ lệ cộng
+      // lại bằng 1, đẩy một cái lên là dìm hai cái kia xuống.
+      final same = profile.withNutrientGoals({'protein_g': 0.9});
+      expect(same.weights, equals(profile.weights));
+    });
+
+    test('hồ sơ rỗng và phiên toàn neutral vẫn được coi là rỗng', () {
+      // Bảo vệ phần đổi nghĩa của `isEmpty`: nới nó ra không được làm hai
+      // trường hợp cũ đổi hành vi.
+      final sp = FoodVectorSpace.fromFoods(MockFoods.surveyDeck);
+      expect(PreferenceProfile.empty(sp).isEmpty, isTrue);
+      expect(
+        PreferenceProfile.fromSwipes(
+          space: sp,
+          swipes: [
+            for (final f in MockFoods.surveyDeck.take(3))
+              (food: f, action: SwipeAction.neutral),
+          ],
+        ).isEmpty,
+        isTrue,
+      );
+    });
+  });
 
   group('Mô-đun tính nhu cầu dinh dưỡng', () {
     test('BMI, BMR và TDEE khớp công thức Mifflin-St Jeor', () {
@@ -74,9 +217,12 @@ void main() {
     });
 
     test('món được thích ăn điểm cao hơn món bị ghét', () {
+      // Hai món phải khác nhóm, vì nhóm món là trục one-hot duy nhất trong
+      // vector — chọn hai món cùng nhóm thì chỉ còn dinh dưỡng phân biệt
+      // chúng và phép thử mất ý nghĩa.
       final deck = MockFoods.surveyDeck;
-      final liked = deck.firstWhere((f) => f.cookingMethod == 'Nướng');
-      final hated = deck.firstWhere((f) => f.cookingMethod == 'Luộc');
+      final liked = deck.first;
+      final hated = deck.firstWhere((f) => f.category != liked.category);
 
       final profile = PreferenceProfile.fromSwipes(
         space: space,
@@ -224,8 +370,8 @@ void main() {
     test('bật thăm dò thì thực đơn đa dạng hơn khi tắt', () {
       // Đây chính là phép đo bong bóng lọc: chạy song song hai cấu hình rồi
       // đếm số món khác nhau xuất hiện qua nhiều ngày.
-      Set<int> idsOver(int days, double exploration) {
-        final ids = <int>{};
+      Set<String> idsOver(int days, double exploration) {
+        final ids = <String>{};
         for (var d = 0; d < days; d++) {
           ids.addAll(
             buildPlan(

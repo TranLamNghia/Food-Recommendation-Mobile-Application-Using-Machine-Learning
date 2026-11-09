@@ -1,0 +1,1634 @@
+{
+ "users": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "email": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "role": {
+   "type": "ENUM(user, admin)",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "is_active": {
+   "type": "BIT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "password_hash": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "display_name": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "avatar_url": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "onboarding_completed_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "updated_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "health_profiles": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": true,
+   "null": null
+  },
+  "gender": {
+   "type": "BIT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "date_of_birth": {
+   "type": "DATE",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "height_cm": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "weight_kg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "bmi": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "activity_level": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "goal": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "bmr_kcal": {
+   "type": "SMALLINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "tdee_kcal": {
+   "type": "SMALLINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "daily_calories_target": {
+   "type": "SMALLINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "target_protein_pct": {
+   "type": "TINYINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "target_carbs_pct": {
+   "type": "TINYINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "target_fat_pct": {
+   "type": "TINYINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "computed_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "updated_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "body_logs": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": true,
+   "null": null
+  },
+  "logged_on": {
+   "type": "DATE",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": true,
+   "null": null
+  },
+  "weight_kg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column1": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "note": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "user_conditions": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "condition_id": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "severity": {
+   "type": null,
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "note": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETMIE",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "user_preference_profiles": {
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "feature_version": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "weights": {
+   "type": "JSON",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column4": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column5": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column6": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column7": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column8": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "conditions": {
+  "id": {
+   "type": "INT",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "code": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": true,
+   "null": null
+  },
+  "name_vi": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "condition_type": {
+   "type": "ENUM('disease',  'allergy', 'intolerance', 'diet')",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "description": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column1": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "condition_rules": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "condition_id": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "rule_type": {
+   "type": "ENUM('exclude_tag', 'require_tag', 'nutrient_limit')",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "tag_id": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": true
+  },
+  "nutrient": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": true
+  },
+  "comparator": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": true
+  },
+  "threshold": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": true
+  },
+  "scope": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "severity_min": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "is_hard": {
+   "type": "BIT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "penalty": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "note": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "rda_reference": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "gender": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "age_min": {
+   "type": "DOUBLE",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "age_max": {
+   "type": "DOUBLE",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "qualifier": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "nutrient": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "rda_value": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "unit": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "source": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "food_categories": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "name": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "description": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "icon_url": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column5": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "foods": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "category_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "name": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "description": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "image_url": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "spice_level": {
+   "type": "TINYINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "dish_role": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "popularity_score": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "is_active": {
+   "type": "BIT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "updated_by_user_on": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": true
+  },
+  "owner_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": true
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "updated_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "food_nutrition": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "serving_size_g": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "calories_kcal": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "protein_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "carbs_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "fat_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "fiber_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "sugar_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "sodium_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "cholesterol_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "purine_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "calcium_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "iron_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "zinc_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "vitamin_a_mcg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "vitamin_c_mg": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "data_source": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "updated_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "food_tags": {
+  "food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "tag_id": {
+   "type": "INT",
+   "len": 0,
+   "pk": true,
+   "fk": true,
+   "uq": null,
+   "null": null
+  }
+ },
+ "tags": {
+  "id": {
+   "type": "INT",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "name_vi": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "tag_type": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "description": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "recommendations": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "batch_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "context_meal_type": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "score": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "score_content": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "score_ml": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "alpha": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "rank_position": {
+   "type": "SMALLINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "source": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "model_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "was_selected": {
+   "type": "BIT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "recommended_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "interactions": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "food_id": {
+   "type": "CHAR",
+   "len": null,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "action": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "session_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "interacted_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "food_diary": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "ate_on": {
+   "type": "DATE",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "meal_type": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "portion_multiplier": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "feedbacks": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "rating": {
+   "type": "TINYINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "comment": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "meal_plans": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "user_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "plan_date": {
+   "type": "DATE",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "target_calories_kcal": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "target_protein_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "target_carbs_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "target_fat_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "actual_calories_kcal": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "actual_protein_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "actual_carbs_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "actual_fat_g": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "calorie_deviation_pct": {
+   "type": null,
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "total_preference_score": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "exploration_ratio": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "generation_source": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "model_id": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "status": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "generated_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "meal_plan_items": {
+  "id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "meal_plan_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": null
+  },
+  "meal_type": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "portion_multiplier": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "predicted_score": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "status": {
+   "type": "ENUM",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "replaced_by_food_id": {
+   "type": "CHAR",
+   "len": 0,
+   "pk": null,
+   "fk": true,
+   "uq": null,
+   "null": true
+  },
+  "replaced_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": true
+  },
+  "exploration_delta": {
+   "type": "DECIMAL",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "position": {
+   "type": "TINYINT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "note": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "created_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ },
+ "ml_models": {
+  "id": {
+   "type": "INT",
+   "len": 0,
+   "pk": true,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "version": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "algorithm": {
+   "type": "ENUM('logistic_regression', 'random_forest', 'gradient_boosting')",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "feature_version": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "dataset_version": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "hyperparams": {
+   "type": "JSON",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "scaler_params": {
+   "type": "JSON",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "feature_importance": {
+   "type": "JSON",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "n_train": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "n_test": {
+   "type": "INT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "artifact_path": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "is_active": {
+   "type": "BIT",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "trained_at": {
+   "type": "DATETIME",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "note": {
+   "type": "VARCHAR",
+   "len": 0,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  },
+  "Column13": {
+   "type": null,
+   "len": null,
+   "pk": null,
+   "fk": null,
+   "uq": null,
+   "null": null
+  }
+ }
+}

@@ -460,6 +460,39 @@ appsettings.Production.json
 *.joblib
 .ipynb_checkpoints/
 
+# Tệp SQL sinh tự động từ data/foods/*.csv bằng tools/load_foods.py.
+# CSV là nguồn duy nhất; commit cả bản sinh ra thì mỗi lần sửa một món lại
+# phát sinh diff hàng trăm KB, và hai bản có thể lệch nhau lúc nào không biết.
+/db/seed_foods.sql
+
 # Rác hệ điều hành
 Thumbs.db
 .DS_Store
+
+# Phiếu khảo sát khẩu vị ĐÃ ĐIỀN. Chúng chứa họ tên, email, ngày sinh, chiều
+# cao, cân nặng và bệnh lý của người thật — dữ liệu sức khỏe cá nhân, và repo
+# này là repo công khai. Phiếu TRỐNG (data/survey/phieu_khao_sat.csv) thì vẫn
+# commit vì nó là sản phẩm phải nộp.
+/data/survey/da_dien/
+
+# ── Những thứ KHÔNG được phát hành trên repo công khai ──────────────
+
+# Đồ án của sinh viên khác, lấy về để tham khảo cách trình bày. Phát hành
+# lại tài liệu của người ta trên repo công khai là việc không được làm, và
+# Git giữ lại trong lịch sử nên xóa sau cũng không hết.
+/BAOCAO/*DoanNgocKy*
+/BAOCAO/*_DATN*.pdf
+!/BAOCAO/BAOCAO_DATN_TranLamNghia.pdf
+
+# Bản sao lưu và ảnh render trung gian của báo cáo. Mỗi lần sửa một đoạn
+# chữ lại phát sinh thêm một tệp .docx vài trăm KB trong lịch sử.
+/BAOCAO/bak/
+/BAOCAO/_render/
+/BAOCAO/png/
+*.bak
+*.bak[0-9]
+*.bak_*
+
+# Ghi chú làm việc và bản rà soát ERD — tài liệu nội bộ, không phải sản phẩm.
+/docs/ERD_REVIEW.md
+/problem.md
