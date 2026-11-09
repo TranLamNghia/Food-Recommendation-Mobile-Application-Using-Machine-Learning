@@ -1,0 +1,1107 @@
+{
+  "_doc": "Ca thử Bước 1. Sinh bởi tools/gen_buoc1_cases.py — đừng sửa tay. Bản tham chiếu viết lại từ SYSTEM_ARCHITECTURE §3.1, không chép từ C# hay Dart.",
+  "today": "2026-11-08",
+  "activityFactor": {
+    "sedentary": 1.2,
+    "light": 1.375,
+    "moderate": 1.55,
+    "active": 1.725,
+    "very_active": 1.9
+  },
+  "mealShare": {
+    "breakfast": 0.275,
+    "lunch": 0.375,
+    "dinner": 0.275,
+    "snack": 0.075
+  },
+  "cases": [
+    {
+      "ten": "dac-ta-7.2.3",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 2565,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2565,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 96.2,
+        "carbsG": 384.8,
+        "fatG": 71.3,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 962,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "gioi-male",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 2565,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2565,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 96.2,
+        "carbsG": 384.8,
+        "fatG": 71.3,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 962,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "gioi-female",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1489,
+        "tdeeKcal": 2308,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2308,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 86.5,
+        "carbsG": 346.2,
+        "fatG": 64.1,
+        "mealKcal": {
+          "breakfast": 635,
+          "lunch": 865,
+          "dinner": 635,
+          "snack": 173
+        }
+      }
+    },
+    {
+      "ten": "gioi-other",
+      "vao": {
+        "gender": "other",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1572,
+        "tdeeKcal": 2437,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2437,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 91.4,
+        "carbsG": 365.5,
+        "fatG": 67.7,
+        "mealKcal": {
+          "breakfast": 670,
+          "lunch": 914,
+          "dinner": 670,
+          "snack": 183
+        }
+      }
+    },
+    {
+      "ten": "van-dong-sedentary",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1996-11-08",
+        "heightCm": 160.0,
+        "weightKg": 55.0,
+        "activityLevel": "sedentary",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 30,
+        "bmi": 21.48,
+        "bmiCategory": "normal",
+        "bmrKcal": 1239,
+        "tdeeKcal": 1487,
+        "activityFactor": 1.2,
+        "dailyCaloriesTarget": 1487,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 55.8,
+        "carbsG": 223.0,
+        "fatG": 41.3,
+        "mealKcal": {
+          "breakfast": 409,
+          "lunch": 558,
+          "dinner": 409,
+          "snack": 112
+        }
+      }
+    },
+    {
+      "ten": "van-dong-light",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1996-11-08",
+        "heightCm": 160.0,
+        "weightKg": 55.0,
+        "activityLevel": "light",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 30,
+        "bmi": 21.48,
+        "bmiCategory": "normal",
+        "bmrKcal": 1239,
+        "tdeeKcal": 1704,
+        "activityFactor": 1.375,
+        "dailyCaloriesTarget": 1704,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 63.9,
+        "carbsG": 255.5,
+        "fatG": 47.3,
+        "mealKcal": {
+          "breakfast": 468,
+          "lunch": 639,
+          "dinner": 468,
+          "snack": 128
+        }
+      }
+    },
+    {
+      "ten": "van-dong-moderate",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1996-11-08",
+        "heightCm": 160.0,
+        "weightKg": 55.0,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 30,
+        "bmi": 21.48,
+        "bmiCategory": "normal",
+        "bmrKcal": 1239,
+        "tdeeKcal": 1920,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 1920,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 72.0,
+        "carbsG": 288.1,
+        "fatG": 53.3,
+        "mealKcal": {
+          "breakfast": 528,
+          "lunch": 720,
+          "dinner": 528,
+          "snack": 144
+        }
+      }
+    },
+    {
+      "ten": "van-dong-active",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1996-11-08",
+        "heightCm": 160.0,
+        "weightKg": 55.0,
+        "activityLevel": "active",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 30,
+        "bmi": 21.48,
+        "bmiCategory": "normal",
+        "bmrKcal": 1239,
+        "tdeeKcal": 2137,
+        "activityFactor": 1.725,
+        "dailyCaloriesTarget": 2137,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 80.1,
+        "carbsG": 320.6,
+        "fatG": 59.4,
+        "mealKcal": {
+          "breakfast": 588,
+          "lunch": 801,
+          "dinner": 588,
+          "snack": 160
+        }
+      }
+    },
+    {
+      "ten": "van-dong-very_active",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1996-11-08",
+        "heightCm": 160.0,
+        "weightKg": 55.0,
+        "activityLevel": "very_active",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 30,
+        "bmi": 21.48,
+        "bmiCategory": "normal",
+        "bmrKcal": 1239,
+        "tdeeKcal": 2354,
+        "activityFactor": 1.9,
+        "dailyCaloriesTarget": 2354,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 88.3,
+        "carbsG": 353.1,
+        "fatG": 65.4,
+        "mealKcal": {
+          "breakfast": 647,
+          "lunch": 883,
+          "dinner": 647,
+          "snack": 177
+        }
+      }
+    },
+    {
+      "ten": "muc-tieu-lose_weight",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 80.0,
+        "activityLevel": "active",
+        "goal": "lose_weight",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 26.12,
+        "bmiCategory": "obese",
+        "bmrKcal": 1774,
+        "tdeeKcal": 3060,
+        "activityFactor": 1.725,
+        "dailyCaloriesTarget": 2560,
+        "goalAdjustmentKcal": -500,
+        "proteinG": 96.0,
+        "carbsG": 384.0,
+        "fatG": 71.1,
+        "mealKcal": {
+          "breakfast": 704,
+          "lunch": 960,
+          "dinner": 704,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "muc-tieu-maintain",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 80.0,
+        "activityLevel": "active",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 26.12,
+        "bmiCategory": "obese",
+        "bmrKcal": 1774,
+        "tdeeKcal": 3060,
+        "activityFactor": 1.725,
+        "dailyCaloriesTarget": 3060,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 114.7,
+        "carbsG": 459.0,
+        "fatG": 85.0,
+        "mealKcal": {
+          "breakfast": 841,
+          "lunch": 1147,
+          "dinner": 841,
+          "snack": 229
+        }
+      }
+    },
+    {
+      "ten": "muc-tieu-gain_weight",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 80.0,
+        "activityLevel": "active",
+        "goal": "gain_weight",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 26.12,
+        "bmiCategory": "obese",
+        "bmrKcal": 1774,
+        "tdeeKcal": 3060,
+        "activityFactor": 1.725,
+        "dailyCaloriesTarget": 3560,
+        "goalAdjustmentKcal": 500,
+        "proteinG": 133.5,
+        "carbsG": 534.0,
+        "fatG": 98.9,
+        "mealKcal": {
+          "breakfast": 979,
+          "lunch": 1335,
+          "dinner": 979,
+          "snack": 267
+        }
+      }
+    },
+    {
+      "ten": "muc-tieu-healthy_eating",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 80.0,
+        "activityLevel": "active",
+        "goal": "healthy_eating",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 26.12,
+        "bmiCategory": "obese",
+        "bmrKcal": 1774,
+        "tdeeKcal": 3060,
+        "activityFactor": 1.725,
+        "dailyCaloriesTarget": 3060,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 114.7,
+        "carbsG": 459.0,
+        "fatG": 85.0,
+        "mealKcal": {
+          "breakfast": 841,
+          "lunch": 1147,
+          "dinner": 841,
+          "snack": 229
+        }
+      }
+    },
+    {
+      "ten": "kep-ve-bmr",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "sedentary",
+        "goal": "lose_weight",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 1986,
+        "activityFactor": 1.2,
+        "dailyCaloriesTarget": 1655,
+        "goalAdjustmentKcal": -331,
+        "proteinG": 62.1,
+        "carbsG": 248.3,
+        "fatG": 46.0,
+        "mealKcal": {
+          "breakfast": 455,
+          "lunch": 621,
+          "dinner": 455,
+          "snack": 124
+        }
+      }
+    },
+    {
+      "ten": "kep-ve-bmr-nu",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1966-11-08",
+        "heightCm": 150.0,
+        "weightKg": 45.0,
+        "activityLevel": "sedentary",
+        "goal": "lose_weight",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 60,
+        "bmi": 20.0,
+        "bmiCategory": "normal",
+        "bmrKcal": 927,
+        "tdeeKcal": 1112,
+        "activityFactor": 1.2,
+        "dailyCaloriesTarget": 927,
+        "goalAdjustmentKcal": -185,
+        "proteinG": 34.7,
+        "carbsG": 139.0,
+        "fatG": 25.7,
+        "mealKcal": {
+          "breakfast": 255,
+          "lunch": 347,
+          "dinner": 255,
+          "snack": 69
+        }
+      }
+    },
+    {
+      "ten": "bmi-underweight",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 50.0,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 16.33,
+        "bmiCategory": "underweight",
+        "bmrKcal": 1474,
+        "tdeeKcal": 2284,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2284,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 85.7,
+        "carbsG": 342.6,
+        "fatG": 63.5,
+        "mealKcal": {
+          "breakfast": 628,
+          "lunch": 857,
+          "dinner": 628,
+          "snack": 171
+        }
+      }
+    },
+    {
+      "ten": "bmi-normal",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 68.0,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 22.2,
+        "bmiCategory": "normal",
+        "bmrKcal": 1654,
+        "tdeeKcal": 2563,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2563,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 96.1,
+        "carbsG": 384.5,
+        "fatG": 71.2,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 961,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "bmi-overweight",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 72.0,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 23.51,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1694,
+        "tdeeKcal": 2625,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2625,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 98.4,
+        "carbsG": 393.8,
+        "fatG": 72.9,
+        "mealKcal": {
+          "breakfast": 722,
+          "lunch": 984,
+          "dinner": 722,
+          "snack": 197
+        }
+      }
+    },
+    {
+      "ten": "bmi-obese",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 85.0,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 27.76,
+        "bmiCategory": "obese",
+        "bmrKcal": 1824,
+        "tdeeKcal": 2827,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2827,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 106.0,
+        "carbsG": 424.0,
+        "fatG": 78.5,
+        "mealKcal": {
+          "breakfast": 777,
+          "lunch": 1060,
+          "dinner": 777,
+          "snack": 212
+        }
+      }
+    },
+    {
+      "ten": "bmi-dung-23",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 70.4375,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 23.0,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1678,
+        "tdeeKcal": 2601,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2601,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 97.5,
+        "carbsG": 390.2,
+        "fatG": 72.3,
+        "mealKcal": {
+          "breakfast": 715,
+          "lunch": 975,
+          "dinner": 715,
+          "snack": 195
+        }
+      }
+    },
+    {
+      "ten": "bmi-dung-25",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 175.0,
+        "weightKg": 76.5625,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 25.0,
+        "bmiCategory": "obese",
+        "bmrKcal": 1739,
+        "tdeeKcal": 2696,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2696,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 101.1,
+        "carbsG": 404.4,
+        "fatG": 74.9,
+        "mealKcal": {
+          "breakfast": 741,
+          "lunch": 1011,
+          "dinner": 741,
+          "snack": 202
+        }
+      }
+    },
+    {
+      "ten": "sinh-nhat-chua-toi",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-14",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 21,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1660,
+        "tdeeKcal": 2573,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2573,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 96.5,
+        "carbsG": 386.0,
+        "fatG": 71.5,
+        "mealKcal": {
+          "breakfast": 708,
+          "lunch": 965,
+          "dinner": 708,
+          "snack": 193
+        }
+      }
+    },
+    {
+      "ten": "sinh-nhat-dung-hom-nay",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 2565,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2565,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 96.2,
+        "carbsG": 384.8,
+        "fatG": 71.3,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 962,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "sinh-nhat-vua-qua",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-07",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 2565,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2565,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 96.2,
+        "carbsG": 384.8,
+        "fatG": 71.3,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 962,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "bien-tuoi-13",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "2013-11-08",
+        "heightCm": 150.0,
+        "weightKg": 40.0,
+        "activityLevel": "light",
+        "goal": "healthy_eating",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 13,
+        "bmi": 17.78,
+        "bmiCategory": "underweight",
+        "bmrKcal": 1112,
+        "tdeeKcal": 1528,
+        "activityFactor": 1.375,
+        "dailyCaloriesTarget": 1528,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 57.3,
+        "carbsG": 229.2,
+        "fatG": 42.5,
+        "mealKcal": {
+          "breakfast": 420,
+          "lunch": 573,
+          "dinner": 420,
+          "snack": 115
+        }
+      }
+    },
+    {
+      "ten": "bien-tuoi-100",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "1926-11-08",
+        "heightCm": 165.0,
+        "weightKg": 60.0,
+        "activityLevel": "sedentary",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 100,
+        "bmi": 22.04,
+        "bmiCategory": "normal",
+        "bmrKcal": 1136,
+        "tdeeKcal": 1364,
+        "activityFactor": 1.2,
+        "dailyCaloriesTarget": 1364,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 51.1,
+        "carbsG": 204.5,
+        "fatG": 37.9,
+        "mealKcal": {
+          "breakfast": 375,
+          "lunch": 511,
+          "dinner": 375,
+          "snack": 102
+        }
+      }
+    },
+    {
+      "ten": "bien-cao-50",
+      "vao": {
+        "gender": "other",
+        "dateOfBirth": "2006-11-08",
+        "heightCm": 50.0,
+        "weightKg": 20.0,
+        "activityLevel": "sedentary",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 20,
+        "bmi": 80.0,
+        "bmiCategory": "obese",
+        "bmrKcal": 335,
+        "tdeeKcal": 401,
+        "activityFactor": 1.2,
+        "dailyCaloriesTarget": 401,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 15.1,
+        "carbsG": 60.2,
+        "fatG": 11.2,
+        "mealKcal": {
+          "breakfast": 110,
+          "lunch": 151,
+          "dinner": 110,
+          "snack": 30
+        }
+      }
+    },
+    {
+      "ten": "bien-cao-250",
+      "vao": {
+        "gender": "other",
+        "dateOfBirth": "2006-11-08",
+        "heightCm": 250.0,
+        "weightKg": 300.0,
+        "activityLevel": "very_active",
+        "goal": "gain_weight",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 20,
+        "bmi": 48.0,
+        "bmiCategory": "obese",
+        "bmrKcal": 4385,
+        "tdeeKcal": 8331,
+        "activityFactor": 1.9,
+        "dailyCaloriesTarget": 8831,
+        "goalAdjustmentKcal": 500,
+        "proteinG": 331.1,
+        "carbsG": 1324.6,
+        "fatG": 245.3,
+        "mealKcal": {
+          "breakfast": 2428,
+          "lunch": 3311,
+          "dinner": 2428,
+          "snack": 662
+        }
+      }
+    },
+    {
+      "ten": "lam-tron-nua",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2001-11-08",
+        "heightCm": 170.04,
+        "weightKg": 60.0,
+        "activityLevel": "sedentary",
+        "goal": "maintain",
+        "proteinPct": 15,
+        "carbsPct": 60,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 25,
+        "bmi": 20.75,
+        "bmiCategory": "normal",
+        "bmrKcal": 1543,
+        "tdeeKcal": 1851,
+        "activityFactor": 1.2,
+        "dailyCaloriesTarget": 1851,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 69.4,
+        "carbsG": 277.7,
+        "fatG": 51.4,
+        "mealKcal": {
+          "breakfast": 509,
+          "lunch": 694,
+          "dinner": 509,
+          "snack": 139
+        }
+      }
+    },
+    {
+      "ten": "macro-17-60-23",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 17,
+        "carbsPct": 60,
+        "fatPct": 23,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 2565,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2565,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 109.0,
+        "carbsG": 384.8,
+        "fatG": 65.6,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 962,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "macro-20-55-25",
+      "vao": {
+        "gender": "male",
+        "dateOfBirth": "2004-11-08",
+        "heightCm": 172.0,
+        "weightKg": 68.5,
+        "activityLevel": "moderate",
+        "goal": "maintain",
+        "proteinPct": 20,
+        "carbsPct": 55,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 22,
+        "bmi": 23.15,
+        "bmiCategory": "overweight",
+        "bmrKcal": 1655,
+        "tdeeKcal": 2565,
+        "activityFactor": 1.55,
+        "dailyCaloriesTarget": 2565,
+        "goalAdjustmentKcal": 0,
+        "proteinG": 128.3,
+        "carbsG": 352.7,
+        "fatG": 71.3,
+        "mealKcal": {
+          "breakfast": 705,
+          "lunch": 962,
+          "dinner": 705,
+          "snack": 192
+        }
+      }
+    },
+    {
+      "ten": "macro-13-62-25",
+      "vao": {
+        "gender": "female",
+        "dateOfBirth": "1986-11-08",
+        "heightCm": 158.0,
+        "weightKg": 52.0,
+        "activityLevel": "light",
+        "goal": "lose_weight",
+        "proteinPct": 13,
+        "carbsPct": 62,
+        "fatPct": 25,
+        "today": "2026-11-08"
+      },
+      "ra": {
+        "age": 40,
+        "bmi": 20.83,
+        "bmiCategory": "normal",
+        "bmrKcal": 1147,
+        "tdeeKcal": 1576,
+        "activityFactor": 1.375,
+        "dailyCaloriesTarget": 1147,
+        "goalAdjustmentKcal": -430,
+        "proteinG": 37.3,
+        "carbsG": 177.7,
+        "fatG": 31.8,
+        "mealKcal": {
+          "breakfast": 315,
+          "lunch": 430,
+          "dinner": 315,
+          "snack": 86
+        }
+      }
+    }
+  ]
+}
