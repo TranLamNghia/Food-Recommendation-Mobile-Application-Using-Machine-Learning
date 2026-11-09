@@ -73,7 +73,7 @@ Payload của `accessToken`:
 
 ```json
 {
-  "sub": "1",
+  "sub": "00000001-0000-4000-8000-000000000000",
   "email": "nghia@example.com",
   "role": "user",
   "onboarded": true,
@@ -83,6 +83,10 @@ Payload của `accessToken`:
 ```
 
 > `onboarded` cho phép Frontend biết ngay có cần đẩy người dùng vào màn hình vuốt thăm dò hay không, mà không cần gọi thêm API.
+
+> `sub` là **UUID 36 ký tự** của `users.id`, đúng theo mục 2.3. Bản trước của
+> ví dụ này ghi `"sub": "1"` — khóa số nguyên của một bản thiết kế đã bỏ. Chỉ
+> ba bảng tra cứu `conditions`, `tags`, `ml_models` còn dùng khóa số.
 
 **Bốn mức truy cập:**
 
@@ -505,6 +509,20 @@ Content-Type: application/json
 
 > `refreshToken` được **xoay vòng**: mỗi lần làm mới trả về token mới và thu hồi token cũ. Frontend phải lưu lại token mới.
 
+> **Token sống trong bảng `refresh_tokens`** (lược đồ ở DATABASE_DESIGN 3.7),
+> lưu dưới dạng băm SHA-256. Nó **không thể** là một JWT tự chứa: lời hứa
+> "thu hồi token cũ" ở trên, và "thu hồi mọi token" ở 7.1.7, đều đòi trạng
+> thái phía máy chủ. Một JWT tự chứa hợp lệ tới đúng lúc hết hạn, nên đổi mật
+> khẩu vì nghi bị chiếm tài khoản sẽ không cắt được phiên của kẻ đó trong 30
+> ngày.
+
+> **Nộp lại một token đã thu hồi thì thu hồi cả họ.** Cột `replaced_by` nối
+> các token thành chuỗi. Một token đã thu hồi mà được nộp lại chỉ có hai
+> khả năng — người dùng thật mất mạng giữa lúc xoay vòng, hoặc token đã rò ra
+> ngoài — và máy chủ không phân biệt được, nên xử lý theo hướng an toàn: thu
+> hồi toàn bộ chuỗi, trả `401 TOKEN_INVALID`, buộc đăng nhập lại. Không có
+> phép này thì xoay vòng không thêm an toàn nào.
+
 ---
 
 ### 7.1.4 Thông tin tài khoản
@@ -709,7 +727,7 @@ Authorization: Bearer <accessToken>
   "heightCm": 172.0,
   "weightKg": 68.5,
   "bmi": 23.15,
-  "bmiCategory": "normal",
+  "bmiCategory": "overweight",
   "activityLevel": "moderate",
   "goal": "maintain",
   "conditions": [
@@ -735,6 +753,18 @@ Authorization: Bearer <accessToken>
 | `401` | | |
 
 > `bmi` và `age` do Backend tính, Frontend chỉ hiển thị. `bmi` là cột `GENERATED` trong CSDL.
+
+> **`bmiCategory` dùng ngưỡng châu Á của WHO 2004: 23 và 25**, không phải
+> ngưỡng quốc tế 25 và 30. Bốn nhóm: `underweight` < 18.5 ≤ `normal` < 23 ≤
+> `overweight` < 25 ≤ `obese`. Người châu Á có tỷ lệ mỡ cơ thể và nguy cơ
+> chuyển hóa cao hơn ở cùng một BMI, nên dùng ngưỡng quốc tế cho người Việt
+> sẽ xếp một người thừa cân thật vào nhóm bình thường — và hệ thống sẽ không
+> đề xuất giảm năng lượng.
+
+> Bản trước của hai ví dụ ở mục này và 7.2.3 ghi `"bmiCategory": "normal"`
+> cho `bmi: 23.15`. Sai theo chính ngưỡng mà hệ thống dùng — 23.15 vượt 23.
+> `mobile/lib/features/progress/progress_screen.dart` đã phân loại theo ngưỡng
+> châu Á từ trước, nên đây là chỗ đặc tả lệch khỏi mã, không phải ngược lại.
 
 ---
 
@@ -802,31 +832,38 @@ Dùng `PUT` chứ không phải `POST` vì quan hệ người dùng–hồ sơ l
 
 Đây là **đầu ra Bước 1** của thuật toán khuyến nghị.
 
+> `proteinPct`, `carbsPct` và `fatPct` đọc từ ba cột `target_*_pct` của
+> `health_profiles` — chúng là dữ liệu **của từng người**, không phải hằng
+> số trong mã. Dòng mới nhận giá trị mặc định của CSDL là 15 / 60 / 25, và
+> `chk_macro_sum` buộc ba cột cộng đúng 100. Backend **không được** cứng hóa
+> bộ ba này: làm vậy thì sửa một dòng trong CSDL sẽ không có tác dụng gì, mà
+> cũng không báo lỗi.
+
 **Response `200 OK`**
 
 ```json
 {
   "bmi": 23.15,
-  "bmiCategory": "normal",
-  "bmrKcal": 1660,
-  "tdeeKcal": 2573,
+  "bmiCategory": "overweight",
+  "bmrKcal": 1655,
+  "tdeeKcal": 2565,
   "activityFactor": 1.55,
-  "dailyCaloriesTarget": 2573,
+  "dailyCaloriesTarget": 2565,
   "goalAdjustmentKcal": 0,
   "macroTargets": {
-    "proteinPct": 15, "proteinG": 96.5,
-    "carbsPct":   60, "carbsG":   385.9,
-    "fatPct":     25, "fatG":     71.5
+    "proteinPct": 15, "proteinG": 96.2,
+    "carbsPct":   60, "carbsG":   384.8,
+    "fatPct":     25, "fatG":     71.3
   },
   "mealDistribution": [
-    { "mealType": "breakfast", "pct": 25, "caloriesKcal": 643 },
-    { "mealType": "lunch",     "pct": 40, "caloriesKcal": 1029 },
-    { "mealType": "dinner",    "pct": 27, "caloriesKcal": 695 },
-    { "mealType": "snack",     "pct": 8,  "caloriesKcal": 206 }
+    { "mealType": "breakfast", "pct": 27.5, "caloriesKcal": 705 },
+    { "mealType": "lunch",     "pct": 37.5, "caloriesKcal": 962 },
+    { "mealType": "dinner",    "pct": 27.5, "caloriesKcal": 705 },
+    { "mealType": "snack",     "pct": 7.5,  "caloriesKcal": 192 }
   ],
   "formula": {
     "bmr": "Mifflin-St Jeor",
-    "expression": "10 × 68.5 + 6.25 × 172 − 5 × 22 + 5 = 1660"
+    "expression": "10 × 68.5 + 6.25 × 172 − 5 × 22 + 5 = 1655"
   }
 }
 ```
@@ -834,6 +871,37 @@ Dùng `PUT` chứ không phải `POST` vì quan hệ người dùng–hồ sơ l
 **Status codes:** `200` · `401` · `409 PROFILE_REQUIRED`
 
 > Trường `formula.expression` để màn hình hồ sơ giải thích cho người dùng con số đến từ đâu — tăng độ tin cậy, và cũng là một điểm cộng khi demo bảo vệ.
+
+> **Bản trước của khối ví dụ này không tự khớp.** Nó ghi `bmrKcal: 1660`,
+> trong khi `10 × 68.5 + 6.25 × 172 − 5 × 22 + 5 = 1655`. Và `1660` không phải
+> một con số bịa: nó là kết quả **đúng** của công thức với **tuổi 21**. Hai số
+> đều đúng, chỉ là của hai tuổi khác nhau — đặt cạnh một trường `age: 22` thì
+> chúng không thể cùng đúng.
+>
+> Nguồn của sự lệch này là `age` được tính tại thời điểm gọi API. Với
+> `dateOfBirth: 2004-11-14`, tuổi là 21 cho tới ngày 14/11/2026 và 22 từ ngày
+> đó trở đi. **Mọi ví dụ trong mục này giả định hôm nay đã qua ngày sinh**,
+> nên `age: 22` và `bmrKcal: 1655`. Một phép thử tự động đối chiếu với khối
+> JSON này phải tự suy ngày sinh từ hôm nay, chứ không gán cứng
+> `2004-11-14` — nếu không nó sẽ đổi kết quả vào đúng ngày 14/11.
+>
+> Frontend dùng JSON mẫu làm dữ liệu giả, theo mục 1 của tài liệu này, nên
+> một con số không tự khớp trong ví dụ là một con số sai trong giao diện cho
+> tới khi ghép với Backend thật.
+
+> **`mealDistribution` dùng điểm giữa của khoảng trong `SYSTEM_ARCHITECTURE`
+> §3.1**, không phải con số gõ tay. Khoảng là sáng 25–30 %, trưa 35–40 %, tối
+> 25–30 %, phụ 5–10 %; điểm giữa là 27.5 / 37.5 / 27.5 / 7.5 và cộng đúng
+> 100 %. Bản trước ghi 25 / 40 / 27 / 8 — cũng nằm trong khoảng và cũng cộng
+> đủ 100, nhưng không suy ra được từ đâu, nên hai bên hiện thực sẽ chọn hai bộ
+> khác nhau. `mobile/lib/data/models/meal_plan.dart` đã dùng điểm giữa từ
+> trước.
+
+> **Làm tròn từng bữa làm mất 1 kcal**: 705 + 962 + 705 + 192 = 2564, trong khi
+> `dailyCaloriesTarget` là 2565. Không phải lỗi — bốn số nguyên không chia hết
+> được một số thực. Nhưng Bước 4 phải dùng **tỷ lệ**, không dùng bốn số đã làm
+> tròn, nếu không sai số này biến thành một ràng buộc không thỏa được: tổng
+> bốn hạn mức bữa nhỏ hơn hạn mức ngày, và không tổ hợp món nào đạt đủ cả hai.
 
 ---
 
