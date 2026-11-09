@@ -992,9 +992,21 @@ ml/dataset.py    — ghép ba khối đặc trưng thành ma trận đầu vào
 tools/check_ml.py       262 mục · hàm thuần   · KHÔNG cần CSDL
 tools/check_ml_e2e.py   190 mục · cả đường ống · tự dựng CSDL riêng rồi tự xóa
 tools/check_contrast.py  20 cặp · tương phản bảng màu theo WCAG 2.1 AA
-tools/check_flowchart.py 4 phép · sơ đồ ↔ đặc tả API ↔ lược đồ CSDL
-cd mobile && flutter test  92 mục, gồm 6 mục đối chiếu Dart ↔ Python
+tools/check_flowchart.py 5 phép · sơ đồ ↔ đặc tả API ↔ lược đồ CSDL
+tools/gen_entities.py          · 24 lớp thực thể + 4 danh sách ENUM C# ↔ db/schema.sql
+tools/check_be_parity.py  76 mục · Bước 1: Python ↔ C# ↔ Dart
+tools/smoke_backend.py    93 mục · 9 endpoint trên MySQL thật
+cd backend && dotnet test  44 mục, Bước 1 phía C#, KHÔNG cần CSDL
+cd mobile && flutter test 124 mục, gồm 6 mục đối chiếu vector Dart ↔ Python
+                                  và 32 mục đối chiếu Bước 1 ba chiều
 ```
+
+`check_be_parity.py` tồn tại vì **Bước 1 được hiện thực ba lần** — máy chủ
+(C#), ứng dụng (Dart) và bản tham chiếu (Python). Ba bản chạy ở ba tầng và
+không bao giờ gặp nhau, nên khi chúng lệch thì không gì báo ra: ứng dụng hiện
+một hạn mức năng lượng, máy chủ sinh thực đơn theo một hạn mức khác, và cả
+hai con số đều trông hợp lý. Lần chạy đầu bắt được ba chỗ lệch có thật — xem
+`backend/README.md`.
 
 `check_ml.py` kiểm **ca biên** mà dữ liệu thật không có: cả tập chỉ một mức
 năng lượng, người dùng vuốt toàn `neutral`, một người không có món nào đáng

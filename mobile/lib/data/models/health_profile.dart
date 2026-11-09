@@ -72,10 +72,30 @@ class HealthProfile {
   /// Mã dị ứng và chế độ ăn bắt buộc.
   final Set<String> allergies = {};
 
+  /// Ngày coi là "hôm nay" khi tính tuổi. `null` nghĩa là lấy
+  /// [DateTime.now].
+  ///
+  /// Máy chủ tính cùng phép này theo múi giờ **Asia/Ho_Chi_Minh**
+  /// (`backend/Api/Time/DongHo.cs`), nên với người dùng ở Việt Nam thì
+  /// [DateTime.now] ở đây cho đúng cùng một ngày. Người dùng đang ở múi giờ
+  /// khác thì hai bên có thể lệch một ngày, và con số của máy chủ là con số
+  /// đúng — nó là thứ được ghi vào `health_profiles` và dùng để sinh thực
+  /// đơn.
+  ///
+  /// Tồn tại để kiểm được. Tuổi phụ thuộc ngày chạy, nên một bộ ca thử cố
+  /// định ngày sinh **không** kiểm được bản này nếu nó luôn đọc đồng hồ hệ
+  /// thống: `test/buoc1_parity_test.dart` sẽ phải bỏ qua mọi ca mà tuổi tính
+  /// ra hôm nay khác tuổi trong tệp mẫu — tức là bỏ qua gần hết, gần như cả
+  /// năm, mà vẫn báo "All tests passed".
+  ///
+  /// Đó đúng là kiểu hỏng mà bộ kiểm parity sinh ra để chặn: một phép so
+  /// ngừng so mà không ai thấy.
+  DateTime? today;
+
   int? get age {
     final b = birthday;
     if (b == null) return null;
-    final now = DateTime.now();
+    final now = today ?? DateTime.now();
     var years = now.year - b.year;
     if (now.month < b.month || (now.month == b.month && now.day < b.day)) {
       years--;
@@ -127,12 +147,37 @@ class HealthProfile {
     };
   }
 
-  /// Phân bổ ba chất sinh năng lượng theo gram, lấy điểm giữa của khoảng
-  /// khuyến nghị: 60 % bột đường, 17 % đạm, 23 % béo.
+  /// Phần trăm năng lượng của ba chất sinh năng lượng.
+  ///
+  /// Mặc định 15 / 60 / 25 — đúng bằng `DEFAULT` của ba cột
+  /// `health_profiles.target_protein_pct`, `target_carbs_pct`,
+  /// `target_fat_pct`. Cả ba đều nằm trong khoảng khuyến nghị của Viện Dinh
+  /// dưỡng Quốc gia (`SYSTEM_ARCHITECTURE.md` §3.1: đạm 13–20, bột đường
+  /// 55–65, béo 20–25) và cộng đúng 100.
+  ///
+  /// Bản trước cứng hóa 17 / 60 / 23 — cũng hợp lệ, và còn có lý do tốt hơn
+  /// (đó là điểm giữa ba khoảng). Nhưng ba cột trong CSDL là dữ liệu **của
+  /// từng người**: Backend đọc chúng ra và trả về trong
+  /// `GET /profile/nutrition-targets`, nên một bộ ba cứng hóa khác ở đây làm
+  /// ứng dụng tính ra hạn mức khác với hạn mức mà máy chủ vừa gửi — và không
+  /// có gì báo ra. Sửa một dòng trong CSDL cũng sẽ không có tác dụng gì.
+  ///
+  /// Ba trường này cho phép ghi đè khi đã đồng bộ hồ sơ từ máy chủ.
+  int proteinPct = 15;
+  int carbsPct = 60;
+  int fatPct = 25;
+
+  /// Phân bổ ba chất sinh năng lượng theo gram.
+  ///
+  /// 4 kcal/g cho đạm và bột đường, 9 kcal/g cho béo — hệ số Atwater.
   ({double protein, double carb, double fat})? get macroTarget {
     final e = energyTarget;
     if (e == null) return null;
-    return (protein: e * 0.17 / 4, carb: e * 0.60 / 4, fat: e * 0.23 / 9);
+    return (
+      protein: e * proteinPct / 100 / 4,
+      carb: e * carbsPct / 100 / 4,
+      fat: e * fatPct / 100 / 9,
+    );
   }
 
   /// Chênh lệch giữa cân nặng hiện tại và cân nặng mục tiêu.
