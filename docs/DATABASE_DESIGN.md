@@ -89,8 +89,8 @@ Tầng 0 — không phụ thuộc bảng nào
     users, conditions, food_categories, tags, rda_reference, ml_models
 
 Tầng 1
-    health_profiles, body_logs, password_resets, user_conditions, foods,
-    condition_rules, user_preference_profiles
+    health_profiles, body_logs, password_resets, refresh_tokens,
+    user_conditions, foods, condition_rules, user_preference_profiles
 
 Tầng 2
     food_nutrition, food_tags, meal_plans, recommendations,
@@ -339,6 +339,53 @@ Dùng SHA-256 chứ không BCrypt, có chủ ý. BCrypt cố ý chậm để ch�
 **Giới hạn số lần xin mã, và chỗ nó không che được.** `INDEX (user_id, created_at)` tồn tại để đếm số lần xin mã gần đây của một tài khoản, phục vụ mức `429 RATE_LIMITED`. Nhưng phép giới hạn này **chỉ che được email đã đăng ký**: email không có trong hệ thống không sinh dòng nào — cố ý, vì lưu lại mọi địa chỉ người lạ nhập vào là tự dựng một danh sách email mà hệ thống không cần. Nhóm đó phải giới hạn ở tầng trước CSDL, theo địa chỉ IP.
 
 **Dọn dòng cũ.** Mã sống 15 phút, nên gần như mọi dòng trong bảng này là rác sau một giờ. Xóa những dòng đã hết hạn **trên bảy ngày** bằng một việc định kỳ; giữ lại bảy ngày để còn tra được khi có nghi vấn về truy cập.
+
+---
+
+## 3.7 `refresh_tokens` — Phiên đăng nhập còn sống
+
+```sql
+CREATE TABLE refresh_tokens (
+    id          CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
+    token_hash  CHAR(64) NOT NULL,
+    expires_at  DATETIME NOT NULL,
+    revoked_at  DATETIME NULL,
+    replaced_by CHAR(36) NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_refresh_window CHECK (expires_at > created_at),
+    FOREIGN KEY (user_id)     REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (replaced_by) REFERENCES refresh_tokens(id) ON DELETE SET NULL,
+
+    UNIQUE KEY uq_refresh_token (token_hash),
+    INDEX idx_refresh_user (user_id, revoked_at, expires_at)
+) ENGINE=InnoDB;
+```
+
+**Vì sao `refreshToken` không thể là một JWT tự chứa.** Đặc tả API 7.1.3 hứa hai điều, và cả hai đòi trạng thái phía máy chủ:
+
+| Lời hứa | Cần gì |
+|---|---|
+| Mỗi lần làm mới thì **thu hồi** token cũ | Biết token nào đã bị thu hồi |
+| Đổi mật khẩu thì thu hồi **mọi** token của tài khoản (7.1.7) | Liệt kê được token của một người |
+
+Một JWT tự chứa hợp lệ cho tới đúng lúc nó hết hạn — không ai thu hồi được. Nghĩa là "đổi mật khẩu vì nghi có người khác đang truy cập" sẽ không cắt được phiên của người đó trong **30 ngày**, mà đó đúng là tình huống duy nhất người ta đổi mật khẩu.
+
+**Vì sao có `replaced_by`, không chỉ `revoked_at`.** Xoay vòng token mà không phát hiện tái dùng thì không thêm an toàn nào: kẻ lấy được token cứ nộp, hệ thống cứ cấp token mới, không ai biết gì.
+
+`replaced_by` nối các token thành chuỗi `A → B → C`. Khi một token **đã thu hồi** được nộp lại, chỉ có hai khả năng:
+
+- người dùng thật mất mạng đúng giữa lúc xoay vòng, nên vẫn giữ token cũ;
+- token đã rò ra ngoài và kẻ khác đang dùng.
+
+Không phân biệt được hai cái từ phía máy chủ, nên xử lý theo hướng an toàn: lần theo chuỗi, thu hồi **cả họ**, buộc đăng nhập lại. Đây là cách làm chuẩn — *refresh token rotation with reuse detection*.
+
+**Một bất biến mà lược đồ KHÔNG bắt buộc.** Về logic, một token chỉ thay thế đúng một token khác, nên quan hệ `replaced_by` là 1:1. Nhưng không có `UNIQUE (replaced_by)` nào chặn hai dòng cùng trỏ về một token, nên lược đồ chỉ phát biểu được N:1 — và ERD vẽ đúng theo lược đồ, không theo ý định. Bất biến này do tầng mã giữ: chỉ luồng xoay vòng ghi vào cột đó, và nó ghi đúng một lần cho mỗi token. Nếu về sau có chỗ thứ hai ghi vào cột này thì phải thêm ràng buộc, vì lúc đó phép dò tái dùng sẽ đi trên một cây chứ không phải một chuỗi.
+
+**`ON DELETE SET NULL` cho `replaced_by`, không `CASCADE`.** Việc dọn định kỳ xóa những token đã hết hạn; nếu `CASCADE` thì xóa một token hết hạn ở **giữa** chuỗi sẽ kéo theo token đang sống ở cuối chuỗi, và người dùng bị đăng xuất vì một việc dọn rác.
+
+**Lưu mã đã băm**, cùng lý do như [3.6](#36-password_resets--mã-đặt-lại-mật-khẩu): ai đọc được bảng này mà token nằm nguyên trong đó thì mạo danh được mọi phiên đang sống. SHA-256 chứ không BCrypt — token là UUID do máy chủ sinh, không phải mật khẩu người đặt, nên không dò được bằng từ điển.
 
 ---
 

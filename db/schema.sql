@@ -3,7 +3,7 @@
 --  Đồ án tốt nghiệp — Trần Lâm Nghĩa (22115053122231)
 --
 --  MySQL 8.x · InnoDB · utf8mb4_unicode_ci
---  23 bảng · 30 khóa ngoại · 17 ràng buộc CHECK
+--  24 bảng · 32 khóa ngoại · 18 ràng buộc CHECK
 --
 --  LƯU Ý: trong MySQL 8, tên ràng buộc CHECK phải duy nhất trên TOÀN CSDL,
 --  không phải trên từng bảng. Đặt trùng tên ở hai bảng khác nhau sẽ báo lỗi
@@ -236,6 +236,46 @@ CREATE TABLE password_resets (
     -- là tự dựng một danh sách email mà hệ thống không cần. Nhóm đó phải giới
     -- hạn ở tầng trước CSDL, theo địa chỉ IP.
     INDEX idx_reset_user_time (user_id, created_at)
+) ENGINE=InnoDB;
+
+
+-- ── refresh_tokens ────────────────────────────────────────────────────────
+-- Chỗ lưu `refreshToken` (API 7.1.3). Đặc tả hứa hai điều đòi trạng thái
+-- phía máy chủ: mỗi lần làm mới thì THU HỒI token cũ, và đổi mật khẩu thì
+-- thu hồi MỌI token của tài khoản. Một JWT tự chứa không thu hồi được — nó
+-- hợp lệ tới lúc hết hạn, nên đổi mật khẩu vì nghi bị chiếm tài khoản sẽ
+-- không cắt được phiên của kẻ đó trong 30 ngày.
+--
+-- `replaced_by` nối các token thành chuỗi A -> B -> C. Xoay vòng mà không
+-- phát hiện tái dùng thì không thêm an toàn nào: kẻ lấy được token cứ dùng,
+-- hệ thống cứ cấp token mới, không ai biết. Khi một token ĐÃ thu hồi được
+-- nộp lại, chỉ có hai khả năng — người dùng thật mất mạng giữa lúc xoay
+-- vòng, hoặc token đã rò. Không phân biệt được, nên lần theo chuỗi và thu
+-- hồi cả họ.
+--
+-- Lưu mã đã băm, cùng lý do như `password_resets`.
+CREATE TABLE refresh_tokens (
+    id          CHAR(36) DEFAULT (UUID()) PRIMARY KEY,
+    user_id     CHAR(36) NOT NULL,
+    token_hash  CHAR(64) NOT NULL,
+    expires_at  DATETIME NOT NULL,
+
+    -- NULL = còn sống. Thu hồi thì ghi thời điểm, KHÔNG xóa dòng: một token
+    -- đã thu hồi mà được nộp lại là tín hiệu rò rỉ, và xóa dòng đi thì lần
+    -- nộp đó không phân biệt được với một token bịa.
+    revoked_at  DATETIME NULL,
+    replaced_by CHAR(36) NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_refresh_window CHECK (expires_at > created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+
+    -- SET NULL, không CASCADE: dọn một token hết hạn ở giữa chuỗi không được
+    -- kéo theo token đang sống ở cuối chuỗi.
+    FOREIGN KEY (replaced_by) REFERENCES refresh_tokens(id) ON DELETE SET NULL,
+
+    UNIQUE KEY uq_refresh_token (token_hash),
+    INDEX idx_refresh_user (user_id, revoked_at, expires_at)
 ) ENGINE=InnoDB;
 
 
