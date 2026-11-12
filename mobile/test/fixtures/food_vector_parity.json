@@ -1,7 +1,7 @@
 {
  "_doc": "Tệp sinh tự động bởi tools/check_feature_parity.py — đừng sửa tay. Chứa đầu vào và vector mong đợi do bản Python dựng, để bài kiểm Dart đối chiếu từng chiều.",
  "feature_version": "v2",
- "sinh_luc": "2026-11-02T10:52:15",
+ "sinh_luc": "2026-11-10T16:39:58",
  "scaler": {
   "feature_version": "v2",
   "categories": [

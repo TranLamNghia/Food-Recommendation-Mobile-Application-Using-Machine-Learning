@@ -895,11 +895,11 @@ hướng B thì không cần.
 
 #### Bộ công cụ thu phiên vuốt, không cần chờ ứng dụng
 
-Phiên vuốt onboarding không phải chờ app chạy mới thu được — nó là 40 câu hỏi
+Phiên vuốt onboarding không phải chờ app chạy mới thu được — nó là 45 câu hỏi
 bốn lựa chọn. Hai công cụ dưới đây làm trọn việc đó:
 
 ```
-python tools/make_survey_deck.py --so 40 --ghi
+python tools/make_survey_deck.py --so 45 --ghi
     → data/survey/survey_deck.json      (bộ món kèm vector, để tái lập)
     → data/survey/phieu_khao_sat.csv    (phiếu trống để chép cho từng người)
 
@@ -922,7 +922,7 @@ hằng ngày); vòng sau rải món ra khắp không gian. Điểm khởi đầu
 danh mục nhất, không ngẫu nhiên, vì hai người được khảo sát bằng hai bộ món
 khác nhau thì vector của họ không so được với nhau.
 
-**Hạn chế phải ghi vào báo cáo:** bộ 40 món thu được có **37 món ở mức cay 0**,
+**Hạn chế phải ghi vào báo cáo:** bộ 45 món thu được có **39 món ở mức cay 0**,
 vì cả danh mục chỉ có 24/318 món cay. Vector sở thích vì vậy **yếu ở chiều
 "Mức cay"**. Đây là hạn chế của dữ liệu, không của thuật toán, và
 `make_survey_deck.py` in cảnh báo này ra cùng bộ món.
@@ -937,6 +937,208 @@ một phiếu nhập dở — có người dùng nhưng thiếu lượt vuốt, 
 nhưng thiếu hồ sơ sở thích — tệ hơn hẳn một phiếu chưa nhập, vì nó vẫn chạy
 qua mọi script phía sau và âm thầm góp một người dùng khuyết vào tập huấn
 luyện.
+
+### 11.4 Tập mô phỏng — dùng khi chưa có dữ liệu người thật
+
+Lần thu đầu cho ra `data/survey/da_dien/f1_user_food_behaviors_50x45.csv`:
+50 người × 45 món, không thiếu một ô, 45 `ma_mon` khớp deck. Qua mọi phép
+kiểm hình thức, mà **không mang tín hiệu nào**:
+
+| phép đo | tệp đó | ngưỡng |
+|---|---|---|
+| cosine người–người | **+0,0359** | sau khi xáo ngẫu nhiên: +0,0340 ± 0,0053 → z = +0,4 |
+| phương sai số lượt `thich` mỗi món / phương sai nhị thức | **1,15** | 1,00 là tình cờ; sd 0,21 → z = +0,7 |
+| AUC của Rocchio, kiểm chéo bỏ-một | **0,528** | 0,500 là ngẫu nhiên |
+
+Lý do: `ObesityDataSet` cho hồ sơ sức khỏe, nhưng phần **lựa chọn món** không
+được sinh từ một mô hình sở thích nào — nó là rút ngẫu nhiên với một phân bố
+biên cố định. Không mô hình nào học được gì từ đó; Chương 3 sẽ chỉ đo lại mức
+đa số 41,0%.
+
+`tools/sinh_khau_vi.py` thay phần đó bằng mô phỏng **có ground truth**: mỗi
+người ảo nhận một vector khẩu vị ẩn `t_u` trong chính không gian 20 chiều của
+hệ thống, lựa chọn rút ra từ `cos(t_u, v_i)` qua một ordered logit. Đầu bài
+docstring của tệp đó giải thích từng lựa chọn thiết kế; ba điều quan trọng
+nhất:
+
+- **Nguyên mẫu khẩu vị lấy từ k-means trên chính 45 vector món**, không bốc
+  tay. Hồ sơ Rocchio `p_u = Σ w·v / Σ|w|` là trung bình có dấu của vector
+  món, nên nó chỉ biểu diễn được hướng nằm trong vùng vector món phủ tới.
+  Một `t_u` bốc đều trong [0,1]²⁰ nằm ngoài vùng đó, và cosine khôi phục sẽ
+  thấp vì hình học chứ không vì mô hình kém.
+- **`chua_biet` độc lập với khẩu vị.** "Chưa từng ăn" là tính chất của món,
+  nên nó rút theo xu hướng của từng món, không theo `t_u`. Cho nó phụ thuộc
+  khẩu vị là biến dữ liệu thiếu thành *missing not at random*, và khi đó
+  vector Rocchio lệch có hệ thống dù công thức đúng.
+- **Hồ sơ sức khỏe chỉ được tác động qua hai cột** `FAVC` và `FCVC` — hai cột
+  duy nhất của `ObesityDataSet` nói về thức ăn — với biên độ nhỏ. Nếu hồ sơ
+  chi phối khẩu vị thì bài toán gợi ý thành bài toán hồi quy trên hồ sơ, và
+  mô phỏng đã tự trả lời mất câu hỏi mà đồ án đặt ra.
+
+```
+python tools/sinh_khau_vi.py --ghi
+    → data/survey/mo_phong/hanh_vi.csv        2250 lượt, cùng cột với tệp gốc
+    → data/survey/mo_phong/khau_vi_that.json  vector ẩn + mọi tham số sinh
+
+python tools/check_mo_phong.py --so-sanh-goc
+```
+
+`check_mo_phong.py` là bộ kiểm mà lần trước **không có**, và chính chỗ thiếu
+đó là lý do tệp nhiễu đi qua được mọi phép kiểm. Nó so tập cần kiểm với chính
+tập đó sau khi **xáo đánh giá của từng người giữa 45 món**: phép xáo phá mọi
+liên hệ món↔người mà giữ nguyên mọi đại lượng biên, nên hiệu giữa hai bên
+đúng là phần tín hiệu. Bảy phép kiểm, và phép thứ tám quan trọng hơn cả bảy:
+`--so-sanh-goc` đòi tệp nhiễu đã biết **phải trượt**. Một bộ kiểm chỉ báo xanh
+trên dữ liệu tốt thì chưa chứng minh được gì — nó có thể báo xanh trên mọi
+thứ.
+
+Kết quả của lần sinh đang commit (seed 20261112):
+
+| phép đo | mô phỏng | tệp gốc |
+|---|---|---|
+| cosine người–người | +0,1212 → **z = +19,3** | +0,0359 → z = +0,4 |
+| phương sai `thich`/nhị thức | 3,93 → **z = +13,8** | 1,15 → z = +0,7 |
+| AUC Rocchio bỏ-một | **0,851** | 0,528 |
+| cosine cùng nguyên mẫu / khác nguyên mẫu | +0,344 / +0,071 = **4,8×** | không áp được |
+| `cos(p_u, t_u)` — khôi phục vector ẩn | **0,708** trung bình · 0,807 trung vị | không áp được |
+
+Dòng cuối là đại lượng mà chỉ mô phỏng mới có, và nó cho ra một kết quả đáng
+viết vào báo cáo hơn cả con số trung bình: **Rocchio khôi phục được khẩu vị
+đúng theo mức bộ món đại diện cho khẩu vị đó.**
+
+| cụm khẩu vị | số món trong 45 | `cos(p_u, t_u)` |
+|---|---|---|
+| món mặn ăn cơm | 18 | 0,898 |
+| món luộc / rau | 9 | 0,776 |
+| món nước | 8 | 0,689 |
+| trái cây | 6 | 0,577 |
+| nước ép | 4 | 0,599 |
+
+Đây là hạn chế của **bộ món**, không của thuật toán: người nào có khẩu vị nằm
+ở góc mỏng của danh mục thì hồ sơ của họ bị phần `không thích` chi phối và trỏ
+ra xa khẩu vị thật. Nó cùng một gốc với hạn chế "39/45 món ở mức cay 0" ở
+§11.3, và là lập luận định lượng cho việc cân lại bộ món ở lần khảo sát sau.
+
+**Và điều phải viết thẳng ở Chương 3:** tập này chứng minh **mô hình chạy
+đúng** — nó khôi phục được thứ đã biết trước — chứ **không** chứng minh người
+Việt ăn gì. Hai câu đó khác nhau, và chỉ câu đầu mới đo được bằng dữ liệu sinh
+ra. Phần hồ sơ sức khỏe thì mô phỏng được; phần khẩu vị thì không, nên con số
+ở bảng trên không thay được một lần thu dữ liệu thật.
+
+### 11.5 Nạp tập mô phỏng vào CSDL
+
+`tools/import_mo_phong.py` là bước giữa hai tệp CSV ở trên và các bảng mà
+đường ống đọc. Trước nó, `build_dataset` trả về 0 mẫu nên `train.py`,
+`evaluate.py` và cả bảng so sánh của Chương 3 đều không chạy được.
+
+```
+python tools/import_mo_phong.py              # xem trước
+python tools/import_mo_phong.py --apply      # 50 người, một giao dịch
+python tools/import_mo_phong.py --xoa        # xóa lần nạp trước
+```
+
+Khác `import_swipes.py` ở chỗ: tệp kia nhập một phiếu giấy đã khai sẵn
+`ngay_sinh`, `chieu_cao_cm`, `muc_van_dong`, `muc_tieu`. `ObesityDataSet`
+**không có** bốn trường đó, nên bốn phép quy đổi dưới đây là phần phải tự
+quyết — và hai dòng cuối là hai bậc mà **thang đo nguồn không với tới**:
+
+| nguồn | đích | phép quy đổi |
+|---|---|---|
+| `Age` thập phân (31/50 không nguyên) | `date_of_birth` | làm tròn tuổi, đặt ngày sinh 1–300 ngày trước mốc sinh nhật, lệch theo chỉ số người |
+| `Height` mét | `height_cm` | ×100, kẹp 100–250 cm |
+| `FAF` 0–3 liên tục | `activity_level` | làm tròn về câu trả lời nguyên gốc: 0/1/2/3 → `sedentary`/`light`/`moderate`/`active` |
+| `NObeyesdad` 7 nhãn | `goal` | thiếu cân → `gain_weight`; bình thường → `maintain`; 2 bậc thừa cân + 3 bậc béo → `lose_weight` |
+| — | `very_active` | **không bao giờ xuất hiện**: bậc cao nhất của `FAF` là "4–5 ngày mỗi tuần", còn `very_active` là "lao động nặng hoặc tập hai buổi mỗi ngày" |
+| — | `healthy_eating` | **không bao giờ xuất hiện**: nó là lựa chọn người dùng **tự khai**, không suy ra được từ một nhãn phân loại cân nặng |
+
+Gán `very_active` cho `FAF = 3` sẽ nhân hạn mức năng lượng với 1,900 thay vì
+1,725 — bơm thêm ~10% calo cho một nhóm người mà dữ liệu không nói gì về họ.
+Suy ra `healthy_eating` thì là bịa một ý định không ai phát biểu.
+
+Phép quy đổi tuổi **tự kiểm**: `tuoi(ngay_sinh, ngay_nap) == round(Age)` được
+`assert` cho cả 50 dòng. Không có nó thì một lỗi lệch-một đi thẳng vào BMR của
+cả 50 người và không gì báo ra. Bước 1 (BMR, TDEE, hạn mức) lấy từ
+`tools/gen_buoc1_cases.py` — bản tham chiếu Python đã được `check_be_parity`
+đối chiếu với C# và Dart — chứ không viết lại, vì viết lại là tạo bản thứ tư
+của cùng một công thức.
+
+**`users.id` sinh bằng UUID v5, không phải `uuid4()`.** `build_dataset` gán
+fold bằng `sorted(nguoi, key=sha256(f"{seed}:{user_id}"))` và bốc mẫu
+`random_neg` bằng `random.Random(f"{seed}:{user_id}")`. Khóa của cả hai là
+`user_id`, nên với `uuid4()` thì mỗi lần nạp lại cho ra một cách chia fold
+khác và một tập mẫu âm khác — **mọi con số trong bảng Chương 3 đổi sau mỗi
+lần chạy mà không ai sửa gì cả.** UUID v5 là băm của (không gian tên, tên)
+nên `U001` luôn cho đúng một `user_id`, và cả chuỗi `--xoa` → `--apply` →
+`build_dataset` → `train` → `evaluate` tái lập được từng chữ số. Đã kiểm bằng
+hai lần chạy toàn chuỗi cho ra bảng giống nhau hoàn toàn.
+
+Kết quả lần nạp hiện tại:
+
+```
+users 50 · health_profiles 50 · user_conditions 0
+interactions 2250   like 799 · neutral 648 · dislike 503 · unknown 300
+user_preference_profiles 50   stage=hybrid cả 50 · n_signals 34–43 · α≈0,129
+ml_training_samples 2950      swipe 1950 + random_neg 1000
+ml_models 3 · ml_evaluations 825
+tuổi 17–46 · BMI 16,2–44,1 (trung vị 30,0) · hạn mức 1341–3124 kcal
+```
+
+`n_signals` là 2250 − 300 lượt `unknown` chia cho 50: lượt "chưa từng ăn"
+không được đếm, đúng như §5.1.
+
+**`alpha` được ghi đúng `alpha(n_signals)`, không ghi 0.** `import_swipes.py`
+và `check_ml_e2e.py` trước đây ghi cứng 0 vào cột đó. `ml/serve.py` tính lại α
+lúc phục vụ nên không có gì vỡ khi chạy, nhưng cột này là thứ các truy vấn
+thống kê của Chương 3 đọc tới — để 0 thì bảng α trong báo cáo toàn số 0 trong
+khi hệ thống thì không chạy bằng 0. Đã sửa ở cả ba chỗ.
+
+### 11.6 Bảng so sánh Chương 3 — lần chạy đầu có dữ liệu
+
+`python -m ml.evaluate --dataset v1 --model gb-v1-1`, 5 fold chia theo người:
+
+| phương án | nDCG@5 | nDCG@10 | P@5 | MAP | AUC |
+|---|---|---|---|---|---|
+| `popularity` | 0,710 ± 0,027 | 0,726 | 0,848 | 0,842 | 0,647 |
+| `rule_based` | 0,731 ± 0,035 | 0,714 | 0,876 | 0,844 | 0,649 |
+| `content_based` | **0,862 ± 0,040** | 0,814 | 0,920 | 0,855 | 0,701 |
+| `hybrid` | 0,861 ± 0,045 | 0,816 | 0,916 | 0,856 | 0,702 |
+| `ml` | 0,883 ± 0,023 | 0,841 | 0,960 | 0,888 | 0,746 |
+
+Câu hỏi nghiên cứu cốt lõi có câu trả lời: **`content_based` 0,862 đối lại
+`popularity` 0,710, hơn 0,137 nDCG@5.**
+
+`hybrid` trùng `content_based` tới chữ số thứ ba, đúng như §11.4 đã báo
+trước: α = 0,129 nên công thức trộn gần như chỉ còn nhánh nội dung. Đây là
+hạn chế của **một lần khảo sát**, không của công thức — α chỉ lớn khi người
+dùng tích đủ tín hiệu qua nhiều tuần dùng app.
+
+**Một hiện tượng phải ghi vào phần hạn chế.** Ở cả ba thuật toán,
+`nguoi.n_tin_hieu` là đặc trưng mạnh nhất (hệ số −0,833 ở hồi quy logistic;
+độ quan trọng 0,188 và 0,305 ở hai mô hình cây). Nó **không** phải tín hiệu
+khẩu vị, mà là một tương quan do cách dựng tập sinh ra:
+`tu_am_ngau_nhien` lấy **một số mẫu âm cố định cho mỗi người** (20), bất kể
+người đó vuốt bao nhiêu món. Nên tỉ lệ mẫu nhãn 0 giảm đơn điệu theo
+`n_signals`:
+
+| `n_signals` | 34 | 36 | 38 | 40 | 43 |
+|---|---|---|---|---|---|
+| tỉ lệ `random_neg` | 0,370 | 0,357 | 0,345 | 0,333 | 0,318 |
+
+Đo trực tiếp: `corr(n_signals, nhãn)` trong nhóm `swipe` là **+0,215**, còn
+trong nhóm `random_neg` là **+0,000** — đúng dấu hiệu của một tương quan nằm ở
+**tỉ lệ pha trộn giữa hai nguồn**, không nằm trong tín hiệu nào.
+
+Chỉ phương án `ml` đọc đặc trưng, nên chỉ nó được lợi — tức một phần khoảng
+cách 0,883 − 0,862 là tạo tác của cách bốc mẫu âm, và **phần đó sẽ không
+chuyển sang lúc phục vụ thật**, nơi không có bước bốc mẫu âm nào. Phép sửa là
+cho số mẫu âm **tỉ lệ theo số lượt vuốt** thay vì cố định; nó đổi mọi con số
+của hàng `ml`, nên phải chạy lại cả bảng.
+
+**Bộ lọc F1 không lọc gì trên tập này.** `ObesityDataSet` không có cột bệnh
+lý, dị ứng hay chế độ ăn nào, nên `benh_ly` rỗng cho cả 50 người và F1 loại
+0/2250 lượt. Chương 3 vì vậy **chưa** so được "có F1" đối lại "không F1" — cần
+hoặc dữ liệu người thật có khai bệnh lý, hoặc một bước gán bệnh lý mô phỏng
+riêng.
 
 ---
 
@@ -953,7 +1155,7 @@ luyện.
 | 7 | Rocchio + cái túi đa chiều **5 pha** | **Xong** trong app Flutter |
 | 8 | Cơ chế 70-30 cấp ngày | **Xong**, có test |
 | 9 | Tính `foods.popularity_score` từ tín hiệu thật | **Xong** — `tools/update_popularity.py`, chờ dữ liệu |
-| 10 | Thu dữ liệu từ người dùng thật | Bộ công cụ **xong**; **dữ liệu chờ thu** — xem §11.3 |
+| 10 | Thu dữ liệu từ người dùng thật | Bộ công cụ **xong**; **dữ liệu thật chờ thu**. Tập **mô phỏng** đã nạp vào CSDL và cả đường ống đã chạy hết — xem §11.4–11.6 |
 | 11 | Hạn mức theo ngày từ nhật ký + thực đơn | **Xong** — `ml/han_muc.py` |
 | 12 | Lý do bị F1 loại, ba bậc | **Xong** — `f1_filter.ly_do_loai` |
 | 13 | Thi hành ràng buộc mềm | **Xong** — `scoring.hinh_phat`; phạm vi `per_meal` **chưa có tầng nhận** |
@@ -970,6 +1172,12 @@ tổng                0
 Chưa có tín hiệu nào trong CSDL — không có gì để dựng.
 ```
 
+Đoạn trên là trạng thái của CSDL **trống**. Với tập mô phỏng đã nạp (§11.5)
+thì cùng câu lệnh đó trả về 2950 mẫu, `train.py` ghi 3 mô hình và
+`evaluate.py` ghi 825 dòng `ml_evaluations` — bảng so sánh của Chương 3 ở
+§11.6. Dữ liệu người thật khi có sẽ đi đúng đường đó qua
+`tools/import_swipes.py`.
+
 Toàn bộ phần Python nằm ở thư mục `ml/`, chạy theo thứ tự:
 
 ```
@@ -984,6 +1192,15 @@ ml/f1_filter.py  — tầng an toàn, chạy TRƯỚC mọi phép chấm điểm
 ml/rocchio.py    — hồ sơ Rocchio: dựng tập, đánh giá và phục vụ đều dùng
 ml/scoring.py    — công thức chấm điểm bốn giai đoạn, **một chỗ duy nhất**
 ml/dataset.py    — ghép ba khối đặc trưng thành ma trận đầu vào
+```
+
+Hai công cụ dựng và kiểm dữ liệu mô phỏng nằm ngoài `ml/` vì chúng là công cụ
+chuẩn bị dữ liệu, không phải một tầng của đường ống:
+
+```
+tools/sinh_khau_vi.py    sinh lượt vuốt từ vector khẩu vị ẩn — §11.4
+tools/check_mo_phong.py  7 phép kiểm tín hiệu + 1 phép thử phủ định
+tools/import_mo_phong.py nạp 50 hồ sơ + 2250 lượt vào CSDL — §11.5
 ```
 
 ### 12.0 Hai bộ kiểm, và vì sao cần cả hai

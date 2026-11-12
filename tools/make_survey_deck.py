@@ -208,15 +208,26 @@ HUONG_DAN = [
     "# muc_van_dong: moderate     # sedentary | light | moderate | active | very_active",
     "# muc_tieu: maintain         # lose_weight | maintain | gain_weight | healthy_eating",
     "# benh_ly:                   # cách nhau bằng dấu ;  để trống nếu không có",
+    "#   Phải viết ĐÚNG tên tiếng Việt có dấu, chọn trong danh sách này:",
+    "{benh_ly}",
     "# ngay_khao_sat: {ngay}",
     "#",
 ]
 
 
-def ghi_phieu(bo: list[Mon], duong_dan: Path) -> None:
+def ghi_phieu(bo: list[Mon], duong_dan: Path, ten_benh: list[str]) -> None:
     duong_dan.parent.mkdir(parents=True, exist_ok=True)
     with duong_dan.open("w", encoding="utf-8-sig", newline="") as f:
+        # Danh sách bệnh lý lấy THẲNG từ bảng `conditions`, không gõ tay vào
+        # phần hướng dẫn. `import_swipes.py` tra `benh_ly` theo đúng
+        # `conditions.name_vi`, nên một danh sách chép tay sẽ lệch ngay lần
+        # đầu có ai thêm một bệnh lý vào CSDL — và người chịu hậu quả là
+        # người điền phiếu, sau khi đã điền xong và không sửa lại được.
+        khoi_benh = "\n".join(f"#     - {x}" for x in ten_benh)
         for dong in HUONG_DAN:
+            if dong == "{benh_ly}":
+                f.write(khoi_benh + "\n")
+                continue
             f.write(dong.format(ngay=date.today().isoformat()) + "\n")
         w = csv.writer(f)
         w.writerow(["stt", "ma_mon", "ten_mon", "nhom", "muc_cay", "lua_chon"])
@@ -263,7 +274,22 @@ def ghi_json(bo: list[Mon], kg: KhongGianDacTrung, duong_dan: Path) -> None:
 def main() -> int:
     in_utf8()
     bo_doc = argparse.ArgumentParser(description=__doc__)
-    bo_doc.add_argument("--so", type=int, default=40, help="số món (mặc định 40)")
+    # 45, KHÔNG phải 40. Lượt vuốt trên món mà Bộ lọc F1 không cho người đó
+    # ăn bị loại lúc nhập (xem `import_swipes.loc_theo_f1`), nên người có
+    # ràng buộc cứng thu được ít tín hiệu hơn hẳn:
+    #
+    #   cỡ phiếu   không bệnh   dị ứng hải sản   gút+THA
+    #      40        35 ✓          27              27
+    #      45        39 ✓          30 ✓            30 ✓
+    #
+    # Ngưỡng `hybrid` là 30 tín hiệu (`ml.rocchio.giai_doan`), tức mức đầu
+    # tiên mà học máy có tiếng nói. Ở cỡ 40 thì BẤT KỲ ai có ràng buộc cứng
+    # cũng dừng ở 27 — thiếu đúng 3.
+    #
+    # Mặc định phải là 45 chứ không chỉ truyền `--so 45` một lần: sinh lại
+    # phiếu bằng lệnh không cờ sẽ đổi dụng cụ đo giữa đợt thu dữ liệu, và
+    # trộn hai cỡ phiếu thì không so sánh được giữa những người trả lời.
+    bo_doc.add_argument("--so", type=int, default=45, help="số món (mặc định 45)")
     bo_doc.add_argument("--db", default=None)
     bo_doc.add_argument("--ghi", action="store_true", help="ghi JSON và phiếu CSV")
     t = bo_doc.parse_args()
@@ -271,6 +297,11 @@ def main() -> int:
     cn = ket_noi(t.db)
     try:
         mon, bao_cao = nap_mon(cn)
+        # Đọc luôn ở đây, trong cùng một lần mở kết nối. Danh sách này đi
+        # vào phần hướng dẫn của phiếu — xem `ghi_phieu`.
+        with cn.cursor() as cur:
+            cur.execute("SELECT name_vi FROM conditions ORDER BY id")
+            ten_benh = [d["name_vi"] for d in cur.fetchall()]
     finally:
         cn.close()
 
@@ -290,7 +321,7 @@ def main() -> int:
         return 0
 
     ghi_json(bo, kg, TEP_JSON)
-    ghi_phieu(bo, TEP_PHIEU)
+    ghi_phieu(bo, TEP_PHIEU, ten_benh)
     print(f"\nĐã ghi {TEP_JSON.relative_to(ROOT)}")
     print(f"Đã ghi {TEP_PHIEU.relative_to(ROOT)}")
     print(

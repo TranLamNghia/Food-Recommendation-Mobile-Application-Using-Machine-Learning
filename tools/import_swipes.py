@@ -44,13 +44,24 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from ml.db import in_utf8, ket_noi  # noqa: E402
+from ml.f1_filter import dieu_kien_theo_ten, ly_do_loai  # noqa: E402
 from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
-from ml.rocchio import dung_ho_so, giai_doan  # noqa: E402
+from ml.rocchio import alpha, dung_ho_so, giai_doan  # noqa: E402
 
 from tools.make_survey_deck import LUA_CHON  # noqa: E402
 
 #: Giá trị băm không dùng được — xem phần đầu tệp.
 BAM_KHONG_DUNG_DUOC = "!khong-the-dang-nhap"
+
+#: Mức độ ghi vào `user_conditions.severity`, VÀ mức độ dùng khi chạy Bộ lọc
+#: F1 lúc nhập. Một hằng số cho cả hai chỗ, có chủ ý: phiếu giấy không hỏi
+#: mức độ, nên nếu hai chỗ dùng hai giá trị khác nhau thì F1 lúc nhập sẽ loại
+#: một tập món khác với F1 lúc chạy thật, trên cùng một người.
+#:
+#: Khác biệt này KHÔNG phải lý thuyết: với `Gút`, F1 loại 0 món ở mức `mild`
+#: nhưng 9 món ở mức `moderate`, vì `condition_rules.severity_min` gác từng
+#: quy tắc.
+SEVERITY_PHIEU = "moderate"
 
 TRUONG_BAT_BUOC = (
     "gioi_tinh",
@@ -204,6 +215,114 @@ def kiem_luot_vuot(
     return ket_qua
 
 
+def kiem_benh_ly(cn, ten: list[str]) -> list[int]:
+    """Tra `benh_ly` sang `conditions.id`. Ném `LoiPhieu` nếu có tên lạ.
+
+    Chạy ở pha KIỂM, không ở pha ghi. Trước đây phép tra này nằm trong
+    `ghi()`, nên một phiếu ghi `benh_ly: tieu_duong` vẫn qua được lần chạy
+    thử và chỉ vỡ lúc `--apply`. Với một phiếu thì phiền; với hai mươi lăm
+    phiếu phát ra cùng một mẫu sai thì là hai mươi lăm lần vỡ cùng lúc, sau
+    khi người trả lời đã điền xong và không còn sửa được.
+    """
+    if not ten:
+        return []
+    with cn.cursor() as cur:
+        cho = ", ".join(["%s"] * len(ten))
+        cur.execute(
+            f"SELECT id, name_vi FROM conditions WHERE name_vi IN ({cho})",
+            tuple(ten),
+        )
+        tim = {d["name_vi"]: int(d["id"]) for d in cur.fetchall()}
+        thieu = [b for b in ten if b not in tim]
+        if thieu:
+            cur.execute("SELECT name_vi FROM conditions ORDER BY id")
+            co = ", ".join(d["name_vi"] for d in cur.fetchall())
+            raise LoiPhieu(
+                "`benh_ly` có tên không khớp `conditions`: "
+                + ", ".join(repr(x) for x in thieu)
+                + f"\nPhải viết ĐÚNG tên tiếng Việt có dấu. Dùng được: {co}"
+            )
+    return [tim[b] for b in ten]
+
+
+def loc_theo_f1(
+    cn,
+    ten_benh: list[str],
+    luot: list[tuple[str, str]],
+    mon_theo_id: dict[str, Any],
+) -> tuple[list[tuple[str, str]], list[tuple[str, str, list[str]]]]:
+    """Bỏ các lượt vuốt trên món mà Bộ lọc F1 không cho người này ăn.
+
+    ## Vì sao phải làm, và vì sao làm ở ĐÂY
+
+    Phiếu giấy dùng **một bộ món cố định cho mọi người**, vì không in riêng
+    cho từng người được — và vì bộ cố định mới cho đủ quan sát trên mỗi món
+    để tính được độ phổ biến (25 người × 40 món = ~25 lượt/món; cá nhân hóa
+    thì 1000 lượt rải trên 318 món, còn ~3 lượt/món, và chặn dưới Wilson với
+    3 quan sát thì vô dụng).
+
+    Nhưng bộ cố định buộc người trả lời đánh giá cả món họ **không thể ăn**.
+    Đo trên đúng bộ 40 món của phiếu:
+
+        Dị ứng hải sản        loại  9/40  (22%)
+        Ăn thuần chay         loại 22/40  (55%)
+        Gút + Tăng huyết áp   loại  9/40  (22%)
+
+    Người ăn thuần chay sẽ đánh `khong_thich` cho 22 món, và mô hình đọc đó
+    là "không thích phở, không thích cá" thay vì "ăn thuần chay" — 55 % tín
+    hiệu của họ là **ràng buộc giả dạng khẩu vị**. Tệ hơn, nó đầu độc cả độ
+    phổ biến TOÀN CỤC: năm người thuần chay trong hai mươi lăm làm phở bò
+    nhận năm lượt không-thích không phải vì phở dở.
+
+    Trong app thì chuyện này không xảy ra — `GET /onboarding/survey` chạy F1
+    **trước khi hỏi** (đặc tả §7.4.1). Phiếu giấy không làm được thế, nên nó
+    chạy F1 **sau khi hỏi, trước khi ghi**. Khác thời điểm, nhưng thứ vào CSDL
+    là như nhau.
+
+    Bỏ hẳn chứ không ghi thành `unknown`: F1 vốn đã không bao giờ gợi ý những
+    món đó cho người này, nên khẩu vị của họ trên chúng không được dùng ở đâu
+    cả — còn `unknown` lại có nghĩa riêng là "chưa từng ăn", không phải
+    "không được ăn".
+
+    Trả về `(luot_con_lai, [(food_id, action, [lý do...])])`.
+    """
+    if not ten_benh:
+        return luot, []
+
+    # Cùng `severity` với dòng sẽ ghi vào `user_conditions` — xem
+    # `SEVERITY_PHIEU`.
+    dieu_kien = dieu_kien_theo_ten(cn, ten_benh, severity=SEVERITY_PHIEU)
+
+    # `chi_mon_chung=True`: người trả lời phiếu giấy không có món riêng, và
+    # cả bộ khảo sát là món chung.
+    bi_loai_theo_mon = ly_do_loai(cn, dieu_kien=dieu_kien, chi_mon_chung=True)
+
+    giu: list[tuple[str, str]] = []
+    bo: list[tuple[str, str, list[str]]] = []
+    for food_id, action in luot:
+        ly_do = bi_loai_theo_mon.get(food_id)
+        if ly_do:
+            bo.append((food_id, action, [_ly_do_ngan(x) for x in ly_do]))
+        else:
+            giu.append((food_id, action))
+    return giu, bo
+
+
+def _ly_do_ngan(x: Any) -> str:
+    """Một dòng đọc được từ `LyDoLoai`.
+
+    `LyDoLoai` là dataclass mười ba trường; `str()` của nó dump hết và làm
+    phần báo cáo không đọc nổi. `note` là câu đã viết sẵn cho người đọc.
+    """
+    benh = getattr(x, "benh", None) or "?"
+    note = getattr(x, "note", None)
+    if note:
+        return f"{benh}: {note}"
+    loai = getattr(x, "rule_type", None) or "?"
+    the = getattr(x, "the", None) or getattr(x, "nutrient", None) or ""
+    return f"{benh}: {loai} {the}".strip()
+
+
 # ── Ghi ───────────────────────────────────────────────────────────────
 
 
@@ -238,25 +357,9 @@ def ghi(
                 f"được nhập; đổi email hoặc xóa người dùng cũ trước."
             )
 
-        # Bệnh lý phải tra được hết TRƯỚC khi ghi gì.
-        ma_benh: list[int] = []
-        if tt["benh_ly"]:
-            cho = ", ".join(["%s"] * len(tt["benh_ly"]))
-            cur.execute(
-                f"SELECT id, name_vi FROM conditions WHERE name_vi IN ({cho})",
-                tuple(tt["benh_ly"]),
-            )
-            tim = {d["name_vi"]: int(d["id"]) for d in cur.fetchall()}
-            thieu = [b for b in tt["benh_ly"] if b not in tim]
-            if thieu:
-                cur.execute("SELECT name_vi FROM conditions ORDER BY name_vi")
-                co = ", ".join(d["name_vi"] for d in cur.fetchall())
-                raise LoiPhieu(
-                    "`benh_ly` có tên không khớp `conditions`: "
-                    + ", ".join(repr(x) for x in thieu)
-                    + f"\nCác tên dùng được: {co}"
-                )
-            ma_benh = [tim[b] for b in tt["benh_ly"]]
+        # Bệnh lý đã được `kiem_benh_ly` tra ở pha kiểm; tra lại ở đây để
+        # `ghi()` không phụ thuộc vào việc người gọi đã kiểm hay chưa.
+        ma_benh: list[int] = kiem_benh_ly(cn, tt["benh_ly"])
 
         cur.execute(
             "INSERT INTO users (id, email, password_hash, display_name, "
@@ -286,8 +389,8 @@ def ghi(
         for cid in ma_benh:
             cur.execute(
                 "INSERT INTO user_conditions (id, user_id, condition_id, severity) "
-                "VALUES (UUID(), %s, %s, 'moderate')",
-                (user_id, cid),
+                "VALUES (UUID(), %s, %s, %s)",
+                (user_id, cid, SEVERITY_PHIEU),
             )
 
         # Rải thời điểm cách nhau 1 giây trong ngày khảo sát. Thứ tự giữ đúng
@@ -315,7 +418,7 @@ def ghi(
                 ho_so.sum_abs_weight,
                 ho_so.n_signals,
                 giai_doan(ho_so.n_signals),
-                0,
+                round(alpha(ho_so.n_signals), 3),
             ),
         )
 
@@ -347,8 +450,25 @@ def main() -> int:
             thong_tin, hang = doc_phieu(t.phieu)
             tt = kiem_thong_tin(thong_tin)
             luot = kiem_luot_vuot(hang, mon_theo_id)
+            kiem_benh_ly(cn, tt["benh_ly"])
         except LoiPhieu as e:
             print(f"Phiếu không dùng được.\n{e}", file=sys.stderr)
+            return 1
+
+        # Bộ lọc F1 chạy TRƯỚC khi dựng vector sở thích, không chỉ trước khi
+        # ghi `interactions`. Lọc sau khi dựng thì vector vẫn mang nguyên
+        # phần ràng buộc giả dạng khẩu vị, và `n_signals` vẫn đếm cả những
+        # lượt đó nên giai đoạn cũng bị tính sai.
+        luot_tho = luot
+        luot, bi_loai = loc_theo_f1(cn, tt["benh_ly"], luot, mon_theo_id)
+        if not luot:
+            print(
+                "Phiếu không dùng được.\nBộ lọc F1 loại toàn bộ "
+                f"{len(luot_tho)} lượt đã điền — mọi món trong phiếu đều vi "
+                "phạm ràng buộc cứng của người này. Cần một bộ món khác cho "
+                "trường hợp này.",
+                file=sys.stderr,
+            )
             return 1
 
         dem: dict[str, int] = {}
@@ -364,8 +484,32 @@ def main() -> int:
         )
         print(f"  mục tiêu {tt['muc_tieu']} · vận động {tt['muc_van_dong']}")
         print(f"  bệnh lý: {', '.join(tt['benh_ly']) or '(không có)'}")
+
+        if bi_loai:
+            print(
+                f"  Bộ lọc F1 loại {len(bi_loai)}/{len(luot_tho)} lượt "
+                f"({len(bi_loai) / len(luot_tho) * 100:.0f}%) — món người "
+                "này không được ăn:"
+            )
+            # Gom theo lý do, không liệt kê từng món một: một người ăn thuần
+            # chay bị loại 22 món vì ĐÚNG MỘT quy tắc, và in 22 dòng giống
+            # nhau thì che mất chuyện đó.
+            theo_ly_do: dict[str, list[str]] = {}
+            for food_id, action, ly_do in bi_loai:
+                ten = getattr(mon_theo_id[food_id], "name", food_id)
+                theo_ly_do.setdefault(ly_do[0], []).append(f"{ten}[{action}]")
+            for ly, mon_ds in sorted(theo_ly_do.items()):
+                print(f"      {ly} → {len(mon_ds)} món")
+                dau = ", ".join(mon_ds[:3])
+                con = f", … và {len(mon_ds) - 3} món nữa" if len(mon_ds) > 3 else ""
+                print(f"        {dau}{con}")
+            print(
+                "    Những lượt này KHÔNG được ghi và KHÔNG vào vector sở "
+                "thích: chúng là ràng buộc, không phải khẩu vị."
+            )
+
         print(
-            f"  {len(luot)} lượt điền: "
+            f"  {len(luot)} lượt dùng được: "
             + "  ".join(f"{k}={v}" for k, v in sorted(dem.items()))
         )
         print(

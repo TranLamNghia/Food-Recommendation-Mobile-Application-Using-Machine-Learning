@@ -68,7 +68,7 @@ from ml.han_muc import (  # noqa: E402
     trang_thai,
 )
 from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
-from ml.rocchio import dung_ho_so, giai_doan  # noqa: E402
+from ml.rocchio import alpha, dung_ho_so, giai_doan  # noqa: E402
 from ml.serve import goi_y, nap_mo_hinh_hoat_dong  # noqa: E402
 from ml.train import main as chay_huan_luyen  # noqa: E402
 from tools.make_survey_deck import chon_bo_mon  # noqa: E402
@@ -301,7 +301,7 @@ def dung_nguoi_dung(cn) -> dict[str, int]:
                     ho_so.sum_abs_weight,
                     ho_so.n_signals,
                     giai_doan(ho_so.n_signals),
-                    0,
+                    round(alpha(ho_so.n_signals), 3),
                 ),
             )
             ket_qua[uid] = ho_so.n_signals
