@@ -47,19 +47,19 @@ BAI_DART = "test/buoc1_parity_test.dart"
 #: Mỗi ca nhắm vào một phần khác nhau của phép tính, để một phép so bị bỏ
 #: sót không núp sau một phép so khác.
 THU = [
-    ("tuoi lech 1", ["age"], lambda v: v + 1),
-    ("bmi lech 0.01", ["bmi"], lambda v: round(v + 0.01, 2)),
+    ("tuoi excess 1", ["age"], lambda v: v + 1),
+    ("bmi excess 0.01", ["bmi"], lambda v: round(v + 0.01, 2)),
     ("nhom BMI doi", ["bmiCategory"],
      lambda v: "normal" if v != "normal" else "obese"),
-    ("BMR lech 5 kcal", ["bmrKcal"], lambda v: v + 5),
-    ("TDEE lech 1 kcal", ["tdeeKcal"], lambda v: v + 1),
-    ("he so van dong lech 0.005", ["activityFactor"],
+    ("BMR excess 5 kcal", ["bmrKcal"], lambda v: v + 5),
+    ("TDEE excess 1 kcal", ["tdeeKcal"], lambda v: v + 1),
+    ("he so van dong excess 0.005", ["activityFactor"],
      lambda v: round(v + 0.005, 3)),
-    ("han muc nang luong lech 1", ["dailyCaloriesTarget"], lambda v: v + 1),
-    ("dam lech 0.1 g", ["proteinG"], lambda v: round(v + 0.1, 1)),
-    ("bot duong lech 0.1 g", ["carbsG"], lambda v: round(v + 0.1, 1)),
-    ("beo lech 0.1 g", ["fatG"], lambda v: round(v + 0.1, 1)),
-    ("kcal bua trua lech 1", ["mealKcal", "lunch"], lambda v: v + 1),
+    ("han muc nang luong excess 1", ["dailyCaloriesTarget"], lambda v: v + 1),
+    ("dam excess 0.1 g", ["proteinG"], lambda v: round(v + 0.1, 1)),
+    ("bot duong excess 0.1 g", ["carbsG"], lambda v: round(v + 0.1, 1)),
+    ("beo excess 0.1 g", ["fatG"], lambda v: round(v + 0.1, 1)),
+    ("kcal bua trua excess 1", ["mealKcal", "lunch"], lambda v: v + 1),
 ]
 
 #: Hai bảng hệ số ở cấp tệp, không thuộc ca nào — `Bang_he_so_khop_hai_chieu`
@@ -165,10 +165,10 @@ def main() -> int:
         # ở bước 1, nên tệp không bao giờ ở trạng thái lệch lâu.
         sinh_lai()
 
-    tong = len(THU) + len(THU_BANG)
+    total = len(THU) + len(THU_BANG)
     print()
     print("=" * 72)
-    print(f"{tong - len(lot)}/{tong} lỗi tiêm bị bắt được")
+    print(f"{total - len(lot)}/{total} lỗi tiêm bị bắt được")
     if lot:
         print("LỌT — bộ kiểm không so những phần này:")
         for x in lot:

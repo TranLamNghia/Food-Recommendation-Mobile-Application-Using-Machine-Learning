@@ -303,7 +303,7 @@ def check_row(issues, filename, lineno, row, expected_category):
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--strict", action="store_true", help="coi cảnh báo là lỗi"

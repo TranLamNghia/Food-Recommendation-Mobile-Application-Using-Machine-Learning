@@ -37,11 +37,11 @@ from pathlib import Path
 from typing import Any, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _env import in_utf8  # noqa: E402
+from _env import use_utf8  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from ml.rocchio import TRONG_SO, dung_ho_so  # noqa: E402
+from ml.rocchio import WEIGHTS, build_profile  # noqa: E402
 
 DECK = ROOT / "data" / "survey" / "survey_deck.json"
 MO_PHONG = ROOT / "data" / "survey" / "mo_phong" / "hanh_vi.csv"
@@ -65,10 +65,10 @@ SO_LAN_XAO = 40
 
 
 class KhongGianDeck:
-    """Vỏ mỏng để `ml.rocchio.dung_ho_so` chạy trên vector sẵn có trong deck.
+    """Vỏ mỏng để `ml.rocchio.build_profile` chạy trên vector sẵn có trong deck.
 
-    `dung_ho_so` chỉ gọi `kg.length` và `kg.encode(m)`, nên không cần dựng
-    `KhongGianDacTrung` thật — tức là không cần CSDL. Phần **đang được
+    `build_profile` chỉ gọi `kg.length` và `kg.encode(m)`, nên không cần dựng
+    `FeatureSpace` thật — tức là không cần CSDL. Phần **đang được
     kiểm** vẫn là mã Rocchio thật: công thức trọng số, cách loại `unknown`,
     cách xử mẫu số bằng 0. Chỉ phép mã hóa món là lấy sẵn, và nó đã được
     `check_feature_parity.py` kiểm riêng.
@@ -114,11 +114,11 @@ def auc(duong: Sequence[float], am: Sequence[float]) -> float:
     """
     if not duong or not am:
         return float("nan")
-    tong = 0.0
+    total = 0.0
     for x in duong:
         for y in am:
-            tong += 1.0 if x > y else 0.5 if x == y else 0.0
-    return tong / (len(duong) * len(am))
+            total += 1.0 if x > y else 0.5 if x == y else 0.0
+    return total / (len(duong) * len(am))
 
 
 # ── nạp ───────────────────────────────────────────────────────────────────
@@ -212,14 +212,14 @@ def auc_rocchio(
         # nhiễm cùng một phần ràng buộc, nên nó đoán đúng `khong_thich` trên
         # đúng những món đó mà không biết gì về khẩu vị.
         bo_loai = set(
-            ((su_that or {}).get("nguoi", {}).get(u) or {}).get("f1_loai") or ()
+            ((su_that or {}).get("nguoi", {}).get(u) or {}).get("f1_excluded") or ()
         )
         da_danh = [k for k in mon if chon[k] != "chua_biet" and k not in bo_loai]
         for giu in da_danh:
             if chon[giu] == "binh_thuong":
                 continue  # trung tính không thuộc lớp nào trong phép so này
             luot = [(k, SANG_ACTION[chon[k]]) for k in da_danh if k != giu]
-            ho_so = dung_ho_so(kg, luot)
+            ho_so = build_profile(kg, luot)
             if ho_so.is_empty:
                 continue
             s = cosine(ho_so.weights, vec[giu])
@@ -237,7 +237,7 @@ def khoi_phuc_vector_an(
 
     Dựng vector **sau khi lọc F1**, vì đó là vector mà hệ thống thật dùng:
     `import_mo_phong.py` và `import_swipes.py` đều chạy F1 trước khi gọi
-    `dung_ho_so`, nên dòng trong `user_preference_profiles` là vector đã lọc.
+    `build_profile`, nên dòng trong `user_preference_profiles` là vector đã lọc.
     Đo trên vector chưa lọc thì phép kiểm này đang đo một đại lượng không
     tồn tại ở đâu trong hệ thống.
 
@@ -249,9 +249,9 @@ def khoi_phuc_vector_an(
         t = su_that["nguoi"].get(u)
         if t is None:
             continue
-        bo_loai = set(t.get("f1_loai") or ())
+        bo_loai = set(t.get("f1_excluded") or ())
         luot = [(k, SANG_ACTION[chon[k]]) for k in mon if k not in bo_loai]
-        ho_so = dung_ho_so(kg, luot)
+        ho_so = build_profile(kg, luot)
         if not ho_so.is_empty:
             ra[u] = cosine(ho_so.weights, t["vector_khau_vi"])
     return ra
@@ -266,7 +266,7 @@ def f1_truoc_sau(
     """`cos(p_u, t_u)` **không lọc F1** đối lại **có lọc F1**, cho người có ràng buộc.
 
     Đây là phép đo biện minh cho `import_swipes.loc_theo_f1` và
-    `import_mo_phong.loc_f1`, và nó chỉ làm được trên dữ liệu mô phỏng: nó
+    `import_mo_phong.allowed_foods`, và nó chỉ làm được trên dữ liệu mô phỏng: nó
     cần `t_u`, tức khẩu vị **thật** của người đó, thứ không ai biết ở dữ liệu
     người thật.
 
@@ -285,14 +285,14 @@ def f1_truoc_sau(
     sach: list[float] = []
     for u in sorted(mat):
         tt = su_that["nguoi"].get(u) or {}
-        bo_loai = set(tt.get("f1_loai") or ())
+        bo_loai = set(tt.get("f1_excluded") or ())
         if not bo_loai:
             continue
         t = tt["vector_khau_vi"]
         chon = mat[u]
 
-        a = dung_ho_so(kg, [(k, SANG_ACTION[chon[k]]) for k in mon])
-        b = dung_ho_so(
+        a = build_profile(kg, [(k, SANG_ACTION[chon[k]]) for k in mon])
+        b = build_profile(
             kg, [(k, SANG_ACTION[chon[k]]) for k in mon if k not in bo_loai]
         )
         if a.is_empty or b.is_empty:
@@ -349,10 +349,10 @@ def bao_cao(
     print(f"\n── {ten} ── {len(mat)} người × {len(mon)} món")
 
     dem = collections.Counter(v for chon in mat.values() for v in chon.values())
-    tong = sum(dem.values())
+    total = sum(dem.values())
     print(
         "  phân bố: "
-        + "  ".join(f"{k}={dem[k]} ({dem[k]/tong:.1%})" for k in DIEM if dem[k])
+        + "  ".join(f"{k}={dem[k]} ({dem[k]/total:.1%})" for k in DIEM if dem[k])
     )
 
     # 1. cosine người–người đối lại dải nhiễu
@@ -391,14 +391,14 @@ def bao_cao(
             t = su_that["nguoi"][u]["vector_khau_vi"]
             for k in mon:
                 (s_cb if chon[k] == "chua_biet" else s_kh).append(cosine(t, vec[k]))
-        lech = trung_binh(s_cb) - trung_binh(s_kh)
+        excess = trung_binh(s_cb) - trung_binh(s_kh)
         hop = do_lech(s_cb) / math.sqrt(len(s_cb)) + do_lech(s_kh) / math.sqrt(len(s_kh))
         print(
-            f"  4. độ gần của món `chua_biet` lệch {lech:+.4f} "
+            f"  4. độ gần của món `chua_biet` lệch {excess:+.4f} "
             f"(± {hop:.4f}) so với món đã đánh"
         )
         ket.append(
-            (abs(lech) < 3 * hop, "`chua_biet` độc lập với khẩu vị (thiếu ngẫu nhiên)")
+            (abs(excess) < 3 * hop, "`chua_biet` độc lập với khẩu vị (thiếu ngẫu nhiên)")
         )
 
         # 5. khôi phục vector ẩn
@@ -478,7 +478,7 @@ def bao_cao(
 
 
 def main() -> int:
-    in_utf8()
+    use_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
     bo.add_argument(
         "--so-sanh-goc",
@@ -508,11 +508,11 @@ def main() -> int:
         )
 
     mat = nap_hanh_vi(MO_PHONG)
-    thieu = set(mat) - set(su_that["nguoi"])
-    if thieu:
+    missing = set(mat) - set(su_that["nguoi"])
+    if missing:
         raise SystemExit(
-            f"{len(thieu)} người trong hanh_vi.csv không có vector ẩn "
-            f"trong khau_vi_that.json ({', '.join(sorted(thieu)[:3])}…) — "
+            f"{len(missing)} người trong hanh_vi.csv không có vector ẩn "
+            f"trong khau_vi_that.json ({', '.join(sorted(missing)[:3])}…) — "
             "hai tệp không cùng một lần sinh."
         )
 

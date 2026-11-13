@@ -259,7 +259,7 @@ def has_diacritics(text: str) -> bool:
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     db = read_db("nutrition_rec")
     n_tables = len(db["tables"])
     problems: list[str] = []

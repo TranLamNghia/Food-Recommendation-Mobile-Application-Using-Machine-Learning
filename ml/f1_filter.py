@@ -1,31 +1,38 @@
 # -*- coding: utf-8 -*-
-"""Bộ lọc F1 — tầng an toàn, đặt **trước** mọi phép chấm điểm.
+"""The F1 filter — the safety layer, placed **before** any scoring.
 
-Loại khỏi tập ứng viên mọi món vi phạm ràng buộc cứng, bất kể người dùng
-thích món đó đến đâu. Bộ quy tắc nằm **dưới dạng dữ liệu** trong
-`condition_rules`, không viết cứng trong mã: thêm một bệnh lý là thêm dòng,
-không phải sửa mã.
+Removes from the candidate set every food that violates a hard constraint,
+no matter how much the user likes it. The rule set lives **as data** in
+`condition_rules`, not hard-coded: adding a medical condition means adding
+rows, not editing code.
 
-`tools/check_f1.py` đã chứng minh lược đồ đủ sức biểu diễn F1 bằng SQL thuần.
-Tệp này biến phép chứng minh đó thành một hàm dùng được cho cả ba giai đoạn,
-và bổ sung hai điều mà bản chứng minh bỏ qua:
+`tools/check_f1.py` already proved the schema can express F1 in plain SQL.
+This file turns that proof into a function usable by all three stages, and
+adds two things the proof skipped:
 
-**1. `severity_min` được tôn trọng.** Một quy tắc chỉ áp khi mức độ bệnh của
-người dùng đạt tối thiểu `severity_min`. `check_f1.py` nhận vào danh sách tên
-bệnh nên không biểu diễn được mức độ, và vì vậy nó áp **mọi** quy tắc — chặt
-hơn thực tế. Bỏ qua cột này thì một người tăng huyết áp mức nhẹ sẽ bị cắt
-đúng bằng một người mức nặng, và cột `severity_min` trong lược đồ thành vô
-nghĩa.
+**1. `severity_min` is honoured.** A rule applies only when the user's
+severity reaches at least `severity_min`. `check_f1.py` takes a list of
+condition names, so it cannot express severity, and therefore applies
+**every** rule — stricter than reality. Ignoring this column would cut a
+mildly hypertensive user exactly as hard as a severe one, and would make the
+schema's `severity_min` column meaningless.
 
-**2. Ràng buộc mềm được trả về chứ không bị bỏ.** `is_hard = 0` nghĩa là
-**trừ điểm** ở bước chấm điểm, món vẫn ở trong tập ứng viên. Nếu mọi ràng
-buộc đều cứng thì tập ứng viên teo lại và bộ tối ưu Bước 4 không tìm nổi tổ
-hợp thỏa hạn mức năng lượng — ràng buộc mềm chính là đường xoay xở.
+**2. Soft constraints are returned rather than dropped.** `is_hard = 0` means
+**penalise** at scoring time; the food stays in the candidate set. If every
+constraint were hard the candidate set would shrink until the Step 4
+optimiser could not find a combination meeting the energy target — soft
+constraints are the room to manoeuvre.
 
-Một điều quy tắc **không** làm: ngưỡng dinh dưỡng cứng theo ngày
-(`scope = 'per_day'`) không lọc món nào ở đây. Một món mặn vẫn hợp lệ nếu cả
-ngày vẫn dưới ngưỡng; phần theo ngày do Bước 4 pha 5 thi hành. Hàm
-`han_muc_theo_ngay` trả về đúng những hạn mức đó để Bước 4 dùng.
+One thing the rules do **not** do here: hard per-day nutrient thresholds
+(`scope = 'per_day'`) filter nothing at this point. A salty dish is still
+valid if the day's total stays under the limit; the per-day part is enforced
+by Step 4 phase 5. `daily_limit_rules` returns exactly those limits for Step 4.
+
+A note on language. Identifiers, comments and developer-facing output in this
+file are English. The **data** stays Vietnamese — condition names, tag names,
+rule notes — and so do the few strings that the mobile app shows to end
+users, because the product is Vietnamese. `EVIDENCE_LABELS` and
+`direction_word` are product text, not developer text.
 """
 
 from __future__ import annotations
@@ -33,49 +40,51 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
-#: Mức tin cậy của một ngưỡng, từ `condition_rules.evidence_level`.
+#: How well-founded a threshold is, from `condition_rules.evidence_level`.
 #:
-#: Giao diện dùng nó để chọn giọng: dẫn khuyến cáo của WHO và một con số
-#: chưa ai tra bằng cùng một giọng là không trung thực. Trước đây mức này
-#: nằm trong văn xuôi cột `note`, nên muốn lọc phải tìm chuỗi "chưa xác
-#: minh" — hỏng ngay lần đầu ai sửa câu chữ.
-MUC_TIN_CAY = ("definitional", "published", "derived", "unsupported")
+#: The interface uses it to choose its tone: quoting a WHO recommendation and
+#: an unverified number in the same voice is dishonest. This used to live in
+#: the prose of the `note` column, so filtering meant searching for the
+#: string "chưa xác minh" — which breaks the first time anyone edits the
+#: wording.
+EVIDENCE_LEVELS = ("definitional", "published", "derived", "unsupported")
 
-#: Mức nào được phép dẫn như khuyến cáo có nguồn.
-DAN_DUOC_NGUON = frozenset({"published"})
+#: Which level may be quoted as a sourced recommendation.
+CITABLE_EVIDENCE = frozenset({"published"})
 
-#: Câu ngắn cho giao diện, theo từng mức.
-NHAN_TIN_CAY = {
+#: Short phrase for the interface, per level. **Vietnamese on purpose**: this
+#: is end-user product text, shown in a Vietnamese app.
+EVIDENCE_LABELS = {
     "definitional": "quy tắc định nghĩa",
     "published": "có nguồn công bố",
     "derived": "suy ra kèm giả thiết",
     "unsupported": "không có nguồn đang hiệu lực",
 }
 
-#: Thứ tự mức độ. Dùng cả ở Python và trong SQL qua `FIELD()`.
-THU_TU_MUC_DO = ("mild", "moderate", "severe")
+#: Severity order. Used both in Python and in SQL via `FIELD()`.
+SEVERITY_ORDER = ("mild", "moderate", "severe")
 
 
 @dataclass(frozen=True)
-class DieuKien:
-    """Một bệnh lý / dị ứng / chế độ ăn của người dùng, kèm mức độ."""
+class Condition:
+    """One medical condition / allergy / diet of a user, with its severity."""
 
     condition_id: int
     severity: str = "moderate"
     name_vi: str = ""
 
     def __post_init__(self) -> None:
-        if self.severity not in THU_TU_MUC_DO:
+        if self.severity not in SEVERITY_ORDER:
             raise ValueError(
-                f"severity phải thuộc {THU_TU_MUC_DO}, nhận {self.severity!r}"
+                f"severity must be one of {SEVERITY_ORDER}, got {self.severity!r}"
             )
 
 
-# ── Lấy điều kiện của một người dùng thật ─────────────────────────────
+# ── Reading one real user's conditions ────────────────────────────────
 
 
-def dieu_kien_cua_nguoi_dung(cn, user_id: str) -> list[DieuKien]:
-    """Đọc `user_conditions` của một người, kèm mức độ và tên bệnh."""
+def conditions_for_user(cn, user_id: str) -> list[Condition]:
+    """Read a user's `user_conditions`, with severity and condition name."""
     sql = """
         SELECT uc.condition_id, uc.severity, co.name_vi
         FROM user_conditions uc
@@ -86,44 +95,48 @@ def dieu_kien_cua_nguoi_dung(cn, user_id: str) -> list[DieuKien]:
     with cn.cursor() as cur:
         cur.execute(sql, (user_id,))
         return [
-            DieuKien(int(d["condition_id"]), d["severity"], d["name_vi"])
+            Condition(int(d["condition_id"]), d["severity"], d["name_vi"])
             for d in cur.fetchall()
         ]
 
 
-def dieu_kien_theo_ten(cn, ten: Sequence[str], severity: str = "severe") -> list[DieuKien]:
-    """Tra điều kiện theo `conditions.name_vi` — dùng khi thử tình huống.
+def conditions_by_name(
+    cn, names: Sequence[str], severity: str = "severe"
+) -> list[Condition]:
+    """Look conditions up by `conditions.name_vi` — used for scenario runs.
 
-    Mặc định `severe` để áp **mọi** quy tắc, tức là giữ đúng hành vi của
-    `tools/check_f1.py`: đó là trường hợp chặt nhất, cũng là trường hợp phải
-    kiểm vì nếu nó còn dựng nổi thực đơn thì mọi mức nhẹ hơn đều dựng nổi.
+    Defaults to `severe` so that **every** rule applies, which preserves the
+    behaviour of `tools/check_f1.py`: that is the strictest case, and the one
+    worth testing, because if a plan can still be built there then every
+    milder level can build one too.
     """
-    if not ten:
+    if not names:
         return []
-    cho = ", ".join(["%s"] * len(ten))
+    placeholders = ", ".join(["%s"] * len(names))
     with cn.cursor() as cur:
         cur.execute(
-            f"SELECT id, name_vi FROM conditions WHERE name_vi IN ({cho})",
-            tuple(ten),
+            f"SELECT id, name_vi FROM conditions WHERE name_vi IN ({placeholders})",
+            tuple(names),
         )
-        tim_duoc = {d["name_vi"]: int(d["id"]) for d in cur.fetchall()}
+        found = {d["name_vi"]: int(d["id"]) for d in cur.fetchall()}
 
-    thieu = [t for t in ten if t not in tim_duoc]
-    if thieu:
+    missing = [n for n in names if n not in found]
+    if missing:
         raise ValueError(
-            "Không có bệnh lý nào tên như vậy trong `conditions`: "
-            + ", ".join(repr(t) for t in thieu)
+            "No condition in `conditions` has these names: "
+            + ", ".join(repr(n) for n in missing)
         )
-    return [DieuKien(tim_duoc[t], severity, t) for t in ten]
+    return [Condition(found[n], severity, n) for n in names]
 
 
-# ── Bộ lọc ────────────────────────────────────────────────────────────
+# ── The filter ────────────────────────────────────────────────────────
 
-#: Ánh xạ `condition_rules.nutrient` → cột của `food_nutrition`. Viết một lần
-#: ở đây thay vì một khối `CASE` dài trong SQL: một chất mới chỉ phải thêm
-#: vào đúng một chỗ, và quên thêm thì `_cot_dinh_duong` báo lỗi ngay thay vì
-#: trả về `NULL` rồi âm thầm loại sạch món.
-COT_DINH_DUONG = {
+#: Maps `condition_rules.nutrient` -> a `food_nutrition` column. Written once
+#: here rather than as a long `CASE` block inside the SQL: a new nutrient has
+#: to be added in exactly one place, and forgetting to add it makes
+#: `NUTRIENT_COLUMNS` raise immediately instead of yielding `NULL` and then
+#: silently excluding every food.
+NUTRIENT_COLUMNS = {
     "calories_kcal": "fn.calories_kcal",
     "protein_g": "fn.protein_g",
     "carbs_g": "fn.carbs_g",
@@ -140,125 +153,134 @@ COT_DINH_DUONG = {
     "vitamin_c_mg": "fn.vitamin_c_mg",
 }
 
-_CASE_CHAT = "CASE cr.nutrient\n" + "\n".join(
-    f"              WHEN '{chat}' THEN {cot}" for chat, cot in COT_DINH_DUONG.items()
-) + "\n            END"
+_NUTRIENT_CASE = (
+    "CASE cr.nutrient\n"
+    + "\n".join(
+        f"              WHEN '{nutrient}' THEN {column}"
+        for nutrient, column in NUTRIENT_COLUMNS.items()
+    )
+    + "\n            END"
+)
 
-#: Mệnh đề so mức độ: quy tắc chỉ áp khi mức của người dùng đạt `severity_min`.
-_DU_MUC_DO = (
-    "FIELD(dk.severity, 'mild', 'moderate', 'severe') >= "
+#: The severity clause: a rule applies only when the user's level reaches
+#: `severity_min`.
+_SEVERITY_MET = (
+    "FIELD(uc.severity, 'mild', 'moderate', 'severe') >= "
     "FIELD(cr.severity_min, 'mild', 'moderate', 'severe')"
 )
 
 
-def _cte_dieu_kien(dieu_kien: Sequence[DieuKien]) -> tuple[str, list[Any]]:
-    """Dựng bảng dẫn xuất `dk(condition_id, severity)` từ danh sách Python.
+def _conditions_cte(conditions: Sequence[Condition]) -> tuple[str, list[Any]]:
+    """Build the derived table `uc(condition_id, severity)` from a Python list.
 
-    Dùng bảng dẫn xuất thay vì `IN (...)` để mức độ đi cùng được mã bệnh
-    trong cùng một dòng — nhờ vậy mệnh đề `severity_min` so được từng cặp.
+    A derived table rather than `IN (...)` so that each severity travels in
+    the same row as its condition id — which is what lets the `severity_min`
+    clause compare them pairwise.
     """
-    manh = " UNION ALL ".join(
+    parts = " UNION ALL ".join(
         ["SELECT CAST(%s AS UNSIGNED) AS condition_id, CAST(%s AS CHAR) AS severity"]
-        + ["SELECT %s, %s"] * (len(dieu_kien) - 1)
+        + ["SELECT %s, %s"] * (len(conditions) - 1)
     )
-    tham_so: list[Any] = []
-    for dk in dieu_kien:
-        tham_so += [dk.condition_id, dk.severity]
-    return f"WITH dk AS ({manh})", tham_so
+    params: list[Any] = []
+    for c in conditions:
+        params += [c.condition_id, c.severity]
+    return f"WITH uc AS ({parts})", params
 
 
-def loc_f1(
+def allowed_foods(
     cn,
     *,
     user_id: str | None = None,
-    dieu_kien: Sequence[DieuKien] = (),
-    chi_mon_chung: bool = False,
+    conditions: Sequence[Condition] = (),
+    public_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Trả về tập món **an toàn** cho người dùng, đã áp mọi ràng buộc cứng.
+    """The set of foods **safe** for this user, with every hard rule applied.
 
-    `user_id` dùng cho hai việc khác nhau, đừng lẫn:
+    `user_id` does two different jobs here, do not conflate them:
 
-    · **phạm vi món** — `owner_id IS NULL OR owner_id = user_id`, tức là món
-      danh mục chung cộng món riêng của chính người đó;
-    · **tra điều kiện** — nếu `dieu_kien` để trống thì đọc từ
+    - **food scope** — `owner_id IS NULL OR owner_id = user_id`, that is the
+      shared catalogue plus this user's own foods;
+    - **condition lookup** — when `conditions` is empty, read them from
       `user_conditions`.
 
-    `chi_mon_chung=True` bỏ hẳn món riêng. Đặt `True` khi dựng tập huấn luyện
-    cho mô hình toàn cục: số liệu dinh dưỡng của món riêng do người dùng tự
-    khai, nhiễm vào mô hình dùng chung là làm hại mọi người dùng khác.
+    `public_only=True` drops private foods entirely. Set it when building the
+    training set for the global model: a private food's nutrition figures are
+    self-declared, and letting them into a shared model harms every other
+    user.
     """
-    if not dieu_kien and user_id is not None:
-        dieu_kien = dieu_kien_cua_nguoi_dung(cn, user_id)
+    if not conditions and user_id is not None:
+        conditions = conditions_for_user(cn, user_id)
 
-    pham_vi = (
+    scope = (
         "f.owner_id IS NULL"
-        if chi_mon_chung
+        if public_only
         else "(f.owner_id IS NULL OR f.owner_id <=> %s)"
     )
-    tham_so_pham_vi: list[Any] = [] if chi_mon_chung else [user_id]
+    scope_params: list[Any] = [] if public_only else [user_id]
 
-    chon = """
+    select = """
 SELECT f.id, f.name, f.category_id, f.dish_role, f.spice_level,
        f.popularity_score, f.owner_id
 FROM foods f
 WHERE f.is_active = 1
-  AND {pham_vi}
+  AND {scope}
 """
 
-    if not dieu_kien:
-        # Không có bệnh lý nào: F1 chỉ còn mệnh đề phạm vi. Tách nhánh vì
-        # một bảng dẫn xuất rỗng là SQL không hợp lệ.
-        sql = chon.format(pham_vi=pham_vi) + " ORDER BY f.name, f.id"
+    if not conditions:
+        # No conditions at all: F1 reduces to the scope clause. A separate
+        # branch because an empty derived table is invalid SQL.
+        sql = select.format(scope=scope) + " ORDER BY f.name, f.id"
         with cn.cursor() as cur:
-            cur.execute(sql, tuple(tham_so_pham_vi))
+            cur.execute(sql, tuple(scope_params))
             return list(cur.fetchall())
 
-    cte, tham_so_cte = _cte_dieu_kien(dieu_kien)
+    cte, cte_params = _conditions_cte(conditions)
 
-    than = (
-        chon.format(pham_vi=pham_vi)
+    body = (
+        select.format(scope=scope)
         + f"""
-  -- (1) exclude_tag — loại món mang nhãn bị cấm
+  -- (1) exclude_tag — drop foods carrying a forbidden tag
   AND NOT EXISTS (
         SELECT 1
         FROM condition_rules cr
-        JOIN dk        ON dk.condition_id = cr.condition_id
+        JOIN uc        ON uc.condition_id = cr.condition_id
         JOIN food_tags ft ON ft.tag_id = cr.tag_id
         WHERE cr.rule_type = 'exclude_tag'
           AND cr.is_hard = 1
-          AND {_DU_MUC_DO}
+          AND {_SEVERITY_MET}
           AND ft.food_id = f.id
       )
 
-  -- (2) require_tag — món phải mang MỌI nhãn bắt buộc
+  -- (2) require_tag — the food must carry EVERY required tag
   AND NOT EXISTS (
         SELECT 1
         FROM condition_rules cr
-        JOIN dk ON dk.condition_id = cr.condition_id
+        JOIN uc ON uc.condition_id = cr.condition_id
         WHERE cr.rule_type = 'require_tag'
           AND cr.is_hard = 1
-          AND {_DU_MUC_DO}
+          AND {_SEVERITY_MET}
           AND NOT EXISTS (
                 SELECT 1 FROM food_tags ft
                 WHERE ft.food_id = f.id AND ft.tag_id = cr.tag_id
               )
       )
 
-  -- (3) nutrient_limit cứng theo SUẤT. Thiếu số liệu thì LOẠI, vì không
-  --     chứng minh được là an toàn — im lặng cho qua mới là nguy hiểm.
+  -- (3) hard PER-SERVING nutrient_limit. Missing data EXCLUDES, because it
+  --     cannot be shown to be safe — letting it through silently is the
+  --     dangerous option.
   AND NOT EXISTS (
         SELECT 1
         FROM condition_rules cr
-        JOIN dk ON dk.condition_id = cr.condition_id
+        JOIN uc ON uc.condition_id = cr.condition_id
         JOIN food_nutrition fn ON fn.food_id = f.id
         WHERE cr.rule_type = 'nutrient_limit'
           AND cr.is_hard = 1
           AND cr.scope = 'per_serving'
-          AND {_DU_MUC_DO}
+          AND {_SEVERITY_MET}
           AND (
-            {_CASE_CHAT} IS NULL
-            OR (cr.comparator = 'lte' AND {_CASE_CHAT} > cr.threshold)
-            OR (cr.comparator = 'gte' AND {_CASE_CHAT} < cr.threshold)
+            {_NUTRIENT_CASE} IS NULL
+            OR (cr.comparator = 'lte' AND {_NUTRIENT_CASE} > cr.threshold)
+            OR (cr.comparator = 'gte' AND {_NUTRIENT_CASE} < cr.threshold)
           )
       )
 ORDER BY f.name, f.id
@@ -266,24 +288,24 @@ ORDER BY f.name, f.id
     )
 
     with cn.cursor() as cur:
-        cur.execute(cte + than, tuple(tham_so_cte + tham_so_pham_vi))
+        cur.execute(cte + body, tuple(cte_params + scope_params))
         return list(cur.fetchall())
 
 
-# ── Ràng buộc mềm và hạn mức theo ngày ────────────────────────────────
+# ── Soft constraints and per-day limits ───────────────────────────────
 
 
-def hinh_phat_mem(cn, dieu_kien: Sequence[DieuKien]) -> list[dict[str, Any]]:
-    """Các quy tắc `is_hard = 0` đang áp, kèm `penalty`, để bước chấm điểm trừ.
+def soft_rule_rows(cn, conditions: Sequence[Condition]) -> list[dict[str, Any]]:
+    """The active `is_hard = 0` rules with their `penalty`, for scoring.
 
-    F1 **không** loại món theo các quy tắc này; nó chỉ trả chúng về. Giữ hai
-    việc tách nhau là có chủ ý: loại món là quyết định về an toàn, trừ điểm
-    là quyết định về sở thích, và trộn lẫn hai thứ thì không gỡ ra được khi
-    phải giải thích vì sao một món bị bỏ.
+    F1 does **not** drop foods under these rules; it only hands them back.
+    Keeping the two apart is deliberate: excluding a food is a safety
+    decision, penalising it is a preference decision, and mixing them makes
+    it impossible to untangle when explaining why a food was dropped.
     """
-    if not dieu_kien:
+    if not conditions:
         return []
-    cte, tham_so = _cte_dieu_kien(dieu_kien)
+    cte, params = _conditions_cte(conditions)
     sql = (
         cte
         + f"""
@@ -291,304 +313,313 @@ SELECT co.name_vi, cr.rule_type, cr.tag_id, t.name_vi AS tag_name,
        cr.nutrient, cr.comparator, cr.threshold, cr.scope, cr.penalty,
        cr.severity_min, cr.evidence_level, cr.note
 FROM condition_rules cr
-JOIN dk         ON dk.condition_id = cr.condition_id
+JOIN uc         ON uc.condition_id = cr.condition_id
 JOIN conditions co ON co.id = cr.condition_id
 LEFT JOIN tags  t  ON t.id = cr.tag_id
 WHERE cr.is_hard = 0
-  AND {_DU_MUC_DO}
+  AND {_SEVERITY_MET}
 ORDER BY co.name_vi, cr.rule_type, cr.nutrient
 """
     )
     with cn.cursor() as cur:
-        cur.execute(sql, tuple(tham_so))
+        cur.execute(sql, tuple(params))
         return list(cur.fetchall())
 
 
-def han_muc_theo_ngay(
+def daily_limit_rules(
     cn,
-    dieu_kien: Sequence[DieuKien],
+    conditions: Sequence[Condition],
     *,
-    chi_cung: bool = True,
+    hard_only: bool = True,
 ) -> list[dict[str, Any]]:
-    """Ngưỡng dinh dưỡng **theo ngày** — đầu vào của Bước 4 pha 5.
+    """**Per-day** nutrient thresholds — the input to Step 4 phase 5.
 
-    Không lọc món nào: một món mặn vẫn hợp lệ nếu tổng cả ngày vẫn dưới
-    ngưỡng. Bản trước đặt ngưỡng cứng theo từng suất và ngưỡng natri 600 mg
-    loại 58/60 món, khiến Bước 4 không dựng nổi thực đơn.
+    Filters no foods: a salty dish is still valid if the day's total stays
+    under the limit. An earlier version put hard thresholds on each serving,
+    and a 600 mg sodium limit excluded 58 of 60 foods, leaving Step 4 unable
+    to build a plan at all.
 
-    `chi_cung=True` (mặc định, giữ nguyên hành vi cũ) chỉ trả ngưỡng cứng —
-    thứ **chặn** món. `chi_cung=False` trả thêm ngưỡng mềm theo ngày, thứ
-    chỉ **trừ điểm**. Hai loại phải phân biệt được ở phía gọi, nên mỗi dòng
-    mang theo `is_hard` và `penalty`; gộp chúng lại sẽ biến một khuyến cáo
-    thành một lệnh cấm.
+    `hard_only=True` (the default, preserving the old behaviour) returns only
+    hard thresholds — the ones that **block**. `hard_only=False` also returns
+    per-day soft thresholds, which only **penalise**. The caller must be able
+    to tell them apart, so every row carries `is_hard` and `penalty`; merging
+    them would turn a recommendation into a prohibition.
     """
-    if not dieu_kien:
+    if not conditions:
         return []
-    cte, tham_so = _cte_dieu_kien(dieu_kien)
-    loc_cung = "  AND cr.is_hard = 1\n" if chi_cung else ""
+    cte, params = _conditions_cte(conditions)
+    hard_clause = "  AND cr.is_hard = 1\n" if hard_only else ""
     sql = (
         cte
         + f"""
 SELECT co.name_vi, cr.nutrient, cr.comparator, cr.threshold,
        cr.is_hard, cr.penalty, cr.severity_min, cr.evidence_level, cr.note
 FROM condition_rules cr
-JOIN dk         ON dk.condition_id = cr.condition_id
+JOIN uc         ON uc.condition_id = cr.condition_id
 JOIN conditions co ON co.id = cr.condition_id
 WHERE cr.rule_type = 'nutrient_limit'
-{loc_cung}  AND cr.scope = 'per_day'
-  AND {_DU_MUC_DO}
+{hard_clause}  AND cr.scope = 'per_day'
+  AND {_SEVERITY_MET}
 ORDER BY cr.is_hard DESC, co.name_vi, cr.nutrient
 """
     )
     with cn.cursor() as cur:
-        cur.execute(sql, tuple(tham_so))
+        cur.execute(sql, tuple(params))
         return list(cur.fetchall())
 
 
-# ── Ràng buộc mềm, dạng có kiểu ────────────────────────────────────────
+# ── Soft constraints, typed ────────────────────────────────────────────
 #
-# `hinh_phat_mem` trả về dòng thô. Nó được giữ nguyên vì `main()` dùng, còn
-# `LuatMem` là dạng mà bước chấm điểm nhận: có kiểu, có `scope` bắt buộc
-# phải xét, và không cho một luật đi lạc phạm vi.
+# `soft_rule_rows` returns raw rows. It stays as it is because `main()` uses
+# it, while `SoftRule` is the form the scoring step consumes: typed, with a
+# `scope` that must be considered, and no way for a rule to stray outside
+# its scope.
 
 
 @dataclass(frozen=True)
-class LuatMem:
-    """Một ràng buộc mềm: vượt thì **trừ điểm**, không loại món."""
+class SoftRule:
+    """A soft constraint: exceeding it **penalises**, it does not exclude."""
 
-    benh: str
+    condition: str
     severity_min: str
     nutrient: str
     comparator: str
-    nguong: float
-    #: **Hệ số nhân**, không phải lượng trừ. Xem `scoring.hinh_phat`.
+    threshold: float
+    #: A **multiplier**, not an amount to subtract. See `scoring.penalty`.
     penalty: float
     scope: str
     note: str = ""
     evidence_level: str = "derived"
 
     @property
-    def dan_duoc_nguon(self) -> bool:
-        """Ngưỡng này có được dẫn như khuyến cáo có nguồn hay không."""
-        return self.evidence_level in DAN_DUOC_NGUON
+    def is_citable(self) -> bool:
+        """Whether this threshold may be quoted as a sourced recommendation."""
+        return self.evidence_level in CITABLE_EVIDENCE
 
     @property
-    def nhan_tin_cay(self) -> str:
-        return NHAN_TIN_CAY.get(self.evidence_level, self.evidence_level)
+    def evidence_label(self) -> str:
+        return EVIDENCE_LABELS.get(self.evidence_level, self.evidence_level)
 
-    def vi_pham(self, gia_tri: float) -> bool:
+    def is_violated(self, value: float) -> bool:
         if self.comparator == "lte":
-            return gia_tri > self.nguong
-        return gia_tri < self.nguong
+            return value > self.threshold
+        return value < self.threshold
 
     @property
-    def lech_bao_nhieu_tu(self) -> str:
-        """Chiều của ngưỡng, để giao diện chọn chữ: `vượt` hay `thiếu`."""
+    def direction_word(self) -> str:
+        """Which way the threshold runs, so the interface can pick its wording.
+
+        Vietnamese on purpose: this is end-user product text.
+        """
         return "vượt" if self.comparator == "lte" else "thiếu"
 
 
-def luat_mem(cn, dieu_kien: Sequence[DieuKien]) -> list[LuatMem]:
-    """`hinh_phat_mem` ở dạng có kiểu, chỉ gồm quy tắc `nutrient_limit`.
+def soft_rules(cn, conditions: Sequence[Condition]) -> list[SoftRule]:
+    """`soft_rule_rows` in typed form, restricted to `nutrient_limit` rules.
 
-    Bộ quy tắc hiện tại không có ràng buộc mềm nào dạng nhãn, nhưng lược đồ
-    cho phép. Lọc ở đây thay vì để bước chấm điểm tự đoán: một luật nhãn mềm
-    không có `nutrient` nên mọi phép so số với nó đều vô nghĩa.
+    The current rule set has no tag-based soft constraint, but the schema
+    allows one. Filtering here rather than leaving the scoring step to guess:
+    a soft tag rule has no `nutrient`, so every numeric comparison against it
+    is meaningless.
     """
-    ra: list[LuatMem] = []
-    for d in hinh_phat_mem(cn, dieu_kien):
+    result: list[SoftRule] = []
+    for d in soft_rule_rows(cn, conditions):
         if d["rule_type"] != "nutrient_limit" or d["nutrient"] is None:
             continue
-        ra.append(
-            LuatMem(
-                benh=d["name_vi"],
+        result.append(
+            SoftRule(
+                condition=d["name_vi"],
                 severity_min=d["severity_min"],
                 nutrient=d["nutrient"],
                 comparator=d["comparator"],
-                nguong=float(d["threshold"]),
+                threshold=float(d["threshold"]),
                 penalty=float(d["penalty"]),
                 scope=d["scope"],
                 note=d["note"] or "",
                 evidence_level=d["evidence_level"],
             )
         )
-    return ra
+    return result
 
 
-#: Phạm vi nào đã có tầng thi hành, và tầng đó ở đâu.
+#: Which scope has an enforcing layer, and where that layer is.
 #:
-#: `per_meal` là `None` vì **chưa có ai thi hành**. Bộ quy tắc hiện có đúng
-#: một luật như vậy — Đái tháo đường, bột đường ≤ 60 g mỗi bữa — và nó không
-#: ảnh hưởng đến bất cứ thứ gì. Nêu ra thành dữ liệu để `luat_chua_thi_hanh`
-#: báo được, thay vì để nó nằm im trong CSDL trông như đang hoạt động.
-TANG_THI_HANH: dict[str, str | None] = {
-    "per_serving": "ml/scoring.hinh_phat",
-    "per_day": "ml/han_muc.trang_thai",
+#: `per_meal` is `None` because **nothing enforces it**. The current rule set
+#: has exactly one such rule — diabetes, carbohydrate <= 60 g per meal — and
+#: it affects nothing. Stated as data so that `unenforced_rules` can report
+#: it, rather than leaving it sitting in the database looking active.
+ENFORCED_BY: dict[str, str | None] = {
+    "per_serving": "ml/scoring.penalty",
+    "per_day": "ml/daily_limits.status",
     "per_meal": None,
 }
 
 
-def luat_chua_thi_hanh(luat: Sequence[LuatMem]) -> list[LuatMem]:
-    """Luật mềm thuộc phạm vi chưa có tầng nào thi hành.
+def unenforced_rules(rules: Sequence[SoftRule]) -> list[SoftRule]:
+    """Soft rules whose scope has no enforcing layer.
 
-    Danh sách này **không được phép** biến thành rỗng bằng cách xóa luật.
-    Nó rỗng khi và chỉ khi Bước 4 nhận phần `per_meal`.
+    This list **must not** be emptied by deleting rules. It empties when, and
+    only when, Step 4 takes on the `per_meal` part.
     """
-    return [l for l in luat if TANG_THI_HANH.get(l.scope) is None]
+    return [r for r in rules if ENFORCED_BY.get(r.scope) is None]
 
 
-def luat_mem_theo_pham_vi(
-    luat: Sequence[LuatMem],
-) -> dict[str, list[LuatMem]]:
-    """Chia luật mềm theo `scope`, vì ba phạm vi cần ba lượng thông tin khác.
+def soft_rules_by_scope(rules: Sequence[SoftRule]) -> dict[str, list[SoftRule]]:
+    """Split soft rules by `scope`, because the three scopes need three
+    different amounts of information.
 
-        per_serving — xét được từng món một, bước chấm điểm làm
-        per_meal    — cần tổng cả bữa, thuộc Bước 4
-        per_day     — cần tổng cả ngày, thuộc `ml/han_muc.py`
+        per_serving — decidable one food at a time, the scoring step does it
+        per_meal    — needs the meal total, belongs to Step 4
+        per_day     — needs the day's total, belongs to `ml/daily_limits.py`
 
-    Áp một luật `per_meal` cho từng món là sai cả hai chiều: nó bỏ sót
-    trường hợp tổng bữa vượt dù không món nào vượt, và nó phạt oan một món
-    lớn trong một bữa vẫn còn dư địa. Nên hàm chia ra để mỗi tầng chỉ nhận
-    phần nó xét được, và `chua_thi_hanh` nói thẳng phần nào chưa có ai nhận.
+    Applying a `per_meal` rule per food is wrong in both directions: it misses
+    the case where the meal total is exceeded although no single food exceeds
+    it, and it wrongly penalises a large food in a meal that still has room.
+    So this splits them, each layer receives only what it can decide, and
+    `unenforced_rules` says plainly which part nobody has taken on.
     """
-    ra: dict[str, list[LuatMem]] = {
+    result: dict[str, list[SoftRule]] = {
         "per_serving": [],
         "per_meal": [],
         "per_day": [],
     }
-    for l in luat:
-        ra.setdefault(l.scope, []).append(l)
-    return ra
+    for r in rules:
+        result.setdefault(r.scope, []).append(r)
+    return result
 
 
-# ── Nghịch đảo của F1: vì sao một món bị loại ─────────────────────────
+# ── The inverse of F1: why a food was excluded ────────────────────────
 #
-# `loc_f1` trả về tập món còn lại. Giao diện cần điều ngược lại — món nào bị
-# bỏ và vì luật nào — và câu trả lời đó KHÔNG suy ra được từ tập còn lại:
-# lấy phần bù chỉ cho biết món nào bị bỏ, không cho biết tại sao.
+# `allowed_foods` returns what survives. The interface needs the opposite —
+# which food was dropped, and by which rule — and that answer CANNOT be
+# derived from the surviving set: taking the complement says which foods went
+# but not why.
 #
-# Hai hàm dưới đây dựng đúng ba mệnh đề `NOT EXISTS` của `loc_f1` thành ba
-# nhánh `UNION ALL` đọc cùng một bộ quy tắc. Nguy cơ rõ ràng là hai bên lệch
-# nhau sau một lần sửa, và khi đó giao diện sẽ nói một món vừa an toàn vừa
-# bị loại. `doi_chieu_loc_f1` tồn tại để bắt đúng tình huống đó.
+# The two functions below rebuild the same three `NOT EXISTS` clauses of
+# `allowed_foods` as three `UNION ALL` branches over the same rule set. The
+# obvious risk is the two drifting apart after an edit, at which point the
+# interface would call a food both safe and excluded. `cross_check_f1` exists
+# to catch exactly that.
 
 
 @dataclass(frozen=True)
-class LyDoLoai:
-    """Một luật cứng mà một món vi phạm."""
+class ExclusionReason:
+    """One hard rule that a food violates."""
 
     food_id: str
     name: str
     dish_role: str
     rule_type: str
-    benh: str
+    condition: str
     severity_min: str
-    the: str | None = None
+    tag: str | None = None
     nutrient: str | None = None
     comparator: str | None = None
-    nguong: float | None = None
-    #: Số đo của món. `None` nghĩa là **thiếu số liệu**, không phải bằng 0.
-    gia_tri: float | None = None
+    threshold: float | None = None
+    #: The food's measurement. `None` means **no data**, not zero.
+    value: float | None = None
     note: str = ""
     evidence_level: str = "derived"
 
     @property
-    def dan_duoc_nguon(self) -> bool:
-        """Ngưỡng này có được dẫn như khuyến cáo có nguồn hay không."""
-        return self.evidence_level in DAN_DUOC_NGUON
+    def is_citable(self) -> bool:
+        """Whether this threshold may be quoted as a sourced recommendation."""
+        return self.evidence_level in CITABLE_EVIDENCE
 
     @property
-    def nhan_tin_cay(self) -> str:
-        return NHAN_TIN_CAY.get(self.evidence_level, self.evidence_level)
-
+    def evidence_label(self) -> str:
+        return EVIDENCE_LABELS.get(self.evidence_level, self.evidence_level)
 
     @property
-    def thieu_so_lieu(self) -> bool:
-        """Món bị loại vì không có số liệu, chứ không vì vượt ngưỡng.
+    def missing_data(self) -> bool:
+        """Excluded for lack of a measurement, rather than for exceeding one.
 
-        `loc_f1` loại món thiếu số liệu ở ngưỡng theo suất — không chứng minh
-        được là an toàn thì không cho qua. Đó là lựa chọn đúng cho một tầng
-        an toàn, nhưng nói với người dùng "món này vượt ngưỡng" khi thật ra
-        là "chúng tôi không biết" thì sai sự thật, nên hai thứ phải tách ra.
+        `allowed_foods` excludes foods with no measurement at a per-serving
+        threshold — what cannot be shown safe does not pass. That is the right
+        call for a safety layer, but telling the user "this food exceeds the
+        limit" when the truth is "we do not know" is false, so the two have to
+        be separated.
 
-        Lưu ý chiều ngược với `ml/han_muc.py`: ngưỡng theo SUẤT thiếu số liệu
-        thì LOẠI, còn hạn mức theo NGÀY thiếu số liệu thì CỘNG 0 kèm cờ báo.
-        Hai lựa chọn trái nhau nhưng cùng một lý do: theo suất, câu hỏi là
-        "món này có an toàn không" nên không biết là không cho qua; theo ngày,
-        chặn khi không biết sẽ loại 248/318 món và hệ thống thành vô dụng.
+        Note the opposite direction in `ml/daily_limits.py`: a missing measurement
+        at a PER-SERVING threshold EXCLUDES, while at a PER-DAY limit it adds
+        0 and raises a flag. Two opposite choices for one reason: per serving
+        the question is "is this food safe", so not knowing means not passing;
+        per day, blocking on not knowing would exclude 248 of 318 foods and
+        leave the system useless.
         """
-        return self.rule_type == "nutrient_limit" and self.gia_tri is None
+        return self.rule_type == "nutrient_limit" and self.value is None
 
     @property
-    def bac(self) -> str:
-        """Bậc lý do, để giao diện nhóm lại.
+    def kind(self) -> str:
+        """The class of reason, so the interface can group them.
 
-        · `nhan`          — món mang nhãn bị cấm, hoặc thiếu nhãn bắt buộc
-        · `nguong_suat`   — số đo mỗi suất vượt ngưỡng cứng
-        · `thieu_so_lieu` — không có số liệu nên không cho qua
+        - `tag`                — carries a forbidden tag, or lacks a required one
+        - `serving_threshold`  — the per-serving measurement exceeds a hard limit
+        - `missing_data`       — no measurement, so it does not pass
         """
         if self.rule_type in ("exclude_tag", "require_tag"):
-            return "nhan"
-        return "thieu_so_lieu" if self.thieu_so_lieu else "nguong_suat"
+            return "tag"
+        return "missing_data" if self.missing_data else "serving_threshold"
 
     @property
-    def vuot_bao_nhieu(self) -> float | None:
-        """Vượt ngưỡng bao nhiêu. `None` khi không tính được."""
-        if self.gia_tri is None or self.nguong is None:
+    def excess(self) -> float | None:
+        """How far past the threshold. `None` when it cannot be computed."""
+        if self.value is None or self.threshold is None:
             return None
         if self.comparator == "lte":
-            return self.gia_tri - self.nguong
-        return self.nguong - self.gia_tri
+            return self.value - self.threshold
+        return self.threshold - self.value
 
 
-_CHON_LY_DO = """
+_SELECT_REASON = """
 SELECT f.id AS food_id, f.name, f.dish_role,
-       {loai} AS rule_type,
-       co.name_vi AS benh, cr.severity_min,
-       {the} AS the,
+       {rule_type} AS rule_type,
+       co.name_vi AS condition_name, cr.severity_min,
+       {tag} AS tag,
        {nutrient} AS nutrient, {comparator} AS comparator,
-       {nguong} AS nguong, {gia_tri} AS gia_tri,
+       {threshold} AS threshold, {value} AS value,
        cr.evidence_level, cr.note
 """
 
 
-def ly_do_loai(
+def exclusion_reasons(
     cn,
     *,
     user_id: str | None = None,
-    dieu_kien: Sequence[DieuKien] = (),
-    chi_mon_chung: bool = False,
-) -> dict[str, list[LyDoLoai]]:
-    """Món nào bị F1 loại, và vì luật nào.
+    conditions: Sequence[Condition] = (),
+    public_only: bool = False,
+) -> dict[str, list[ExclusionReason]]:
+    """Which foods F1 excluded, and under which rule.
 
-    Tham số giống `loc_f1` và phải được truyền giống nhau — cùng `user_id`,
-    cùng `dieu_kien`, cùng `chi_mon_chung` — nếu không thì hai bên đang nói
-    về hai tập món khác nhau.
+    The parameters mirror `allowed_foods` and must be passed identically —
+    same `user_id`, same `conditions`, same `public_only` — otherwise the two
+    are talking about different food sets.
 
-    Trả về `{food_id: [lý do...]}`. Một món có thể vi phạm nhiều luật, và
-    mọi luật bị vi phạm đều được nêu: biết một lý do không đủ để người dùng
-    hiểu, vì sửa được một luật chưa chắc món đó hợp.
+    Returns `{food_id: [reason, ...]}`. A food may violate several rules, and
+    every violated rule is listed: one reason is not enough for the user to
+    understand, because fixing one rule does not make the food acceptable.
     """
-    if not dieu_kien and user_id is not None:
-        dieu_kien = dieu_kien_cua_nguoi_dung(cn, user_id)
-    if not dieu_kien:
-        # Không bệnh lý nào thì F1 không loại món nào.
+    if not conditions and user_id is not None:
+        conditions = conditions_for_user(cn, user_id)
+    if not conditions:
+        # With no conditions, F1 excludes nothing.
         return {}
 
-    pham_vi = (
+    scope = (
         "f.owner_id IS NULL"
-        if chi_mon_chung
+        if public_only
         else "(f.owner_id IS NULL OR f.owner_id <=> %s)"
     )
-    mot_pham_vi: list[Any] = [] if chi_mon_chung else [user_id]
+    scope_params: list[Any] = [] if public_only else [user_id]
 
-    nhanh_the = (
-        _CHON_LY_DO.format(
-            loai="'exclude_tag'",
-            the="t.name_vi",
+    tag_branch = (
+        _SELECT_REASON.format(
+            rule_type="'exclude_tag'",
+            tag="t.name_vi",
             nutrient="NULL",
             comparator="NULL",
-            nguong="NULL",
-            gia_tri="NULL",
+            threshold="NULL",
+            value="NULL",
         )
         + f"""
 FROM foods f
@@ -596,33 +627,33 @@ JOIN food_tags       ft ON ft.food_id = f.id
 JOIN condition_rules cr ON cr.tag_id = ft.tag_id
                        AND cr.rule_type = 'exclude_tag'
                        AND cr.is_hard = 1
-JOIN dk                 ON dk.condition_id = cr.condition_id
+JOIN uc                 ON uc.condition_id = cr.condition_id
 JOIN conditions      co ON co.id = cr.condition_id
 JOIN tags            t  ON t.id = cr.tag_id
 WHERE f.is_active = 1
-  AND {pham_vi}
-  AND {_DU_MUC_DO}
+  AND {scope}
+  AND {_SEVERITY_MET}
 """
     )
 
-    nhanh_bat_buoc = (
-        _CHON_LY_DO.format(
-            loai="'require_tag'",
-            the="t.name_vi",
+    required_branch = (
+        _SELECT_REASON.format(
+            rule_type="'require_tag'",
+            tag="t.name_vi",
             nutrient="NULL",
             comparator="NULL",
-            nguong="NULL",
-            gia_tri="NULL",
+            threshold="NULL",
+            value="NULL",
         )
         + f"""
 FROM foods f
 JOIN condition_rules cr ON cr.rule_type = 'require_tag' AND cr.is_hard = 1
-JOIN dk                 ON dk.condition_id = cr.condition_id
+JOIN uc                 ON uc.condition_id = cr.condition_id
 JOIN conditions      co ON co.id = cr.condition_id
 JOIN tags            t  ON t.id = cr.tag_id
 WHERE f.is_active = 1
-  AND {pham_vi}
-  AND {_DU_MUC_DO}
+  AND {scope}
+  AND {_SEVERITY_MET}
   AND NOT EXISTS (
         SELECT 1 FROM food_tags ft
         WHERE ft.food_id = f.id AND ft.tag_id = cr.tag_id
@@ -630,14 +661,14 @@ WHERE f.is_active = 1
 """
     )
 
-    nhanh_nguong = (
-        _CHON_LY_DO.format(
-            loai="'nutrient_limit'",
-            the="NULL",
+    threshold_branch = (
+        _SELECT_REASON.format(
+            rule_type="'nutrient_limit'",
+            tag="NULL",
             nutrient="cr.nutrient",
             comparator="cr.comparator",
-            nguong="cr.threshold",
-            gia_tri=_CASE_CHAT,
+            threshold="cr.threshold",
+            value=_NUTRIENT_CASE,
         )
         + f"""
 FROM foods f
@@ -645,168 +676,172 @@ JOIN food_nutrition  fn ON fn.food_id = f.id
 JOIN condition_rules cr ON cr.rule_type = 'nutrient_limit'
                        AND cr.is_hard = 1
                        AND cr.scope = 'per_serving'
-JOIN dk                 ON dk.condition_id = cr.condition_id
+JOIN uc                 ON uc.condition_id = cr.condition_id
 JOIN conditions      co ON co.id = cr.condition_id
 WHERE f.is_active = 1
-  AND {pham_vi}
-  AND {_DU_MUC_DO}
+  AND {scope}
+  AND {_SEVERITY_MET}
   AND (
-        {_CASE_CHAT} IS NULL
-        OR (cr.comparator = 'lte' AND {_CASE_CHAT} > cr.threshold)
-        OR (cr.comparator = 'gte' AND {_CASE_CHAT} < cr.threshold)
+        {_NUTRIENT_CASE} IS NULL
+        OR (cr.comparator = 'lte' AND {_NUTRIENT_CASE} > cr.threshold)
+        OR (cr.comparator = 'gte' AND {_NUTRIENT_CASE} < cr.threshold)
       )
 """
     )
 
-    cte, tham_so_cte = _cte_dieu_kien(dieu_kien)
+    cte, cte_params = _conditions_cte(conditions)
     sql = (
         cte
-        + nhanh_the
+        + tag_branch
         + "UNION ALL"
-        + nhanh_bat_buoc
+        + required_branch
         + "UNION ALL"
-        + nhanh_nguong
+        + threshold_branch
         + "ORDER BY name, food_id, rule_type"
     )
-    tham_so = tham_so_cte + mot_pham_vi + mot_pham_vi + mot_pham_vi
+    params = cte_params + scope_params + scope_params + scope_params
 
     with cn.cursor() as cur:
-        cur.execute(sql, tuple(tham_so))
-        dong = list(cur.fetchall())
+        cur.execute(sql, tuple(params))
+        rows = list(cur.fetchall())
 
-    ket_qua: dict[str, list[LyDoLoai]] = {}
-    for d in dong:
-        ket_qua.setdefault(d["food_id"], []).append(
-            LyDoLoai(
+    result: dict[str, list[ExclusionReason]] = {}
+    for d in rows:
+        result.setdefault(d["food_id"], []).append(
+            ExclusionReason(
                 food_id=d["food_id"],
                 name=d["name"],
                 dish_role=d["dish_role"],
                 rule_type=d["rule_type"],
-                benh=d["benh"],
+                condition=d["condition_name"],
                 severity_min=d["severity_min"],
-                the=d["the"],
+                tag=d["tag"],
                 nutrient=d["nutrient"],
                 comparator=d["comparator"],
-                nguong=None if d["nguong"] is None else float(d["nguong"]),
-                gia_tri=None if d["gia_tri"] is None else float(d["gia_tri"]),
+                threshold=None if d["threshold"] is None else float(d["threshold"]),
+                value=None if d["value"] is None else float(d["value"]),
                 note=d["note"] or "",
                 evidence_level=d["evidence_level"],
             )
         )
-    return ket_qua
+    return result
 
 
-def doi_chieu_loc_f1(
+def cross_check_f1(
     cn,
     *,
     user_id: str | None = None,
-    dieu_kien: Sequence[DieuKien] = (),
-    chi_mon_chung: bool = False,
+    conditions: Sequence[Condition] = (),
+    public_only: bool = False,
 ) -> dict[str, list[str]]:
-    """Soát `ly_do_loai` khớp `loc_f1` — hai câu SQL, một bộ quy tắc.
+    """Check `exclusion_reasons` agrees with `allowed_foods` — two queries,
+    one rule set.
 
-    `loc_f1` và `ly_do_loai` đọc cùng `condition_rules` nhưng bằng hai câu
-    SQL viết tay khác nhau. Sửa một bên mà quên bên kia thì giao diện sẽ hiện
-    một món vừa nằm trong thực đơn vừa nằm trong danh sách bị loại, và không
-    có gì báo. Hàm này so hai tập:
+    `allowed_foods` and `exclusion_reasons` read the same `condition_rules`
+    through two separately hand-written SQL statements. Editing one and
+    forgetting the other would have the interface show a food that is both in
+    the plan and on the excluded list, with nothing to report it. This
+    compares the two sets:
 
-        · `thieu_ly_do` — bị `loc_f1` bỏ nhưng `ly_do_loai` không giải thích
-          được. Người dùng thấy món biến mất mà không có lý do nào.
-        · `ly_do_du`    — có lý do bị loại nhưng `loc_f1` vẫn cho qua. Hướng
-          này tệ hơn: một món bị coi là vi phạm vẫn vào được thực đơn.
+    - `unexplained` — dropped by `allowed_foods` but `exclusion_reasons`
+      offers no reason. The user sees a food vanish with no explanation.
+    - `spurious`    — has an exclusion reason yet `allowed_foods` let it
+      through. This direction is worse: a food considered in violation still
+      reaches the meal plan.
 
-    Hai danh sách rỗng nghĩa là hai bên đang khớp.
+    Both lists empty means the two agree.
     """
-    con_lai = {
-        m["id"]
-        for m in loc_f1(
+    surviving = {
+        f["id"]
+        for f in allowed_foods(
             cn,
             user_id=user_id,
-            dieu_kien=dieu_kien,
-            chi_mon_chung=chi_mon_chung,
+            conditions=conditions,
+            public_only=public_only,
         )
     }
-    co_ly_do = set(
-        ly_do_loai(
+    explained = set(
+        exclusion_reasons(
             cn,
             user_id=user_id,
-            dieu_kien=dieu_kien,
-            chi_mon_chung=chi_mon_chung,
+            conditions=conditions,
+            public_only=public_only,
         )
     )
 
-    pham_vi = (
+    scope = (
         "f.owner_id IS NULL"
-        if chi_mon_chung
+        if public_only
         else "(f.owner_id IS NULL OR f.owner_id <=> %s)"
     )
     with cn.cursor() as cur:
         cur.execute(
-            f"SELECT f.id FROM foods f WHERE f.is_active = 1 AND {pham_vi}",
-            () if chi_mon_chung else (user_id,),
+            f"SELECT f.id FROM foods f WHERE f.is_active = 1 AND {scope}",
+            () if public_only else (user_id,),
         )
-        tat_ca = {d["id"] for d in cur.fetchall()}
+        every_food = {d["id"] for d in cur.fetchall()}
 
     return {
-        "thieu_ly_do": sorted((tat_ca - con_lai) - co_ly_do),
-        "ly_do_du": sorted(co_ly_do & con_lai),
+        "unexplained": sorted((every_food - surviving) - explained),
+        "spurious": sorted(explained & surviving),
     }
 
 
-# ── Chạy thử ──────────────────────────────────────────────────────────
+# ── Trial run ─────────────────────────────────────────────────────────
 
 
-def _dem_theo_vai(mon: Iterable[dict[str, Any]]) -> dict[str, int]:
-    dem: dict[str, int] = {}
-    for m in mon:
-        dem[m["dish_role"]] = dem.get(m["dish_role"], 0) + 1
-    return dem
+def _count_by_role(foods: Iterable[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for f in foods:
+        counts[f["dish_role"]] = counts.get(f["dish_role"], 0) + 1
+    return counts
 
 
 def main() -> int:
-    """Chạy vài tình huống, trong đó có hai tình huống chỉ khác nhau mức độ."""
-    from .db import in_utf8, ket_noi
+    """Run a few scenarios, two of which differ only in severity."""
+    from .db import connect, use_utf8
 
-    in_utf8()
-    cn = ket_noi()
+    use_utf8()
+    cn = connect()
     try:
-        tat_ca = loc_f1(cn)
-        print(f"Không bệnh gì: {len(tat_ca)} món")
+        everything = allowed_foods(cn)
+        print(f"No conditions: {len(everything)} foods")
 
-        tinh_huong = [
+        scenarios = [
             ("Tăng huyết áp", ["Tăng huyết áp"]),
             ("Gút + dị ứng hải sản", ["Gút", "Dị ứng hải sản"]),
             ("Ăn chay + dị ứng đậu nành", ["Ăn chay", "Dị ứng đậu nành"]),
         ]
-        for ten, ds in tinh_huong:
-            for muc in ("mild", "severe"):
-                dk = dieu_kien_theo_ten(cn, ds, muc)
-                mon = loc_f1(cn, dieu_kien=dk)
-                vai = _dem_theo_vai(mon)
+        for label, names in scenarios:
+            for level in ("mild", "severe"):
+                conds = conditions_by_name(cn, names, level)
+                foods = allowed_foods(cn, conditions=conds)
+                by_role = _count_by_role(foods)
                 print(
-                    f"{ten:28} [{muc:7}] {len(mon):3} món  "
-                    + " ".join(f"{k}={v}" for k, v in sorted(vai.items()))
+                    f"{label:28} [{level:7}] {len(foods):3} foods  "
+                    + " ".join(f"{k}={v}" for k, v in sorted(by_role.items()))
                 )
 
-            mem = hinh_phat_mem(cn, dieu_kien_theo_ten(cn, ds, "severe"))
-            ngay = han_muc_theo_ngay(cn, dieu_kien_theo_ten(cn, ds, "severe"))
-            if mem:
+            severe = conditions_by_name(cn, names, "severe")
+            soft = soft_rule_rows(cn, severe)
+            per_day = daily_limits(cn, severe)
+            if soft:
                 print(
-                    "    mềm:   "
+                    "    soft:    "
                     + "; ".join(
                         f"{r['name_vi']}/{r['rule_type']}"
                         f"{'/' + r['nutrient'] if r['nutrient'] else ''}"
-                        f" −{r['penalty']}"
-                        for r in mem
+                        f" x{r['penalty']}"
+                        for r in soft
                     )
                 )
-            if ngay:
+            if per_day:
                 print(
-                    "    theo ngày: "
+                    "    per day: "
                     + "; ".join(
                         f"{r['name_vi']}/{r['nutrient']} "
                         f"{r['comparator']} {r['threshold']:g}"
-                        for r in ngay
+                        for r in per_day
                     )
                 )
     finally:

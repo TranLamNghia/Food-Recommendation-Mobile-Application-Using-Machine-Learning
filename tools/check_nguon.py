@@ -115,7 +115,7 @@ def nap_nguon_csdl() -> set[str]:
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     print("Soát nguồn: CSDL và mã → Tài liệu tham khảo")
     print("=" * 72)
 

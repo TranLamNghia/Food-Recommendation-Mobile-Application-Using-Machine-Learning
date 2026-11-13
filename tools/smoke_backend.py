@@ -91,13 +91,13 @@ def _ket_noi():
     )
 
 
-def sql(cau: str, tham=()):
+def sql(sentence: str, tham=()):
     """Chạy một câu SQL, trả các dòng. Dùng để dựng trạng thái mà API
     không cho dựng — ví dụ khóa một tài khoản."""
     cn = _ket_noi()
     try:
         with cn.cursor() as cur:
-            cur.execute(cau, tham)
+            cur.execute(sentence, tham)
             dong = cur.fetchall()
         cn.commit()
         return dong
@@ -126,7 +126,7 @@ def xoa_tai_khoan(*email: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--giu", action="store_true",
                     help="không xóa tài khoản thử, để soi trong CSDL")
@@ -490,12 +490,12 @@ def main(argv: list[str] | None = None) -> int:
     # `DEFAULT CURRENT_TIMESTAMP` của lược đồ và so với mọi `NOW()` trong
     # tools/*.py. Sắp theo `created_at` khi đó là trộn hai đồng hồ.
     print("\n§2.3  mọi DATETIME theo một đồng hồ: Asia/Ho_Chi_Minh")
-    lech = sql(
+    excess = sql(
         "SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) FROM users "
         "WHERE email = %s", (email,))[0][0]
     kiem("users.created_at lệch NOW() dưới 5 phút",
-         lech is not None and abs(lech) < 5,
-         f"lệch {lech} phút — 420 phút nghĩa là vẫn đang ghi UTC")
+         excess is not None and abs(excess) < 5,
+         f"lệch {excess} phút — 420 phút nghĩa là vẫn đang ghi UTC")
 
     # ── Tài khoản bị khóa: bộ lọc toàn cục phải chặn MỌI endpoint ────────
     #
@@ -539,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
     if ts.giu:
         print(f"Giữ lại tài khoản thử {email} (--giu)")
     else:
-        # `vua-` là tài khoản của phép kiểm mật khẩu đúng 72 byte; `dai-`
+        # `fits-` là tài khoản của phép kiểm mật khẩu đúng 72 byte; `dai-`
         # không bao giờ tạo được dòng nào nhưng vẫn xóa cho chắc, để một lần
         # đổi chặn trên sau này không để lại rác.
         xoa_tai_khoan(email, f"vua-{email}", f"dai-{email}")

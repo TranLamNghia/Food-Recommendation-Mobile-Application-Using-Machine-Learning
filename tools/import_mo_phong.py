@@ -98,9 +98,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import in_utf8, ket_noi  # noqa: E402
-from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
-from ml.rocchio import alpha, dung_ho_so, giai_doan  # noqa: E402
+from ml.db import use_utf8, connect  # noqa: E402
+from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
+from ml.rocchio import alpha, build_profile, stage  # noqa: E402
 
 from tools.gen_buoc1_cases import bmr, han_muc, tdee, tron, tuoi  # noqa: E402
 
@@ -280,9 +280,9 @@ def doc_ho_so(hom_nay: date) -> list[dict[str, Any]]:
     if not hang:
         raise LoiNap(f"{HO_SO_NGUON} không có dòng dữ liệu nào")
     can = {"user_id", "Gender", "Age", "Height", "Weight", "FAF", "NObeyesdad"}
-    thieu = can - set(hang[0])
-    if thieu:
-        raise LoiNap(f"{HO_SO_NGUON.name} thiếu cột: {', '.join(sorted(thieu))}")
+    missing = can - set(hang[0])
+    if missing:
+        raise LoiNap(f"{HO_SO_NGUON.name} thiếu cột: {', '.join(sorted(missing))}")
 
     dau_tien: dict[str, dict[str, str]] = {}
     for h in hang:
@@ -293,7 +293,7 @@ def doc_ho_so(hom_nay: date) -> list[dict[str, Any]]:
     ]
 
 
-def doc_hanh_vi(mon_theo_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
+def doc_hanh_vi(foods_by_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
     """`user_id` → danh sách `(food_id, action)` theo đúng thứ tự trong tệp."""
     if not HANH_VI.exists():
         raise LoiNap(
@@ -302,9 +302,9 @@ def doc_hanh_vi(mon_theo_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]
         )
     with HANH_VI.open(encoding="utf-8-sig", newline="") as f:
         doc = csv.DictReader(f)
-        thieu = {"user_id", "ma_mon", "lua_chon"} - set(doc.fieldnames or ())
-        if thieu:
-            raise LoiNap(f"{HANH_VI.name} thiếu cột: {', '.join(sorted(thieu))}")
+        missing = {"user_id", "ma_mon", "lua_chon"} - set(doc.fieldnames or ())
+        if missing:
+            raise LoiNap(f"{HANH_VI.name} thiếu cột: {', '.join(sorted(missing))}")
         luot: dict[str, list[tuple[str, str]]] = {}
         thay: dict[str, set[str]] = {}
         for stt, d in enumerate(doc, start=2):
@@ -316,7 +316,7 @@ def doc_hanh_vi(mon_theo_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]
                     f"  dòng {stt}: `lua_chon` = {chon!r} không hợp lệ; "
                     f"phải là một trong: {', '.join(LUA_CHON)}"
                 )
-            if ma not in mon_theo_id:
+            if ma not in foods_by_id:
                 raise LoiNap(
                     f"  dòng {stt}: `ma_mon` = {ma} không có trong `foods` "
                     f"đang hoạt động. Bộ món đã đổi — sinh lại deck và dữ liệu."
@@ -342,11 +342,11 @@ def doc_su_that() -> dict[str, Any]:
 # ── Bộ lọc F1 ─────────────────────────────────────────────────────────────
 
 
-def loc_f1(
+def allowed_foods(
     cn,
     su_that: dict[str, Any],
     luot: dict[str, list[tuple[str, str]]],
-    mon_theo_id: dict[str, Any],
+    foods_by_id: dict[str, Any],
 ) -> tuple[
     dict[str, list[tuple[str, str]]],
     dict[str, list[tuple[str, str, list[str]]]],
@@ -359,7 +359,7 @@ def loc_f1(
     buộc giả dạng khẩu vị, và `n_signals` vẫn đếm cả những lượt đó nên giai
     đoạn cũng bị tính sai.
 
-    Với dữ liệu mô phỏng hiện tại thì `benh_ly` rỗng cho cả 50 người, nên
+    Với dữ liệu mô phỏng hiện tại thì `condition_names` rỗng cho cả 50 người, nên
     hàm này trả về nguyên đầu vào. Nó vẫn đi qua **đúng** đường mà
     `import_swipes.py` đi, để khi có bước gán bệnh lý mô phỏng thì không
     phải viết lại chỗ này — và để hai đường nhập không thể lệch nhau.
@@ -370,7 +370,7 @@ def loc_f1(
         {
             b
             for u in luot
-            for b in (su_that["nguoi"].get(u, {}).get("benh_ly") or [])
+            for b in (su_that["nguoi"].get(u, {}).get("condition_names") or [])
         }
     )
     # Tra một lần cho mọi tên, ở pha kiểm: 50 hồ sơ cùng một mẫu sai thì phải
@@ -382,9 +382,9 @@ def loc_f1(
     ma_benh: dict[str, list[int]] = {}
 
     for u, ds in luot.items():
-        ten = su_that["nguoi"].get(u, {}).get("benh_ly") or []
+        ten = su_that["nguoi"].get(u, {}).get("condition_names") or []
         ma_benh[u] = kiem_benh_ly(cn, ten)
-        con, loai = loc_theo_f1(cn, ten, ds, mon_theo_id)
+        con, loai = loc_theo_f1(cn, ten, ds, foods_by_id)
         if not con:
             raise LoiNap(
                 f"{u}: Bộ lọc F1 loại toàn bộ {len(ds)} lượt — mọi món trong "
@@ -393,13 +393,13 @@ def loc_f1(
             )
         # Đối chiếu với danh sách mà bộ sinh đã ghi vào `khau_vi_that.json`.
         #
-        # Hai bên chạy cùng `ly_do_loai` nhưng ở hai thời điểm khác nhau, nên
+        # Hai bên chạy cùng `exclusion_reasons` nhưng ở hai thời điểm khác nhau, nên
         # lệch nghĩa là `condition_rules` đã đổi sau khi dữ liệu được sinh —
         # và khi đó dữ liệu mang một ràng buộc khác với ràng buộc mà hệ thống
         # đang thi hành. Nó không gây lỗi ở đâu cả: trình nhập vẫn ghi xong,
         # `build_dataset` vẫn chạy, và phép đo F1 trong `check_mo_phong.py`
         # vẫn in ra một con số — một con số của bộ luật cũ.
-        da_ghi = set(su_that["nguoi"].get(u, {}).get("f1_loai") or ())
+        da_ghi = set(su_that["nguoi"].get(u, {}).get("f1_excluded") or ())
         vua_tinh = {f for f, _a, _l in loai}
         if da_ghi != vua_tinh:
             raise LoiNap(
@@ -439,8 +439,8 @@ def ghi(
     cn,
     ho_so: list[dict[str, Any]],
     luot: dict[str, list[tuple[str, str]]],
-    kg: KhongGianDacTrung,
-    mon_theo_id: dict[str, Any],
+    kg: FeatureSpace,
+    foods_by_id: dict[str, Any],
     ma_benh: dict[str, list[int]],
     ngay_nap: date,
 ) -> list[dict[str, Any]]:
@@ -512,7 +512,7 @@ def ghi(
                     ),
                 )
 
-            ho = dung_ho_so(kg, [(mon_theo_id[f], a) for f, a in luot[ma]])
+            ho = build_profile(kg, [(foods_by_id[f], a) for f, a in luot[ma]])
             # `alpha` ghi đúng `alpha(n_signals)`, không ghi 0. `ml/serve.py`
             # tính lại α lúc phục vụ nên số 0 không làm vỡ gì khi chạy, nhưng
             # cột này là thứ các truy vấn thống kê của Chương 3 đọc tới — để
@@ -528,7 +528,7 @@ def ghi(
                     json.dumps(list(ho.weights)),
                     ho.sum_abs_weight,
                     ho.n_signals,
-                    giai_doan(ho.n_signals),
+                    stage(ho.n_signals),
                     round(alpha(ho.n_signals), 3),
                 ),
             )
@@ -538,7 +538,7 @@ def ghi(
                     "user_id": user_id,
                     "email": email,
                     "n_signals": ho.n_signals,
-                    "stage": giai_doan(ho.n_signals),
+                    "stage": stage(ho.n_signals),
                     "alpha": alpha(ho.n_signals),
                 }
             )
@@ -553,8 +553,8 @@ def ghi(
 def xem_truoc(
     ho_so: list[dict[str, Any]],
     luot: dict[str, list[tuple[str, str]]],
-    kg: KhongGianDacTrung,
-    mon_theo_id: dict[str, Any],
+    kg: FeatureSpace,
+    foods_by_id: dict[str, Any],
 ) -> None:
     print(f"{len(ho_so)} hồ sơ · {sum(len(v) for v in luot.values())} lượt vuốt")
 
@@ -578,8 +578,8 @@ def xem_truoc(
 
     gd = collections.Counter()
     for h in ho_so:
-        ho = dung_ho_so(kg, [(mon_theo_id[f], a) for f, a in luot[h["user_id"]]])
-        gd[giai_doan(ho.n_signals)] += 1
+        ho = build_profile(kg, [(foods_by_id[f], a) for f, a in luot[h["user_id"]]])
+        gd[stage(ho.n_signals)] += 1
     print("  giai đoạn      " + "  ".join(f"{k}={v}" for k, v in sorted(gd.items())))
 
     # Hai bậc không với tới được từ thang đo nguồn — nói ra chứ không để
@@ -593,7 +593,7 @@ def xem_truoc(
 
 
 def main() -> int:
-    in_utf8()
+    use_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
     bo.add_argument("--db", default=None)
     bo.add_argument("--apply", action="store_true", help="ghi vào CSDL")
@@ -602,16 +602,16 @@ def main() -> int:
     )
     t = bo.parse_args()
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
         if t.xoa:
             n = xoa_da_nap(cn)
             print(f"Đã xóa {n} người dùng mô phỏng (cùng mọi dòng phụ thuộc).")
             return 0
 
-        mon, _ = nap_mon(cn)
-        kg = KhongGianDacTrung.tu_mon(mon)
-        mon_theo_id = {m.id: m for m in mon}
+        mon, _ = load_foods(cn)
+        kg = FeatureSpace.from_foods(mon)
+        foods_by_id = {m.id: m for m in mon}
         ngay_nap = date.today()
 
         try:
@@ -624,7 +624,7 @@ def main() -> int:
                     "python tools/sinh_khau_vi.py --ghi"
                 )
             ho_so = doc_ho_so(ngay_nap)
-            luot = doc_hanh_vi(mon_theo_id)
+            luot = doc_hanh_vi(foods_by_id)
 
             thieu_luot = [h["user_id"] for h in ho_so if h["user_id"] not in luot]
             if thieu_luot:
@@ -638,7 +638,7 @@ def main() -> int:
                     f"{len(thua_luot)} người có lượt vuốt nhưng không có hồ "
                     f"sơ: {', '.join(sorted(thua_luot)[:5])}"
                 )
-            luot, bi_loai, ma_benh = loc_f1(cn, su_that, luot, mon_theo_id)
+            luot, bi_loai, ma_benh = allowed_foods(cn, su_that, luot, foods_by_id)
         except (LoiNap, LoiPhieu) as e:
             print(f"Không nạp được.\n{e}", file=sys.stderr)
             return 1
@@ -655,9 +655,9 @@ def main() -> int:
 
         print(f"Nguồn: {HANH_VI.relative_to(ROOT)}")
         print(f"       {HO_SO_NGUON.relative_to(ROOT)}  (chỉ các cột hồ sơ)")
-        print(f"       {SU_THAT.relative_to(ROOT)}  seed {su_that['tham_so']['seed']}")
+        print(f"       {SU_THAT.relative_to(ROOT)}  seed {su_that['params']['seed']}")
         print()
-        xem_truoc(ho_so, luot, kg, mon_theo_id)
+        xem_truoc(ho_so, luot, kg, foods_by_id)
         n_bo = sum(len(v) for v in bi_loai.values())
         n_giu = sum(len(v) for v in luot.values())
         if n_bo:
@@ -688,7 +688,7 @@ def main() -> int:
             print("\nXem trước. Thêm --apply để ghi vào CSDL.")
             return 0
 
-        ra = ghi(cn, ho_so, luot, kg, mon_theo_id, ma_benh, ngay_nap)
+        ra = ghi(cn, ho_so, luot, kg, foods_by_id, ma_benh, ngay_nap)
         n_luot = sum(len(v) for v in luot.values())
         print(
             f"\nĐã ghi {len(ra)} người · {n_luot} dòng `interactions` · "

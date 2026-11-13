@@ -183,7 +183,7 @@ ROLES_NEEDED = {
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     try:
         import pymysql
     except ImportError:

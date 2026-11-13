@@ -1338,7 +1338,7 @@ không cá nhân hóa — phần "ai cũng không thích mấy món này" đã b
 | 8 | Cơ chế 70-30 cấp ngày | **Xong**, có test |
 | 9 | Tính `foods.popularity_score` từ tín hiệu thật | **Xong** — `tools/update_popularity.py`, chờ dữ liệu |
 | 10 | Thu dữ liệu từ người dùng thật | Bộ công cụ **xong**; **dữ liệu thật chờ thu**. Tập **mô phỏng** đã nạp vào CSDL và cả đường ống đã chạy hết — xem §11.4–11.7 |
-| 11 | Hạn mức theo ngày từ nhật ký + thực đơn | **Xong** — `ml/han_muc.py` |
+| 11 | Hạn mức theo ngày từ nhật ký + thực đơn | **Xong** — `ml/daily_limits.py` |
 | 12 | Lý do bị F1 loại, ba bậc | **Xong** — `f1_filter.ly_do_loai` |
 | 13 | Thi hành ràng buộc mềm | **Xong** — `scoring.hinh_phat`; phạm vi `per_meal` **chưa có tầng nhận** |
 | 14 | Giải thích gợi ý bằng câu | **Xong** — `serve.dong_gop`, `serve.cau_giai_thich` |

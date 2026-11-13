@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Bổ khuyết chất ngoại vi cho nguyên liệu, lấy từ USDA FoodData Central.
+"""Fill micronutrient gaps for ingredients from USDA FoodData Central.
 
-Vá ở **tầng nguyên liệu**, không vá ở tầng món ăn. Mười món nước đầu tiên
-dùng chung 15 nguyên liệu; chữa một nguyên liệu thì mọi món dùng nó đều được
-chữa theo. Đi chữa từng món là làm lại cùng một việc hàng trăm lần và mỗi
-lần lại có cơ hội sai khác đi.
+Patched at the **ingredient** level, not the dish level. The first ten soup
+dishes share 15 ingredients; fixing one ingredient fixes every dish that uses
+it. Fixing dish by dish repeats the same work hundreds of times, and each
+repetition is another chance to diverge.
 
-Kết quả ghi ra `data/reference/ingredients.json` — bảng nguyên liệu đã hợp
-nhất, trong đó **mỗi giá trị mang nguồn của riêng nó**. Ghi nguồn ở cấp mục
-là ghi sai, vì một nguyên liệu có thể lấy macro từ bảng Việt Nam nhưng vay
-natri từ USDA.
+The result is written to `data/reference/ingredients.json` — a merged
+ingredient table in which **each value carries its own source**. Recording the
+source per entry would be wrong, because one ingredient can take its
+macronutrients from the Vietnamese table while borrowing sodium from USDA.
 
-Chạy:
-    python tools/fill_gaps_usda.py            # vá và ghi
-    python tools/fill_gaps_usda.py --dry-run  # chỉ xem, không ghi
+Run:
+    python tools/fill_gaps_usda.py            # patch and write
+    python tools/fill_gaps_usda.py --dry-run  # look only, write nothing
+
+Note on language: identifiers and output here are English, but the keys and
+values inside `ingredient_map.json` stay Vietnamese — they are **data**, a
+hand-maintained reference file, not code.
 """
 
 from __future__ import annotations
@@ -37,10 +41,11 @@ FCT_PATH = REF / "fct2007.json"
 MAP_PATH = REF / "ingredient_map.json"
 OUT_PATH = REF / "ingredients.json"
 
-# Chất được phép vay. Cố ý KHÔNG có calories_kcal, protein_g, fat_g, carbs_g
-# — xem SOURCING_POLICY.md mục 2. Trộn chất sinh năng lượng giữa hai bảng
-# tạo ra nguyên liệu không tồn tại và phá luôn phép đối chiếu Atwater, vốn là
-# phép kiểm duy nhất bắt được lỗi số liệu.
+# The nutrients that may be borrowed. Deliberately WITHOUT calories_kcal,
+# protein_g, fat_g and carbs_g — see SOURCING_POLICY.md section 2. Mixing
+# macronutrients across two tables invents an ingredient that does not exist
+# and also breaks the Atwater cross-check, which is the only check that
+# catches a bad figure.
 BORROWABLE = {
     "sodium_mg": ("Sodium, Na", "MG"),
     "sugar_g": ("Sugars, total including NLEA", "G"),
@@ -51,7 +56,7 @@ BORROWABLE = {
     "vitamin_c_mg": ("Vitamin C, total ascorbic acid", "MG"),
 }
 
-# Các chất giữ nguyên từ bảng Việt Nam, không bao giờ vay.
+# The nutrients kept from the Vietnamese table, never borrowed.
 LOCKED = ["calories_kcal", "protein_g", "fat_g", "carbs_g", "fiber_g", "purine_mg"]
 
 SRC_FCT = "FCT2007"
@@ -59,7 +64,7 @@ SRC_USDA = "USDA"
 
 
 def fetch_usda(fdc_id: int, api_key: str) -> dict[str, float]:
-    """Lấy các chất vay được của một mục USDA, quy về mỗi 100 g."""
+    """Fetch one USDA entry's borrowable nutrients, normalised per 100 g."""
     url = f"https://api.nal.usda.gov/fdc/v1/food/{fdc_id}?api_key={api_key}"
     with urllib.request.urlopen(url, timeout=45) as response:
         data = json.load(response)
@@ -77,53 +82,39 @@ def fetch_usda(fdc_id: int, api_key: str) -> dict[str, float]:
     return values
 
 
-
-def _in_utf8() -> None:
-    """Bắt stdout nhận tiếng Việt trên Windows (mặc định cp1252).
-
-    Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
-    đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
-    Bản sao của `tools/_env.in_utf8`; để ở đây vì `tools/baocao/` không chắc
-    có `tools/` trên `sys.path`.
-    """
-    for luong in (sys.stdout, sys.stderr):
-        try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-        except Exception:  # pragma: no cover
-            pass
-
 def main() -> int:
-    _in_utf8()
+    _env.use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     api_key = _env.require(
         "USDA_API_KEY",
-        hint="Đăng ký miễn phí tại https://api.data.gov/signup/",
+        hint="Sign up free at https://api.data.gov/signup/",
     )
 
     fct = {f["code"]: f for f in json.loads(FCT_PATH.read_text(encoding="utf-8"))}
     mapping = json.loads(MAP_PATH.read_text(encoding="utf-8"))
     pairs = mapping["mappings"]
-    no_map = {k: v for k, v in mapping["khong_anh_xa"].items() if k != "_doc"}
+    # `khong_anh_xa` ("not mapped") is a key in the data file, kept as-is.
+    unmapped = {k: v for k, v in mapping["khong_anh_xa"].items() if k != "_doc"}
 
     result: dict[str, dict] = {}
     filled_count = 0
     skipped: list[str] = []
 
-    codes = list(pairs) + list(no_map)
-    print(f"Xử lý {len(codes)} nguyên liệu.\n")
+    codes = list(pairs) + list(unmapped)
+    print(f"Processing {len(codes)} ingredients.\n")
 
     for code in codes:
         source = fct.get(code)
         if source is None:
-            print(f"  ⚠ mã {code} không có trong bảng gốc, bỏ qua")
+            print(f"  ! code {code} is not in the source table, skipping")
             continue
 
         entry = {
             "code": code,
-            "name_vi": pairs.get(code, {}).get("vi") or no_map.get(code, ""),
+            "name_vi": pairs.get(code, {}).get("vi") or unmapped.get(code, ""),
             "name_en_fct": source["name_en"],
             "values": {},
             "sources": {},
@@ -148,7 +139,7 @@ def main() -> int:
         try:
             usda = fetch_usda(pair["fdc_id"], api_key)
         except urllib.error.HTTPError as exc:
-            print(f"  ⚠ {entry['name_vi']}: gọi USDA lỗi {exc.code}")
+            print(f"  ! {entry['name_vi']}: USDA call failed with {exc.code}")
             skipped.append(entry["name_vi"])
             result[code] = entry
             continue
@@ -167,38 +158,46 @@ def main() -> int:
             "confidence": pair["confidence"],
         }
 
-        flag = {"cao": " ", "trung binh": "~", "thap": "!"}.get(pair["confidence"], " ")
-        still = [k for k in gaps if k not in usda]
-        print(f"  {flag} {entry['name_vi']:<18} vay {len(borrowed)}: {', '.join(borrowed) or '—'}")
-        if still:
-            print(f"      vẫn thiếu: {', '.join(still)}")
+        # The confidence values are Vietnamese because they come from the
+        # data file.
+        flag = {"cao": " ", "trung binh": "~", "thap": "!"}.get(
+            pair["confidence"], " "
+        )
+        still_missing = [k for k in gaps if k not in usda]
+        print(
+            f"  {flag} {entry['name_vi']:<18} borrowed {len(borrowed)}: "
+            f"{', '.join(borrowed) or '-'}"
+        )
+        if still_missing:
+            print(f"      still missing: {', '.join(still_missing)}")
 
         result[code] = entry
-        # Lịch sự với máy chủ; hạn mức là 1.000 lượt/giờ nên không cần vội.
+        # Be polite to the server; the quota is 1,000 calls per hour, so
+        # there is no need to rush.
         time.sleep(0.4)
 
-    print(f"\nĐã vay {filled_count} giá trị.")
+    print(f"\nBorrowed {filled_count} values.")
     if skipped:
-        print(f"Không gọi được: {', '.join(skipped)}")
+        print(f"Could not call: {', '.join(skipped)}")
 
-    print("\nĐộ phủ sau khi vá:")
+    print("\nCoverage after patching:")
     total = len(result)
     for key in LOCKED + list(BORROWABLE):
         have = sum(1 for e in result.values() if key in e["values"])
         from_usda = sum(
             1 for e in result.values() if e["sources"].get(key) == SRC_USDA
         )
-        tail = f"  (vay {from_usda})" if from_usda else ""
+        tail = f"  (borrowed {from_usda})" if from_usda else ""
         print(f"  {key:<16} {have:>3}/{total}  {have / total * 100:>5.1f} %{tail}")
 
     if args.dry_run:
-        print("\n(--dry-run: không ghi tệp)")
+        print("\n(--dry-run: no file written)")
         return 0
 
     OUT_PATH.write_text(
         json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8"
     )
-    print(f"\nĐã ghi → {OUT_PATH}")
+    print(f"\nWrote -> {OUT_PATH}")
     return 0
 
 

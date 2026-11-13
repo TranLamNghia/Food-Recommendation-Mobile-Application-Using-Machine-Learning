@@ -98,7 +98,7 @@ def assert_no_real_db(label: str, text: str, real: str) -> None:
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     try:
         import pymysql
     except ImportError:

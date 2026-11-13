@@ -248,7 +248,7 @@ def read_db(database: str) -> dict[str, dict[str, dict]]:
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     database = _env.require("MYSQL_DATABASE")
     sql = parse_schema(SCHEMA.read_text(encoding="utf-8"))
     db = read_db(database)

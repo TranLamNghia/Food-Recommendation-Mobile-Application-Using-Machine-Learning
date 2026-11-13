@@ -197,10 +197,10 @@ def kiem_ten_use_case() -> list[str]:
     us = {s[0] for s in us_data.STORIES}
 
     for ten_nguon, tap in (("flowchart_data", fc), ("us_data", us)):
-        thieu = sorted(mdj - tap)
+        missing = sorted(mdj - tap)
         thua = sorted(tap - mdj)
-        if thieu or thua:
-            for x in thieu:
+        if missing or thua:
+            for x in missing:
                 loi.append(f"{ten_nguon} thiếu use case {x!r} (có trong mdj)")
             for x in thua:
                 loi.append(f"{ten_nguon} có use case {x!r} mà mdj không có")
@@ -372,9 +372,9 @@ def kiem_con_so(spec: str) -> list[str]:
     so = sorted(int(m) for m in re.findall(
         r"^\| (\d+) \| .+ \| `(?:GET|POST|PUT|PATCH|DELETE)` \| `/", spec,
         re.M))
-    thieu = sorted(set(range(1, khai_cong + 1)) - set(so))
-    if thieu:
-        loi.append(f"bảng tổng hợp thiếu số thứ tự: {thieu}")
+    missing = sorted(set(range(1, khai_cong + 1)) - set(so))
+    if missing:
+        loi.append(f"bảng tổng hợp thiếu số thứ tự: {missing}")
     for n in sorted({n for n in so if so.count(n) > 1}):
         loi.append(f"số thứ tự {n} dùng cho {so.count(n)} endpoint")
     print(f"   {len(cong)} endpoint công khai + {len(noi)} nội bộ, "

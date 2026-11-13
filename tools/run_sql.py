@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Chạy tệp .sql lên MySQL qua pymysql.
+"""Run a .sql file against MySQL through pymysql.
 
-Tồn tại vì máy phát triển không có `mysql` CLI trong PATH, mà tách câu lệnh
-bằng `split(';')` là sai: dấu chấm phẩy nằm trong chuỗi hoặc trong chú thích
-sẽ cắt câu lệnh làm đôi. Bộ tách ở đây duyệt từng ký tự và theo dõi trạng
-thái chuỗi, nên chỉ cắt ở dấu chấm phẩy thật sự kết thúc câu lệnh.
+It exists because the development machine has no `mysql` CLI on PATH, and
+splitting statements with `split(';')` is wrong: a semicolon inside a string
+or inside a comment would cut a statement in half. The splitter here walks
+character by character and tracks quoting state, so it only cuts at a
+semicolon that genuinely ends a statement.
 
-Chạy:
+Run:
     python tools/run_sql.py db/schema.sql
     python tools/run_sql.py db/seed.sql --database nutrition_rec
 """
@@ -23,7 +24,7 @@ import _env  # noqa: E402
 
 
 def split_statements(sql: str) -> list[str]:
-    """Tách thành từng câu lệnh, bỏ qua dấu ; trong chuỗi và chú thích."""
+    """Split into statements, ignoring any `;` inside a string or comment."""
     out: list[str] = []
     buf: list[str] = []
     i, n = 0, len(sql)
@@ -34,12 +35,12 @@ def split_statements(sql: str) -> list[str]:
 
         if quote:
             buf.append(ch)
-            if ch == "\\" and i + 1 < n:          # ký tự thoát
+            if ch == "\\" and i + 1 < n:          # escape character
                 buf.append(sql[i + 1])
                 i += 2
                 continue
             if ch == quote:
-                # Hai dấu nháy liền nhau là một dấu nháy nằm trong chuỗi.
+                # Two adjacent quotes are one quote inside the string.
                 if i + 1 < n and sql[i + 1] == quote:
                     buf.append(sql[i + 1])
                     i += 2
@@ -48,13 +49,13 @@ def split_statements(sql: str) -> list[str]:
             i += 1
             continue
 
-        # Chú thích một dòng: bỏ tới hết dòng.
+        # Line comment: skip to end of line.
         if sql.startswith("--", i) or sql.startswith("#", i):
             j = sql.find("\n", i)
             i = n if j < 0 else j
             continue
 
-        # Chú thích khối.
+        # Block comment.
         if sql.startswith("/*", i):
             j = sql.find("*/", i + 2)
             i = n if j < 0 else j + 2
@@ -84,19 +85,19 @@ def split_statements(sql: str) -> list[str]:
 
 
 def main() -> int:
-    _env.in_utf8()
+    _env.use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="+", type=Path)
     parser.add_argument(
         "--database", default=None,
-        help="chọn CSDL trước khi chạy; bỏ qua nếu tệp tự CREATE/USE",
+        help="select this database first; omit if the file does CREATE/USE itself",
     )
     args = parser.parse_args()
 
     try:
         import pymysql
     except ImportError:
-        sys.exit("Cần cài pymysql:  pip install pymysql")
+        sys.exit("pymysql is required:  pip install pymysql")
 
     conn = pymysql.connect(
         host=_env.get("MYSQL_HOST", "localhost"),
@@ -114,7 +115,7 @@ def main() -> int:
 
             for path in args.files:
                 statements = split_statements(path.read_text(encoding="utf-8"))
-                print(f"\n{path}  —  {len(statements)} câu lệnh")
+                print(f"\n{path}  —  {len(statements)} statements")
 
                 for idx, stmt in enumerate(statements, start=1):
                     try:
@@ -123,13 +124,13 @@ def main() -> int:
                         conn.rollback()
                         head = " ".join(stmt.split())[:160]
                         sys.exit(
-                            f"\nLỖI ở câu lệnh {idx}/{len(statements)} của {path}\n"
-                            f"  {head}…\n\n{exc}\n\nĐã hoàn tác."
+                            f"\nFAILED at statement {idx}/{len(statements)} "
+                            f"of {path}\n  {head}...\n\n{exc}\n\nRolled back."
                         )
-                print(f"  → chạy xong")
+                print("  -> done")
 
         conn.commit()
-        print("\nĐã commit.")
+        print("\nCommitted.")
     finally:
         conn.close()
 
