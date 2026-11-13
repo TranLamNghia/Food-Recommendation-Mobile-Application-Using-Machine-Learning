@@ -1,31 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Dựng `db/schema.sql` + `db/seed.sql` vào một CSDL dùng một lần rồi kiểm.
+"""Build `db/schema.sql` + `db/seed.sql` into a throwaway database, then check it.
 
-Vì sao cần một công cụ riêng thay vì chạy thẳng tệp schema: **`db/schema.sql`
-mở đầu bằng `DROP DATABASE IF EXISTS nutrition_rec`**. Nó là script dựng lại
-từ đầu, nên chạy nó để "thử xem lược đồ có đúng không" sẽ xóa sạch CSDL đang
-làm việc.
+Why this needs its own tool instead of running the schema file directly:
+**`db/schema.sql` opens with `DROP DATABASE IF EXISTS nutrition_rec`**. It is a
+rebuild-from-scratch script, so running it to "see whether the schema is right"
+wipes the working database.
 
-Chuyện này đã xảy ra thật một lần: một phép thử dựng lại tưởng là chạy trên
-CSDL nháp đã xóa 305 món trong CSDL thật, vì câu `USE nutrition_rec` ở đầu tệp
-lặng lẽ chuyển kết nối về đó bất chấp tham số `database=` lúc kết nối. Lần đó
-không mất gì — toàn bộ món dựng lại được từ `data/foods/*.csv` — nhưng khi
-CSDL đã có dữ liệu người dùng thật thì sẽ không may như vậy.
+This happened for real once: a rebuild test believed to be running against a
+scratch database deleted 305 dishes from the real one, because the `USE
+nutrition_rec` statement at the top of the file silently moved the connection
+there regardless of the `database=` connection parameter. Nothing was lost that
+time — every dish rebuilds from `data/foods/*.csv` — but once the database
+holds real user data there will be no such luck.
 
-Công cụ này đổi tên CSDL trong cả hai tệp trước khi chạy, rồi **kiểm lại rằng
-kết nối thật sự đang ở CSDL nháp** trước khi đo bất cứ thứ gì. Phép kiểm đó
-quan trọng không kém phần đổi tên: nếu đổi tên không ăn, mọi con số bên dưới
-vẫn trả về đúng vì chúng đang đo CSDL thật, và bài kiểm hóa ra vô nghĩa mà
-trông như đã đạt.
+This tool renames the database inside both files before running them, and then
+**verifies that the connection really is on the scratch database** before
+measuring anything. That verification matters as much as the renaming: if the
+rename did not take, every number below still comes back correct because it is
+measuring the real database, and the test turns out meaningless while looking
+like it passed.
 
-Kiểm những gì:
-  · quy mô: số bảng, số cột khóa ngoại, số ràng buộc CHECK, tổng số cột
-  · không còn khóa UNIQUE nào chứa cột cho phép NULL (xem migration 003)
-  · không định danh nào mang dấu tiếng Việt (yêu cầu của bài tập ERD)
-  · seed nạp được và các bảng tra cứu có đúng số dòng
+What it checks:
+  - scale: table count, foreign-key columns, CHECK constraints, total columns
+  - no UNIQUE key contains a nullable column any more (see migration 003)
+  - no identifier carries Vietnamese diacritics (an ERD assignment requirement)
+  - the seed loads and the lookup tables hold the right number of rows
 
-Chạy:
+Run:
     python tools/test_schema_build.py
 """
 
@@ -35,13 +37,13 @@ import pathlib
 import re
 import sys
 
-import _env  # noqa: E402
-
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-# Dùng lại bộ tách câu lệnh của `run_sql.py` thay vì chép thêm một bản. Hai
-# bản sẽ lệch nhau: bản này sửa được một ca lạ thì bản kia vẫn sai, mà cả hai
-# đều chạy lên cùng một CSDL.
+import _env  # noqa: E402
+
+# Reuse `run_sql.py`'s statement splitter rather than keeping a second copy.
+# Two copies drift: fix an odd case in one and the other stays wrong, while
+# both run against the same database.
 from run_sql import split_statements  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -49,8 +51,9 @@ SCHEMA = ROOT / "db" / "schema.sql"
 SEED = ROOT / "db" / "seed.sql"
 SANDBOX = "nutrition_rec_buildtest"
 
-# Số liệu mong đợi. Đối chiếu chứ không chỉ in ra, vì một thay đổi lược đồ
-# ngoài ý muốn thường chỉ lệch đúng một con số — in ra thì rất dễ đọc qua.
+# The expected figures. Compared rather than merely printed, because an
+# unintended schema change usually moves exactly one number — printed, that is
+# very easy to read past.
 EXPECTED = {
     "tables": 24,
     "fk_columns": 32,
@@ -70,30 +73,31 @@ LOOKUP_ROWS = {
 def read_env() -> dict[str, str]:
     env_file = ROOT / ".env"
     if not env_file.exists():
-        sys.exit("Chưa có .env")
+        sys.exit("No .env file yet")
     return dict(
         re.findall(r"^(\w+)=(.*)$", env_file.read_text(encoding="utf-8"), re.M)
     )
 
 
 def rename_database(text: str, real: str) -> str:
-    """Trỏ tệp sang CSDL nháp.
+    """Point the file at the scratch database.
 
-    Bắt theo ranh giới từ, nếu không thì `nutrition_rec_buildtest` sẽ bị đổi
-    thêm một lần nữa ở những lần khớp sau.
+    Matches on a word boundary; without it, `nutrition_rec_buildtest` would be
+    renamed a second time on the later matches.
     """
     return re.compile(rf"\b{re.escape(real)}\b").sub(SANDBOX, text)
 
 
 def assert_no_real_db(label: str, text: str, real: str) -> None:
-    """Chốt an toàn cuối: không còn câu DROP DATABASE / USE nào trỏ về thật."""
+    """The last safety gate: no DROP DATABASE / USE statement still points at
+    the real database."""
     for line in text.split("\n"):
         upper = line.upper().strip()
         touches = "DROP DATABASE" in upper or upper.startswith("USE ")
         if touches and re.search(rf"\b{re.escape(real)}\b", line):
             sys.exit(
-                f"{label} vẫn còn câu lệnh trỏ vào CSDL thật sau khi đổi tên "
-                f"— dừng lại:\n  {line.strip()}"
+                f"{label} still has a statement pointing at the real database "
+                f"after renaming — stopping:\n  {line.strip()}"
             )
 
 
@@ -102,15 +106,15 @@ def main() -> int:
     try:
         import pymysql
     except ImportError:
-        sys.exit("Cần cài pymysql:  pip install pymysql")
+        sys.exit("pymysql is required:  pip install pymysql")
 
     env = read_env()
     real_db = env.get("MYSQL_DATABASE", "nutrition_rec")
 
     if SANDBOX == real_db:
         sys.exit(
-            f"CSDL nháp trùng tên CSDL thật ({real_db}) — chạy tiếp sẽ xóa "
-            f"dữ liệu thật. Dừng lại."
+            f"The scratch database has the same name as the real one "
+            f"({real_db}) — continuing would delete real data. Stopping."
         )
 
     schema_sql = rename_database(SCHEMA.read_text(encoding="utf-8"), real_db)
@@ -118,10 +122,10 @@ def main() -> int:
     assert_no_real_db("schema.sql", schema_sql, real_db)
     assert_no_real_db("seed.sql", seed_sql, real_db)
 
-    print("═" * 70)
-    print(f"DỰNG LƯỢC ĐỒ VÀO CSDL NHÁP  {SANDBOX}")
-    print(f"(CSDL thật {real_db} không bị chạm tới)")
-    print("═" * 70)
+    print("=" * 70)
+    print(f"BUILDING THE SCHEMA INTO THE SCRATCH DATABASE  {SANDBOX}")
+    print(f"(the real database {real_db} is not touched)")
+    print("=" * 70)
 
     connect = dict(
         host=env.get("MYSQL_HOST", "localhost"),
@@ -148,22 +152,23 @@ def main() -> int:
                         cursor.execute(statement)
                     except Exception as exc:  # noqa: BLE001
                         errors += 1
-                        failures.append(f"{label} câu {number}: {exc}")
-                        print(f"  ✗ câu {number}: {exc}")
+                        failures.append(f"{label} statement {number}: {exc}")
+                        print(f"  BAD  statement {number}: {exc}")
                         if errors > 3:
                             break
-                print(f"{label}: {len(statements)} câu lệnh, {errors} lỗi")
+                print(f"{label}: {len(statements)} statements, {errors} errors")
 
             cursor.execute("SELECT DATABASE()")
             current = cursor.fetchone()[0]
             if current != SANDBOX:
                 sys.exit(
-                    f"Kết nối đang ở CSDL {current!r}, không phải "
-                    f"{SANDBOX!r}. Dừng lại để không đo nhầm CSDL thật."
+                    f"The connection is on database {current!r}, not "
+                    f"{SANDBOX!r}. Stopping, so as not to measure the real "
+                    f"database by mistake."
                 )
-            print(f"\nđang ở CSDL: {current}")
+            print(f"\non database: {current}")
 
-            # ── Quy mô ──
+            # -- Scale --
             cursor.execute("SHOW TABLES")
             measured = {"tables": len(cursor.fetchall())}
 
@@ -186,15 +191,15 @@ def main() -> int:
             )
             measured["columns"] = cursor.fetchone()[0]
 
-            print("\nQuy mô:")
+            print("\nScale:")
             for key, want in EXPECTED.items():
                 got = measured[key]
-                mark = "✓" if got == want else "✗"
-                print(f"  {mark} {key:<12}{got:>5}   (mong đợi {want})")
+                mark = "ok " if got == want else "BAD"
+                print(f"  {mark} {key:<12}{got:>5}   (expected {want})")
                 if got != want:
-                    failures.append(f"{key}: đo {got}, mong đợi {want}")
+                    failures.append(f"{key}: measured {got}, expected {want}")
 
-            # ── Khóa UNIQUE bị NULL vô hiệu hóa ──
+            # -- UNIQUE keys defeated by NULL --
             cursor.execute(
                 "SELECT s.TABLE_NAME, s.INDEX_NAME,"
                 "       GROUP_CONCAT(CASE WHEN s.NULLABLE = 'YES'"
@@ -206,17 +211,17 @@ def main() -> int:
                 " HAVING nullable_cols IS NOT NULL"
             )
             leaky = cursor.fetchall()
-            print(f"\nKhóa UNIQUE chứa cột cho phép NULL: {len(leaky)}")
+            print(f"\nUNIQUE keys containing a nullable column: {len(leaky)}")
             for table, index, columns in leaky:
-                print(f"  ✗ {table}.{index} — cột NULL được: {columns}")
+                print(f"  BAD  {table}.{index} — nullable columns: {columns}")
                 failures.append(
-                    f"{table}.{index} không chặn trùng vì cột {columns} "
-                    f"cho phép NULL"
+                    f"{table}.{index} does not prevent duplicates because "
+                    f"column {columns} is nullable"
                 )
             if not leaky:
-                print("  ✓ không còn khóa nào bị NULL vô hiệu hóa")
+                print("  ok   no key is defeated by NULL any more")
 
-            # ── Dấu tiếng Việt trong định danh ──
+            # -- Vietnamese diacritics in identifiers --
             cursor.execute(
                 "SELECT TABLE_NAME, COLUMN_NAME "
                 "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()"
@@ -228,43 +233,48 @@ def main() -> int:
 
             accented = sorted(n for n in identifiers if not n.isascii())
             print(
-                f"\nĐịnh danh: {len(identifiers)} tên, "
-                f"{len(accented)} tên có dấu"
+                f"\nIdentifiers: {len(identifiers)} names, "
+                f"{len(accented)} with diacritics"
             )
             if accented:
                 for name in accented:
-                    print(f"  ✗ {name}")
-                failures.append(f"{len(accented)} định danh có dấu tiếng Việt")
+                    print(f"  BAD  {name}")
+                failures.append(
+                    f"{len(accented)} identifiers carry Vietnamese diacritics"
+                )
             else:
-                print("  ✓ không tên nào có dấu — đúng yêu cầu bài tập ERD")
+                print(
+                    "  ok   no name carries diacritics — as the ERD assignment "
+                    "requires"
+                )
 
-            # ── Seed ──
-            print("\nBảng tra cứu sau seed:")
+            # -- Seed --
+            print("\nLookup tables after seeding:")
             for table, want in LOOKUP_ROWS.items():
                 cursor.execute(f"SELECT COUNT(*) FROM {table}")
                 got = cursor.fetchone()[0]
-                mark = "✓" if got == want else "✗"
-                print(f"  {mark} {table:<18}{got:>4}   (mong đợi {want})")
+                mark = "ok " if got == want else "BAD"
+                print(f"  {mark} {table:<18}{got:>4}   (expected {want})")
                 if got != want:
-                    failures.append(f"{table}: {got} dòng, mong đợi {want}")
+                    failures.append(f"{table}: {got} rows, expected {want}")
     finally:
-        # Dọn bằng một kết nối khác: kết nối đang mở đứng trong chính CSDL
-        # sắp xóa.
+        # Clean up on a separate connection: the open one is sitting inside
+        # the very database about to be dropped.
         cleanup = pymysql.connect(**connect)
         with cleanup.cursor() as cursor:
             cursor.execute(f"DROP DATABASE IF EXISTS {SANDBOX}")
         cleanup.close()
         connection.close()
-        print(f"\n(đã xóa CSDL nháp {SANDBOX})")
+        print(f"\n(dropped the scratch database {SANDBOX})")
 
-    print("\n" + "═" * 70)
+    print("\n" + "=" * 70)
     if failures:
-        print(f"{len(failures)} vấn đề:\n")
+        print(f"{len(failures)} problems:\n")
         for item in failures:
-            print(f"  ✗ {item}")
+            print(f"  BAD  {item}")
     else:
-        print("LƯỢC ĐỒ DỰNG LẠI ĐƯỢC TỪ ĐẦU — không có vấn đề nào.")
-    print("═" * 70)
+        print("THE SCHEMA REBUILDS FROM SCRATCH — no problems found.")
+    print("=" * 70)
     return 1 if failures else 0
 
 

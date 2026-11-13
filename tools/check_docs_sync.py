@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Đối chiếu bốn tài liệu thiết kế với CSDL thật.
+"""Compare the four design documents against the live database.
 
-Lược đồ được mô tả ở năm nơi, và chúng rất dễ lệch nhau:
+The schema is described in five places, and they drift apart very easily:
 
-    db/schema.sql               nguồn để dựng CSDL
-    docs/DATABASE_DESIGN.md     khối DDL + bảng mô tả từng cột
-    docs/database_erd.html      sơ đồ quan hệ
-    docs/ERD_REVIEW.md          bản rà soát để nộp bài tập
-    docs/API_SPECIFICATION.md   trường JSON mà API trả về
+    db/schema.sql               the source that builds the database
+    docs/DATABASE_DESIGN.md     the DDL blocks plus a per-column table
+    docs/database_erd.html      the relationship diagram
+    docs/ERD_REVIEW.md          the review write-up for the assignment
+    docs/API_SPECIFICATION.md   the JSON fields the API returns
 
-Phép kiểm trước đây chỉ đối chiếu hai tệp giữa, nên `ERD_REVIEW.md` lệch mà
-không ai biết: nó nêu quy mô ở HAI chỗ, một chỗ được cập nhật còn chỗ kia vẫn
-ghi `21 bảng · 27 khóa ngoại · 14 ràng buộc CHECK` sau khi lược đồ đã thành
-22/30/15. Cùng kiểu lỗi ấy lặp lại với `API_SPECIFICATION.md`: nó vẫn trả
-`origin` và `cookingMethod` hơn một tháng sau khi hai cột rời lược đồ, vì tệp
-không nằm trong danh sách quét. Bộ này kiểm cả năm.
+The earlier check compared only the two middle files, so `ERD_REVIEW.md`
+drifted without anyone knowing: it states the scale in TWO places, one of which
+was updated while the other still said `21 bảng · 27 khóa ngoại · 14 ràng buộc
+CHECK` after the schema had become 22/30/15. The same kind of defect repeated
+with `API_SPECIFICATION.md`: it was still returning `origin` and `cookingMethod`
+more than a month after both columns left the schema, because the file was not
+in the scanned list. This checker covers all five.
 
-Kiểm bốn nhóm:
+It checks four groups:
 
-    1. Số bảng, khóa ngoại, ràng buộc CHECK — mọi chỗ phát biểu trong tài liệu
-    2. Cột của từng bảng — CSDL ⊆ ERD HTML, và CSDL ⊆ khối DDL trong tài liệu
-    3. Cột đã bỏ mà tài liệu còn nhắc như cột đang tồn tại
-    4. Dấu tiếng Việt trong định danh — yêu cầu của bài tập ERD
+    1. Table, foreign-key and CHECK counts — every claim stated in the docs
+    2. Each table's columns — database ⊆ ERD HTML, and database ⊆ the doc DDL
+    3. Dropped columns that the docs still list as if they existed
+    4. Vietnamese diacritics in identifiers — an ERD assignment requirement
 
-Chạy:
+Run:
     python tools/check_docs_sync.py
+
+Note on language: the patterns below match Vietnamese sentences inside
+`docs/*.md` and `docs/database_erd.html`, so they stay exactly as written.
 """
 
 from __future__ import annotations
@@ -44,21 +48,23 @@ DESIGN = ROOT / "docs" / "DATABASE_DESIGN.md"
 REVIEW = ROOT / "docs" / "ERD_REVIEW.md"
 APISPEC = ROOT / "docs" / "API_SPECIFICATION.md"
 
-# Cột đã bỏ khỏi lược đồ. Tài liệu được phép NHẮC chúng trong các mục giải
-# thích "vì sao không có cột này", nhưng không được liệt kê như cột đang có.
+# Columns dropped from the schema. The documents may MENTION them in sections
+# explaining "why this column is absent", but must not list them as existing.
 DROPPED = ("origin", "suitable_meals", "cooking_method", "computed_at")
 
-# API_SPECIFICATION.md viết tên trường kiểu camelCase, nên phép kiểm phải tra
-# cả hai dạng. Chính khoảng trống này đã để `cookingMethod` và `origin` nằm
-# trong tài liệu API hơn một tháng sau khi hai cột bị bỏ khỏi lược đồ: tệp
-# không có trong danh sách quét, mà nếu có thì mẫu tìm `cooking_method` cũng
-# không khớp được chữ `cookingMethod` trong khối JSON.
-def camel(ten: str) -> str:
-    dau, *sau = ten.split("_")
-    return dau + "".join(k.capitalize() for k in sau)
+
+# API_SPECIFICATION.md writes field names in camelCase, so the check has to
+# look for both forms. That very gap left `cookingMethod` and `origin` in the
+# API document more than a month after both columns were dropped: the file was
+# not in the scanned list, and even if it had been, a pattern looking for
+# `cooking_method` could not match the `cookingMethod` in a JSON block.
+def camel(name: str) -> str:
+    first, *rest = name.split("_")
+    return first + "".join(part.capitalize() for part in rest)
 
 
-# Từ khóa cho thấy một lần nhắc là phần giải thích lịch sử, không phải liệt kê.
+# Keywords showing that a mention is historical explanation rather than a
+# listing. They match Vietnamese document text, so they stay as they are.
 HISTORICAL = (
     "không có cột", "KHÔNG có cột", "đã bỏ", "Bản thiết kế trước",
     "trước đây", "Trước đây", "bỏ `", "Bỏ `",
@@ -98,11 +104,12 @@ def read_db(database: str) -> dict:
             )
             types = {(t, col): dt.upper() for t, col, dt in cur.fetchall()}
 
-            # Giá trị của từng ENUM. Cần riêng vì `data_type` chỉ trả về
-            # chuỗi 'enum', không kèm danh sách giá trị — nên phép so họ
-            # kiểu ở mục 2b coi ENUM('a','b') và ENUM('a','b','c') là giống
-            # nhau. Đúng khoảng trống đó đã để tài liệu giữ `tag_type
-            # ENUM(...,'taste')` sau khi nhóm nhãn vị bị bỏ khỏi CSDL.
+            # Each ENUM's values. Needed separately because `data_type` only
+            # returns the string 'enum' without the value list — so the type
+            # family comparison in section 2b treats ENUM('a','b') and
+            # ENUM('a','b','c') as identical. That very gap let the docs keep
+            # `tag_type ENUM(...,'taste')` after the taste tag group was
+            # dropped from the database.
             cur.execute(
                 "SELECT table_name, column_name, column_type "
                 "FROM information_schema.columns "
@@ -114,16 +121,18 @@ def read_db(database: str) -> dict:
                 (t, col): set(re.findall(r"'([^']*)'", ctype))
                 for t, col, ctype in rows
             }
-            # Giữ nguyên THỨ TỰ khai báo, dùng cho mục 2e. Tách khỏi `enums`
-            # (là tập hợp) vì mục 2d chỉ cần so tập, còn 2e cần so cả thứ tự.
+            # Keeps the DECLARATION ORDER, used by section 2e. Separate from
+            # `enums` (a set) because 2d only needs set comparison while 2e
+            # needs the order too.
             enum_order = {
                 (t, col): re.findall(r"'([^']*)'", ctype)
                 for t, col, ctype in rows
             }
 
-            # Danh sách khóa ngoại, không chỉ số lượng. Mục 1b chỉ so
-            # **tổng** quan hệ trong tiêu đề sơ đồ, nên hai quan hệ cùng lúc
-            # một sai một đúng sẽ triệt tiêu nhau và không ai thấy.
+            # The list of foreign keys, not just the count. Section 1b compares
+            # only the **total** stated in the diagram's header, so two
+            # relationships wrong at once — one added, one missing — cancel out
+            # and nobody sees it.
             cur.execute(
                 "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, "
                 "       REFERENCED_COLUMN_NAME "
@@ -133,9 +142,9 @@ def read_db(database: str) -> dict:
             )
             foreign_keys = {tuple(r) for r in cur.fetchall()}
 
-            # Chỉ mục UNIQUE chỉ gồm MỘT cột. Dùng để suy bản số quan hệ:
-            # khóa ngoại nằm trên một cột UNIQUE thì quan hệ là 1:1, không
-            # phải N:1.
+            # UNIQUE indexes over exactly ONE column. Used to derive a
+            # relationship's cardinality: a foreign key sitting on a UNIQUE
+            # column makes the relationship 1:1, not N:1.
             cur.execute(
                 "SELECT TABLE_NAME, MIN(COLUMN_NAME) "
                 "FROM information_schema.STATISTICS "
@@ -171,8 +180,8 @@ def erd_columns(html: str) -> dict[str, set[str]]:
     }
 
 
-# Từ khóa mở đầu một khai báo kiểu, dùng để phân biệt dòng khai báo cột với
-# dòng nối tiếp của ENUM nhiều dòng hoặc biểu thức CHECK.
+# Keywords that begin a type declaration, used to tell a column-declaration
+# line from a continuation line of a multi-line ENUM or a CHECK expression.
 TYPE_KEYWORDS = (
     "BIGINT", "INT", "SMALLINT", "TINYINT", "DECIMAL", "VARCHAR", "CHAR",
     "TEXT", "JSON", "ENUM", "SET", "DATE", "DATETIME", "TIMESTAMP", "BOOLEAN",
@@ -180,7 +189,7 @@ TYPE_KEYWORDS = (
 
 
 def ddl_columns(markdown: str) -> dict[str, set[str]]:
-    """Bóc tên cột ra khỏi các khối CREATE TABLE trong tài liệu."""
+    """Extract the column names out of the CREATE TABLE blocks in a document."""
     out: dict[str, set[str]] = {}
     for m in re.finditer(
         r"CREATE TABLE (\w+)\s*\((.*?)\n\) ENGINE", markdown, re.S
@@ -192,10 +201,11 @@ def ddl_columns(markdown: str) -> dict[str, set[str]]:
                 ("PRIMARY", "FOREIGN", "UNIQUE", "INDEX", "KEY", "CONSTRAINT")
             ):
                 continue
-            # Chỉ nhận dòng THỰC SỰ khai báo cột: tên hợp lệ, theo sau là một
-            # kiểu dữ liệu. Thiếu điều kiện thứ hai thì dòng nối tiếp của một
-            # ENUM nhiều dòng hay một biểu thức CHECK cũng bị đếm thành cột,
-            # cho ra những "cột" như `ON`, `NOT`, `(100`, `'gradient_boosting')`.
+            # Accept only lines that REALLY declare a column: a valid name
+            # followed by a data type. Without the second condition, the
+            # continuation line of a multi-line ENUM or of a CHECK expression
+            # is counted as a column too, yielding "columns" like `ON`, `NOT`,
+            # `(100` and `'gradient_boosting')`.
             parts = line.split(None, 1)
             if len(parts) < 2:
                 continue
@@ -210,18 +220,19 @@ def ddl_columns(markdown: str) -> dict[str, set[str]]:
 
 
 def ddl_enums(markdown: str) -> dict[tuple[str, str], set[str]]:
-    """Bóc tập giá trị của mỗi cột ENUM trong các khối CREATE TABLE.
+    """Extract each ENUM column's value set from the CREATE TABLE blocks.
 
-    ENUM trong tài liệu hay trải nhiều dòng, nên phải gộp cả khối lại rồi mới
-    tìm — bắt từng dòng một sẽ chỉ lấy được phần giá trị nằm ở dòng đầu.
+    An ENUM in the documents often spans several lines, so the whole block has
+    to be joined before searching — matching line by line would only pick up
+    the values on the first line.
     """
     out: dict[tuple[str, str], set[str]] = {}
     for m in re.finditer(
         r"CREATE TABLE (\w+)\s*\((.*?)\n\) ENGINE", markdown, re.S
     ):
         table, body = m.group(1), m.group(2)
-        # Gỡ chú thích cuối dòng trước khi gộp, để một ví dụ viết trong chú
-        # thích không bị đọc nhầm thành giá trị của ENUM.
+        # Strip end-of-line comments before joining, so an example written in
+        # a comment is not read as one of the ENUM's values.
         clean = "\n".join(line.split("--")[0] for line in body.split("\n"))
         for col in re.finditer(
             r"([a-z_][a-z0-9_]*)\s+ENUM\s*\((.*?)\)", clean, re.S | re.I
@@ -233,12 +244,13 @@ def ddl_enums(markdown: str) -> dict[tuple[str, str], set[str]]:
 
 
 def type_family(declared: str) -> str:
-    """Rút kiểu về họ để so sánh được.
+    """Reduce a type to its family so it can be compared.
 
-    ERD HTML viết kiểu rút gọn — `ENUM` không kèm danh sách giá trị, `BIGINT`
-    không kèm UNSIGNED — nên không so khớp từng ký tự được. Nhưng **họ** kiểu
-    thì phải khớp: một cột là ENUM trong CSDL mà ghi VARCHAR trên sơ đồ là
-    lệch thật, và đó đúng là lỗi đã xảy ra với `rda_reference.nutrient`.
+    The ERD HTML writes types in short form — `ENUM` without its value list,
+    `BIGINT` without UNSIGNED — so a character-by-character comparison is
+    impossible. But the **family** must match: a column that is ENUM in the
+    database and written VARCHAR on the diagram is real drift, and that is
+    exactly the defect that occurred with `rda_reference.nutrient`.
     """
     declared = declared.upper()
     for family in (
@@ -264,16 +276,16 @@ def main() -> int:
     n_tables = len(db["tables"])
     problems: list[str] = []
 
-    print("═" * 72)
-    print("ĐỐI CHIẾU TÀI LIỆU VỚI CSDL")
-    print("═" * 72)
+    print("=" * 72)
+    print("COMPARING THE DOCUMENTS AGAINST THE DATABASE")
+    print("=" * 72)
     print(
-        f"\nCSDL: {n_tables} bảng · {db['fk']} khóa ngoại · "
-        f"{db['check']} ràng buộc CHECK"
+        f"\nDatabase: {n_tables} tables · {db['fk']} foreign keys · "
+        f"{db['check']} CHECK constraints"
     )
 
-    # ── 1. Mọi phát biểu về quy mô ──
-    print("\n1. Phát biểu về quy mô trong tài liệu")
+    # -- 1. Every claim about the scale --
+    print("\n1. Scale claims in the documents")
     pattern = re.compile(
         r"(\d+)\s*bảng\s*·\s*(\d+)\s*khóa ngoại\s*·\s*(\d+)\s*ràng buộc CHECK"
     )
@@ -285,29 +297,32 @@ def main() -> int:
             lineno = text[: m.start()].count("\n") + 1
             claim = tuple(int(g) for g in m.groups())
             actual = (n_tables, db["fk"], db["check"])
-            mark = "✓" if claim == actual else "✗"
+            mark = "ok " if claim == actual else "BAD"
             print(
                 f"   {mark} {path.name}:{lineno}  "
-                f"{claim[0]} bảng · {claim[1]} FK · {claim[2]} CHECK"
+                f"{claim[0]} tables · {claim[1]} FK · {claim[2]} CHECK"
             )
             if claim != actual:
                 problems.append(
-                    f"{path.name}:{lineno} nêu {claim[0]}/{claim[1]}/{claim[2]}, "
-                    f"thực tế {actual[0]}/{actual[1]}/{actual[2]}"
+                    f"{path.name}:{lineno} claims "
+                    f"{claim[0]}/{claim[1]}/{claim[2]}, actually "
+                    f"{actual[0]}/{actual[1]}/{actual[2]}"
                 )
-    print(f"   {found} chỗ phát biểu")
+    print(f"   {found} places make the claim")
 
-    # ── 1c. Danh sách quan hệ trên sơ đồ, và bản số của từng quan hệ ──
+    # -- 1c. The diagram's relationship list, and each one's cardinality --
     #
-    # Mục 1b chỉ so **tổng** số quan hệ ghi ở tiêu đề. Tổng khớp mà danh sách
-    # sai vẫn hoàn toàn có thể: thêm một quan hệ không tồn tại rồi bỏ một
-    # quan hệ có thật thì tổng không đổi. Đây là thứ người đọc ERD nhìn vào
-    # đầu tiên, nên phải so từng quan hệ.
+    # Section 1b compares only the **total** stated in the header. The total
+    # matching while the list is wrong is perfectly possible: add one
+    # relationship that does not exist and drop one that does, and the total is
+    # unchanged. This is the first thing a reader of an ERD looks at, so each
+    # relationship has to be compared.
     #
-    # Bản số suy từ CSDL chứ không chép tay: khóa ngoại đặt trên một cột có
-    # chỉ mục UNIQUE **một cột** thì quan hệ là 1:1 — mỗi dòng bảng cha ứng
-    # với nhiều nhất một dòng bảng con. Ngược lại là N:1.
-    print("\n1c. Danh sách quan hệ trên sơ đồ")
+    # Cardinality is derived from the database rather than copied by hand: a
+    # foreign key placed on a column with a **single-column** UNIQUE index
+    # makes the relationship 1:1 — each parent row matches at most one child
+    # row. Otherwise it is N:1.
+    print("\n1c. The diagram's relationship list")
     erd_relations = {
         (a, b, c, d): card
         for a, b, c, d, card in re.findall(
@@ -320,11 +335,21 @@ def main() -> int:
     only_erd = sorted(set(erd_relations) - db_fk)
     only_db = sorted(db_fk - set(erd_relations))
     for a, b, c, d in only_erd:
-        print(f"   ✗ sơ đồ vẽ `{a}.{b}` → `{c}.{d}` nhưng CSDL không có")
-        problems.append(f"ERD HTML: quan hệ `{a}.{b}` → `{c}.{d}` không tồn tại")
+        print(
+            f"   BAD  the diagram draws `{a}.{b}` -> `{c}.{d}` which the "
+            f"database does not have"
+        )
+        problems.append(
+            f"ERD HTML: relationship `{a}.{b}` -> `{c}.{d}` does not exist"
+        )
     for a, b, c, d in only_db:
-        print(f"   ✗ CSDL có `{a}.{b}` → `{c}.{d}` nhưng sơ đồ thiếu")
-        problems.append(f"ERD HTML: thiếu quan hệ `{a}.{b}` → `{c}.{d}`")
+        print(
+            f"   BAD  the database has `{a}.{b}` -> `{c}.{d}` which the "
+            f"diagram is missing"
+        )
+        problems.append(
+            f"ERD HTML: relationship `{a}.{b}` -> `{c}.{d}` is missing"
+        )
 
     wrong_card = 0
     for key in sorted(set(erd_relations) & db_fk):
@@ -334,12 +359,12 @@ def main() -> int:
         if stated != expected:
             wrong_card += 1
             print(
-                f"   ✗ {key[0]}.{key[1]} → {key[2]}.{key[3]}: sơ đồ ghi "
-                f"{stated}, phải là {expected}"
+                f"   BAD  {key[0]}.{key[1]} -> {key[2]}.{key[3]}: the diagram "
+                f"says {stated}, it must be {expected}"
             )
             problems.append(
-                f"ERD HTML: bản số `{key[0]}.{key[1]}` ghi {stated}, "
-                f"phải là {expected}"
+                f"ERD HTML: cardinality of `{key[0]}.{key[1]}` says {stated}, "
+                f"it must be {expected}"
             )
 
     if not only_erd and not only_db and not wrong_card:
@@ -347,12 +372,12 @@ def main() -> int:
             1 for k in db_fk if (k[0], k[1]) in db["single_unique"]
         )
         print(
-            f"   ✓ {len(db_fk)} quan hệ khớp hai chiều, bản số đúng "
-            f"({ones} quan hệ 1:1, {len(db_fk) - ones} quan hệ N:1)"
+            f"   ok   {len(db_fk)} relationships match in both directions, "
+            f"cardinality correct ({ones} are 1:1, {len(db_fk) - ones} are N:1)"
         )
 
-    # ── 2. Cột của từng bảng ──
-    print("\n2. Cột của từng bảng")
+    # -- 2. Each table's columns --
+    print("\n2. Each table's columns")
     erd = erd_columns(ERD.read_text(encoding="utf-8"))
     ddl = ddl_columns(DESIGN.read_text(encoding="utf-8"))
 
@@ -364,51 +389,59 @@ def main() -> int:
             if gap:
                 missing_cols += len(gap)
                 problems.append(
-                    f"{label}: `{table}` thiếu {', '.join(sorted(gap))}"
+                    f"{label}: `{table}` is missing {', '.join(sorted(gap))}"
                 )
-            # Chiều ngược lại: cột tài liệu còn liệt kê mà CSDL đã bỏ.
-            # Thiếu phép kiểm này thì `code` vẫn nằm trên sơ đồ nhiều ngày
-            # sau khi đã gỡ khỏi lược đồ, vì phép so một chiều không thấy.
+            # The reverse direction: a column the documents still list which
+            # the database has dropped. Without this check, `code` stayed on
+            # the diagram for days after being removed from the schema,
+            # because a one-way comparison cannot see it.
             over = source.get(table, set()) - db["columns"][table]
             if over:
                 extra_cols += len(over)
                 problems.append(
-                    f"{label}: `{table}` còn thừa {', '.join(sorted(over))} "
-                    f"— CSDL không có cột này"
+                    f"{label}: `{table}` still lists "
+                    f"{', '.join(sorted(over))} — the database has no such "
+                    f"column"
                 )
-        mark = "✓" if not missing_tables and not missing_cols and not extra_cols else "✗"
+        mark = (
+            "ok " if not missing_tables and not missing_cols and not extra_cols
+            else "BAD"
+        )
         print(
-            f"   {mark} {label:<18} {len(source)}/{n_tables} bảng, "
-            f"{missing_cols} cột thiếu, {extra_cols} cột thừa"
+            f"   {mark} {label:<18} {len(source)}/{n_tables} tables, "
+            f"{missing_cols} columns missing, {extra_cols} surplus"
         )
         if missing_tables:
-            problems.append(f"{label}: thiếu bảng {', '.join(missing_tables)}")
-
-    # ── 1b. Tiêu đề trong sơ đồ ──
-    #
-    # Sơ đồ nêu quy mô bằng CÂU KHÁC các tài liệu markdown: "22 bảng · 29
-    # quan hệ" thay vì "… khóa ngoại · … ràng buộc CHECK". Phép kiểm ở mục 1
-    # không bắt được dạng này, nên tiêu đề đã lạc hậu một thời gian mà không
-    # ai thấy — nó ghi 30 quan hệ sau khi `foods.updated_by` bị bỏ.
-    print("\n1b. Tiêu đề trong sơ đồ")
-    html_head = ERD.read_text(encoding="utf-8")
-    hm = re.search(r"<span>(\d+) bảng · (\d+) quan hệ</span>", html_head)
-    if hm is None:
-        problems.append("ERD HTML: không tìm thấy tiêu đề nêu quy mô")
-        print("   ✗ không tìm thấy tiêu đề")
-    else:
-        claim = (int(hm.group(1)), int(hm.group(2)))
-        actual = (n_tables, db["fk"])
-        mark = "✓" if claim == actual else "✗"
-        print(f"   {mark} {claim[0]} bảng · {claim[1]} quan hệ")
-        if claim != actual:
             problems.append(
-                f"ERD HTML tiêu đề nêu {claim[0]} bảng · {claim[1]} quan hệ, "
-                f"thực tế {actual[0]} · {actual[1]}"
+                f"{label}: missing tables {', '.join(missing_tables)}"
             )
 
-    # ── 2b. Họ kiểu dữ liệu của từng cột trên sơ đồ ──
-    print("\n2b. Họ kiểu dữ liệu trên sơ đồ")
+    # -- 1b. The diagram's header --
+    #
+    # The diagram states the scale in a DIFFERENT SENTENCE from the markdown
+    # documents: "22 bảng · 29 quan hệ" instead of "… khóa ngoại · … ràng buộc
+    # CHECK". The check in section 1 cannot match that form, so the header was
+    # out of date for a while without anyone noticing — it said 30
+    # relationships after `foods.updated_by` was dropped.
+    print("\n1b. The diagram's header")
+    html_head = ERD.read_text(encoding="utf-8")
+    header_match = re.search(r"<span>(\d+) bảng · (\d+) quan hệ</span>", html_head)
+    if header_match is None:
+        problems.append("ERD HTML: no header stating the scale was found")
+        print("   BAD  no header found")
+    else:
+        claim = (int(header_match.group(1)), int(header_match.group(2)))
+        actual = (n_tables, db["fk"])
+        mark = "ok " if claim == actual else "BAD"
+        print(f"   {mark} {claim[0]} tables · {claim[1]} relationships")
+        if claim != actual:
+            problems.append(
+                f"the ERD HTML header states {claim[0]} tables · {claim[1]} "
+                f"relationships, actually {actual[0]} · {actual[1]}"
+            )
+
+    # -- 2b. Each column's type family on the diagram --
+    print("\n2b. Type families on the diagram")
     erd_types: dict[tuple[str, str], str] = {}
     html = ERD.read_text(encoding="utf-8")
     for m in re.finditer(r"\{ id:'(\w+)'.*?cols:\[(.*?)\]\s*\}", html, re.S):
@@ -423,46 +456,54 @@ def main() -> int:
         if type_family(declared) != type_family(actual):
             mismatched += 1
             problems.append(
-                f"ERD HTML: `{table}.{column}` ghi {declared}, CSDL là {actual}"
+                f"ERD HTML: `{table}.{column}` says {declared}, the database "
+                f"has {actual}"
             )
-            print(f"   ✗ {table}.{column}  ERD={declared}  CSDL={actual}")
+            print(
+                f"   BAD  {table}.{column}  ERD={declared}  database={actual}"
+            )
     if not mismatched:
-        print(f"   ✓ {len(erd_types)} cột, họ kiểu khớp hết")
+        print(f"   ok   {len(erd_types)} columns, type families all match")
 
-    # ── 2d. Giá trị ENUM trong DATABASE_DESIGN.md ──
+    # -- 2d. ENUM values in DATABASE_DESIGN.md --
     #
-    # Mục 2b chỉ so HỌ kiểu, nên ENUM('a','b') và ENUM('a','b','c') với nó là
-    # một. Khoảng trống đó đã để tài liệu giữ `tags.tag_type` với giá trị
-    # 'taste' rất lâu sau khi nhóm nhãn vị bị bỏ khỏi CSDL — không mục kiểm
-    # nào kêu, vì cả hai bên đều "là ENUM".
-    print("\n2d. Giá trị ENUM trong DATABASE_DESIGN.md")
+    # Section 2b compares only the type FAMILY, so to it ENUM('a','b') and
+    # ENUM('a','b','c') are one and the same. That gap let the documents keep
+    # `tags.tag_type` with the value 'taste' long after the taste tag group was
+    # dropped from the database — no check complained, because both sides
+    # "are an ENUM".
+    print("\n2d. ENUM values in DATABASE_DESIGN.md")
     doc_enums = ddl_enums(DESIGN.read_text(encoding="utf-8"))
-    checked = off = 0
+    checked = mismatches = 0
     for (table, column), stated in sorted(doc_enums.items()):
         actual = db["enums"].get((table, column))
         if actual is None:
             continue
         checked += 1
         if stated != actual:
-            off += 1
-            extra = ", ".join(sorted(stated - actual)) or "—"
-            missing = ", ".join(sorted(actual - stated)) or "—"
-            print(f"   ✗ {table}.{column}  thừa: {extra}  ·  thiếu: {missing}")
-            problems.append(
-                f"DATABASE_DESIGN: `{table}.{column}` ENUM lệch CSDL "
-                f"(thừa: {extra}, thiếu: {missing})"
+            mismatches += 1
+            surplus = ", ".join(sorted(stated - actual)) or "-"
+            missing = ", ".join(sorted(actual - stated)) or "-"
+            print(
+                f"   BAD  {table}.{column}  surplus: {surplus}  ·  "
+                f"missing: {missing}"
             )
-    if not off:
-        print(f"   ✓ {checked} cột ENUM, tập giá trị khớp hết")
+            problems.append(
+                f"DATABASE_DESIGN: `{table}.{column}` ENUM differs from the "
+                f"database (surplus: {surplus}, missing: {missing})"
+            )
+    if not mismatches:
+        print(f"   ok   {checked} ENUM columns, value sets all match")
 
-    # ── 2e. Giá trị ENUM hiển thị trên sơ đồ ──
+    # -- 2e. ENUM values displayed on the diagram --
     #
-    # Sơ đồ in ra giá trị của từng cột ENUM để người đọc không phải mở lược
-    # đồ, nên danh sách đó phải khớp CSDL **cả về thứ tự**: thứ tự của ENUM
-    # là ngữ nghĩa, không phải trang trí — `severity_min` đi từ `mild` tới
-    # `severe` và MySQL so sánh theo đúng thứ tự khai báo. Sắp lại rồi so
-    # theo tập hợp sẽ bỏ qua một sơ đồ in sai chiều nặng nhẹ.
-    print("\n2e. Giá trị ENUM hiển thị trên sơ đồ")
+    # The diagram prints each ENUM column's values so a reader need not open
+    # the schema, so that list must match the database **including its order**:
+    # an ENUM's order is meaning, not decoration — `severity_min` runs from
+    # `mild` to `severe` and MySQL compares by declaration order. Sorting both
+    # sides and comparing as sets would let a diagram printing the severity
+    # scale backwards pass.
+    print("\n2e. ENUM values displayed on the diagram")
     erd_enum_values: dict[tuple[str, str], str] = {}
     for m in re.finditer(r"\{ id:'(\w+)'.*?cols:\[(.*?)\]\s*\}", html, re.S):
         table = m.group(1)
@@ -475,125 +516,145 @@ def main() -> int:
     for (table, column), values in db["enum_order"].items():
         db_enum_order[(table, column)] = "|".join(values)
 
-    off = 0
+    mismatches = 0
     for key in sorted(set(erd_enum_values) | set(db_enum_order)):
         stated = erd_enum_values.get(key)
         actual = db_enum_order.get(key)
         if stated == actual:
             continue
-        off += 1
+        mismatches += 1
         if actual is None:
-            print(f"   ✗ {key[0]}.{key[1]}: sơ đồ in giá trị nhưng CSDL không "
-                  f"phải ENUM")
+            print(
+                f"   BAD  {key[0]}.{key[1]}: the diagram prints values but the "
+                f"database column is not an ENUM"
+            )
             problems.append(
-                f"ERD HTML: `{key[0]}.{key[1]}` in giá trị ENUM nhưng cột "
-                f"không phải ENUM"
+                f"ERD HTML: `{key[0]}.{key[1]}` prints ENUM values but the "
+                f"column is not an ENUM"
             )
         elif stated is None:
-            print(f"   ✗ {key[0]}.{key[1]}: thiếu danh sách giá trị")
+            print(f"   BAD  {key[0]}.{key[1]}: the value list is missing")
             problems.append(
-                f"ERD HTML: `{key[0]}.{key[1]}` thiếu danh sách giá trị ENUM"
+                f"ERD HTML: `{key[0]}.{key[1]}` is missing its ENUM value list"
             )
         else:
-            print(f"   ✗ {key[0]}.{key[1]}:")
-            print(f"       sơ đồ: {stated}")
-            print(f"       CSDL : {actual}")
+            print(f"   BAD  {key[0]}.{key[1]}:")
+            print(f"       diagram:  {stated}")
+            print(f"       database: {actual}")
             problems.append(
-                f"ERD HTML: `{key[0]}.{key[1]}` danh sách giá trị ENUM lệch "
-                f"CSDL"
+                f"ERD HTML: `{key[0]}.{key[1]}` ENUM value list differs from "
+                f"the database"
             )
-    if not off:
+    if not mismatches:
         total = sum(len(v) for v in db["enum_order"].values())
-        print(f"   ✓ {len(db_enum_order)} cột ENUM/SET, {total} giá trị, "
-              f"khớp cả thứ tự")
+        print(
+            f"   ok   {len(db_enum_order)} ENUM/SET columns, {total} values, "
+            f"matching including order"
+        )
 
-    # ── 2c. Mảng cột trên sơ đồ có hỏng không ──
+    # -- 2c. Is the diagram's column array broken --
     #
-    # Hai phần tử mảng đứng cạnh nhau mà THIẾU DẤU PHẨY vẫn là JavaScript hợp
-    # lệ — nó thành phép lập chỉ mục và cho `undefined`:
+    # Two array elements next to each other with a MISSING COMMA are still
+    # valid JavaScript — it becomes an indexing operation and yields
+    # `undefined`:
     #
-    #     ['vitamin_c_mg','DECIMAL(6,2)','']      ← thiếu dấu phẩy
+    #     ['vitamin_c_mg','DECIMAL(6,2)','']      <- missing comma
     #     ['updated_at','DATETIME','']
     #
-    # Khi đó vòng lặp vẽ thẻ ném lỗi ở đúng bảng ấy và DỪNG HẲN — sơ đồ chỉ
-    # hiện các bảng trước nó và không vẽ đường quan hệ nào. `node --check` không
-    # bắt được vì cú pháp vẫn đúng, và phép so tên cột cũng không bắt được vì
-    # tên vẫn nằm trong văn bản.
-    print("\n2c. Mảng cột trên sơ đồ")
+    # The card-drawing loop then throws at exactly that table and STOPS DEAD —
+    # the diagram shows only the tables before it and draws no relationship
+    # lines at all. `node --check` cannot catch it because the syntax is
+    # valid, and the column-name comparison cannot catch it either because the
+    # names are still in the text.
+    print("\n2c. The diagram's column array")
     gaps = []
     for m in re.finditer(r"\]\s*\n\s*\[", html):
         gaps.append(html[: m.start()].count("\n") + 1)
     if gaps:
         for line in gaps:
             problems.append(
-                f"ERD HTML dòng {line}: thiếu dấu phẩy giữa hai phần tử mảng "
-                f"— sơ đồ sẽ ngừng vẽ từ bảng này trở đi"
+                f"ERD HTML line {line}: missing comma between two array "
+                f"elements — the diagram will stop drawing from this table on"
             )
-            print(f"   ✗ dòng {line}: thiếu dấu phẩy giữa hai phần tử mảng")
+            print(
+                f"   BAD  line {line}: missing comma between two array elements"
+            )
     else:
-        print("   ✓ không có chỗ nào thiếu dấu phẩy giữa hai phần tử")
+        print("   ok   no missing comma between elements anywhere")
 
-    # ── 3. Cột đã bỏ mà tài liệu còn liệt kê ──
-    print("\n3. Cột đã bỏ khỏi lược đồ")
+    # -- 3. Dropped columns the documents still list --
+    print("\n3. Columns dropped from the schema")
     live = {c for cols in db["columns"].values() for c in cols}
+    # A flag rather than a substring search over `problems`: the earlier
+    # version decided whether to print the all-clear line by looking for a
+    # phrase inside its own messages, so rewording a message silently
+    # disabled the conclusion.
+    found_dropped = False
     for path in (DESIGN, REVIEW, ERD, APISPEC):
         text = path.read_text(encoding="utf-8")
         for col in DROPPED:
             if col in live:
                 continue
-            # Dấu nháy/backtick hai đầu là cố ý: `origin` phải khớp nhưng
-            # `originalItem` thì không, mà nó có thật trong tài liệu API.
-            ten = {col, camel(col)}
-            mau = "|".join(
-                [rf"`{t}`" for t in sorted(ten)]
-                + [rf'"{t}"\s*:' for t in sorted(ten)]
+            # The quotes/backticks on both sides are deliberate: `origin` must
+            # match while `originalItem` must not, and the latter really does
+            # occur in the API document.
+            names = {col, camel(col)}
+            pattern = "|".join(
+                [rf"`{t}`" for t in sorted(names)]
+                + [rf'"{t}"\s*:' for t in sorted(names)]
                 + [rf"\['{col}'"]
             )
-            for m in re.finditer(mau, text):
+            for m in re.finditer(pattern, text):
                 lineno = text[: m.start()].count("\n") + 1
                 line = text.split("\n")[lineno - 1]
-                # Nhắc trong mục giải thích lịch sử thì bỏ qua
+                # A mention inside a historical explanation is skipped.
                 context = "\n".join(
                     text.split("\n")[max(0, lineno - 16): lineno + 1]
                 )
                 if any(h in context for h in HISTORICAL):
                     continue
+                found_dropped = True
                 problems.append(
-                    f"{path.name}:{lineno} còn liệt kê `{col}` — đã bỏ khỏi lược đồ"
+                    f"{path.name}:{lineno} still lists `{col}` — it was "
+                    f"dropped from the schema"
                 )
-                print(f"   ✗ {path.name}:{lineno}  {line.strip()[:60]}")
-    print("   ✓ không có chỗ nào liệt kê cột đã bỏ"
-          if not any("đã bỏ khỏi lược đồ" in p for p in problems) else "")
+                print(f"   BAD  {path.name}:{lineno}  {line.strip()[:60]}")
+    if not found_dropped:
+        print("   ok   nowhere lists a dropped column")
 
-    # ── 4. Dấu tiếng Việt trong định danh ──
-    print("\n4. Dấu tiếng Việt trong định danh (yêu cầu bài tập ERD)")
+    # -- 4. Vietnamese diacritics in identifiers --
+    print("\n4. Vietnamese diacritics in identifiers (ERD assignment rule)")
     distinct = set(db["tables"]) | {
         c for cols in db["columns"].values() for c in cols
     }
     bad = sorted(x for x in distinct if has_diacritics(x))
     n_positions = sum(len(v) for v in db["columns"].values())
     print(
-        f"   {len(distinct)} định danh phân biệt "
-        f"({n_tables} tên bảng + {len(distinct) - n_tables} tên cột), "
-        f"{n_positions} vị trí cột"
+        f"   {len(distinct)} distinct identifiers "
+        f"({n_tables} table names + {len(distinct) - n_tables} column names), "
+        f"{n_positions} column positions"
     )
     if bad:
-        print(f"   ✗ {len(bad)} định danh có dấu: {', '.join(bad)}")
-        problems.extend(f"định danh có dấu: {x}" for x in bad)
+        print(
+            f"   BAD  {len(bad)} identifiers carry diacritics: {', '.join(bad)}"
+        )
+        problems.extend(f"identifier with diacritics: {x}" for x in bad)
     else:
-        print("   ✓ không có định danh nào chứa dấu hay ký tự ngoài ASCII")
+        print("   ok   no identifier contains a diacritic or a non-ASCII char")
 
-    # ── 4b. Câu phát biểu về số định danh trong ERD_REVIEW.md ──
+    # -- 4b. The identifier-count sentence in ERD_REVIEW.md --
     #
-    # Mục 4 ở trên chỉ ĐO rồi in ra; nó không đối chiếu với con số viết trong
-    # tài liệu. Khoảng trống đó đã để một câu sai nằm im: ERD_REVIEW.md ghi
-    # "161 định danh phân biệt — 22 tên bảng cộng 139 tên cột phân biệt, trên
-    # tổng 216 vị trí cột" trong khi CSDL đo được 160 / 138 / 213. Sai từ
-    # trước, và không mục kiểm nào bắt được vì không ai so hai bên.
+    # Section 4 above only MEASURES and prints; it does not compare against the
+    # number written in the document. That gap let a wrong sentence sit
+    # undisturbed: ERD_REVIEW.md said "161 định danh phân biệt — 22 tên bảng
+    # cộng 139 tên cột phân biệt, trên tổng 216 vị trí cột" while the database
+    # measured 160 / 138 / 213. Wrong from the start, and caught by no check
+    # because nobody compared the two sides.
     #
-    # Cùng một loại lỗi với "hai chỗ phát biểu quy mô mà chỉ sửa một chỗ" ở
-    # mục 1 — nên chữa cùng một cách: đọc con số trong câu văn rồi so với số đo.
-    print("\n4b. Con số định danh viết trong ERD_REVIEW.md")
+    # The same kind of defect as "two places state the scale and only one was
+    # updated" in section 1 — so it is cured the same way: read the number out
+    # of the sentence and compare it with the measurement.
+    print("\n4b. The identifier counts written in ERD_REVIEW.md")
     review = REVIEW.read_text(encoding="utf-8")
     sentence = re.search(
         r"\*\*(\d+) định danh phân biệt\*\*\s*—\s*(\d+) tên bảng cộng\s+"
@@ -601,43 +662,50 @@ def main() -> int:
         review,
     )
     if not sentence:
-        print("   ✗ không tìm thấy câu phát biểu — mẫu tìm kiếm đã lạc hậu?")
+        print("   BAD  sentence not found — has the search pattern gone stale?")
         problems.append(
-            "ERD_REVIEW.md: không tìm thấy câu phát biểu số định danh"
+            "ERD_REVIEW.md: the identifier-count sentence was not found"
         )
     else:
-        stated = [int(g) for g in sentence.groups()]
+        stated_counts = [int(g) for g in sentence.groups()]
         measured = [
             len(distinct), n_tables, len(distinct) - n_tables, n_positions
         ]
-        labels = ("định danh phân biệt", "tên bảng", "tên cột", "vị trí cột")
+        labels = (
+            "distinct identifiers", "table names", "column names",
+            "column positions",
+        )
         line = review[: sentence.start()].count("\n") + 1
         wrong = [
-            (lab, say, got)
-            for lab, say, got in zip(labels, stated, measured)
-            if say != got
+            (label, says, got)
+            for label, says, got in zip(labels, stated_counts, measured)
+            if says != got
         ]
-        for lab, say, got in wrong:
-            print(f"   ✗ ERD_REVIEW.md:{line}  {lab}: ghi {say}, đo {got}")
+        for label, says, got in wrong:
+            print(
+                f"   BAD  ERD_REVIEW.md:{line}  {label}: says {says}, "
+                f"measured {got}"
+            )
             problems.append(
-                f"ERD_REVIEW.md:{line} {lab}: ghi {say}, CSDL có {got}"
+                f"ERD_REVIEW.md:{line} {label}: says {says}, the database has "
+                f"{got}"
             )
         if not wrong:
             print(
-                f"   ✓ ERD_REVIEW.md:{line}  "
-                f"{stated[0]} định danh · {stated[1]} bảng · "
-                f"{stated[2]} cột · {stated[3]} vị trí"
+                f"   ok   ERD_REVIEW.md:{line}  "
+                f"{stated_counts[0]} identifiers · {stated_counts[1]} tables · "
+                f"{stated_counts[2]} columns · {stated_counts[3]} positions"
             )
 
-    # ── Kết luận ──
-    print("\n" + "═" * 72)
+    # -- Conclusion --
+    print("\n" + "=" * 72)
     if problems:
-        print(f"{len(problems)} vấn đề:\n")
+        print(f"{len(problems)} problems:\n")
         for p in problems:
-            print(f"  ✗ {p}")
+            print(f"  BAD  {p}")
     else:
-        print("TẤT CẢ KHỚP — năm nguồn mô tả cùng một lược đồ.")
-    print("═" * 72)
+        print("EVERYTHING MATCHES — five sources describe one schema.")
+    print("=" * 72)
     return 1 if problems else 0
 
 

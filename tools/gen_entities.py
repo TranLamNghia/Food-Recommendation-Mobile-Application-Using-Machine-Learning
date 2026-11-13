@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Sinh lớp thực thể C# từ `db/schema.sql`, và soát lại chúng.
+"""Generate the C# entity classes from `db/schema.sql`, and audit them.
 
-Vì sao sinh bằng máy. Hai mươi bốn bảng, 225 cột. Gõ tay từng thuộc tính thì
-một cột sai tên hoặc sai tính cho phép NULL sẽ không gây lỗi biên dịch — nó
-gây một `MySqlException` lúc chạy, ở một endpoint có thể không ai gọi tới
-trong nhiều tuần. Sinh từ chính tệp lược đồ thì khoảng sai đó không tồn tại.
+Why generate them. Twenty-four tables, 225 columns. Typing each property by
+hand means a column with the wrong name or the wrong nullability causes no
+compile error — it causes a runtime `MySqlException`, at an endpoint nobody may
+call for weeks. Generating from the schema file itself removes that whole class
+of error.
 
-Vì sao KHÔNG dùng `dotnet ef dbcontext scaffold`. Công cụ đó đọc CSDL đang
-chạy, nên nó đòi CSDL phải sống đúng lúc dựng mã, và nó sinh cả `OnModelCreating`
-với toàn bộ chỉ mục, ràng buộc, collation — hàng nghìn dòng mà không ai đọc.
-`db/schema.sql` là nguồn quyền lực theo `db/migrations/applied/README.md`, nên
-sinh từ tệp đó là sinh từ đúng nguồn, và mã ra đủ nhỏ để đọc được.
+Why NOT `dotnet ef dbcontext scaffold`. That tool reads a running database, so
+it requires the database to be alive at build time, and it generates an
+`OnModelCreating` with every index, constraint and collation — thousands of
+lines nobody reads. `db/schema.sql` is the source of authority per
+`db/migrations/applied/README.md`, so generating from that file generates from
+the right source, and the output is small enough to read.
 
-HAI CHẾ ĐỘ
-    (mặc định)  soát: mã C# đang có phải khớp lược đồ, cả hai chiều
-    --ghi       sinh lại Entities/ và AppDbContext.cs
+TWO MODES
+    (default)  audit: the existing C# must match the schema, both directions
+    --write    regenerate Entities/ and AppDbContext.cs
 
-Chạy:
+Run:
     python tools/gen_entities.py
-    python tools/gen_entities.py --ghi
+    python tools/gen_entities.py --write
 """
 
 from __future__ import annotations
@@ -32,32 +34,32 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "db" / "schema.sql"
 API = ROOT / "backend" / "Api"
-THUC_THE = API / "Entities"
+ENTITIES = API / "Entities"
 CONTEXT = API / "Data" / "AppDbContext.cs"
-#: Không sinh tự động — chỉ được SOÁT, xem `_soat_enum`.
+#: Not generated — only AUDITED, see `_verify_enums`.
 DTOS = API / "Profile" / "ProfileDtos.cs"
 
 NAMESPACE = "Api.Entities"
 
-#: Từ khóa mở đầu một ràng buộc ở cấp bảng, không phải một cột.
-CAP_BANG = (
+#: Keywords that begin a table-level constraint rather than a column.
+TABLE_LEVEL = (
     "PRIMARY KEY", "FOREIGN KEY", "UNIQUE KEY", "UNIQUE INDEX", "UNIQUE (",
     "INDEX", "KEY ", "CONSTRAINT", "CHECK",
 )
 
-TU_KHOA_KIEU = (
+TYPE_KEYWORDS = (
     "BIGINT", "INT", "SMALLINT", "TINYINT", "MEDIUMINT", "DECIMAL", "NUMERIC",
     "FLOAT", "DOUBLE", "VARCHAR", "CHAR", "TEXT", "LONGTEXT", "MEDIUMTEXT",
     "JSON", "ENUM", "SET", "DATE", "DATETIME", "TIMESTAMP", "TIME", "YEAR",
     "BOOLEAN", "BOOL", "BLOB", "BINARY",
 )
 
-#: Họ kiểu MySQL -> kiểu C#. ENUM và SET thành `string`: ánh xạ chúng sang
-#: `enum` của C# nghe gọn hơn, nhưng khi CSDL thêm một giá trị mà mã chưa
-#: biết thì EF ném lỗi lúc ĐỌC, và một dòng dữ liệu hợp lệ trở thành không
-#: đọc nổi. Giữ `string`, và để tầng validation kiểm theo danh sách ở mục 5
-#: của đặc tả API.
-KIEU = {
+#: MySQL type family -> C# type. ENUM and SET become `string`: mapping them to
+#: a C# `enum` sounds tidier, but when the database gains a value the code does
+#: not know about, EF throws on READ, and a perfectly valid row becomes
+#: unreadable. Keep `string`, and let the validation layer check against the
+#: lists in §5 of the API specification.
+CS_TYPE = {
     "CHAR": "string", "VARCHAR": "string", "TEXT": "string",
     "LONGTEXT": "string", "MEDIUMTEXT": "string", "JSON": "string",
     "ENUM": "string", "SET": "string",
@@ -69,327 +71,349 @@ KIEU = {
     "TIME": "TimeOnly", "YEAR": "int",
 }
 
-#: `TINYINT(1)` trong MySQL là quy ước cho boolean, không phải số 0..255.
-#: Lược đồ dùng nó cho `is_active`, `is_hard`, `was_selected`.
+#: `TINYINT(1)` in MySQL is the convention for a boolean, not a 0..255 number.
+#: The schema uses it for `is_active`, `is_hard`, `was_selected`.
 
 
-def _tach_dinh_nghia(than: str) -> list[str]:
-    """Tách thân CREATE TABLE theo dấu phẩy NGOÀI ngoặc và ngoài dấu nháy.
+def _split_definitions(body: str) -> list[str]:
+    """Split a CREATE TABLE body on commas OUTSIDE parentheses and quotes.
 
-    Tách theo dòng thì một `ENUM(...)` trải nhiều dòng bị cắt làm nhiều mảnh,
-    và mảnh đầu không chứa `NOT NULL` nằm ở dòng dưới.
+    Splitting by line would cut an `ENUM(...)` spanning several lines into
+    pieces, and the first piece would not contain the `NOT NULL` sitting on a
+    later line.
     """
-    ra: list[str] = []
-    dem: list[str] = []
-    sau = 0
-    trong_nhay = False
-    i, n = 0, len(than)
+    out: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    in_string = False
+    i, n = 0, len(body)
     while i < n:
-        c = than[i]
-        if trong_nhay:
-            dem.append(c)
+        c = body[i]
+        if in_string:
+            buf.append(c)
             if c == "\\" and i + 1 < n:
-                dem.append(than[i + 1])
+                buf.append(body[i + 1])
                 i += 2
                 continue
             if c == "'":
-                trong_nhay = False
+                in_string = False
         elif c == "'":
-            trong_nhay = True
-            dem.append(c)
+            in_string = True
+            buf.append(c)
         elif c == "(":
-            sau += 1
-            dem.append(c)
+            depth += 1
+            buf.append(c)
         elif c == ")":
-            sau -= 1
-            dem.append(c)
-        elif c == "," and sau == 0:
-            ra.append("".join(dem))
-            dem = []
+            depth -= 1
+            buf.append(c)
+        elif c == "," and depth == 0:
+            out.append("".join(buf))
+            buf = []
         else:
-            dem.append(c)
+            buf.append(c)
         i += 1
-    if "".join(dem).strip():
-        ra.append("".join(dem))
-    return [" ".join(d.split()) for d in ra if d.strip()]
+    if "".join(buf).strip():
+        out.append("".join(buf))
+    return [" ".join(d.split()) for d in out if d.strip()]
 
 
-def _bo_chu_thich(chu: str) -> str:
-    """Bỏ chú thích `--` nhưng giữ nguyên nội dung trong dấu nháy."""
-    ra: list[str] = []
-    trong_nhay = False
-    i, n = 0, len(chu)
+def _strip_comments(text: str) -> str:
+    """Remove `--` comments while leaving quoted content untouched."""
+    out: list[str] = []
+    in_string = False
+    i, n = 0, len(text)
     while i < n:
-        c = chu[i]
-        if trong_nhay:
-            ra.append(c)
+        c = text[i]
+        if in_string:
+            out.append(c)
             if c == "\\" and i + 1 < n:
-                ra.append(chu[i + 1])
+                out.append(text[i + 1])
                 i += 2
                 continue
             if c == "'":
-                trong_nhay = False
+                in_string = False
         elif c == "'":
-            trong_nhay = True
-            ra.append(c)
-        elif chu.startswith("--", i):
-            while i < n and chu[i] != "\n":
+            in_string = True
+            out.append(c)
+        elif text.startswith("--", i):
+            while i < n and text[i] != "\n":
                 i += 1
             continue
         else:
-            ra.append(c)
+            out.append(c)
         i += 1
-    return "".join(ra)
+    return "".join(out)
 
 
-def pascal(ten: str) -> str:
-    return "".join(p.capitalize() for p in ten.split("_"))
+def pascal(name: str) -> str:
+    return "".join(p.capitalize() for p in name.split("_"))
 
 
-def doc_luoc_do(chu: str) -> dict[str, list[dict]]:
-    """{tên bảng: [cột...]} với kiểu C# đã suy ra, giữ đúng thứ tự khai báo."""
-    sach = _bo_chu_thich(chu)
-    bang: dict[str, list[dict]] = {}
+def read_schema(text: str) -> dict[str, list[dict]]:
+    """{table name: [columns...]} with the C# type inferred, in declaration
+    order."""
+    clean = _strip_comments(text)
+    tables: dict[str, list[dict]] = {}
 
     for m in re.finditer(r"CREATE TABLE\s+(\w+)\s*\((.*?)\)\s*ENGINE",
-                         sach, re.S):
-        ten, than = m.group(1), m.group(2)
-        cot: list[dict] = []
+                         clean, re.S):
+        name, body = m.group(1), m.group(2)
+        columns: list[dict] = []
 
-        # Khóa chính có thể khai ở CẤP BẢNG: `PRIMARY KEY (food_id, tag_id)`.
-        # Bỏ sót chỗ này thì EF ném `requires a primary key to be defined`
-        # lúc dựng mô hình — nghĩa là MỌI endpoint 500, không chỉ endpoint
-        # chạm vào bảng đó, vì mô hình được dựng một lần cho cả DbContext.
-        khoa_cap_bang: list[str] = []
-        for dn in _tach_dinh_nghia(than):
-            kb = re.match(r"PRIMARY KEY\s*\((.+?)\)", dn.strip(), re.I)
-            if kb:
-                khoa_cap_bang = [c.strip().strip("`")
-                                 for c in kb.group(1).split(",")]
+        # A primary key may be declared at TABLE LEVEL:
+        # `PRIMARY KEY (food_id, tag_id)`. Missing that makes EF throw
+        # `requires a primary key to be defined` while building the model —
+        # which means EVERY endpoint returns 500, not just the ones touching
+        # that table, because the model is built once for the whole DbContext.
+        table_level_key: list[str] = []
+        for definition in _split_definitions(body):
+            pk_match = re.match(
+                r"PRIMARY KEY\s*\((.+?)\)", definition.strip(), re.I
+            )
+            if pk_match:
+                table_level_key = [
+                    c.strip().strip("`") for c in pk_match.group(1).split(",")
+                ]
 
-        for dn in _tach_dinh_nghia(than):
-            if dn.upper().startswith(CAP_BANG):
+        for definition in _split_definitions(body):
+            if definition.upper().startswith(TABLE_LEVEL):
                 continue
-            phan = dn.split(None, 1)
-            if len(phan) < 2:
+            parts = definition.split(None, 1)
+            if len(parts) < 2:
                 continue
-            ten_cot, remaining = phan[0], phan[1]
-            if not re.fullmatch(r"[a-z_][a-z0-9_]*", ten_cot):
+            column_name, remaining = parts[0], parts[1]
+            if not re.fullmatch(r"[a-z_][a-z0-9_]*", column_name):
                 continue
-            hoa = remaining.upper()
-            if not hoa.startswith(TU_KHOA_KIEU):
+            upper = remaining.upper()
+            if not upper.startswith(TYPE_KEYWORDS):
                 continue
 
-            km = re.match(r"([A-Za-z]+)\s*(?:\((.*?)\))?", remaining, re.S)
-            ho = km.group(1).upper() if km else ""
-            doi_so = (km.group(2) or "").strip() if km else ""
+            type_match = re.match(
+                r"([A-Za-z]+)\s*(?:\((.*?)\))?", remaining, re.S
+            )
+            family = type_match.group(1).upper() if type_match else ""
+            argument = (type_match.group(2) or "").strip() if type_match else ""
 
-            # Khóa chính ngầm định NOT NULL dù không viết ra.
-            la_pk = "PRIMARY KEY" in hoa
-            cho_null = "NOT NULL" not in hoa and not la_pk
+            # A primary key is implicitly NOT NULL even when unwritten.
+            is_pk = "PRIMARY KEY" in upper
+            nullable = "NOT NULL" not in upper and not is_pk
 
-            cs = KIEU.get(ho, "string")
-            if ho == "TINYINT" and doi_so.strip() == "1":
+            cs = CS_TYPE.get(family, "string")
+            if family == "TINYINT" and argument.strip() == "1":
                 cs = "bool"
 
-            # Tập giá trị ENUM/SET, giữ ĐÚNG THỨ TỰ khai báo: MySQL lưu ENUM
-            # theo thứ số, nên đổi thứ tự là đổi dữ liệu đã có.
-            gt = re.findall(r"'([^']*)'", doi_so) if ho in ("ENUM", "SET") \
-                else []
+            # The ENUM/SET value set, kept in DECLARATION ORDER: MySQL stores
+            # an ENUM by ordinal, so reordering the values changes existing
+            # data.
+            values = (
+                re.findall(r"'([^']*)'", argument)
+                if family in ("ENUM", "SET") else []
+            )
 
-            cot.append({
-                "db": ten_cot,
-                "cs": pascal(ten_cot),
-                "kieu": cs,
-                "null": cho_null,
-                # Cột GENERATED do CSDL tính; EF phải đọc mà không ghi.
-                "sinh": "GENERATED" in hoa,
-                "pk": la_pk,
-                "gt": gt,
+            columns.append({
+                "db": column_name,
+                "cs": pascal(column_name),
+                "type": cs,
+                "null": nullable,
+                # A GENERATED column is computed by the database; EF must read
+                # it without writing it.
+                "generated": "GENERATED" in upper,
+                "pk": is_pk,
+                "values": values,
             })
 
-        if khoa_cap_bang:
-            for c in cot:
-                if c["db"] in khoa_cap_bang:
+        if table_level_key:
+            for c in columns:
+                if c["db"] in table_level_key:
                     c["pk"] = True
 
-        bang[ten] = cot
-    return bang
+        tables[name] = columns
+    return tables
 
 
-# ── Sinh mã ──────────────────────────────────────────────────────────────
+# -- Code generation ------------------------------------------------------
 
-DAU = """// <auto-generated>
-//     SINH TỰ ĐỘNG từ db/schema.sql bằng tools/gen_entities.py — ĐỪNG SỬA TAY.
-//     Sửa lược đồ thì chạy lại:  python tools/gen_entities.py --ghi
-//     Soát lại:                  python tools/gen_entities.py
+HEADER = """// <auto-generated>
+//     GENERATED from db/schema.sql by tools/gen_entities.py — DO NOT EDIT.
+//     After a schema change, run:  python tools/gen_entities.py --write
+//     To audit:                    python tools/gen_entities.py
 // </auto-generated>
 
-// Header `<auto-generated>` ở trên làm trình biên dịch TẮT ngữ cảnh nullable
-// cho cả tệp, nên mọi `string?` sinh ra sẽ kêu CS8669. Bật lại tường minh.
+// The `<auto-generated>` header above makes the compiler TURN OFF the nullable
+// context for the whole file, so every generated `string?` warns CS8669.
+// Turn it back on explicitly.
 #nullable enable
 """
 
 
-def _kieu_cs(c: dict) -> str:
-    t = c["kieu"]
-    if c["null"]:
+def _cs_type(column: dict) -> str:
+    t = column["type"]
+    if column["null"]:
         return t + "?"
     return t
 
 
-def _gia_tri_dau(c: dict) -> str:
-    """Giá trị khởi tạo, để `Nullable` không cảnh báo thuộc tính chưa gán."""
-    if c["null"]:
+def _initializer(column: dict) -> str:
+    """An initial value, so `Nullable` does not warn about an unassigned
+    property."""
+    if column["null"]:
         return ""
-    if c["kieu"] == "string":
+    if column["type"] == "string":
         return " = string.Empty;"
     return ""
 
 
-def sinh_thuc_the(ten: str, cot: list[dict]) -> str:
-    lop = pascal(ten)
-    dong = [DAU, "", f"namespace {NAMESPACE};", "",
-            f"/// <summary>Bảng <c>{ten}</c>.</summary>",
-            f"public class {lop}", "{"]
-    for c in cot:
-        ghi_chu = []
-        if c["pk"]:
-            ghi_chu.append("khóa chính")
-        if c["sinh"]:
-            ghi_chu.append("CSDL tự tính — chỉ đọc")
-        hau = f"  // {', '.join(ghi_chu)}" if ghi_chu else ""
-        dong.append(f"    public {_kieu_cs(c)} {c['cs']} "
-                    f"{{ get; set; }}{_gia_tri_dau(c)}{hau}")
-    dong += ["}", ""]
-    return "\n".join(dong)
+def render_entity(table: str, columns: list[dict]) -> str:
+    class_name = pascal(table)
+    lines = [HEADER, "", f"namespace {NAMESPACE};", "",
+             f"/// <summary>Table <c>{table}</c>.</summary>",
+             f"public class {class_name}", "{"]
+    for column in columns:
+        notes = []
+        if column["pk"]:
+            notes.append("primary key")
+        if column["generated"]:
+            notes.append("computed by the database — read only")
+        suffix = f"  // {', '.join(notes)}" if notes else ""
+        lines.append(f"    public {_cs_type(column)} {column['cs']} "
+                     f"{{ get; set; }}{_initializer(column)}{suffix}")
+    lines += ["}", ""]
+    return "\n".join(lines)
 
 
-def sinh_context(bang: dict[str, list[dict]]) -> str:
-    dong = [
-        DAU, "",
+def render_context(tables: dict[str, list[dict]]) -> str:
+    lines = [
+        HEADER, "",
         "using Api.Entities;",
         "using Microsoft.EntityFrameworkCore;", "",
         "namespace Api.Data;", "",
         "/// <summary>",
-        "/// Ánh xạ 24 bảng của <c>db/schema.sql</c>.",
+        "/// Maps the 24 tables of <c>db/schema.sql</c>.",
         "///",
-        "/// <para><b>KHÔNG dùng EF Migrations.</b> Theo",
-        "/// <c>db/migrations/applied/README.md</c>, <c>db/schema.sql</c> là",
-        "/// trạng thái hiện hành của lược đồ. Bật Migrations là tạo ra nguồn",
-        "/// quyền lực thứ hai cho cùng một lược đồ, và hai cái sẽ lệch nhau —",
-        "/// <c>tools/check_schema_sql.py</c> bắt được, nhưng chỉ <i>sau khi</i>",
-        "/// đã lệch. Đổi lược đồ thì viết một tệp trong <c>db/migrations/</c>,",
-        "/// chạy nó, gộp vào <c>schema.sql</c>, rồi chạy lại",
-        "/// <c>python tools/gen_entities.py --ghi</c>.</para>",
+        "/// <para><b>EF Migrations are NOT used.</b> Per",
+        "/// <c>db/migrations/applied/README.md</c>, <c>db/schema.sql</c> is",
+        "/// the schema's current state. Enabling Migrations would create a",
+        "/// second source of authority for one schema, and the two would",
+        "/// drift — <c>tools/check_schema_sql.py</c> catches that, but only",
+        "/// <i>after</i> the drift. To change the schema, write a file in",
+        "/// <c>db/migrations/</c>, run it, fold it into <c>schema.sql</c>,",
+        "/// then run <c>python tools/gen_entities.py --write</c>.</para>",
         "/// </summary>",
         "public class AppDbContext(DbContextOptions<AppDbContext> options)",
         "    : DbContext(options)",
         "{",
     ]
-    for ten in bang:
-        dong.append(f"    public DbSet<{pascal(ten)}> {pascal(ten)} "
-                    "=> Set<" + pascal(ten) + ">();")
-    dong += ["", "    protected override void OnModelCreating("
-                 "ModelBuilder b)", "    {"]
-    for ten, cot in bang.items():
-        lop = pascal(ten)
-        dong.append(f"        b.Entity<{lop}>(e =>")
-        dong.append("        {")
-        dong.append(f'            e.ToTable("{ten}");')
-        khoa = [c for c in cot if c["pk"]]
-        if len(khoa) == 1:
-            dong.append(f"            e.HasKey(x => x.{khoa[0]['cs']});")
-        elif len(khoa) > 1:
-            # Khóa phức hợp: `food_tags (food_id, tag_id)`.
-            bo = ", ".join(f"x.{c['cs']}" for c in khoa)
-            dong.append(f"            e.HasKey(x => new {{ {bo} }});")
+    for table in tables:
+        lines.append(f"    public DbSet<{pascal(table)}> {pascal(table)} "
+                     "=> Set<" + pascal(table) + ">();")
+    lines += ["", "    protected override void OnModelCreating("
+                  "ModelBuilder b)", "    {"]
+    for table, columns in tables.items():
+        class_name = pascal(table)
+        lines.append(f"        b.Entity<{class_name}>(e =>")
+        lines.append("        {")
+        lines.append(f'            e.ToTable("{table}");')
+        keys = [c for c in columns if c["pk"]]
+        if len(keys) == 1:
+            lines.append(f"            e.HasKey(x => x.{keys[0]['cs']});")
+        elif len(keys) > 1:
+            # A composite key: `food_tags (food_id, tag_id)`.
+            tuple_body = ", ".join(f"x.{c['cs']}" for c in keys)
+            lines.append(f"            e.HasKey(x => new {{ {tuple_body} }});")
         else:
             raise AssertionError(
-                f"bảng `{ten}` không có khóa chính nào bóc được — EF sẽ ném "
-                "`requires a primary key to be defined` lúc dựng mô hình")
-        for c in cot:
-            dong.append(f'            e.Property(x => x.{c["cs"]})'
-                        f'.HasColumnName("{c["db"]}");')
-            if c["sinh"]:
-                dong.append(f"            e.Property(x => x.{c['cs']})"
-                            ".ValueGeneratedOnAddOrUpdate();")
-        dong.append("        });")
-    dong += ["    }", "}", ""]
-    return "\n".join(dong)
+                f"no primary key could be extracted for table `{table}` — EF "
+                "will throw `requires a primary key to be defined` while "
+                "building the model"
+            )
+        for column in columns:
+            lines.append(f'            e.Property(x => x.{column["cs"]})'
+                         f'.HasColumnName("{column["db"]}");')
+            if column["generated"]:
+                lines.append(f"            e.Property(x => x.{column['cs']})"
+                             ".ValueGeneratedOnAddOrUpdate();")
+        lines.append("        });")
+    lines += ["    }", "}", ""]
+    return "\n".join(lines)
 
 
-# ── Soát ─────────────────────────────────────────────────────────────────
+# -- Audit ----------------------------------------------------------------
 
-RE_THUOC_TINH = re.compile(
+RE_PROPERTY = re.compile(
     r'e\.Property\(x => x\.(\w+)\)\.HasColumnName\("(\w+)"\);')
 
 
-def soat(bang: dict[str, list[dict]]) -> list[str]:
-    """Mã C# đang có phải khớp lược đồ, cả hai chiều."""
-    loi: list[str] = []
+def verify(tables: dict[str, list[dict]]) -> list[str]:
+    """The existing C# must match the schema, in both directions."""
+    errors: list[str] = []
 
     if not CONTEXT.exists():
-        return [f"chưa có {CONTEXT.relative_to(ROOT)} — chạy với --ghi"]
+        return [f"{CONTEXT.relative_to(ROOT)} does not exist — run with --write"]
 
-    # ── 1. Mỗi bảng một tệp thực thể ──
-    co_tep = {p.stem for p in THUC_THE.glob("*.cs")}
-    can = {pascal(t) for t in bang}
-    for t in sorted(can - co_tep):
-        loi.append(f"thiếu lớp thực thể {t}.cs")
-    for t in sorted(co_tep - can):
-        loi.append(f"{t}.cs không ứng với bảng nào trong schema.sql")
+    # -- 1. One entity file per table --
+    on_disk = {p.stem for p in ENTITIES.glob("*.cs")}
+    needed = {pascal(t) for t in tables}
+    for t in sorted(needed - on_disk):
+        errors.append(f"entity class {t}.cs is missing")
+    for t in sorted(on_disk - needed):
+        errors.append(f"{t}.cs corresponds to no table in schema.sql")
 
-    # ── 2. Mỗi cột một thuộc tính, đúng tên và đúng kiểu ──
-    for ten, cot in bang.items():
-        tep = THUC_THE / f"{pascal(ten)}.cs"
-        if not tep.exists():
+    # -- 2. One property per column, right name and right type --
+    for table, columns in tables.items():
+        path = ENTITIES / f"{pascal(table)}.cs"
+        if not path.exists():
             continue
-        chu = tep.read_text(encoding="utf-8")
-        for c in cot:
-            mong = f"public {_kieu_cs(c)} {c['cs']} {{ get; set; }}"
-            if mong not in chu:
-                loi.append(f"{pascal(ten)}.{c['cs']}: mong đợi "
-                           f"`{_kieu_cs(c)}`, không thấy trong "
-                           f"{tep.name}")
+        text = path.read_text(encoding="utf-8")
+        for column in columns:
+            expected = (
+                f"public {_cs_type(column)} {column['cs']} {{ get; set; }}"
+            )
+            if expected not in text:
+                errors.append(
+                    f"{pascal(table)}.{column['cs']}: expected "
+                    f"`{_cs_type(column)}`, not found in {path.name}"
+                )
 
-    # ── 3. Khóa chính phải được khai cho TỪNG bảng ──
+    # -- 3. A primary key must be declared for EVERY table --
     #
-    # Thiếu một `HasKey` thì EF không ném lúc biên dịch, nó ném lúc dựng mô
-    # hình — tức là ở lượt gọi API ĐẦU TIÊN, và khi đó MỌI endpoint trả 500,
-    # không chỉ endpoint chạm vào bảng thiếu khóa. Đúng lỗi đó đã xảy ra với
-    # `food_tags`, bảng duy nhất khai `PRIMARY KEY` ở cấp bảng.
-    ctx_tam = CONTEXT.read_text(encoding="utf-8")
-    for ten, cot in bang.items():
-        khoa = [c["cs"] for c in cot if c["pk"]]
-        if not khoa:
-            loi.append(f"`{ten}` không bóc được khóa chính nào")
+    # A missing `HasKey` is not thrown at compile time, it is thrown while
+    # building the model — that is, on the FIRST API call, and then EVERY
+    # endpoint returns 500, not just the ones touching the table without a
+    # key. Exactly that happened with `food_tags`, the one table declaring
+    # its `PRIMARY KEY` at table level.
+    context_text = CONTEXT.read_text(encoding="utf-8")
+    for table, columns in tables.items():
+        keys = [c["cs"] for c in columns if c["pk"]]
+        if not keys:
+            errors.append(f"no primary key could be extracted for `{table}`")
             continue
-        mong = (f"e.HasKey(x => x.{khoa[0]});" if len(khoa) == 1
-                else "e.HasKey(x => new { "
-                     + ", ".join(f"x.{k}" for k in khoa) + " });")
-        if mong not in ctx_tam:
-            loi.append(f"AppDbContext thiếu `{mong}` cho bảng `{ten}`")
+        expected = (f"e.HasKey(x => x.{keys[0]});" if len(keys) == 1
+                    else "e.HasKey(x => new { "
+                         + ", ".join(f"x.{k}" for k in keys) + " });")
+        if expected not in context_text:
+            errors.append(
+                f"AppDbContext is missing `{expected}` for table `{table}`"
+            )
 
-    # ── 4. Ánh xạ tên cột trong DbContext phải đủ và đúng ──
-    ctx = CONTEXT.read_text(encoding="utf-8")
-    anh_xa = set(RE_THUOC_TINH.findall(ctx))
-    can_anh_xa = {(c["cs"], c["db"]) for cot in bang.values() for c in cot}
-    for cs, db in sorted(can_anh_xa - anh_xa):
-        loi.append(f"AppDbContext thiếu ánh xạ {cs} -> `{db}`")
+    # -- 4. The column-name mapping in DbContext must be complete and right --
+    mapped = set(RE_PROPERTY.findall(context_text))
+    required = {(c["cs"], c["db"]) for cols in tables.values() for c in cols}
+    for cs, db in sorted(required - mapped):
+        errors.append(f"AppDbContext is missing the mapping {cs} -> `{db}`")
 
-    # ── 5. Danh sách ENUM trong ProfileDtos.cs phải khớp lược đồ ──
-    loi += _soat_enum(bang)
+    # -- 5. The ENUM lists in ProfileDtos.cs must match the schema --
+    errors += _verify_enums(tables)
 
-    return loi
+    return errors
 
 
-#: {tên trường trong Api.Profile.Enums: (bảng, cột)}.
+#: {field name in Api.Profile.Enums: (table, column)}.
 #:
-#: Khai tường minh chứ không dò tên, vì lược đồ có HAI ENUM tên `gender` với
-#: tập giá trị KHÁC nhau: `health_profiles.gender` là
-#: ('male','female','other'), còn `rda_reference.gender` là
-#: ('male','female','all'). Dò theo tên cột sẽ bắt sai một trong hai.
+#: Declared explicitly rather than matched by name, because the schema has TWO
+#: ENUMs named `gender` with DIFFERENT value sets: `health_profiles.gender` is
+#: ('male','female','other'), while `rda_reference.gender` is
+#: ('male','female','all'). Matching by column name would pick the wrong one of
+#: the two.
 ENUM_CS = {
     "Gender": ("health_profiles", "gender"),
     "ActivityLevel": ("health_profiles", "activity_level"),
@@ -397,87 +421,94 @@ ENUM_CS = {
     "Severity": ("user_conditions", "severity"),
 }
 
-RE_DS_ENUM = re.compile(
+RE_ENUM_ARRAY = re.compile(
     r"public static readonly string\[\]\s+(\w+)\s*=\s*\[(.*?)\]\s*;", re.S)
 
 
-def _soat_enum(bang: dict[str, list[dict]]) -> list[str]:
-    """Bốn mảng trong `Api.Profile.Enums` phải khớp ENUM của lược đồ.
+def _verify_enums(tables: dict[str, list[dict]]) -> list[str]:
+    """The four arrays in `Api.Profile.Enums` must match the schema's ENUMs.
 
-    Bốn mảng đó là tầng DUY NHẤT trả `400 VALIDATION_FAILED` kèm tên trường
-    cho một giá trị ngoài ENUM. Thiếu phép kiểm này thì thêm một giá trị vào
-    `db/schema.sql` sẽ làm API từ chối chính thứ CSDL cho phép — và không có
-    gì báo ra, vì cả hai bên vẫn tự nhất quán.
+    Those four arrays are the ONLY layer returning `400 VALIDATION_FAILED`
+    with a field name for a value outside the ENUM. Without this check, adding
+    a value to `db/schema.sql` would make the API reject exactly what the
+    database allows — and nothing would report it, because each side stays
+    self-consistent.
     """
-    loi: list[str] = []
+    errors: list[str] = []
     if not DTOS.exists():
-        return [f"chưa có {DTOS.relative_to(ROOT)}"]
+        return [f"{DTOS.relative_to(ROOT)} does not exist"]
 
-    co = {m.group(1): re.findall(r'"([^"]*)"', m.group(2))
-          for m in RE_DS_ENUM.finditer(DTOS.read_text(encoding="utf-8"))}
+    on_disk = {
+        m.group(1): re.findall(r'"([^"]*)"', m.group(2))
+        for m in RE_ENUM_ARRAY.finditer(DTOS.read_text(encoding="utf-8"))
+    }
 
-    # Hai chiều: một mảng mới thêm vào mà không khai ở ENUM_CS cũng là lệch —
-    # nó trông như được soát mà thật ra không.
-    for ten in sorted(set(co) - set(ENUM_CS)):
-        loi.append(f"Enums.{ten} không có trong ENUM_CS của gen_entities.py "
-                   f"— chưa ai đối chiếu nó với lược đồ")
+    # Both directions: a newly added array not declared in ENUM_CS is drift
+    # too — it looks audited while in fact it is not.
+    for name in sorted(set(on_disk) - set(ENUM_CS)):
+        errors.append(
+            f"Enums.{name} is not in gen_entities.py's ENUM_CS — nobody is "
+            f"comparing it against the schema"
+        )
 
-    for ten, (ten_bang, ten_cot) in ENUM_CS.items():
-        if ten not in co:
-            loi.append(f"ProfileDtos.cs thiếu `string[] {ten}`")
+    for name, (table, column_name) in ENUM_CS.items():
+        if name not in on_disk:
+            errors.append(f"ProfileDtos.cs is missing `string[] {name}`")
             continue
-        cot = next((c for c in bang.get(ten_bang, [])
-                    if c["db"] == ten_cot), None)
-        if cot is None:
-            loi.append(f"schema.sql không có cột `{ten_bang}.{ten_cot}`")
+        column = next(
+            (c for c in tables.get(table, []) if c["db"] == column_name), None
+        )
+        if column is None:
+            errors.append(f"schema.sql has no column `{table}.{column_name}`")
             continue
-        if cot["gt"] != co[ten]:
-            loi.append(
-                f"Enums.{ten} = {co[ten]} nhưng "
-                f"{ten_bang}.{ten_cot} ENUM{tuple(cot['gt'])}")
-    return loi
+        if column["values"] != on_disk[name]:
+            errors.append(
+                f"Enums.{name} = {on_disk[name]} but "
+                f"{table}.{column_name} is ENUM{tuple(column['values'])}")
+    return errors
 
 
 def main(argv: list[str] | None = None) -> int:
-    for luong in (sys.stdout, sys.stderr):
+    for stream in (sys.stdout, sys.stderr):
         try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         except Exception:
             pass
 
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--ghi", action="store_true",
-                    help="sinh lại Entities/ và AppDbContext.cs")
-    ts = ap.parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--write", action="store_true",
+                        help="regenerate Entities/ and AppDbContext.cs")
+    args = parser.parse_args(argv)
 
-    bang = doc_luoc_do(SCHEMA.read_text(encoding="utf-8"))
-    so_cot = sum(len(c) for c in bang.values())
-    print(f"db/schema.sql: {len(bang)} bảng · {so_cot} cột")
+    tables = read_schema(SCHEMA.read_text(encoding="utf-8"))
+    column_count = sum(len(c) for c in tables.values())
+    print(f"db/schema.sql: {len(tables)} tables · {column_count} columns")
 
-    if ts.ghi:
-        THUC_THE.mkdir(parents=True, exist_ok=True)
+    if args.write:
+        ENTITIES.mkdir(parents=True, exist_ok=True)
         CONTEXT.parent.mkdir(parents=True, exist_ok=True)
-        # Xóa lớp của bảng đã bỏ, nếu không chúng vẫn biên dịch được và vẫn
-        # trông như một phần của lược đồ.
-        giu = {pascal(t) + ".cs" for t in bang}
-        for p in THUC_THE.glob("*.cs"):
-            if p.name not in giu:
-                p.unlink()
-                print(f"  - xóa {p.name} (bảng không còn)")
-        for ten, cot in bang.items():
-            (THUC_THE / f"{pascal(ten)}.cs").write_text(
-                sinh_thuc_the(ten, cot), encoding="utf-8")
-        CONTEXT.write_text(sinh_context(bang), encoding="utf-8")
-        print(f"  đã ghi {len(bang)} lớp + AppDbContext.cs")
+        # Delete the class of a dropped table; otherwise it still compiles and
+        # still looks like part of the schema.
+        keep = {pascal(t) + ".cs" for t in tables}
+        for path in ENTITIES.glob("*.cs"):
+            if path.name not in keep:
+                path.unlink()
+                print(f"  - deleted {path.name} (table no longer exists)")
+        for table, columns in tables.items():
+            (ENTITIES / f"{pascal(table)}.cs").write_text(
+                render_entity(table, columns), encoding="utf-8")
+        CONTEXT.write_text(render_context(tables), encoding="utf-8")
+        print(f"  wrote {len(tables)} classes + AppDbContext.cs")
 
-    loi = soat(bang)
+    errors = verify(tables)
     print()
-    if loi:
-        print(f"{len(loi)} CHỖ LỆCH:")
-        for x in loi:
+    if errors:
+        print(f"{len(errors)} DIVERGENCES:")
+        for x in errors:
             print("  -", x)
         return 1
-    print("Mã C# mô tả đúng lược đồ — từng cột, cả hai chiều.")
+    print("The C# code describes the schema correctly — column by column, "
+          "in both directions.")
     return 0
 
 

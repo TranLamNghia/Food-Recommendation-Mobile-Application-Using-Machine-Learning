@@ -1,38 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Đồng bộ cờ pk / fk / uq / uqc **và giá trị ENUM** trong ERD HTML từ CSDL.
+"""Sync the pk / fk / uq / uqc flags **and ENUM values** in the ERD HTML from
+the database.
 
-Mỗi cột trên sơ đồ là một mảng bốn phần tử:
+Each column on the diagram is a four-element array:
 
     ['role', 'ENUM', 'uq', 'user|admin']
-      tên     kiểu   cờ    giá trị ENUM, ngăn bằng dấu |
+      name    type   flags  ENUM values, separated by |
 
-Phần tử thứ tư chỉ có ở cột ENUM và SET, và **luôn sinh từ
-`information_schema`** chứ không chép tay: 30 cột ENUM với 108 giá trị thì
-chép tay sẽ sai, và sai kiểu lặng lẽ — sơ đồ vẫn vẽ ra bình thường với một
-giá trị không tồn tại.
+The fourth element exists only on ENUM and SET columns, and is **always
+generated from `information_schema`** rather than typed by hand: 30 ENUM
+columns with 108 values will be wrong if copied by hand, and wrong in a silent
+way — the diagram still renders perfectly with a value that does not exist.
 
-Cờ trong `docs/database_erd.html` trước đây được gõ tay, và đã sai theo kiểu
-rất khó thấy: `body_logs.logged_on` và `meal_plans.plan_date` đeo huy hiệu
-`UQ` trần, làm người đọc tưởng **một mình cột đó là duy nhất** — tức hai
-người dùng không thể cùng ghi cân nặng trong một ngày. Thực tế ràng buộc là
-`UNIQUE (user_id, logged_on)`, hoàn toàn cho phép.
+The flags in `docs/database_erd.html` used to be typed by hand, and they were
+wrong in a way that is very hard to spot: `body_logs.logged_on` and
+`meal_plans.plan_date` carried a bare `UQ` badge, implying **that column alone
+is unique** — that is, that two users could not both log a weight on the same
+day. The real constraint is `UNIQUE (user_id, logged_on)`, which allows it
+perfectly.
 
-Hướng ngược lại cũng sai: năm ràng buộc UNIQUE ghép khác không được hiển thị
-gì cả, nên người đọc không biết chúng tồn tại.
+The opposite direction was wrong too: five composite UNIQUE constraints were
+not shown at all, so a reader had no idea they existed.
 
-Script này đọc `information_schema` rồi ghi lại cờ, nên sơ đồ không thể lệch
-khỏi CSDL nữa. Chạy lại sau mỗi lần đổi lược đồ.
+This script reads `information_schema` and rewrites the flags, so the diagram
+can no longer drift from the database. Run it again after every schema change.
 
-Bốn cờ:
-    pk   khóa chính
-    fk   khóa ngoại
-    uq   duy nhất, MỘT cột
-    uqc  duy nhất theo TỔ HỢP nhiều cột
+The four flags:
+    pk   primary key
+    fk   foreign key
+    uq   unique, ONE column
+    uqc  unique across a COMBINATION of columns
 
-Chạy:
-    python tools/sync_erd_flags.py            # ghi vào ERD
-    python tools/sync_erd_flags.py --dry-run  # chỉ in khác biệt
+Run:
+    python tools/sync_erd_flags.py            # write into the ERD
+    python tools/sync_erd_flags.py --dry-run  # print the differences only
 """
 
 from __future__ import annotations
@@ -48,17 +50,17 @@ import _env  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 ERD = ROOT / "docs" / "database_erd.html"
 
-# Cột sinh tự động giữ nguyên cờ `gen` — thông tin đó không nằm trong các
-# bảng ràng buộc mà nằm ở `extra` của information_schema.
+# Generated columns keep their `gen` flag — that information is not in the
+# constraint tables but in information_schema's `extra`.
 KEEP = {"gen"}
 
 
 def read_enums(database: str) -> dict[tuple[str, str], str]:
-    """Giá trị của từng cột ENUM/SET, nối bằng dấu `|`.
+    """Each ENUM/SET column's values, joined with `|`.
 
-    Giữ đúng **thứ tự khai báo** trong CSDL, không sắp lại: thứ tự của ENUM
-    là một phần ngữ nghĩa — `severity_min` đi từ `mild` đến `severe`, và
-    MySQL so sánh ENUM theo thứ tự đó.
+    Keeps the **declaration order** from the database rather than sorting:
+    an ENUM's order is part of its meaning — `severity_min` runs from `mild`
+    to `severe`, and MySQL compares ENUMs in that order.
     """
     import pymysql
 
@@ -102,8 +104,8 @@ def read_keys(database: str) -> dict[tuple[str, str], set[str]]:
 
     try:
         with conn.cursor() as cur:
-            # Khóa chính và khóa duy nhất. Số cột của chỉ mục quyết định
-            # `uq` hay `uqc`.
+            # Primary and unique keys. The index's column count decides
+            # between `uq` and `uqc`.
             cur.execute(
                 """
                 SELECT TABLE_NAME, COLUMN_NAME, INDEX_NAME,
@@ -137,33 +139,33 @@ def read_keys(database: str) -> dict[tuple[str, str], set[str]]:
 
 
 def order(flags: set[str]) -> str:
-    """Thứ tự cố định để diff giữa các lần chạy không nhiễu."""
+    """A fixed order, so a diff between runs carries no noise."""
     return " ".join(f for f in ("pk", "fk", "uq", "uqc", "gen") if f in flags)
 
 
+def _use_utf8() -> None:
+    """Make stdout accept non-ASCII output on Windows (it defaults to cp1252).
 
-def _in_utf8() -> None:
-    """Bắt stdout nhận tiếng Việt trên Windows (mặc định cp1252).
-
-    Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
-    đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
-    Bản sao của `tools/_env.use_utf8`; để ở đây vì `tools/baocao/` không chắc
-    có `tools/` trên `sys.path`.
+    Without it the script dies mid-run with `UnicodeEncodeError` as soon as
+    output is redirected through a pipe or into a file — which is to say
+    exactly when running in CI. A copy of `tools/_env.use_utf8`, kept here so
+    the script also runs when only `tools/` is importable.
     """
-    for luong in (sys.stdout, sys.stderr):
+    for stream in (sys.stdout, sys.stderr):
         try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         except Exception:  # pragma: no cover
             pass
 
+
 def main() -> int:
-    _in_utf8()
+    _use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", default="nutrition_rec")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    live = read_keys(args.database)
+    live_flags = read_keys(args.database)
     enums = read_enums(args.database)
     html = ERD.read_text(encoding="utf-8")
     changes: list[str] = []
@@ -174,26 +176,26 @@ def main() -> int:
 
         def patch_col(cm: re.Match) -> str:
             column = cm.group(1)
-            type_ = cm.group(2)
+            column_type = cm.group(2)
             old = set((cm.group(3) or "").split()) - {""}
             old_values = cm.group(4)
 
-            new = set(live.get((table, column), set())) | (old & KEEP)
+            new = set(live_flags.get((table, column), set())) | (old & KEEP)
             if new != old:
                 changes.append(
-                    f"  {table}.{column:<22} cờ "
-                    f"[{order(old) or '—'}] → [{order(new) or '—'}]"
+                    f"  {table}.{column:<22} flags "
+                    f"[{order(old) or '-'}] -> [{order(new) or '-'}]"
                 )
 
             values = enums.get((table, column))
             if (values or "") != (old_values or ""):
                 changes.append(
                     f"  {table}.{column:<22} ENUM "
-                    f"[{old_values or '—'}] → [{values or '—'}]"
+                    f"[{old_values or '-'}] -> [{values or '-'}]"
                 )
 
             tail = f",'{values}'" if values else ""
-            return f"['{column}','{type_}','{order(new)}'{tail}]"
+            return f"['{column}','{column_type}','{order(new)}'{tail}]"
 
         patched = re.sub(
             r"\['(\w+)','([^']*)'(?:,'([^']*)')?(?:,'([^']*)')?\]",
@@ -207,19 +209,22 @@ def main() -> int:
     )
 
     if not changes:
-        print("Cờ và giá trị ENUM trong ERD đã khớp CSDL, không có gì để sửa.")
+        print(
+            "The ERD's flags and ENUM values already match the database; "
+            "nothing to change."
+        )
         return 0
 
-    print(f"{len(changes)} chỗ cần sửa:\n")
+    print(f"{len(changes)} things to change:\n")
     for line in changes:
         print(line)
 
     if args.dry_run:
-        print("\n(--dry-run: không ghi tệp)")
+        print("\n(--dry-run: no file written)")
         return 1
 
     ERD.write_text(out, encoding="utf-8")
-    print(f"\nĐã ghi → {ERD}")
+    print(f"\nWrote -> {ERD}")
     return 0
 
 

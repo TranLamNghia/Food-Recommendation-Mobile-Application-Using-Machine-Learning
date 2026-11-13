@@ -1,40 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Kiểm tỷ số tương phản của bảng màu theo WCAG 2.1.
+"""Check the palette's contrast ratios against WCAG 2.1.
 
-Vì sao cần một bộ kiểm riêng. Tương phản không đủ là loại lỗi **không ai
-nhìn thấy khi thiết kế**: người làm có màn hình tốt, phòng sáng vừa, mắt
-bình thường, nên chữ xám nhạt trên nền trắng vẫn đọc được với họ. Nó chỉ
-thành vấn đề với người dùng thật, ngoài trời, trên màn hình rẻ, hoặc mắt
-kém — tức là đúng những người không bao giờ ngồi cạnh để phản hồi.
+Why this needs its own checker. Insufficient contrast is the kind of defect
+**nobody sees while designing**: the designer has a good screen, moderate
+room lighting and normal eyesight, so pale grey text on white still reads
+fine to them. It only becomes a problem for real users, outdoors, on a cheap
+screen, or with poor eyesight — which is to say exactly the people who never
+sit next to you to complain.
 
-Hai lỗi mà bộ này bắt được ngay lần chạy đầu:
+Two defects it caught on its first run:
 
-    textSecondary #8A8B90 trên trắng      3,40:1  cần 4,50:1
-    accent        #2AD2EE trên trắng      1,82:1  cần 4,50:1
+    textSecondary #8A8B90 on white      3.40:1  needs 4.50:1
+    accent        #2AD2EE on white      1.82:1  needs 4.50:1
 
-`accent` còn tệ hơn khi đặt trên `accentSoft` (1,65:1) — và đó chính là nền
-của hai trong năm chỗ đang dùng nó làm màu chữ.
+`accent` was worse still on `accentSoft` (1.65:1) — and that was the
+background of two of the five places using it as a text colour.
 
-## Ngưỡng của WCAG 2.1
+## The WCAG 2.1 thresholds
 
-    4,5:1   chữ thường (dưới 18,66 px đậm, hoặc dưới 24 px thường)   AA
-    3,0:1   chữ lớn, và **mọi** thành phần đồ họa phải nhận ra được  AA
-            (biểu tượng, đường viền ô nhập, thanh tiến độ)
+    4.5:1   body text (under 18.66 px bold, or under 24 px regular)     AA
+    3.0:1   large text, and **every** graphical component that must be
+            distinguishable (icons, input borders, progress bars)        AA
 
-Chữ của thành phần đã vô hiệu hóa được WCAG miễn trừ, nên bảng dưới ghi
-`mien_tru=True` cho những cặp đó kèm lý do — miễn trừ phải nêu ra, không
-được im lặng bỏ qua.
+Text in a disabled component is exempt under WCAG, so the table below marks
+those pairs `exempt=True` with a reason — an exemption has to be stated, never
+silently skipped.
 
-## Danh sách cặp màu là bản khai tay
+## The pair list is hand-written
 
-Không dò được tự động cặp (màu chữ, màu nền) từ mã Dart: nền có thể do một
-widget cha đặt cách đó mười tầng. Nên bảng `CAC_CAP` là bản khai tay, và
-mỗi dòng ghi rõ chỗ dùng. Thêm một cách dùng mới thì phải thêm một dòng —
-`check_docs_sync.py` giữ tài liệu khỏi lệch lược đồ bằng đúng cách này.
+The (foreground, background) pairs cannot be detected automatically from the
+Dart source: a background may be set by a parent widget ten levels up. So
+`PAIRS` is hand-written, and each row records where it is used. A new usage
+means a new row — the same approach `check_docs_sync.py` uses to keep the
+documents from drifting from the schema.
 
-Chạy:
+Run:
     python tools/check_contrast.py
+
+Note on language: the colour names are Dart identifiers and the quoted
+strings inside the usage descriptions are the app's Vietnamese UI text, so
+both stay as they are.
 """
 
 from __future__ import annotations
@@ -48,149 +54,193 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _env  # noqa: E402
 
-BANG_MAU = ROOT / "mobile" / "lib" / "core" / "theme" / "app_colors.dart"
+COLOR_FILE = ROOT / "mobile" / "lib" / "core" / "theme" / "app_colors.dart"
 
-#: Ngưỡng AA của WCAG 2.1.
-NGUONG_CHU_THUONG = 4.5
-NGUONG_CHU_LON = 3.0
-NGUONG_DO_HOA = 3.0
+#: The WCAG 2.1 AA thresholds.
+THRESHOLD_BODY_TEXT = 4.5
+THRESHOLD_LARGE_TEXT = 3.0
+THRESHOLD_GRAPHICS = 3.0
 
 
 @dataclass(frozen=True)
-class Cap:
-    """Một cặp (màu trước, màu nền) đang dùng thật, kèm chỗ dùng."""
+class Pair:
+    """One (foreground, background) pair in real use, with its usage."""
 
-    truoc: str
-    sau: str
+    foreground: str
+    background: str
     threshold: float
-    cho_dung: str
-    mien_tru: bool = False
-    ly_do_mien_tru: str = ""
+    used_for: str
+    exempt: bool = False
+    exemption_reason: str = ""
 
 
-#: Mọi cặp màu đang dùng. Xem docstring: đây là bản khai tay.
+#: Every colour pair in use. See the docstring: this is hand-written.
 #:
-#: Ngưỡng của mỗi dòng theo **cách dùng thật**, không theo loại màu. Bốn màu
-#: chất sinh năng lượng chẳng hạn vừa là ruột thanh tiến độ (nền là
-#: `surfaceMuted`, ngưỡng 3:1) vừa — riêng `carb` — là màu chữ của nhãn BMI
-#: trên mặt thẻ (ngưỡng 4,5:1). Gán một ngưỡng cho cả nhóm sẽ bỏ sót đúng
-#: trường hợp chặt hơn.
-CAC_CAP: tuple[Cap, ...] = (
-    # ── Chữ trên ba loại nền ──
-    Cap("textPrimary", "surface", NGUONG_CHU_THUONG, "chữ chính trên mặt thẻ"),
-    Cap("textPrimary", "background", NGUONG_CHU_THUONG, "chữ chính trên nền trang"),
-    Cap("textSecondary", "surface", NGUONG_CHU_THUONG,
-        "chữ phụ trên mặt thẻ — bodyLarge/bodyMedium của app_theme"),
-    Cap("textSecondary", "background", NGUONG_CHU_THUONG, "chữ phụ trên nền trang"),
-    Cap("textSecondary", "surfaceMuted", NGUONG_CHU_THUONG,
-        "chữ phụ trên vùng xám nhạt"),
-    Cap("textOnDark", "ink", NGUONG_CHU_THUONG, "chữ trên nút đen"),
+#: Each row's threshold follows its **actual usage**, not the kind of colour.
+#: The four macronutrient colours, for instance, are both progress-bar fills
+#: (background `surfaceMuted`, threshold 3:1) and — for `carb` alone — the
+#: text colour of a BMI label on a card surface (threshold 4.5:1). Assigning
+#: one threshold to the whole group would miss exactly the stricter case.
+PAIRS: tuple[Pair, ...] = (
+    # -- Text on the three kinds of background --
+    Pair("textPrimary", "surface", THRESHOLD_BODY_TEXT, "primary text on a card"),
+    Pair(
+        "textPrimary", "background", THRESHOLD_BODY_TEXT,
+        "primary text on the page background",
+    ),
+    Pair(
+        "textSecondary", "surface", THRESHOLD_BODY_TEXT,
+        "secondary text on a card — app_theme's bodyLarge/bodyMedium",
+    ),
+    Pair(
+        "textSecondary", "background", THRESHOLD_BODY_TEXT,
+        "secondary text on the page background",
+    ),
+    Pair(
+        "textSecondary", "surfaceMuted", THRESHOLD_BODY_TEXT,
+        "secondary text on a pale grey area",
+    ),
+    Pair("textOnDark", "ink", THRESHOLD_BODY_TEXT, "text on a black button"),
 
-    # ── Màu nhấn: chữ, biểu tượng, ruột thanh ──
-    Cap("accentInk", "surface", NGUONG_CHU_THUONG,
-        "số và nhãn nhấn trên mặt thẻ — motivation_step, option_card"),
-    Cap("accentInk", "background", NGUONG_CHU_THUONG, "số nhấn trên nền trang"),
-    Cap("accentInk", "accentSoft", NGUONG_CHU_THUONG,
-        "nhãn nhấn trên nền lơ nhạt — survey_intro_screen"),
-    Cap("accentInk", "surfaceMuted", NGUONG_DO_HOA,
-        "ruột thanh tiến độ trên rãnh xám — calculating_screen, progress_screen"),
-    Cap("ink", "accentSoft", NGUONG_CHU_THUONG,
-        "chữ đen trên khối lơ — cách DUY NHẤT dùng được màu lơ gốc"),
+    # -- The accent colour: text, icons, bar fills --
+    Pair(
+        "accentInk", "surface", THRESHOLD_BODY_TEXT,
+        "accented numbers and labels on a card — motivation_step, option_card",
+    ),
+    Pair(
+        "accentInk", "background", THRESHOLD_BODY_TEXT,
+        "accented numbers on the page background",
+    ),
+    Pair(
+        "accentInk", "accentSoft", THRESHOLD_BODY_TEXT,
+        "accented label on the pale cyan block — survey_intro_screen",
+    ),
+    Pair(
+        "accentInk", "surfaceMuted", THRESHOLD_GRAPHICS,
+        "progress-bar fill in a grey track — calculating_screen, progress_screen",
+    ),
+    Pair(
+        "ink", "accentSoft", THRESHOLD_BODY_TEXT,
+        "black text on the cyan block — the ONLY usable way to use the raw cyan",
+    ),
 
-    # ── Bốn hướng vuốt. Ba trong bốn màu này là màu CHỮ (`_Stat` ở
-    #    diary_screen, nhãn BMI ở progress_screen), nên ngưỡng là 4,5:1
-    #    chứ không phải 3:1 như một đường viền.
-    Cap("like", "surface", NGUONG_CHU_THUONG, "chữ `Còn lại` và nhãn BMI `Bình thường`"),
-    Cap("dislike", "surface", NGUONG_CHU_THUONG, "chữ `Vượt` và nhãn BMI `Béo phì`"),
-    Cap("unknown", "surface", NGUONG_CHU_THUONG, "nhãn BMI `Thiếu cân`"),
-    Cap("neutral", "surface", NGUONG_DO_HOA, "viền và biểu tượng hướng bình thường"),
+    # -- The four swipe directions. Three of these four are TEXT colours
+    #    (`_Stat` in diary_screen, the BMI label in progress_screen), so the
+    #    threshold is 4.5:1 rather than the 3:1 of a border.
+    Pair(
+        "like", "surface", THRESHOLD_BODY_TEXT,
+        "the `Còn lại` text and the `Bình thường` BMI label",
+    ),
+    Pair(
+        "dislike", "surface", THRESHOLD_BODY_TEXT,
+        "the `Vượt` text and the `Béo phì` BMI label",
+    ),
+    Pair(
+        "unknown", "surface", THRESHOLD_BODY_TEXT,
+        "the `Thiếu cân` BMI label",
+    ),
+    Pair(
+        "neutral", "surface", THRESHOLD_GRAPHICS,
+        "the border and icon of the neutral direction",
+    ),
 
-    # ── Bốn màu chất sinh năng lượng: ruột thanh trên rãnh `surfaceMuted` ──
-    Cap("kcal", "surfaceMuted", NGUONG_DO_HOA, "ruột thanh năng lượng ở diary_screen"),
-    Cap("protein", "surfaceMuted", NGUONG_DO_HOA, "ruột thanh đạm ở energy_summary_card"),
-    Cap("carb", "surfaceMuted", NGUONG_DO_HOA, "ruột thanh bột đường"),
-    Cap("fat", "surfaceMuted", NGUONG_DO_HOA, "ruột thanh béo"),
-    #    `carb` còn là màu CHỮ của nhãn BMI `Thừa cân`, nên nó phải qua cả
-    #    ngưỡng chữ — dòng dưới là dòng chặt hơn trong hai cách dùng.
-    Cap("carb", "surface", NGUONG_CHU_THUONG, "nhãn BMI `Thừa cân` ở progress_screen"),
+    # -- The four macronutrient colours: bar fill on a `surfaceMuted` track --
+    Pair(
+        "kcal", "surfaceMuted", THRESHOLD_GRAPHICS,
+        "the energy bar fill in diary_screen",
+    ),
+    Pair(
+        "protein", "surfaceMuted", THRESHOLD_GRAPHICS,
+        "the protein bar fill in energy_summary_card",
+    ),
+    Pair("carb", "surfaceMuted", THRESHOLD_GRAPHICS, "the carbohydrate bar fill"),
+    Pair("fat", "surfaceMuted", THRESHOLD_GRAPHICS, "the fat bar fill"),
+    #    `carb` is also the TEXT colour of the `Thừa cân` BMI label, so it has
+    #    to clear the text threshold too — the row below is the stricter of
+    #    its two usages.
+    Pair(
+        "carb", "surface", THRESHOLD_BODY_TEXT,
+        "the `Thừa cân` BMI label in progress_screen",
+    ),
 
-    # ── Miễn trừ, có nêu lý do ──
-    Cap(
+    # -- Exemptions, each with a stated reason --
+    Pair(
         "accent",
         "surface",
-        NGUONG_DO_HOA,
-        "chỉ còn là `seedColor` và `secondary` của ColorScheme",
-        mien_tru=True,
-        ly_do_mien_tru=(
-            "Không còn bề mặt nào vẽ bằng màu này. Nó chỉ gieo ColorScheme và "
-            "sinh ra `accentSoft`; mọi chữ, biểu tượng và ruột thanh đã chuyển "
-            "sang `accentInk`. Màu lơ gốc chỉ dùng được làm NỀN với chữ đen "
-            "(11,55:1), không bao giờ làm tiền cảnh trên nền sáng."
+        THRESHOLD_GRAPHICS,
+        "now only the ColorScheme's `seedColor` and `secondary`",
+        exempt=True,
+        exemption_reason=(
+            "No surface is painted in this colour any more. It only seeds the "
+            "ColorScheme and generates `accentSoft`; every text, icon and bar "
+            "fill moved to `accentInk`. The raw cyan is usable only as a "
+            "BACKGROUND with black text (11.55:1), never as a foreground on a "
+            "light background."
         ),
     ),
-    Cap(
+    Pair(
         "textTertiary",
         "surface",
-        NGUONG_CHU_THUONG,
-        "chữ mờ của mục đã vô hiệu hóa và đơn vị sau con số",
-        mien_tru=True,
-        ly_do_mien_tru=(
-            "WCAG 1.4.3 miễn trừ chữ của thành phần đã vô hiệu hóa. Nếu màu "
-            "này có ngày dùng cho chữ đang hoạt động thì phải bỏ miễn trừ."
+        THRESHOLD_BODY_TEXT,
+        "the dimmed text of a disabled item, and the unit after a number",
+        exempt=True,
+        exemption_reason=(
+            "WCAG 1.4.3 exempts the text of a disabled component. If this "
+            "colour is ever used for active text, the exemption has to go."
         ),
     ),
-    Cap(
+    Pair(
         "border",
         "surface",
-        NGUONG_DO_HOA,
-        "đường kẻ phân cách giữa hai dòng",
-        mien_tru=True,
-        ly_do_mien_tru=(
-            "WCAG 1.4.11 không áp cho đường trang trí thuần — bỏ đường kẻ đi "
-            "thì không mất thông tin nào, vì các dòng đã cách nhau bằng khoảng "
-            "trắng. Viền ô NHẬP thì không được miễn trừ."
+        THRESHOLD_GRAPHICS,
+        "the divider line between two rows",
+        exempt=True,
+        exemption_reason=(
+            "WCAG 1.4.11 does not apply to purely decorative lines — removing "
+            "the divider loses no information, because the rows are already "
+            "separated by whitespace. An INPUT border is not exempt."
         ),
     ),
 )
 
 
-def doc_bang_mau() -> dict[str, tuple[int, int, int]]:
-    """Đọc các hằng `Color(0xFFRRGGBB)` trong `app_colors.dart`."""
-    text = BANG_MAU.read_text(encoding="utf-8")
-    mau: dict[str, tuple[int, int, int]] = {}
+def read_palette() -> dict[str, tuple[int, int, int]]:
+    """Read the `Color(0xFFRRGGBB)` constants in `app_colors.dart`."""
+    text = COLOR_FILE.read_text(encoding="utf-8")
+    palette: dict[str, tuple[int, int, int]] = {}
     for m in re.finditer(
         r"static const (\w+)\s*=\s*Color\(0x([0-9A-Fa-f]{8})\)", text
     ):
-        ten, hex8 = m.group(1), m.group(2)
-        gia_tri = int(hex8, 16)
-        mau[ten] = (
-            (gia_tri >> 16) & 0xFF,
-            (gia_tri >> 8) & 0xFF,
-            gia_tri & 0xFF,
+        name, hex8 = m.group(1), m.group(2)
+        value = int(hex8, 16)
+        palette[name] = (
+            (value >> 16) & 0xFF,
+            (value >> 8) & 0xFF,
+            value & 0xFF,
         )
-    # Bí danh trỏ sang hằng khác, ví dụ `primary = ink`.
+    # Aliases pointing at another constant, for example `primary = ink`.
     for m in re.finditer(r"static const (\w+)\s*=\s*(\w+);", text):
-        ten, goc = m.group(1), m.group(2)
-        if goc in mau and ten not in mau:
-            mau[ten] = mau[goc]
-    return mau
+        name, target = m.group(1), m.group(2)
+        if target in palette and name not in palette:
+            palette[name] = palette[target]
+    return palette
 
 
-def _tuyen_tinh(kenh: int) -> float:
-    c = kenh / 255.0
+def _linearize(channel: int) -> float:
+    c = channel / 255.0
     return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
 
 
-def do_sang(rgb: tuple[int, int, int]) -> float:
-    """Độ sáng tương đối theo WCAG 2.1."""
-    r, g, b = (_tuyen_tinh(k) for k in rgb)
+def luminance(rgb: tuple[int, int, int]) -> float:
+    """Relative luminance per WCAG 2.1."""
+    r, g, b = (_linearize(channel) for channel in rgb)
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-def tuong_phan(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
-    la, lb = do_sang(a), do_sang(b)
-    sang, toi = max(la, lb), min(la, lb)
-    return (sang + 0.05) / (toi + 0.05)
+def contrast_ratio(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
+    la, lb = luminance(a), luminance(b)
+    lighter, darker = max(la, lb), min(la, lb)
+    return (lighter + 0.05) / (darker + 0.05)
 
 
 def _hex(rgb: tuple[int, int, int]) -> str:
@@ -199,56 +249,66 @@ def _hex(rgb: tuple[int, int, int]) -> str:
 
 def main() -> int:
     _env.use_utf8()
-    print("Kiểm tương phản bảng màu — WCAG 2.1 AA")
+    print("Palette contrast check — WCAG 2.1 AA")
     print("=" * 72)
 
-    mau = doc_bang_mau()
-    print(f"Đọc được {len(mau)} màu từ {BANG_MAU.relative_to(ROOT)}\n")
+    palette = read_palette()
+    print(f"Read {len(palette)} colours from {COLOR_FILE.relative_to(ROOT)}\n")
 
-    loi: list[str] = []
+    failures: list[str] = []
     missing: list[str] = []
-    dat = 0
-    mien = 0
+    passed = 0
+    exempted = 0
 
-    for cap in CAC_CAP:
-        if cap.truoc not in mau or cap.sau not in mau:
-            con = [t for t in (cap.truoc, cap.sau) if t not in mau]
-            missing.append(f"{cap.truoc} trên {cap.sau}: chưa khai {', '.join(con)}")
+    for pair in PAIRS:
+        if pair.foreground not in palette or pair.background not in palette:
+            absent = [
+                n for n in (pair.foreground, pair.background) if n not in palette
+            ]
+            missing.append(
+                f"{pair.foreground} on {pair.background}: "
+                f"{', '.join(absent)} not declared"
+            )
             continue
 
-        ty_so = tuong_phan(mau[cap.truoc], mau[cap.sau])
-        nhan = f"{cap.truoc} trên {cap.sau}"
-        so = f"{ty_so:5.2f}:1 cần {cap.threshold:.1f}:1"
+        ratio = contrast_ratio(palette[pair.foreground], palette[pair.background])
+        label = f"{pair.foreground} on {pair.background}"
+        figures = f"{ratio:5.2f}:1 needs {pair.threshold:.1f}:1"
 
-        if ty_so >= cap.threshold:
-            dat += 1
-            print(f"  ✓ {nhan:34s} {so}")
-        elif cap.mien_tru:
-            mien += 1
-            print(f"  ~ {nhan:34s} {so}  MIỄN TRỪ")
-            print(f"      {cap.ly_do_mien_tru}")
+        if ratio >= pair.threshold:
+            passed += 1
+            print(f"  ok   {label:34s} {figures}")
+        elif pair.exempt:
+            exempted += 1
+            print(f"  ~    {label:34s} {figures}  EXEMPT")
+            print(f"      {pair.exemption_reason}")
         else:
-            loi.append(
-                f"{nhan} = {ty_so:.2f}:1, cần {cap.threshold:.1f}:1 "
-                f"({_hex(mau[cap.truoc])} trên {_hex(mau[cap.sau])}) "
-                f"— {cap.cho_dung}"
+            failures.append(
+                f"{label} = {ratio:.2f}:1, needs {pair.threshold:.1f}:1 "
+                f"({_hex(palette[pair.foreground])} on "
+                f"{_hex(palette[pair.background])}) — {pair.used_for}"
             )
-            print(f"  ✗ {nhan:34s} {so}")
-            print(f"      {cap.cho_dung}")
+            print(f"  BAD  {label:34s} {figures}")
+            print(f"      {pair.used_for}")
 
     print("\n" + "=" * 72)
     if missing:
-        print(f"{len(missing)} cặp không kiểm được:")
+        print(f"{len(missing)} pairs could not be checked:")
         for x in missing:
             print("  -", x)
-    if loi:
-        print(f"{dat} cặp đạt, {mien} miễn trừ, {len(loi)} CẶP SAI:")
-        for x in loi:
+    if failures:
+        print(
+            f"{passed} pairs passed, {exempted} exempt, {len(failures)} FAILED:"
+        )
+        for x in failures:
             print("  -", x)
         return 1
     if missing:
         return 1
-    print(f"Tất cả {dat} cặp đạt chuẩn AA, {mien} cặp được miễn trừ có nêu lý do.")
+    print(
+        f"All {passed} pairs meet AA, with {exempted} exemptions each carrying "
+        f"a stated reason."
+    )
     return 0
 
 

@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Đối chiếu `db/schema.sql` với CSDL thật, từng cột một.
+"""Compare `db/schema.sql` against the live database, column by column.
 
-Khoảng trống này tồn tại khá lâu mà không ai thấy. `tools/check_docs_sync.py`
-so CSDL với **ba** nguồn — `database_erd.html`, `DATABASE_DESIGN.md`,
-`ERD_REVIEW.md` — nhưng **không so với chính `db/schema.sql`**, dù đó là tệp
-dựng lại CSDL. `tools/test_schema_build.py` thì dựng schema.sql vào CSDL nháp
-và đếm tổng (22 bảng / 29 khóa ngoại / 16 CHECK / 212 cột), nên nó bắt được
-lệch về **số lượng** nhưng không bắt được lệch về **nội dung**: đổi
-`VARCHAR(100)` thành `VARCHAR(200)`, bỏ một `NOT NULL`, thêm một giá trị
-ENUM — mọi con số vẫn đúng y nguyên.
+This gap existed for a long time without anyone noticing.
+`tools/check_docs_sync.py` compares the database against **three** sources —
+`database_erd.html`, `DATABASE_DESIGN.md`, `ERD_REVIEW.md` — but **not against
+`db/schema.sql` itself**, even though that is the file which builds the
+database. `tools/test_schema_build.py` does build schema.sql into a scratch
+database and count totals (22 tables / 29 foreign keys / 16 CHECKs / 212
+columns), so it catches drift in **quantity** but not drift in **content**:
+changing `VARCHAR(100)` to `VARCHAR(200)`, dropping a `NOT NULL`, adding an
+ENUM value — every count stays exactly the same.
 
-Tệp này so bốn thứ, mỗi thứ theo cả hai chiều:
+This file compares four things, each in both directions:
 
-    tập cột · cho phép NULL · họ kiểu và tham số · tập giá trị ENUM/SET
+    column set · nullability · type family and parameters · ENUM/SET values
 
-Bài học về phép đo, ghi lại vì đã tự sa vào: bản thử đầu tiên tách định nghĩa
-cột **theo dòng** và báo 29 lỗi NULL + 25 lỗi ENUM. Cả 54 đều là ảo.
+A lesson about measurement, recorded because I walked into it myself: the first
+attempt split column definitions **by line** and reported 29 nullability errors
+and 25 ENUM errors. All 54 were phantoms.
 
-  · `ENUM(...)` trong schema.sql trải nhiều dòng, nên tách theo dòng thì
-    `dish_role` chỉ còn phần `ENUM('main','side_protein',` — không thấy
-    `NOT NULL` nằm ở dòng dưới.
-  · Cột khóa chính viết `PRIMARY KEY AUTO_INCREMENT` mà không ghi `NOT NULL`;
-    MySQL tự thêm. Không biết luật đó thì mọi khóa chính đều thành "lệch".
-  · Phép so ENUM viết hoa cả chuỗi trước khi bóc giá trị trong dấu nháy, nên
-    `'mild'` thành `'MILD'` và không bao giờ khớp.
+  - An `ENUM(...)` in schema.sql spans several lines, so splitting by line left
+    `dish_role` as just `ENUM('main','side_protein',` — with the `NOT NULL` on
+    a later line unseen.
+  - Primary-key columns are written `PRIMARY KEY AUTO_INCREMENT` without
+    `NOT NULL`; MySQL adds it. Not knowing that rule makes every primary key
+    look like drift.
+  - The ENUM comparison upper-cased the whole string before extracting the
+    quoted values, so `'mild'` became `'MILD'` and never matched.
 
-Nên ở đây định nghĩa cột được tách bằng cách **duyệt ký tự, đếm độ sâu ngoặc**,
-và giá trị ENUM bóc từ chuỗi gốc chưa đổi hoa thường.
+So here a column definition is split by **walking the characters and tracking
+parenthesis depth**, and ENUM values are extracted from the original string
+with its case intact.
 
-Chạy:
+Run:
     python tools/check_schema_sql.py
 """
 
@@ -45,7 +49,7 @@ import _env  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "db" / "schema.sql"
 
-# Từ khóa mở đầu một ràng buộc ở cấp bảng, không phải một cột.
+# Keywords that begin a table-level constraint rather than a column.
 TABLE_LEVEL = (
     "PRIMARY KEY",
     "FOREIGN KEY",
@@ -68,10 +72,10 @@ TYPE_KEYWORDS = (
 
 
 def strip_comments(text: str) -> str:
-    """Bỏ chú thích `--` nhưng giữ nguyên nội dung trong dấu nháy.
+    """Remove `--` comments while leaving quoted content untouched.
 
-    Không được bỏ thô bằng `split('--')`: một chuỗi mặc định hay một COMMENT
-    hoàn toàn có thể chứa hai dấu gạch.
+    It cannot be done crudely with `split('--')`: a default value or a COMMENT
+    may perfectly well contain two dashes.
     """
     out: list[str] = []
     in_string = False
@@ -100,11 +104,12 @@ def strip_comments(text: str) -> str:
 
 
 def split_definitions(body: str) -> list[str]:
-    """Tách thân CREATE TABLE thành từng định nghĩa, theo dấu phẩy **ngoài
-    ngoặc** và ngoài dấu nháy.
+    """Split a CREATE TABLE body into definitions, on commas **outside
+    parentheses** and outside quotes.
 
-    Đây là chỗ bản thử đầu tiên sai: tách theo dòng thì một `ENUM(...)` trải
-    nhiều dòng bị cắt làm nhiều mảnh, và mảnh đầu không chứa `NOT NULL`.
+    This is where the first attempt went wrong: splitting by line cuts an
+    `ENUM(...)` spanning several lines into pieces, and the first piece does
+    not contain the `NOT NULL`.
     """
     out: list[str] = []
     buf: list[str] = []
@@ -145,7 +150,7 @@ def split_definitions(body: str) -> list[str]:
 
 
 def parse_schema(text: str) -> dict[str, dict[str, dict]]:
-    """Bóc từng cột của từng bảng ra khỏi schema.sql."""
+    """Extract every column of every table out of schema.sql."""
     clean = strip_comments(text)
     tables: dict[str, dict[str, dict]] = {}
 
@@ -171,7 +176,8 @@ def parse_schema(text: str) -> dict[str, dict[str, dict]]:
 
             rest_upper = rest.upper()
 
-            # Khóa chính ngầm định NOT NULL dù không viết ra — MySQL tự thêm.
+            # A primary key is implicitly NOT NULL even when unwritten —
+            # MySQL adds it.
             is_pk = "PRIMARY KEY" in rest_upper
             nullable = "NOT NULL" not in rest_upper and not is_pk
 
@@ -185,7 +191,7 @@ def parse_schema(text: str) -> dict[str, dict[str, dict]]:
             }
 
             if kind in ("ENUM", "SET"):
-                # Bóc từ chuỗi GỐC, chưa đổi hoa thường.
+                # Extract from the ORIGINAL string, with its case intact.
                 inner = type_match.group(3) if type_match else ""
                 info["values"] = set(re.findall(r"'([^']*)'", inner or ""))
             elif kind in ("VARCHAR", "CHAR", "BINARY"):
@@ -193,9 +199,9 @@ def parse_schema(text: str) -> dict[str, dict[str, dict]]:
                 info["length"] = int(arg) if arg.isdigit() else None
             elif kind in ("DECIMAL", "NUMERIC"):
                 arg = (type_match.group(3) or "")
-                nums = [int(x) for x in re.findall(r"\d+", arg)]
-                if len(nums) == 2:
-                    info["precision"], info["scale"] = nums
+                numbers = [int(x) for x in re.findall(r"\d+", arg)]
+                if len(numbers) == 2:
+                    info["precision"], info["scale"] = numbers
 
             columns[column] = info
 
@@ -255,119 +261,133 @@ def main() -> int:
 
     problems: list[str] = []
 
-    print("═" * 74)
-    print("ĐỐI CHIẾU db/schema.sql VỚI CSDL THẬT")
-    print("═" * 74)
+    print("=" * 74)
+    print("COMPARING db/schema.sql AGAINST THE LIVE DATABASE")
+    print("=" * 74)
 
-    # ── 1. Tập bảng ──
-    print("\n1. Tập bảng")
+    # -- 1. The set of tables --
+    print("\n1. The set of tables")
     only_sql = sorted(set(sql) - set(db))
     only_db = sorted(set(db) - set(sql))
     for t in only_sql:
-        print(f"   ✗ `{t}` có trong schema.sql, không có trong CSDL")
-        problems.append(f"bảng `{t}` chỉ có trong schema.sql")
+        print(f"   BAD  `{t}` is in schema.sql but not in the database")
+        problems.append(f"table `{t}` is only in schema.sql")
     for t in only_db:
-        print(f"   ✗ `{t}` có trong CSDL, không có trong schema.sql")
-        problems.append(f"bảng `{t}` chỉ có trong CSDL")
+        print(f"   BAD  `{t}` is in the database but not in schema.sql")
+        problems.append(f"table `{t}` is only in the database")
     if not only_sql and not only_db:
-        print(f"   ✓ {len(db)} bảng, khớp hai chiều")
+        print(f"   ok   {len(db)} tables, matching in both directions")
 
     shared = sorted(set(sql) & set(db))
 
-    # ── 2. Tập cột ──
-    print("\n2. Tập cột của từng bảng")
+    # -- 2. Each table's set of columns --
+    print("\n2. Each table's set of columns")
     missing = extra = 0
     for t in shared:
         for c in sorted(set(db[t]) - set(sql[t])):
-            print(f"   ✗ {t}.{c} có trong CSDL, thiếu trong schema.sql")
-            problems.append(f"`{t}.{c}` thiếu trong schema.sql")
+            print(f"   BAD  {t}.{c} is in the database, absent from schema.sql")
+            problems.append(f"`{t}.{c}` is absent from schema.sql")
             missing += 1
         for c in sorted(set(sql[t]) - set(db[t])):
-            print(f"   ✗ {t}.{c} có trong schema.sql, không có trong CSDL")
-            problems.append(f"`{t}.{c}` chỉ có trong schema.sql")
+            print(f"   BAD  {t}.{c} is in schema.sql, absent from the database")
+            problems.append(f"`{t}.{c}` is only in schema.sql")
             extra += 1
     total_cols = sum(len(v) for v in db.values())
     if not missing and not extra:
-        print(f"   ✓ {total_cols} cột, khớp hai chiều")
+        print(f"   ok   {total_cols} columns, matching in both directions")
 
-    # ── 3. Cho phép NULL ──
-    print("\n3. Cho phép NULL")
-    off = 0
+    # -- 3. Nullability --
+    print("\n3. Nullability")
+    mismatches = 0
     for t in shared:
         for c in sorted(set(sql[t]) & set(db[t])):
             a, b = sql[t][c]["nullable"], db[t][c]["nullable"]
             if a != b:
                 print(
-                    f"   ✗ {t}.{c}: schema.sql="
-                    f"{'NULL' if a else 'NOT NULL'}, CSDL="
+                    f"   BAD  {t}.{c}: schema.sql="
+                    f"{'NULL' if a else 'NOT NULL'}, database="
                     f"{'NULL' if b else 'NOT NULL'}"
                 )
-                problems.append(f"`{t}.{c}` lệch NULL/NOT NULL")
-                off += 1
-    if not off:
-        print(f"   ✓ {total_cols} cột, tính cho phép NULL khớp hết")
+                problems.append(f"`{t}.{c}` differs on NULL/NOT NULL")
+                mismatches += 1
+    if not mismatches:
+        print(f"   ok   {total_cols} columns, nullability matches throughout")
 
-    # ── 4. Kiểu và tham số ──
-    print("\n4. Kiểu dữ liệu và tham số")
-    off = 0
+    # -- 4. Types and parameters --
+    print("\n4. Data types and parameters")
+    mismatches = 0
     checked = 0
     for t in shared:
         for c in sorted(set(sql[t]) & set(db[t])):
-            s_, d_ = sql[t][c], db[t][c]
+            in_sql, in_db = sql[t][c], db[t][c]
             checked += 1
-            if s_["kind"] != d_["kind"]:
-                print(f"   ✗ {t}.{c}: schema={s_['kind']}, CSDL={d_['kind']}")
-                problems.append(f"`{t}.{c}` lệch kiểu")
-                off += 1
-                continue
-            if "length" in s_ and s_["length"] != d_.get("length"):
+            if in_sql["kind"] != in_db["kind"]:
                 print(
-                    f"   ✗ {t}.{c}: schema độ dài {s_['length']}, "
-                    f"CSDL {d_.get('length')}"
+                    f"   BAD  {t}.{c}: schema={in_sql['kind']}, "
+                    f"database={in_db['kind']}"
                 )
-                problems.append(f"`{t}.{c}` lệch độ dài")
-                off += 1
-            if "precision" in s_ and (
-                s_.get("precision") != d_.get("precision")
-                or s_.get("scale") != d_.get("scale")
+                problems.append(f"`{t}.{c}` differs on type")
+                mismatches += 1
+                continue
+            if "length" in in_sql and in_sql["length"] != in_db.get("length"):
+                print(
+                    f"   BAD  {t}.{c}: schema length {in_sql['length']}, "
+                    f"database {in_db.get('length')}"
+                )
+                problems.append(f"`{t}.{c}` differs on length")
+                mismatches += 1
+            if "precision" in in_sql and (
+                in_sql.get("precision") != in_db.get("precision")
+                or in_sql.get("scale") != in_db.get("scale")
             ):
                 print(
-                    f"   ✗ {t}.{c}: schema "
-                    f"({s_.get('precision')},{s_.get('scale')}), CSDL "
-                    f"({d_.get('precision')},{d_.get('scale')})"
+                    f"   BAD  {t}.{c}: schema "
+                    f"({in_sql.get('precision')},{in_sql.get('scale')}), "
+                    f"database "
+                    f"({in_db.get('precision')},{in_db.get('scale')})"
                 )
-                problems.append(f"`{t}.{c}` lệch độ chính xác DECIMAL")
-                off += 1
-    if not off:
-        print(f"   ✓ {checked} cột, kiểu và tham số khớp hết")
+                problems.append(f"`{t}.{c}` differs on DECIMAL precision")
+                mismatches += 1
+    if not mismatches:
+        print(f"   ok   {checked} columns, types and parameters match throughout")
 
-    # ── 5. Giá trị ENUM / SET ──
-    print("\n5. Tập giá trị ENUM và SET")
-    off = 0
+    # -- 5. ENUM / SET values --
+    print("\n5. ENUM and SET value sets")
+    mismatches = 0
     checked = 0
     for t in shared:
         for c in sorted(set(sql[t]) & set(db[t])):
-            s_, d_ = sql[t][c], db[t][c]
-            if "values" not in s_ or "values" not in d_:
+            in_sql, in_db = sql[t][c], db[t][c]
+            if "values" not in in_sql or "values" not in in_db:
                 continue
             checked += 1
-            if s_["values"] != d_["values"]:
-                extra_v = ", ".join(sorted(s_["values"] - d_["values"])) or "—"
-                miss_v = ", ".join(sorted(d_["values"] - s_["values"])) or "—"
-                print(f"   ✗ {t}.{c}: schema thừa {extra_v} · thiếu {miss_v}")
-                problems.append(f"`{t}.{c}` lệch tập giá trị ENUM")
-                off += 1
-    if not off:
-        print(f"   ✓ {checked} cột ENUM/SET, tập giá trị khớp hết")
+            if in_sql["values"] != in_db["values"]:
+                surplus = (
+                    ", ".join(sorted(in_sql["values"] - in_db["values"])) or "-"
+                )
+                absent = (
+                    ", ".join(sorted(in_db["values"] - in_sql["values"])) or "-"
+                )
+                print(
+                    f"   BAD  {t}.{c}: schema has extra {surplus} · "
+                    f"missing {absent}"
+                )
+                problems.append(f"`{t}.{c}` differs on its ENUM value set")
+                mismatches += 1
+    if not mismatches:
+        print(f"   ok   {checked} ENUM/SET columns, value sets match throughout")
 
-    print("\n" + "═" * 74)
+    print("\n" + "=" * 74)
     if problems:
-        print(f"{len(problems)} vấn đề:\n")
+        print(f"{len(problems)} problems:\n")
         for item in problems:
-            print(f"  ✗ {item}")
+            print(f"  BAD  {item}")
     else:
-        print("db/schema.sql MÔ TẢ ĐÚNG CSDL — từng cột, cả hai chiều.")
-    print("═" * 74)
+        print(
+            "db/schema.sql DESCRIBES THE DATABASE CORRECTLY — column by "
+            "column, in both directions."
+        )
+    print("=" * 74)
     return 1 if problems else 0
 
 
