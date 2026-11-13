@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Mở kết nối tới CSDL `nutrition_rec`.
+"""Open a connection to the `nutrition_rec` database.
 
-Dùng lại `tools/_env.py` thay vì đọc `.env` lần nữa, để chỉ có **một** chỗ
-biết cách lấy mật khẩu. Mật khẩu không bao giờ được in ra.
+Reuses `tools/_env.py` rather than reading `.env` a second time, so that
+exactly **one** place knows how the password is obtained. The password is
+never printed.
 """
 
 from __future__ import annotations
@@ -19,21 +20,21 @@ import _env  # noqa: E402
 import pymysql  # noqa: E402
 from pymysql.cursors import DictCursor  # noqa: E402
 
-TEN_CSDL = "nutrition_rec"
+DATABASE_NAME = "nutrition_rec"
 
 
-def ket_noi(database: str | None = None, *, dict_cursor: bool = True):
-    """Trả về một kết nối pymysql đã mở.
+def connect(database: str | None = None, *, dict_cursor: bool = True):
+    """Return an open pymysql connection.
 
-    `database` để trống thì dùng CSDL thật. Truyền tên khác khi muốn chạy
-    thử trên CSDL nháp mà không chạm vào dữ liệu đang có.
+    Leaving `database` empty uses the real database. Pass another name to
+    run against a scratch database without touching existing data.
     """
     _env.load_env()
-    thieu = [k for k in ("MYSQL_USER", "MYSQL_PASSWORD") if not os.environ.get(k)]
-    if thieu:
+    missing = [k for k in ("MYSQL_USER", "MYSQL_PASSWORD") if not os.environ.get(k)]
+    if missing:
         raise SystemExit(
-            "Thiếu biến môi trường: " + ", ".join(thieu) + "\n"
-            "Chép .env.example thành .env rồi điền giá trị."
+            "Missing environment variables: " + ", ".join(missing) + "\n"
+            "Copy .env.example to .env and fill in the values."
         )
 
     return pymysql.connect(
@@ -41,17 +42,24 @@ def ket_noi(database: str | None = None, *, dict_cursor: bool = True):
         port=int(os.environ.get("MYSQL_PORT", "3306")),
         user=os.environ["MYSQL_USER"],
         password=os.environ["MYSQL_PASSWORD"],
-        database=database or TEN_CSDL,
+        database=database or DATABASE_NAME,
         charset="utf8mb4",
         cursorclass=DictCursor if dict_cursor else pymysql.cursors.Cursor,
         autocommit=False,
     )
 
 
-def in_utf8() -> None:
-    """Bắt stdout nhận được tiếng Việt trên Windows (mặc định là cp1252)."""
-    for luong in (sys.stdout, sys.stderr):
+def use_utf8() -> None:
+    """Make stdout accept non-ASCII text on Windows (it defaults to cp1252).
+
+    Still needed after the English refactor: the **data** stays Vietnamese.
+    Food names, condition names and rule notes are printed verbatim, so a
+    report line such as `Phở bò chín` dies with `UnicodeEncodeError` without
+    this — and it dies only when output is redirected to a file or a pipe,
+    which is to say only in CI.
+    """
+    for stream in (sys.stdout, sys.stderr):
         try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-        except Exception:  # pragma: no cover - console lạ
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except Exception:  # pragma: no cover - unusual console
             pass

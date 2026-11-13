@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import _env  # noqa: E402
 
-from ml.db import ket_noi  # noqa: E402
+from ml.db import connect  # noqa: E402
 from ml.features import FEATURE_VERSION  # noqa: E402
 
 GOC = "http://127.0.0.1:8000"
@@ -94,7 +94,7 @@ def ma_loi(than) -> str | None:
 
 
 def _cac_mo_hinh() -> dict[int, dict]:
-    cn = ket_noi(None)
+    cn = connect(None)
     try:
         with cn.cursor() as cur:
             cur.execute(
@@ -126,7 +126,7 @@ def _cho_mo_hinh_moi(truoc: dict[int, dict], giay: int) -> dict | None:
 
 def _xoa_mo_hinh(d: dict) -> bool:
     """Xóa dòng `ml_models` và tệp artifact của nó."""
-    cn = ket_noi(None)
+    cn = connect(None)
     try:
         with cn.cursor() as cur:
             cur.execute("DELETE FROM ml_models WHERE id = %s", (d["id"],))
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # ── Lấy dữ liệu thật để thử ──
-    cn = ket_noi(None)
+    cn = connect(None)
     try:
         with cn.cursor() as cur:
             cur.execute(
@@ -425,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
         # Và phải dọn, vì ngược với `smoke_backend.py` — tệp đó tạo một tài
         # khoản rồi xóa — một lần chạy ở đây sinh thêm một dòng `ml_models`
         # cùng một tệp `.joblib`. Chạy bộ kiểm mười lần thì có mười mô hình
-        # rác, và `nap_mo_hinh_hoat_dong` từ chối phục vụ khi có nhiều hơn
+        # rác, và `load_active_model` từ chối phục vụ khi có nhiều hơn
         # một dòng `is_active = 1`.
         print("\n§8.3  phiên huấn luyện phải thật sự chạy, rồi được dọn")
         moi = _cho_mo_hinh_moi(truoc_train, giay=90)

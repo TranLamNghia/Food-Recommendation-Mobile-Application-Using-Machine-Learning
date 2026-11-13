@@ -173,14 +173,14 @@ def doc_luoc_do(chu: str) -> dict[str, list[dict]]:
             phan = dn.split(None, 1)
             if len(phan) < 2:
                 continue
-            ten_cot, con_lai = phan[0], phan[1]
+            ten_cot, remaining = phan[0], phan[1]
             if not re.fullmatch(r"[a-z_][a-z0-9_]*", ten_cot):
                 continue
-            hoa = con_lai.upper()
+            hoa = remaining.upper()
             if not hoa.startswith(TU_KHOA_KIEU):
                 continue
 
-            km = re.match(r"([A-Za-z]+)\s*(?:\((.*?)\))?", con_lai, re.S)
+            km = re.match(r"([A-Za-z]+)\s*(?:\((.*?)\))?", remaining, re.S)
             ho = km.group(1).upper() if km else ""
             doi_so = (km.group(2) or "").strip() if km else ""
 

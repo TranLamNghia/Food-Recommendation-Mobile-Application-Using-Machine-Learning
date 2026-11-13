@@ -38,8 +38,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import in_utf8, ket_noi  # noqa: E402
-from ml.features import KhongGianDacTrung, nap_mon  # noqa: E402
+from ml.db import use_utf8, connect  # noqa: E402
+from ml.features import FeatureSpace, load_foods  # noqa: E402
 
 MAU = ROOT / "mobile" / "test" / "fixtures" / "food_vector_parity.json"
 BAI_KIEM = "test/food_vector_parity_test.dart"
@@ -47,15 +47,15 @@ BAI_KIEM = "test/food_vector_parity_test.dart"
 
 def sinh_mau() -> tuple[Path, int, int]:
     """Nạp món từ CSDL, dựng vector, ghi tệp mẫu. Trả về (đường dẫn, số món, số chiều)."""
-    cn = ket_noi()
+    cn = connect()
     try:
-        mon, bao_cao = nap_mon(cn)
+        mon, bao_cao = load_foods(cn)
     finally:
         cn.close()
 
-    bao_cao.in_ra()
+    bao_cao.print_report()
 
-    kg = KhongGianDacTrung.tu_mon(mon)
+    kg = FeatureSpace.from_foods(mon)
 
     mau = {
         "_doc": (
@@ -63,9 +63,9 @@ def sinh_mau() -> tuple[Path, int, int]:
             "Chứa đầu vào và vector mong đợi do bản Python dựng, để bài kiểm "
             "Dart đối chiếu từng chiều."
         ),
-        "feature_version": kg.tham_so()["feature_version"],
+        "feature_version": kg.params()["feature_version"],
         "sinh_luc": datetime.now().isoformat(timespec="seconds"),
-        "scaler": kg.tham_so(),
+        "scaler": kg.params(),
         "labels": kg.labels,
         "length": kg.length,
         "foods": [
@@ -83,7 +83,7 @@ def sinh_mau() -> tuple[Path, int, int]:
                 "sodium": m.sodium,
                 "fiber": m.fiber,
                 "servingSizeG": m.serving_size_g,
-                "suyRa": list(m.suy_ra),
+                "suyRa": list(m.imputed),
             }
             for m in mon
         ],
@@ -117,22 +117,22 @@ def chay_bai_kiem_dart() -> int:
 
 
 def main() -> int:
-    in_utf8()
+    use_utf8()
     bo_doc = argparse.ArgumentParser(description=__doc__)
     bo_doc.add_argument(
         "--chi-sinh",
         action="store_true",
         help="chỉ sinh tệp mẫu, không gọi flutter test",
     )
-    tham_so = bo_doc.parse_args()
+    params = bo_doc.parse_args()
 
-    duong_dan, so_mon, so_chieu = sinh_mau()
+    duong_dan, n_foods, so_chieu = sinh_mau()
     print(
         f"\nĐã ghi {duong_dan.relative_to(ROOT)} — "
-        f"{so_mon} món × {so_chieu} chiều."
+        f"{n_foods} món × {so_chieu} chiều."
     )
 
-    if tham_so.chi_sinh:
+    if params.chi_sinh:
         return 0
     return chay_bai_kiem_dart()
 

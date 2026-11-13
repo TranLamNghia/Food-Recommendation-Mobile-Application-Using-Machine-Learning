@@ -82,9 +82,9 @@ def main(argv: list[str] | None = None) -> int:
         if gia_tri:
             moi_truong[ten] = gia_tri
 
-    thieu = [t for t in ("MYSQL_USER", "MYSQL_PASSWORD") if not moi_truong.get(t)]
-    if thieu:
-        print(f"Thiếu {', '.join(thieu)} trong .env", file=sys.stderr)
+    missing = [t for t in ("MYSQL_USER", "MYSQL_PASSWORD") if not moi_truong.get(t)]
+    if missing:
+        print(f"Thiếu {', '.join(missing)} trong .env", file=sys.stderr)
         return 1
 
     # Lắng nghe trên 127.0.0.1 chứ không 0.0.0.0, có chủ ý: đây là dịch vụ

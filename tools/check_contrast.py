@@ -62,7 +62,7 @@ class Cap:
 
     truoc: str
     sau: str
-    nguong: float
+    threshold: float
     cho_dung: str
     mien_tru: bool = False
     ly_do_mien_tru: str = ""
@@ -206,21 +206,21 @@ def main() -> int:
     print(f"Đọc được {len(mau)} màu từ {BANG_MAU.relative_to(ROOT)}\n")
 
     loi: list[str] = []
-    thieu: list[str] = []
+    missing: list[str] = []
     dat = 0
     mien = 0
 
     for cap in CAC_CAP:
         if cap.truoc not in mau or cap.sau not in mau:
             con = [t for t in (cap.truoc, cap.sau) if t not in mau]
-            thieu.append(f"{cap.truoc} trên {cap.sau}: chưa khai {', '.join(con)}")
+            missing.append(f"{cap.truoc} trên {cap.sau}: chưa khai {', '.join(con)}")
             continue
 
         ty_so = tuong_phan(mau[cap.truoc], mau[cap.sau])
         nhan = f"{cap.truoc} trên {cap.sau}"
-        so = f"{ty_so:5.2f}:1 cần {cap.nguong:.1f}:1"
+        so = f"{ty_so:5.2f}:1 cần {cap.threshold:.1f}:1"
 
-        if ty_so >= cap.nguong:
+        if ty_so >= cap.threshold:
             dat += 1
             print(f"  ✓ {nhan:34s} {so}")
         elif cap.mien_tru:
@@ -229,7 +229,7 @@ def main() -> int:
             print(f"      {cap.ly_do_mien_tru}")
         else:
             loi.append(
-                f"{nhan} = {ty_so:.2f}:1, cần {cap.nguong:.1f}:1 "
+                f"{nhan} = {ty_so:.2f}:1, cần {cap.threshold:.1f}:1 "
                 f"({_hex(mau[cap.truoc])} trên {_hex(mau[cap.sau])}) "
                 f"— {cap.cho_dung}"
             )
@@ -237,16 +237,16 @@ def main() -> int:
             print(f"      {cap.cho_dung}")
 
     print("\n" + "=" * 72)
-    if thieu:
-        print(f"{len(thieu)} cặp không kiểm được:")
-        for x in thieu:
+    if missing:
+        print(f"{len(missing)} cặp không kiểm được:")
+        for x in missing:
             print("  -", x)
     if loi:
         print(f"{dat} cặp đạt, {mien} miễn trừ, {len(loi)} CẶP SAI:")
         for x in loi:
             print("  -", x)
         return 1
-    if thieu:
+    if missing:
         return 1
     print(f"Tất cả {dat} cặp đạt chuẩn AA, {mien} cặp được miễn trừ có nêu lý do.")
     return 0

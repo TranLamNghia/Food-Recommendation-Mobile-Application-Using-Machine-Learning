@@ -30,22 +30,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import in_utf8, ket_noi  # noqa: E402
-from ml.popularity import tu_csdl  # noqa: E402
+from ml.db import use_utf8, connect  # noqa: E402
+from ml.popularity import from_database  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
-    in_utf8()
+    use_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
     bo.add_argument("--db", default=None)
     bo.add_argument("--apply", action="store_true", help="ghi vào foods")
     t = bo.parse_args(argv)
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
-        dong = tu_csdl(cn)
-        co_tin_hieu = sum(1 for d in dong if int(d["n_thay"]) > 0)
-        doi = sum(1 for d in dong if abs(d["diem"] - float(d["cu"])) > 1e-9)
+        dong = from_database(cn)
+        co_tin_hieu = sum(1 for d in dong if int(d["n_seen"]) > 0)
+        doi = sum(1 for d in dong if abs(d["score"] - float(d["previous"])) > 1e-9)
 
         print(f"{len(dong)} món · {co_tin_hieu} món có tín hiệu")
         if co_tin_hieu == 0:
@@ -61,15 +61,15 @@ def main(argv: list[str] | None = None) -> int:
 
         xep = sorted(
             (
-                (d["diem"], int(d["n_thich"]), int(d["n_thay"]), d["name"])
+                (d["score"], int(d["n_liked"]), int(d["n_seen"]), d["name"])
                 for d in dong
-                if int(d["n_thay"]) > 0
+                if int(d["n_seen"]) > 0
             ),
             reverse=True,
         )
         print(f"\n{'điểm':>7}  {'thích/thấy':>11}  món")
-        for diem, nt, nx, ten in xep[:10]:
-            print(f"{diem:>7.4f}  {nt:>5}/{nx:<5}  {ten}")
+        for score, nt, nx, ten in xep[:10]:
+            print(f"{score:>7.4f}  {nt:>5}/{nx:<5}  {ten}")
         if len(xep) > 10:
             print(f"   … còn {len(xep) - 10} món")
 
@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         with cn.cursor() as cur:
             cur.executemany(
                 "UPDATE foods SET popularity_score = %s WHERE id = %s",
-                [(d["diem"], d["id"]) for d in dong],
+                [(d["score"], d["id"]) for d in dong],
             )
         cn.commit()
         print(f"Đã cập nhật popularity_score cho {len(dong)} món.")

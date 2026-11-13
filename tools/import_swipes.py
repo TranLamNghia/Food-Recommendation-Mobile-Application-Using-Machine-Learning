@@ -17,7 +17,7 @@ khuyết vào tập huấn luyện.
 ## Hai chỗ đặt giá trị thay thế, và vì sao chúng an toàn
 
 `users.password_hash` là `NOT NULL`, nhưng người trả lời phiếu giấy không có
-tài khoản để đăng nhập. Đặt `!khong-the-dang-nhap`: dấu `!` ở đầu làm chuỗi
+tài khoản để đăng nhập. Đặt `!khong-tag-dang-nhap`: dấu `!` ở đầu làm chuỗi
 này **không phải** một giá trị băm hợp lệ của bất kỳ thuật toán nào, nên mọi
 phép so khi đăng nhập đều thất bại. Đây là quy ước của Django cho "mật khẩu
 không dùng được", và nó an toàn hơn hẳn một giá trị băm thật của một mật khẩu
@@ -43,15 +43,15 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import in_utf8, ket_noi  # noqa: E402
-from ml.f1_filter import dieu_kien_theo_ten, ly_do_loai  # noqa: E402
-from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
-from ml.rocchio import alpha, dung_ho_so, giai_doan  # noqa: E402
+from ml.db import use_utf8, connect  # noqa: E402
+from ml.f1_filter import conditions_by_name, exclusion_reasons  # noqa: E402
+from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
+from ml.rocchio import alpha, build_profile, stage  # noqa: E402
 
 from tools.make_survey_deck import LUA_CHON  # noqa: E402
 
 #: Giá trị băm không dùng được — xem phần đầu tệp.
-BAM_KHONG_DUNG_DUOC = "!khong-the-dang-nhap"
+BAM_KHONG_DUNG_DUOC = "!khong-tag-dang-nhap"
 
 #: Mức độ ghi vào `user_conditions.severity`, VÀ mức độ dùng khi chạy Bộ lọc
 #: F1 lúc nhập. Một hằng số cho cả hai chỗ, có chủ ý: phiếu giấy không hỏi
@@ -119,11 +119,11 @@ def doc_phieu(duong_dan: Path) -> tuple[dict[str, str], list[dict[str, str]]]:
 
 def kiem_thong_tin(thong_tin: dict[str, str]) -> dict[str, Any]:
     """Kiểm và quy đổi phần thông tin. Ném `LoiPhieu` kèm chỗ phải sửa."""
-    thieu = [k for k in TRUONG_BAT_BUOC if not thong_tin.get(k)]
-    if thieu:
+    missing = [k for k in TRUONG_BAT_BUOC if not thong_tin.get(k)]
+    if missing:
         raise LoiPhieu(
             "phần thông tin còn trống: "
-            + ", ".join(thieu)
+            + ", ".join(missing)
             + "\nĐiền vào các dòng `# <khóa>: <giá trị>` ở đầu phiếu."
         )
 
@@ -159,7 +159,7 @@ def kiem_thong_tin(thong_tin: dict[str, str]) -> dict[str, Any]:
     except ValueError as e:
         raise LoiPhieu(f"`ngay_khao_sat` phải dạng YYYY-MM-DD: {e}") from e
 
-    benh = [b.strip() for b in thong_tin.get("benh_ly", "").split(";") if b.strip()]
+    condition = [b.strip() for b in thong_tin.get("benh_ly", "").split(";") if b.strip()]
 
     return {
         "ho_ten": thong_tin.get("ho_ten", "").strip(),
@@ -170,13 +170,13 @@ def kiem_thong_tin(thong_tin: dict[str, str]) -> dict[str, Any]:
         "can_nang_kg": nang,
         "muc_van_dong": thong_tin["muc_van_dong"],
         "muc_tieu": thong_tin["muc_tieu"],
-        "benh_ly": benh,
+        "condition_names": condition,
         "ngay_khao_sat": ngay_khao_sat,
     }
 
 
 def kiem_luot_vuot(
-    hang: list[dict[str, str]], mon_theo_id: dict[str, Any]
+    hang: list[dict[str, str]], foods_by_id: dict[str, Any]
 ) -> list[tuple[str, str]]:
     """Kiểm phần bảng. Trả về `[(food_id, action)]` theo thứ tự trong phiếu."""
     ket_qua: list[tuple[str, str]] = []
@@ -196,13 +196,13 @@ def kiem_luot_vuot(
                 f"phải là {' | '.join(LUA_CHON)}"
             )
             continue
-        if ma not in mon_theo_id:
+        if ma not in foods_by_id:
             loi.append(
                 f"  dòng {stt}: `ma_mon` = {ma!r} không có trong danh mục món"
             )
             continue
         if ma in da_gap:
-            loi.append(f"  dòng {stt}: món {mon_theo_id[ma].name!r} xuất hiện hai lần")
+            loi.append(f"  dòng {stt}: món {foods_by_id[ma].name!r} xuất hiện hai lần")
             continue
 
         da_gap.add(ma)
@@ -216,10 +216,10 @@ def kiem_luot_vuot(
 
 
 def kiem_benh_ly(cn, ten: list[str]) -> list[int]:
-    """Tra `benh_ly` sang `conditions.id`. Ném `LoiPhieu` nếu có tên lạ.
+    """Tra `condition_names` sang `conditions.id`. Ném `LoiPhieu` nếu có tên lạ.
 
     Chạy ở pha KIỂM, không ở pha ghi. Trước đây phép tra này nằm trong
-    `ghi()`, nên một phiếu ghi `benh_ly: tieu_duong` vẫn qua được lần chạy
+    `ghi()`, nên một phiếu ghi `condition_names: tieu_duong` vẫn qua được lần chạy
     thử và chỉ vỡ lúc `--apply`. Với một phiếu thì phiền; với hai mươi lăm
     phiếu phát ra cùng một mẫu sai thì là hai mươi lăm lần vỡ cùng lúc, sau
     khi người trả lời đã điền xong và không còn sửa được.
@@ -233,13 +233,13 @@ def kiem_benh_ly(cn, ten: list[str]) -> list[int]:
             tuple(ten),
         )
         tim = {d["name_vi"]: int(d["id"]) for d in cur.fetchall()}
-        thieu = [b for b in ten if b not in tim]
-        if thieu:
+        missing = [b for b in ten if b not in tim]
+        if missing:
             cur.execute("SELECT name_vi FROM conditions ORDER BY id")
             co = ", ".join(d["name_vi"] for d in cur.fetchall())
             raise LoiPhieu(
-                "`benh_ly` có tên không khớp `conditions`: "
-                + ", ".join(repr(x) for x in thieu)
+                "`condition_names` có tên không khớp `conditions`: "
+                + ", ".join(repr(x) for x in missing)
                 + f"\nPhải viết ĐÚNG tên tiếng Việt có dấu. Dùng được: {co}"
             )
     return [tim[b] for b in ten]
@@ -249,7 +249,7 @@ def loc_theo_f1(
     cn,
     ten_benh: list[str],
     luot: list[tuple[str, str]],
-    mon_theo_id: dict[str, Any],
+    foods_by_id: dict[str, Any],
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str, list[str]]]]:
     """Bỏ các lượt vuốt trên món mà Bộ lọc F1 không cho người này ăn.
 
@@ -291,11 +291,11 @@ def loc_theo_f1(
 
     # Cùng `severity` với dòng sẽ ghi vào `user_conditions` — xem
     # `SEVERITY_PHIEU`.
-    dieu_kien = dieu_kien_theo_ten(cn, ten_benh, severity=SEVERITY_PHIEU)
+    conditions = conditions_by_name(cn, ten_benh, severity=SEVERITY_PHIEU)
 
-    # `chi_mon_chung=True`: người trả lời phiếu giấy không có món riêng, và
+    # `public_only=True`: người trả lời phiếu giấy không có món riêng, và
     # cả bộ khảo sát là món chung.
-    bi_loai_theo_mon = ly_do_loai(cn, dieu_kien=dieu_kien, chi_mon_chung=True)
+    bi_loai_theo_mon = exclusion_reasons(cn, conditions=conditions, public_only=True)
 
     giu: list[tuple[str, str]] = []
     bo: list[tuple[str, str, list[str]]] = []
@@ -309,18 +309,18 @@ def loc_theo_f1(
 
 
 def _ly_do_ngan(x: Any) -> str:
-    """Một dòng đọc được từ `LyDoLoai`.
+    """Một dòng đọc được từ `ExclusionReason`.
 
-    `LyDoLoai` là dataclass mười ba trường; `str()` của nó dump hết và làm
+    `ExclusionReason` là dataclass mười ba trường; `str()` của nó dump hết và làm
     phần báo cáo không đọc nổi. `note` là câu đã viết sẵn cho người đọc.
     """
-    benh = getattr(x, "benh", None) or "?"
+    condition = getattr(x, "condition", None) or "?"
     note = getattr(x, "note", None)
     if note:
-        return f"{benh}: {note}"
+        return f"{condition}: {note}"
     loai = getattr(x, "rule_type", None) or "?"
-    the = getattr(x, "the", None) or getattr(x, "nutrient", None) or ""
-    return f"{benh}: {loai} {the}".strip()
+    tag = getattr(x, "tag", None) or getattr(x, "nutrient", None) or ""
+    return f"{condition}: {loai} {tag}".strip()
 
 
 # ── Ghi ───────────────────────────────────────────────────────────────
@@ -341,8 +341,8 @@ def ghi(
     cn,
     tt: dict[str, Any],
     luot: list[tuple[str, str]],
-    kg: KhongGianDacTrung,
-    mon_theo_id: dict[str, Any],
+    kg: FeatureSpace,
+    foods_by_id: dict[str, Any],
 ) -> dict[str, Any]:
     """Ghi cả phiếu trong một giao dịch. Trả về thông tin để báo lại."""
     email = _email_moi(cn, tt["email"])
@@ -359,7 +359,7 @@ def ghi(
 
         # Bệnh lý đã được `kiem_benh_ly` tra ở pha kiểm; tra lại ở đây để
         # `ghi()` không phụ thuộc vào việc người gọi đã kiểm hay chưa.
-        ma_benh: list[int] = kiem_benh_ly(cn, tt["benh_ly"])
+        ma_benh: list[int] = kiem_benh_ly(cn, tt["condition_names"])
 
         cur.execute(
             "INSERT INTO users (id, email, password_hash, display_name, "
@@ -406,7 +406,7 @@ def ghi(
                 (user_id, food_id, action, session_id, goc + timedelta(seconds=i)),
             )
 
-        ho_so = dung_ho_so(kg, [(mon_theo_id[f], a) for f, a in luot])
+        ho_so = build_profile(kg, [(foods_by_id[f], a) for f, a in luot])
         cur.execute(
             "INSERT INTO user_preference_profiles (user_id, feature_version, "
             "weights, sum_abs_weight, n_signals, stage, alpha) "
@@ -417,7 +417,7 @@ def ghi(
                 json.dumps(list(ho_so.weights)),
                 ho_so.sum_abs_weight,
                 ho_so.n_signals,
-                giai_doan(ho_so.n_signals),
+                stage(ho_so.n_signals),
                 round(alpha(ho_so.n_signals), 3),
             ),
         )
@@ -427,30 +427,30 @@ def ghi(
         "user_id": user_id,
         "email": email,
         "n_signals": ho_so.n_signals,
-        "stage": giai_doan(ho_so.n_signals),
+        "stage": stage(ho_so.n_signals),
         "ho_so": ho_so,
     }
 
 
 def main() -> int:
-    in_utf8()
+    use_utf8()
     bo = argparse.ArgumentParser(description=__doc__)
     bo.add_argument("--phieu", required=True, type=Path, help="tệp phiếu đã điền")
     bo.add_argument("--db", default=None)
     bo.add_argument("--apply", action="store_true", help="ghi vào CSDL")
     t = bo.parse_args()
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
-        mon, _ = nap_mon(cn)
-        kg = KhongGianDacTrung.tu_mon(mon)
-        mon_theo_id = {m.id: m for m in mon}
+        mon, _ = load_foods(cn)
+        kg = FeatureSpace.from_foods(mon)
+        foods_by_id = {m.id: m for m in mon}
 
         try:
             thong_tin, hang = doc_phieu(t.phieu)
             tt = kiem_thong_tin(thong_tin)
-            luot = kiem_luot_vuot(hang, mon_theo_id)
-            kiem_benh_ly(cn, tt["benh_ly"])
+            luot = kiem_luot_vuot(hang, foods_by_id)
+            kiem_benh_ly(cn, tt["condition_names"])
         except LoiPhieu as e:
             print(f"Phiếu không dùng được.\n{e}", file=sys.stderr)
             return 1
@@ -460,7 +460,7 @@ def main() -> int:
         # phần ràng buộc giả dạng khẩu vị, và `n_signals` vẫn đếm cả những
         # lượt đó nên giai đoạn cũng bị tính sai.
         luot_tho = luot
-        luot, bi_loai = loc_theo_f1(cn, tt["benh_ly"], luot, mon_theo_id)
+        luot, bi_loai = loc_theo_f1(cn, tt["condition_names"], luot, foods_by_id)
         if not luot:
             print(
                 "Phiếu không dùng được.\nBộ lọc F1 loại toàn bộ "
@@ -474,7 +474,7 @@ def main() -> int:
         dem: dict[str, int] = {}
         for _, a in luot:
             dem[a] = dem.get(a, 0) + 1
-        ho_so = dung_ho_so(kg, [(mon_theo_id[f], a) for f, a in luot])
+        ho_so = build_profile(kg, [(foods_by_id[f], a) for f, a in luot])
 
         print(f"Phiếu: {t.phieu}")
         print(
@@ -483,7 +483,7 @@ def main() -> int:
             f"{tt['can_nang_kg']:g} kg"
         )
         print(f"  mục tiêu {tt['muc_tieu']} · vận động {tt['muc_van_dong']}")
-        print(f"  bệnh lý: {', '.join(tt['benh_ly']) or '(không có)'}")
+        print(f"  bệnh lý: {', '.join(tt['condition_names']) or '(không có)'}")
 
         if bi_loai:
             print(
@@ -496,7 +496,7 @@ def main() -> int:
             # nhau thì che mất chuyện đó.
             theo_ly_do: dict[str, list[str]] = {}
             for food_id, action, ly_do in bi_loai:
-                ten = getattr(mon_theo_id[food_id], "name", food_id)
+                ten = getattr(foods_by_id[food_id], "name", food_id)
                 theo_ly_do.setdefault(ly_do[0], []).append(f"{ten}[{action}]")
             for ly, mon_ds in sorted(theo_ly_do.items()):
                 print(f"      {ly} → {len(mon_ds)} món")
@@ -515,7 +515,7 @@ def main() -> int:
         print(
             f"  → n_signals = {ho_so.n_signals} "
             f"(lượt `unknown` không được đếm) · "
-            f"giai đoạn {giai_doan(ho_so.n_signals)}"
+            f"giai đoạn {stage(ho_so.n_signals)}"
         )
 
         # Ba chiều mạnh nhất, để người nhập tự thấy vector có hợp lý không.
@@ -532,7 +532,7 @@ def main() -> int:
             return 0
 
         try:
-            kq = ghi(cn, tt, luot, kg, mon_theo_id)
+            kq = ghi(cn, tt, luot, kg, foods_by_id)
         except LoiPhieu as e:
             cn.rollback()
             print(f"Không nhập được.\n{e}", file=sys.stderr)

@@ -125,7 +125,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _env import in_utf8  # noqa: E402
 
-from ml.db import ket_noi  # noqa: E402
+from ml.db import connect  # noqa: E402
 
 # `SEVERITY_PHIEU` phải là **cùng một giá trị** với mức độ mà trình nhập ghi
 # vào `user_conditions`: phiếu giấy không hỏi mức độ, nên nếu bộ sinh dùng
@@ -139,11 +139,11 @@ RA_THU_MUC = ROOT / "data" / "survey" / "mo_phong"
 RA_HANH_VI = RA_THU_MUC / "hanh_vi.csv"
 RA_SU_THAT = RA_THU_MUC / "khau_vi_that.json"
 
-#: Tên 20 chiều, đúng thứ tự `KhongGianDacTrung.encode`: 8 chiều cố định rồi
+#: Tên 20 chiều, đúng thứ tự `FeatureSpace.encode`: 8 chiều cố định rồi
 #: one-hot nhóm món theo thứ tự `sorted()`. Phần one-hot được **suy lại từ
 #: chính deck** trong `nhan_chieu()` chứ không gõ tay, vì thứ tự phụ thuộc
 #: tập 318 món trong CSDL — gõ tay thì nó đúng tới lần ai đó thêm một nhóm.
-NHAN_CO_DINH = (
+FIXED_LABELS = (
     "Tỷ lệ đạm",
     "Tỷ lệ bột đường",
     "Tỷ lệ béo",
@@ -187,7 +187,7 @@ MUC = ("khong_thich", "binh_thuong", "thich", "chua_biet")
 #: một người có ràng buộc, F1 có gỡ đúng phần ràng buộc ra khỏi khẩu vị
 #: không.
 #:
-#: Số món bị loại khỏi bộ 45 món, đo bằng `ly_do_loai` ở mức `moderate`:
+#: Số món bị loại khỏi bộ 45 món, đo bằng `exclusion_reasons` ở mức `moderate`:
 #:
 #:     Ăn thuần chay 24 · Ăn chay 24 · Gút 11 · Dị ứng hải sản 11
 #:     Dị ứng đậu nành 5 · Dị ứng trứng 3 · Dị ứng đậu phộng 2
@@ -300,9 +300,9 @@ def nap_deck(duong_dan: Path) -> list[dict[str, Any]]:
 def nhan_chieu(mon: list[dict[str, Any]]) -> list[str]:
     """Tên 20 chiều, phần one-hot suy từ deck."""
     d = len(mon[0]["vector"])
-    ten = list(NHAN_CO_DINH) + [f"nhóm #{i}" for i in range(len(NHAN_CO_DINH), d)]
+    ten = list(FIXED_LABELS) + [f"nhóm #{i}" for i in range(len(FIXED_LABELS), d)]
     for m in mon:
-        nong = [i for i in range(len(NHAN_CO_DINH), d) if m["vector"][i] == 1.0]
+        nong = [i for i in range(len(FIXED_LABELS), d) if m["vector"][i] == 1.0]
         if len(nong) == 1:
             ten[nong[0]] = f"Nhóm: {m['category']}"
     return ten
@@ -314,9 +314,9 @@ def nap_ho_so(duong_dan: Path) -> list[dict[str, str]]:
         hang = list(csv.DictReader(f))
     if not hang:
         raise SystemExit(f"{duong_dan} không có dòng dữ liệu nào.")
-    thieu = {"user_id", "FAVC", "FCVC", "source_profile_row"} - set(hang[0])
-    if thieu:
-        raise SystemExit(f"{duong_dan} thiếu cột: {', '.join(sorted(thieu))}")
+    missing = {"user_id", "FAVC", "FCVC", "source_profile_row"} - set(hang[0])
+    if missing:
+        raise SystemExit(f"{duong_dan} thiếu cột: {', '.join(sorted(missing))}")
     theo_nguoi: dict[str, dict[str, str]] = {}
     for h in hang:
         theo_nguoi.setdefault(h["user_id"], h)
@@ -344,11 +344,11 @@ def kmeans(
         tam = [list(diem[rnd.randrange(len(diem))])]
         while len(tam) < k:
             w = [min(khoang_cach_binh_phuong(p, c) for c in tam) for p in diem]
-            tong = sum(w)
-            if tong == 0.0:
+            total = sum(w)
+            if total == 0.0:
                 tam.append(list(diem[rnd.randrange(len(diem))]))
                 continue
-            moc = rnd.random() * tong
+            moc = rnd.random() * total
             acc = 0.0
             for p, wi in zip(diem, w):
                 acc += wi
@@ -494,7 +494,7 @@ def f1_loai_theo_nguoi(
     bộ sinh và trình nạp sẽ lệch nhau, và chỗ lệch đó nghĩa là dữ liệu mô
     phỏng mang một ràng buộc khác với ràng buộc mà hệ thống thi hành.
     """
-    from ml.f1_filter import dieu_kien_theo_ten, ly_do_loai
+    from ml.f1_filter import conditions_by_name, exclusion_reasons
 
     ra: dict[str, list[str]] = {}
     nho: dict[tuple[str, ...], list[str]] = {}
@@ -504,8 +504,8 @@ def f1_loai_theo_nguoi(
             if not ten:
                 nho[khoa] = []
             else:
-                dk = dieu_kien_theo_ten(cn, list(ten), severity=SEVERITY_PHIEU)
-                bl = ly_do_loai(cn, dieu_kien=dk, chi_mon_chung=True)
+                dk = conditions_by_name(cn, list(ten), severity=SEVERITY_PHIEU)
+                bl = exclusion_reasons(cn, conditions=dk, public_only=True)
                 nho[khoa] = [m for m in ma_mon if bl.get(m)]
         ra[u] = list(nho[khoa])
     return ra
@@ -584,9 +584,9 @@ def sinh(
     # không có đường nào để khẩu vị ảnh hưởng tới ràng buộc hay ngược lại.
     benh_theo_nguoi = gan_dieu_kien(ho_so, rnd)
     ma_mon = [m["id"] for m in mon]
-    f1_loai = f1_loai_theo_nguoi(cn, benh_theo_nguoi, ma_mon)
+    f1_excluded = f1_loai_theo_nguoi(cn, benh_theo_nguoi, ma_mon)
 
-    for u, bo_loai in f1_loai.items():
+    for u, bo_loai in f1_excluded.items():
         con = len(ma_mon) - len(bo_loai)
         if con < TOI_THIEU_LUOT_CON:
             raise SystemExit(
@@ -608,13 +608,13 @@ def sinh(
             "nguyen_mau": z[u],
             "nguyen_mau_phu": phu,
             "vector_khau_vi": [round(x, 6) for x in t],
-            "benh_ly": benh_theo_nguoi[u],
+            "condition_names": benh_theo_nguoi[u],
             "severity": SEVERITY_PHIEU,
             # Món F1 không cho người này ăn. Ghi ra để `check_mo_phong.py`
             # đo được mà không cần CSDL, và để `import_mo_phong.py` đối
             # chiếu lại bằng phép lọc nó tự chạy — hai bên lệch nhau nghĩa
             # là dữ liệu và hệ thống đang hiểu ràng buộc khác nhau.
-            "f1_loai": sorted(f1_loai[u]),
+            "f1_excluded": sorted(f1_excluded[u]),
         }
 
     # Độ gần, rồi chuẩn hóa toàn cục. Chuẩn hóa toàn cục chứ không theo từng
@@ -674,7 +674,7 @@ def sinh(
         # mỗi người một thứ tự.
         thu_tu_nguoi = list(range(len(mon)))
         rnd.shuffle(thu_tu_nguoi)
-        bi_f1 = set(f1_loai[u])
+        bi_f1 = set(f1_excluded[u])
         for i in thu_tu_nguoi:
             m = mon[i]
             if chua_biet[(u, i)]:
@@ -716,7 +716,7 @@ def sinh(
                 "feature_version"
             ],
             "ten_chieu": ten_chieu,
-            "tham_so": {
+            "params": {
                 "seed": seed,
                 "so_nguyen_mau": so_nguyen_mau,
                 "lam_nguyen_mau_phu": lam_phu,
@@ -754,26 +754,26 @@ def xem_truoc(ket_qua: dict[str, Any], mon: list[dict[str, Any]]) -> None:
             f"{len(trong):>2} người · gần: {', '.join(nm['mon_dai_dien'])}"
         )
 
-    co_rang_buoc = [u for u, v in st["nguoi"].items() if v["f1_loai"]]
+    co_rang_buoc = [u for u, v in st["nguoi"].items() if v["f1_excluded"]]
     print(
         f"\nràng buộc sức khỏe · {len(co_rang_buoc)}/{len(st['nguoi'])} người "
         f"bị F1 loại ít nhất một món:"
     )
     dem_dk: dict[str, int] = {}
     for v in st["nguoi"].values():
-        for b in v["benh_ly"]:
+        for b in v["condition_names"]:
             dem_dk[b] = dem_dk.get(b, 0) + 1
     # Khoảng in ra là TỔNG số món bị loại của từng người mang điều kiện đó,
     # không phải số món do riêng điều kiện đó loại: một người có thể mang
     # hai điều kiện. Dị ứng đậu phộng tự nó loại 2 món; người mang nó mà
     # hiện "12" là người còn một ràng buộc nữa.
     for ten, sl in sorted(dem_dk.items(), key=lambda kv: -kv[1]):
-        loai = [len(v["f1_loai"]) for v in st["nguoi"].values() if ten in v["benh_ly"]]
+        loai = [len(v["f1_excluded"]) for v in st["nguoi"].values() if ten in v["condition_names"]]
         print(
             f"  {ten:<24} {sl:>2} người · tổng món bị loại của họ: "
             f"{min(loai)}–{max(loai)}"
         )
-    tong_loai = sum(len(v["f1_loai"]) for v in st["nguoi"].values())
+    tong_loai = sum(len(v["f1_excluded"]) for v in st["nguoi"].values())
     print(
         f"  → F1 loại {tong_loai}/{len(hang)} lượt "
         f"({tong_loai / len(hang):.1%}); những lượt này đã bị ghi đè thành "
@@ -822,7 +822,7 @@ def main() -> int:
     if t.nguyen_mau > len(mon):
         raise SystemExit(f"--nguyen-mau không vượt quá số món ({len(mon)}).")
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
         ket_qua = sinh(
             cn=cn,

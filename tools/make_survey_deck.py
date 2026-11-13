@@ -60,8 +60,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import in_utf8, ket_noi  # noqa: E402
-from ml.features import FEATURE_VERSION, KhongGianDacTrung, Mon, nap_mon  # noqa: E402
+from ml.db import use_utf8, connect  # noqa: E402
+from ml.features import FEATURE_VERSION, FeatureSpace, Food, load_foods  # noqa: E402
 
 THU_MUC = ROOT / "data" / "survey"
 TEP_JSON = THU_MUC / "survey_deck.json"
@@ -81,8 +81,8 @@ def _khoang_cach(a: list[float], b: list[float]) -> float:
 
 
 def chon_bo_mon(
-    mon: list[Mon], kg: KhongGianDacTrung, so_can: int
-) -> list[Mon]:
+    mon: list[Food], kg: FeatureSpace, so_can: int
+) -> list[Food]:
     """Duyệt điểm xa nhất, có phủ nhóm món ở vòng đầu.
 
     Trả về danh sách theo **thứ tự được chọn**: món đầu tiên là món gần tâm
@@ -100,12 +100,12 @@ def chon_bo_mon(
     tam = [
         sum(vec[m.id][i] for m in mon) / len(mon) for i in range(kg.length)
     ]
-    theo_nhom: dict[str, list[Mon]] = {}
+    theo_nhom: dict[str, list[Food]] = {}
     for m in mon:
         theo_nhom.setdefault(m.category, []).append(m)
 
-    da_chon: list[Mon] = []
-    con_lai = {m.id: m for m in mon}
+    da_chon: list[Food] = []
+    remaining = {m.id: m for m in mon}
 
     # ── Vòng 1: mỗi nhóm một món, món gần tâm nhóm nhất ──
     #
@@ -120,7 +120,7 @@ def chon_bo_mon(
         ]
         tot = min(ds, key=lambda m: (_khoang_cach(vec[m.id], tam_nhom), m.name))
         da_chon.append(tot)
-        con_lai.pop(tot.id, None)
+        remaining.pop(tot.id, None)
         if len(da_chon) >= so_can:
             return da_chon
 
@@ -131,18 +131,18 @@ def chon_bo_mon(
     # ── Vòng 2: duyệt điểm xa nhất ──
     kc_nho_nhat = {
         i: min(_khoang_cach(vec[i], vec[m.id]) for m in da_chon)
-        for i in con_lai
+        for i in remaining
     }
-    while len(da_chon) < so_can and con_lai:
+    while len(da_chon) < so_can and remaining:
         # Phá hòa theo tên món để kết quả tái lập được.
         chon = max(
-            con_lai,
-            key=lambda i: (kc_nho_nhat[i], con_lai[i].name),
+            remaining,
+            key=lambda i: (kc_nho_nhat[i], remaining[i].name),
         )
-        m = con_lai.pop(chon)
+        m = remaining.pop(chon)
         da_chon.append(m)
         del kc_nho_nhat[chon]
-        for i in con_lai:
+        for i in remaining:
             d = _khoang_cach(vec[i], vec[m.id])
             if d < kc_nho_nhat[i]:
                 kc_nho_nhat[i] = d
@@ -150,7 +150,7 @@ def chon_bo_mon(
     return da_chon
 
 
-def _thong_ke(bo: list[Mon], tat_ca: list[Mon]) -> list[str]:
+def _thong_ke(bo: list[Food], tat_ca: list[Food]) -> list[str]:
     nhom: dict[str, int] = {}
     cay: dict[int, int] = {}
     vai: dict[str, int] = {}
@@ -215,11 +215,11 @@ HUONG_DAN = [
 ]
 
 
-def ghi_phieu(bo: list[Mon], duong_dan: Path, ten_benh: list[str]) -> None:
+def ghi_phieu(bo: list[Food], duong_dan: Path, ten_benh: list[str]) -> None:
     duong_dan.parent.mkdir(parents=True, exist_ok=True)
     with duong_dan.open("w", encoding="utf-8-sig", newline="") as f:
         # Danh sách bệnh lý lấy THẲNG từ bảng `conditions`, không gõ tay vào
-        # phần hướng dẫn. `import_swipes.py` tra `benh_ly` theo đúng
+        # phần hướng dẫn. `import_swipes.py` tra `condition_names` theo đúng
         # `conditions.name_vi`, nên một danh sách chép tay sẽ lệch ngay lần
         # đầu có ai thêm một bệnh lý vào CSDL — và người chịu hậu quả là
         # người điền phiếu, sau khi đã điền xong và không sửa lại được.
@@ -235,7 +235,7 @@ def ghi_phieu(bo: list[Mon], duong_dan: Path, ten_benh: list[str]) -> None:
             w.writerow([i, m.id, m.name, m.category, m.spice_level, ""])
 
 
-def ghi_json(bo: list[Mon], kg: KhongGianDacTrung, duong_dan: Path) -> None:
+def ghi_json(bo: list[Food], kg: FeatureSpace, duong_dan: Path) -> None:
     duong_dan.parent.mkdir(parents=True, exist_ok=True)
     duong_dan.write_text(
         json.dumps(
@@ -247,7 +247,7 @@ def ghi_json(bo: list[Mon], kg: KhongGianDacTrung, duong_dan: Path) -> None:
                 ),
                 "feature_version": FEATURE_VERSION,
                 "sinh_ngay": date.today().isoformat(),
-                "so_mon": len(bo),
+                "n_foods": len(bo),
                 "lua_chon": LUA_CHON,
                 "mon": [
                     {
@@ -272,7 +272,7 @@ def ghi_json(bo: list[Mon], kg: KhongGianDacTrung, duong_dan: Path) -> None:
 
 
 def main() -> int:
-    in_utf8()
+    use_utf8()
     bo_doc = argparse.ArgumentParser(description=__doc__)
     # 45, KHÔNG phải 40. Lượt vuốt trên món mà Bộ lọc F1 không cho người đó
     # ăn bị loại lúc nhập (xem `import_swipes.loc_theo_f1`), nên người có
@@ -282,7 +282,7 @@ def main() -> int:
     #      40        35 ✓          27              27
     #      45        39 ✓          30 ✓            30 ✓
     #
-    # Ngưỡng `hybrid` là 30 tín hiệu (`ml.rocchio.giai_doan`), tức mức đầu
+    # Ngưỡng `hybrid` là 30 tín hiệu (`ml.rocchio.stage`), tức mức đầu
     # tiên mà học máy có tiếng nói. Ở cỡ 40 thì BẤT KỲ ai có ràng buộc cứng
     # cũng dừng ở 27 — thiếu đúng 3.
     #
@@ -294,9 +294,9 @@ def main() -> int:
     bo_doc.add_argument("--ghi", action="store_true", help="ghi JSON và phiếu CSV")
     t = bo_doc.parse_args()
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
-        mon, bao_cao = nap_mon(cn)
+        mon, bao_cao = load_foods(cn)
         # Đọc luôn ở đây, trong cùng một lần mở kết nối. Danh sách này đi
         # vào phần hướng dẫn của phiếu — xem `ghi_phieu`.
         with cn.cursor() as cur:
@@ -305,7 +305,7 @@ def main() -> int:
     finally:
         cn.close()
 
-    kg = KhongGianDacTrung.tu_mon(mon)
+    kg = FeatureSpace.from_foods(mon)
     bo = chon_bo_mon(mon, kg, t.so)
 
     print()

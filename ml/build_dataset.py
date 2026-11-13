@@ -1,37 +1,38 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Bộ dựng tập dữ liệu — bảy nguồn tín hiệu → `ml_training_samples`.
+"""Dataset builder — seven signal sources -> `ml_training_samples`.
 
-`docs/ML_PIPELINE.md` §9 là đặc tả. Mỗi nguồn cho một **nhãn** và một **trọng
-số**, và hai cột đó trả lời hai câu khác nhau:
+`docs/ML_PIPELINE.md` section 9 is the specification. Each source yields a
+**label** and a **weight**, and those two columns answer different questions:
 
-    label          — người dùng thích món này đến mức nào?
-    sample_weight  — ta tin con số đó đến mức nào?
+    label          — how much does the user like this food?
+    sample_weight  — how much do we trust that number?
 
-Một đánh giá 5 sao sau khi ăn (trọng số 1,0) đáng tin hơn hẳn một suất bị bỏ
-không ăn (0,3): bỏ bữa là tín hiệu **nhập nhằng** — có thể do không thích, có
-thể do hôm đó không có thời gian nấu.
+A 5-star rating after eating (weight 1.0) is far more trustworthy than a
+skipped serving (0.3): skipping is an **ambiguous** signal — it might be
+dislike, or it might be that there was no time to cook that day.
 
-Ba điều tệp này làm mà đọc SQL không thấy ra:
+Three things this file does that reading the SQL will not show:
 
-**1. `profile_snapshot` chống rò rỉ dữ liệu.** Đặc trưng chéo `cos(p_u, vᵢ)`
-là đầu vào của mô hình. Nếu dùng `p_u` *hiện tại* — vector đã được cập nhật
-bởi chính tín hiệu đang xét — thì đặc trưng đã chứa thông tin về nhãn, và kết
-quả đánh giá sẽ rất đẹp mà vô dụng khi chạy thật. Nên hồ sơ Rocchio được
-**phát lại theo thứ tự thời gian** cho từng người, và ảnh chụp của một mẫu
-chỉ gồm những lượt vuốt **trước** nó.
+**1. `profile_snapshot` prevents data leakage.** The cross feature
+`cos(p_u, v_i)` is a model input. Using the *current* `p_u` — a vector
+already updated by the very signal being labelled — would put label
+information into the feature, and the evaluation would look excellent while
+being useless in production. So the Rocchio profile is **replayed in
+chronological order** per user, and a sample's snapshot contains only the
+swipes that came **before** it.
 
-**2. Chia tập theo NGƯỜI DÙNG, không theo mẫu.** Nếu cùng một người xuất
-hiện ở cả tập huấn luyện và tập kiểm tra thì mô hình đã thấy khẩu vị của họ
-và con số đánh giá bị thổi phồng.
+**2. The split is by USER, not by sample.** If one person appears in both the
+training and the test set, the model has already seen their taste and the
+evaluation figure is inflated.
 
-**3. Món riêng tư không vào tập.** Số liệu dinh dưỡng của chúng do người dùng
-tự khai; nhiễm vào mô hình dùng chung là làm hại mọi người dùng khác
-(`ML_PIPELINE.md` §4.2).
+**3. Private foods stay out.** Their nutrition figures are self-declared;
+letting them into a shared model harms every other user
+(`ML_PIPELINE.md` section 4.2).
 
-Chạy:
-    python -m ml.build_dataset --version d1              # chạy thử, không ghi
-    python -m ml.build_dataset --version d1 --apply      # ghi vào CSDL
+Run:
+    python -m ml.build_dataset --version d1              # dry run
+    python -m ml.build_dataset --version d1 --apply      # write to the database
 """
 
 from __future__ import annotations
@@ -45,15 +46,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Sequence
 
-from .db import in_utf8, ket_noi
-from .f1_filter import dieu_kien_cua_nguoi_dung, ly_do_loai
-from .features import KhongGianDacTrung, Mon, nap_mon
-from .rocchio import HoSoSoThich, dung_ho_so, ho_so_rong
+from .db import connect, use_utf8
+from .f1_filter import conditions_for_user, exclusion_reasons
+from .features import FeatureSpace, Food, load_foods
+from .rocchio import build_profile, empty_profile
 
-#: Nhãn và trọng số theo nguồn. `feedback` không có ở đây vì nhãn của nó suy
-#: từ số sao — xem `nhan_tu_sao`.
-NHAN_THEO_NGUON: dict[str, tuple[float, float]] = {
-    #  nguồn            nhãn   trọng số
+#: Label and weight per source. `feedback` is absent because its label is
+#: derived from the star rating — see `label_from_rating`.
+LABEL_BY_SOURCE: dict[str, tuple[float, float]] = {
+    #  source           label  weight
     "diary": (0.800, 0.900),
     "plan_kept": (0.700, 0.600),
     "plan_replaced": (0.150, 0.600),
@@ -61,16 +62,17 @@ NHAN_THEO_NGUON: dict[str, tuple[float, float]] = {
     "random_neg": (0.100, 0.200),
 }
 
-#: Nhãn theo hành động vuốt. `unknown` **không có mặt** — nó bị loại khỏi tập
-#: thay vì gán 0,5, vì gán 0,5 là bịa ra một nhãn người dùng chưa từng cung
-#: cấp rồi huấn luyện mô hình trên nhãn bịa đó (`ML_PIPELINE.md` §9.2).
-NHAN_VUOT: dict[str, float] = {"like": 0.900, "neutral": 0.500, "dislike": 0.000}
-TRONG_SO_VUOT = 0.700
+#: Label per swipe action. `unknown` is **absent** — it is dropped from the
+#: dataset rather than labelled 0.5, because labelling it 0.5 invents a label
+#: the user never gave and then trains a model on the invention
+#: (`ML_PIPELINE.md` section 9.2).
+SWIPE_LABEL: dict[str, float] = {"like": 0.900, "neutral": 0.500, "dislike": 0.000}
+SWIPE_WEIGHT = 0.700
 
-#: `meal_plan_items.status` → nguồn. `suggested` không có mặt: người dùng
-#: chưa quyết định gì với suất đó nên nó không phải tín hiệu. `eaten` gộp vào
-#: `plan_kept` — đã ăn là một dạng giữ suất, chỉ mạnh hơn.
-NGUON_THEO_TRANG_THAI = {
+#: `meal_plan_items.status` -> source. `suggested` is absent: the user has
+#: decided nothing about that serving, so it is not a signal. `eaten` folds
+#: into `plan_kept` — having eaten it is a form of keeping it, only stronger.
+SOURCE_BY_STATUS = {
     "kept": "plan_kept",
     "eaten": "plan_kept",
     "replaced": "plan_replaced",
@@ -78,16 +80,16 @@ NGUON_THEO_TRANG_THAI = {
 }
 
 
-def nhan_tu_sao(rating: int) -> float:
-    """5★ → 1,000 · 4★ → 0,750 · 3★ → 0,500 · 2★ → 0,250 · 1★ → 0,000."""
+def label_from_rating(rating: int) -> float:
+    """5 stars -> 1.000 - 4 -> 0.750 - 3 -> 0.500 - 2 -> 0.250 - 1 -> 0.000."""
     if not 1 <= rating <= 5:
-        raise ValueError(f"rating phải trong 1–5, nhận {rating}")
+        raise ValueError(f"rating must be 1-5, got {rating}")
     return round((rating - 1) / 4, 3)
 
 
 @dataclass
-class Mau:
-    """Một dòng của `ml_training_samples`, trước khi gán fold và ảnh chụp."""
+class Sample:
+    """One `ml_training_samples` row, before fold and snapshot are assigned."""
 
     user_id: str
     food_id: str
@@ -96,433 +98,451 @@ class Mau:
     sample_weight: float
     collected_at: datetime
     context_meal_type: str | None = None
-    #: Id của dòng gốc. Chỉ dùng cho `swipe`, để loại đúng lượt vuốt **của
-    #: chính mẫu này** khỏi ảnh chụp hồ sơ mà vẫn giữ các lượt cùng giây.
-    nguon_id: str | None = None
-    #: `interactions.action` nguyên văn, chỉ có ở mẫu `swipe`. Giữ riêng vì
-    #: Rocchio cần *hành động*, trong khi `label` đã là nhãn đã quy đổi —
-    #: suy ngược từ nhãn về hành động là một phép tra dễ vỡ khi nhãn đổi.
+    #: The id of the originating row. Used only for `swipe`, to exclude
+    #: **this sample's own** swipe from the profile snapshot while keeping
+    #: the other swipes from the same second.
+    source_id: str | None = None
+    #: The verbatim `interactions.action`, present only on `swipe` samples.
+    #: Kept separately because Rocchio needs the *action*, whereas `label` is
+    #: already converted — deriving the action back from the label is a
+    #: fragile lookup that breaks whenever the labels change.
     action: str | None = None
 
 
-# ── Thu tín hiệu từng nguồn ───────────────────────────────────────────
+# ── Collecting signals per source ─────────────────────────────────────
 #
-# Mọi truy vấn đều kèm `f.owner_id IS NULL`: món riêng tư không vào tập huấn
-# luyện của mô hình toàn cục.
+# Every query carries `f.owner_id IS NULL`: private foods do not enter the
+# global model's training set.
 
-_CHUNG = "JOIN foods f ON f.id = {cot} AND f.owner_id IS NULL AND f.is_active = 1"
+_PUBLIC_FOOD_JOIN = (
+    "JOIN foods f ON f.id = {column} AND f.owner_id IS NULL AND f.is_active = 1"
+)
 
 
-def tu_feedback(cn) -> list[Mau]:
-    """`feedbacks` — tín hiệu đáng tin nhất, trọng số 1,0.
+def from_feedback(cn) -> list[Sample]:
+    """`feedbacks` — the most trustworthy signal, weight 1.0.
 
-    Một người có thể đánh giá cùng một món nhiều lần. Giữ **lần gần nhất**:
-    ý kiến mới nhất là ý kiến hiện tại của họ.
+    A person may rate the same food several times. Keep the **most recent**:
+    their latest opinion is their current one.
     """
     sql = f"""
         SELECT fb.id, fb.user_id, fb.food_id, fb.rating, fb.created_at
         FROM feedbacks fb
-        {_CHUNG.format(cot="fb.food_id")}
+        {_PUBLIC_FOOD_JOIN.format(column="fb.food_id")}
         ORDER BY fb.created_at, fb.id
     """
     with cn.cursor() as cur:
         cur.execute(sql)
         return [
-            Mau(
+            Sample(
                 user_id=d["user_id"],
                 food_id=d["food_id"],
                 source="feedback",
-                label=nhan_tu_sao(int(d["rating"])),
+                label=label_from_rating(int(d["rating"])),
                 sample_weight=1.000,
                 collected_at=d["created_at"],
-                nguon_id=d["id"],
+                source_id=d["id"],
             )
             for d in cur.fetchall()
         ]
 
 
-def tu_vuot(cn) -> list[Mau]:
-    """`interactions` — lượt vuốt. `unknown` bị loại ngay trong SQL."""
-    cho = ", ".join(["%s"] * len(NHAN_VUOT))
+def from_swipes(cn) -> list[Sample]:
+    """`interactions` — the swipes. `unknown` is dropped in the SQL itself."""
+    placeholders = ", ".join(["%s"] * len(SWIPE_LABEL))
     sql = f"""
         SELECT i.id, i.user_id, i.food_id, i.action, i.interacted_at
         FROM interactions i
-        {_CHUNG.format(cot="i.food_id")}
-        WHERE i.action IN ({cho})
+        {_PUBLIC_FOOD_JOIN.format(column="i.food_id")}
+        WHERE i.action IN ({placeholders})
         ORDER BY i.interacted_at, i.id
     """
     with cn.cursor() as cur:
-        cur.execute(sql, tuple(NHAN_VUOT))
+        cur.execute(sql, tuple(SWIPE_LABEL))
         return [
-            Mau(
+            Sample(
                 user_id=d["user_id"],
                 food_id=d["food_id"],
                 source="swipe",
-                label=NHAN_VUOT[d["action"]],
-                sample_weight=TRONG_SO_VUOT,
+                label=SWIPE_LABEL[d["action"]],
+                sample_weight=SWIPE_WEIGHT,
                 collected_at=d["interacted_at"],
-                nguon_id=d["id"],
+                source_id=d["id"],
                 action=d["action"],
             )
             for d in cur.fetchall()
         ]
 
 
-def tu_nhat_ky(cn) -> list[Mau]:
-    """`food_diary` — đã ăn thật.
+def from_diary(cn) -> list[Sample]:
+    """`food_diary` — actually eaten.
 
-    Hạn chế đã biết: ăn lại nhiều lần là tín hiệu **mạnh hơn** ăn một lần,
-    nhưng lược đồ không có cột đếm số lần, và §9.1 quy định `sample_weight`
-    mã hóa **độ tin cậy** chứ không mã hóa mức độ thích. Nên ở đây chỉ giữ
-    lần gần nhất; số lần lặp bị bỏ. Muốn dùng thì phải thêm cột, không phải
-    tự đặt ra một công thức nhân trọng số.
+    A known limitation: eating something repeatedly is a **stronger** signal
+    than eating it once, but the schema has no repeat-count column, and
+    section 9.1 rules that `sample_weight` encodes **confidence**, not degree
+    of liking. So only the most recent entry is kept and the repetition is
+    discarded. Using it would require a new column, not an invented
+    weight-multiplication formula.
     """
-    nhan, trong_so = NHAN_THEO_NGUON["diary"]
+    label, weight = LABEL_BY_SOURCE["diary"]
     sql = f"""
         SELECT fd.id, fd.user_id, fd.food_id, fd.meal_type,
                fd.created_at, fd.ate_on
         FROM food_diary fd
-        {_CHUNG.format(cot="fd.food_id")}
+        {_PUBLIC_FOOD_JOIN.format(column="fd.food_id")}
         ORDER BY fd.ate_on, fd.created_at, fd.id
     """
     with cn.cursor() as cur:
         cur.execute(sql)
         return [
-            Mau(
+            Sample(
                 user_id=d["user_id"],
                 food_id=d["food_id"],
                 source="diary",
-                label=nhan,
-                sample_weight=trong_so,
+                label=label,
+                sample_weight=weight,
                 collected_at=d["created_at"],
                 context_meal_type=d["meal_type"],
-                nguon_id=d["id"],
+                source_id=d["id"],
             )
             for d in cur.fetchall()
         ]
 
 
-def tu_thuc_don(cn) -> list[Mau]:
-    """`meal_plan_items` — giữ suất, đổi suất, bỏ suất.
+def from_meal_plans(cn) -> list[Sample]:
+    """`meal_plan_items` — kept, replaced, skipped.
 
-    Ba nguồn khác nhau nên cùng một cặp (người, món) có thể sinh ba dòng hợp
-    lệ: họ giữ suất hôm nay, đổi suất hôm khác. Đó đúng là ba tín hiệu độc
-    lập, và `uq_sample` có `source` trong khóa chính vì vậy.
+    Three different sources, so one (person, food) pair can legitimately
+    produce three rows: they kept the serving today and replaced it another
+    day. Those genuinely are three independent signals, which is why
+    `uq_sample` includes `source` in its key.
     """
-    cho = ", ".join(["%s"] * len(NGUON_THEO_TRANG_THAI))
+    placeholders = ", ".join(["%s"] * len(SOURCE_BY_STATUS))
     sql = f"""
         SELECT mpi.id, mp.user_id, mpi.food_id, mpi.meal_type, mpi.status,
-               COALESCE(mpi.replaced_at, mpi.created_at) AS luc
+               COALESCE(mpi.replaced_at, mpi.created_at) AS at_time
         FROM meal_plan_items mpi
         JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
-        {_CHUNG.format(cot="mpi.food_id")}
-        WHERE mpi.status IN ({cho})
-        ORDER BY luc, mpi.id
+        {_PUBLIC_FOOD_JOIN.format(column="mpi.food_id")}
+        WHERE mpi.status IN ({placeholders})
+        ORDER BY at_time, mpi.id
     """
     with cn.cursor() as cur:
-        cur.execute(sql, tuple(NGUON_THEO_TRANG_THAI))
-        ket_qua: list[Mau] = []
+        cur.execute(sql, tuple(SOURCE_BY_STATUS))
+        result: list[Sample] = []
         for d in cur.fetchall():
-            nguon = NGUON_THEO_TRANG_THAI[d["status"]]
-            nhan, trong_so = NHAN_THEO_NGUON[nguon]
-            ket_qua.append(
-                Mau(
+            source = SOURCE_BY_STATUS[d["status"]]
+            label, weight = LABEL_BY_SOURCE[source]
+            result.append(
+                Sample(
                     user_id=d["user_id"],
                     food_id=d["food_id"],
-                    source=nguon,
-                    label=nhan,
-                    sample_weight=trong_so,
-                    collected_at=d["luc"],
+                    source=source,
+                    label=label,
+                    sample_weight=weight,
+                    collected_at=d["at_time"],
                     context_meal_type=d["meal_type"],
-                    nguon_id=d["id"],
+                    source_id=d["id"],
                 )
             )
-        return ket_qua
+        return result
 
 
-def tu_am_ngau_nhien(
+def random_negatives(
     cn,
     *,
-    da_hien: dict[str, set[str]],
-    so_moi_nguoi: int | None,
-    ty_le: float,
+    already_shown: dict[str, set[str]],
+    fixed_count: int | None,
+    ratio: float,
     seed: int,
-    moc_thoi_gian: dict[str, datetime],
-) -> list[Mau]:
-    """`random_neg` — món **chưa từng hiển thị** cho người đó.
+    latest_signal_at: dict[str, datetime],
+) -> list[Sample]:
+    """`random_neg` — foods **never shown** to that person.
 
-    Vì sao cần. Không có mẫu âm, mô hình chỉ thấy những món hệ thống đã chọn
-    để hiển thị, và nó học cách tái tạo lại chính bộ lọc của hệ thống thay vì
-    học khẩu vị. Nhãn 0,100 với trọng số 0,200: đây là **phỏng đoán** rằng
-    người dùng không đặc biệt thích một món lấy ngẫu nhiên, và trọng số thấp
-    nói rằng đừng tin phỏng đoán đó quá.
+    Why they are needed. Without negative samples the model only ever sees
+    foods the system chose to display, and it learns to reproduce the
+    system's own filter rather than learning taste. Label 0.100 at weight
+    0.200: this is a **guess** that a user is not especially fond of a
+    randomly chosen food, and the low weight says not to trust the guess too
+    far.
 
-    Chỉ lấy từ món công khai đang hoạt động. Sinh bằng `random.Random(seed)`
-    nên chạy lại cho đúng cùng một tập — một tập dữ liệu không tái lập được
-    thì không so sánh được hai mô hình với nhau.
+    Drawn only from public, active foods. Generated through
+    `random.Random(seed)` so a rerun produces the same set — a dataset that
+    cannot be reproduced cannot be used to compare two models.
 
-    ## Số mẫu âm phải TỈ LỆ theo số tín hiệu, không được cố định
+    ## The negative count must be PROPORTIONAL to the signal count
 
-    Bản đầu lấy một số cố định (20) cho mọi người. Nó tạo ra một tương quan
-    giả mà ba thuật toán đều bám vào ngay lần chạy đầu có dữ liệu:
-    `nguoi.n_tin_hieu` thành **đặc trưng mạnh nhất** của cả ba (hệ số −0,833
-    ở hồi quy logistic, độ quan trọng 0,188 và 0,305 ở hai mô hình cây).
+    The first version took a fixed number (20) for everybody. That created a
+    spurious correlation that all three algorithms latched onto on the first
+    run with real data: `user.n_signals` became the **strongest feature** of
+    all three.
 
-    Cơ chế: với số mẫu âm cố định, tỉ lệ mẫu nhãn 0 của một người là
-    `20 / (20 + n)` — một hàm **giảm đơn điệu** theo số tín hiệu. Đo trên 50
-    người mô phỏng, tỉ lệ `random_neg` chạy từ 0,370 ở `n = 34` xuống 0,318 ở
-    `n = 43`, và `corr(n_signals, nhãn)` là +0,215 trong nhóm `swipe` nhưng
-    +0,000 trong nhóm `random_neg` — dấu hiệu của tương quan nằm ở **tỉ lệ
-    pha trộn giữa hai nguồn**, không nằm trong tín hiệu nào.
+    The mechanism: with a fixed negative count, a person's share of
+    zero-label samples is `20 / (20 + n)` — a **monotonically decreasing**
+    function of their signal count. Measured over the 50 simulated users, the
+    `random_neg` share ran from 0.370 at `n = 34` down to 0.318 at `n = 43`,
+    and `corr(n_signals, label)` was +0.215 within the `swipe` group but
+    +0.000 within `random_neg` — the signature of a correlation that lives in
+    the **mixing ratio between two sources**, not in any signal.
 
-    Chỉ phương án `ml` đọc đặc trưng nên chỉ nó được lợi, và phần lợi đó
-    **không chuyển sang lúc phục vụ thật** — lúc đó không có bước bốc mẫu âm
-    nào. Tức là nó làm hàng `ml` trong bảng so sánh của Chương 3 cao hơn thực
-    chất, đúng ở cột mà cả đồ án phải chứng minh.
+    Only the `ml` variant reads features, so only it benefited, and that
+    benefit **does not transfer to serving**, where no negatives are drawn at
+    all. In other words it raised the `ml` row of the Chapter 3 comparison
+    above its true value, in precisely the column the whole project has to
+    demonstrate.
 
-    Lấy theo tỉ lệ thì `so_am / (so_am + n) = ty_le / (1 + ty_le)` — một hằng
-    số, không còn phụ thuộc `n`. `ty_le = 0,5` giữ cân bằng nhãn gần như cũ
-    (49,1% nhãn dương với 20 mẫu cố định trên ~39 tín hiệu).
+    Drawing proportionally makes `negatives / (negatives + n) = ratio /
+    (1 + ratio)` — a constant, no longer a function of `n`. `ratio = 0.5`
+    preserves roughly the previous label balance (49.1% positive with 20
+    fixed negatives over about 39 signals).
 
-    `so_moi_nguoi` khác `None` thì quay về số cố định. Giữ đường đó vì
-    `check_ml_e2e.py` cần một tập mẫu **đếm trước được** để đối chiếu, và một
-    bộ kiểm đổi số mẫu theo số tín hiệu của dữ liệu giả thì không khẳng định
-    được gì.
+    Passing `fixed_count` returns to a fixed number. That path is kept
+    because `tools/check_ml_e2e.py` needs a sample set it can count in
+    advance, and a check whose sample count varies with the synthetic data's
+    signal count cannot assert anything.
 
-    ## Mẫu âm không được lấy món mà Bộ lọc F1 đã chặn
+    ## Negatives must not be drawn from foods F1 already blocks
 
-    `ml/serve.py` chạy F1 **trước** mọi phép chấm điểm, nên món bị F1 chặn
-    không bao giờ là ứng viên lúc phục vụ. Đưa chúng vào tập huấn luyện là
-    huấn luyện trên một phân phối mà mô hình sẽ không bao giờ gặp — và chúng
-    là mẫu âm **quá dễ**: người ăn thuần chay thì mọi món thịt đều là nhãn 0,
-    đoán được mà không cần biết gì về khẩu vị. Đo trên 50 người mô phỏng
-    trước khi chặn: **82/880 mẫu âm (9,3%)** là món mà F1 đã loại cho đúng
-    người đó.
+    `ml/serve.py` runs F1 before any scoring, so a blocked food is never a
+    candidate at serving time. Training on them trains on a distribution the
+    model will never meet — and they are **far too easy** negatives: for a
+    vegan every meat dish is label 0, predictable without knowing anything
+    about taste. Measured before the fix: **82 of 880 negatives (9.3%)** were
+    foods F1 had already excluded for that very person.
 
-    Nó cũng là chuyện phân vai: §4 nói F1 là tầng an toàn đặt trước mọi mô
-    hình. Để mô hình học lại cùng phép loại đó là bắt nó làm việc của tầng
-    khác, bằng một cơ chế mềm hơn — và đổi lấy một con số đánh giá cao hơn
-    thực chất.
+    It is also a question of responsibility: section 4 says F1 is the safety
+    layer, placed **before** every model. Having the model re-learn the same
+    exclusion makes it do another layer's job by a softer mechanism, in
+    exchange for an evaluation figure higher than the truth.
     """
-    if so_moi_nguoi is None and ty_le <= 0:
-        raise ValueError("phải cho `so_moi_nguoi` hoặc `ty_le` dương")
-    nhan, trong_so = NHAN_THEO_NGUON["random_neg"]
+    if fixed_count is None and ratio <= 0:
+        raise ValueError("either `fixed_count` or a positive `ratio` is required")
+
+    label, weight = LABEL_BY_SOURCE["random_neg"]
     with cn.cursor() as cur:
         cur.execute(
             "SELECT id FROM foods WHERE owner_id IS NULL AND is_active = 1 "
             "ORDER BY id"
         )
-        tat_ca = [d["id"] for d in cur.fetchall()]
+        every_food = [d["id"] for d in cur.fetchall()]
 
-    ket_qua: list[Mau] = []
-    # Nhớ theo bộ điều kiện, không theo người: 50 người thường chỉ có vài bộ
-    # điều kiện khác nhau, và `ly_do_loai` quét `condition_rules` × `foods`.
-    nho_f1: dict[tuple[tuple[int, str], ...], frozenset[str]] = {}
-    for user_id in sorted(da_hien):
-        dieu_kien = dieu_kien_cua_nguoi_dung(cn, user_id)
-        khoa = tuple(sorted((d.condition_id, d.severity) for d in dieu_kien))
-        if khoa not in nho_f1:
-            nho_f1[khoa] = (
-                frozenset(ly_do_loai(cn, dieu_kien=dieu_kien, chi_mon_chung=True))
-                if dieu_kien
+    result: list[Sample] = []
+    # Cached per condition set, not per user: 50 users usually share only a
+    # handful of distinct condition sets, and `exclusion_reasons` scans
+    # `condition_rules` x `foods`.
+    blocked_cache: dict[tuple[tuple[int, str], ...], frozenset[str]] = {}
+    for user_id in sorted(already_shown):
+        conditions = conditions_for_user(cn, user_id)
+        key = tuple(sorted((c.condition_id, c.severity) for c in conditions))
+        if key not in blocked_cache:
+            blocked_cache[key] = (
+                frozenset(
+                    exclusion_reasons(cn, conditions=conditions, public_only=True)
+                )
+                if conditions
                 else frozenset()
             )
-        f1_chan = nho_f1[khoa]
+        blocked = blocked_cache[key]
 
-        # Hạt giống trộn thêm mã người dùng: hai người khác nhau nhận hai
-        # tập âm khác nhau, nhưng chạy lại thì mỗi người vẫn nhận đúng tập
-        # của mình kể cả khi số người dùng thay đổi.
+        # The seed mixes in the user id: two different people get two
+        # different negative sets, but a rerun still gives each person their
+        # own set even if the number of users changed.
         rng = random.Random(f"{seed}:{user_id}")
-        con_lai = [
+        remaining = [
             f
-            for f in tat_ca
-            if f not in da_hien[user_id] and f not in f1_chan
+            for f in every_food
+            if f not in already_shown[user_id] and f not in blocked
         ]
-        rng.shuffle(con_lai)
-        # Ít nhất 1: một người chỉ có 1 tín hiệu vẫn phải có mẫu âm, nếu
-        # không thì mọi mẫu của họ cùng một nhãn.
-        lay = (
-            so_moi_nguoi
-            if so_moi_nguoi is not None
-            else max(1, round(ty_le * len(da_hien[user_id])))
+        rng.shuffle(remaining)
+        # At least 1: a person with a single signal still needs a negative,
+        # otherwise every sample they have carries the same label.
+        take = (
+            fixed_count
+            if fixed_count is not None
+            else max(1, round(ratio * len(already_shown[user_id])))
         )
-        for food_id in con_lai[:lay]:
-            ket_qua.append(
-                Mau(
+        for food_id in remaining[:take]:
+            result.append(
+                Sample(
                     user_id=user_id,
                     food_id=food_id,
                     source="random_neg",
-                    label=nhan,
-                    sample_weight=trong_so,
-                    collected_at=moc_thoi_gian[user_id],
+                    label=label,
+                    sample_weight=weight,
+                    collected_at=latest_signal_at[user_id],
                 )
             )
-    return ket_qua
+    return result
 
 
-# ── Gộp, chống nhân đôi ───────────────────────────────────────────────
+# ── Merge, deduplicate ────────────────────────────────────────────────
 
 
-def chong_nhan_doi(mau: Iterable[Mau]) -> tuple[list[Mau], int]:
-    """Giữ **một** dòng cho mỗi `(user_id, food_id, source)` — dòng mới nhất.
+def deduplicate(samples: Iterable[Sample]) -> tuple[list[Sample], int]:
+    """Keep **one** row per `(user_id, food_id, source)` — the newest.
 
-    `uq_sample (dataset_version, user_id, food_id, source)` là ràng buộc
-    tương ứng trong lược đồ. Không có nó thì mỗi lần sinh lại tập dữ liệu sẽ
-    nhân đôi toàn bộ mẫu và mô hình huấn luyện trên dữ liệu trùng lặp mà
-    không ai biết. Chống ở đây nữa để script báo được **đã gộp bao nhiêu**
-    thay vì để CSDL báo lỗi 1062 và dừng.
+    `uq_sample (dataset_version, user_id, food_id, source)` is the matching
+    schema constraint. Without it, every rebuild of a dataset would duplicate
+    every sample and the model would train on duplicated data unnoticed.
+    Deduplicating here as well lets the script report **how many were
+    merged** instead of leaving the database to raise error 1062 and stop.
     """
-    giu: dict[tuple[str, str, str], Mau] = {}
-    bo = 0
-    for m in mau:
-        khoa = (m.user_id, m.food_id, m.source)
-        cu = giu.get(khoa)
-        if cu is None:
-            giu[khoa] = m
+    kept: dict[tuple[str, str, str], Sample] = {}
+    dropped = 0
+    for sample in samples:
+        key = (sample.user_id, sample.food_id, sample.source)
+        current = kept.get(key)
+        if current is None:
+            kept[key] = sample
         else:
-            bo += 1
-            if m.collected_at >= cu.collected_at:
-                giu[khoa] = m
-    return list(giu.values()), bo
+            dropped += 1
+            if sample.collected_at >= current.collected_at:
+                kept[key] = sample
+    return list(kept.values()), dropped
 
 
-# ── Ảnh chụp hồ sơ, chống rò rỉ ───────────────────────────────────────
+# ── Profile snapshots, leakage prevention ─────────────────────────────
 
 
-def gan_anh_chup(
-    mau: Sequence[Mau],
-    luot_vuot: Sequence[Mau],
-    kg: KhongGianDacTrung,
-    mon_theo_id: dict[str, Mon],
+def build_snapshots(
+    samples: Sequence[Sample],
+    swipes: Sequence[Sample],
+    space: FeatureSpace,
+    foods_by_id: dict[str, Food],
 ) -> dict[str, dict[str, Any]]:
-    """Tính `profile_snapshot` cho từng mẫu — hồ sơ **trước** tín hiệu đó.
+    """Compute `profile_snapshot` per sample — the profile **before** that
+    signal.
 
-    Phát lại lịch sử vuốt của từng người theo thứ tự thời gian, và với mỗi
-    mẫu lấy hồ sơ dựng từ những lượt vuốt đứng trước nó.
+    Replays each person's swipe history chronologically and, for each sample,
+    takes the profile built from the swipes preceding it.
 
-    Chỗ tinh tế: `DATETIME` của MySQL chỉ tới giây, mà một phiên vuốt
-    onboarding sinh hàng chục lượt trong vài giây. Nếu cắt theo
-    `thời_gian < thời_gian_mẫu` thì mọi lượt **cùng giây** cũng bị cắt oan;
-    nếu cắt theo `<=` thì chính lượt vuốt của mẫu đó lọt vào ảnh chụp — đúng
-    cái rò rỉ cần tránh. Nên:
+    The subtle part: MySQL `DATETIME` has second resolution, and an
+    onboarding swipe session produces dozens of swipes within a few seconds.
+    Cutting at `time < sample_time` would wrongly cut every swipe from the
+    **same second**; cutting at `<=` would let the sample's own swipe into
+    its snapshot — exactly the leak being avoided. So:
 
-    · mẫu `swipe` — cắt theo `<=` rồi **loại riêng dòng của chính nó** theo
-      `nguon_id`, nhờ vậy các lượt cùng giây vẫn được giữ;
-    · mẫu nguồn khác — cắt theo `<=`, vì một lượt vuốt cùng giây là tín hiệu
-      *khác*, không phải nhãn đang xét.
+    - `swipe` samples — cut at `<=` then **remove that one row** by
+      `source_id`, which keeps the same-second swipes;
+    - other sources — cut at `<=`, because a swipe in the same second is a
+      *different* signal, not the label under consideration.
     """
-    vuot_theo_nguoi: dict[str, list[Mau]] = {}
-    for v in luot_vuot:
-        vuot_theo_nguoi.setdefault(v.user_id, []).append(v)
-    for ds in vuot_theo_nguoi.values():
-        ds.sort(key=lambda m: (m.collected_at, m.nguon_id or ""))
+    swipes_by_user: dict[str, list[Sample]] = {}
+    for swipe in swipes:
+        swipes_by_user.setdefault(swipe.user_id, []).append(swipe)
+    for items in swipes_by_user.values():
+        items.sort(key=lambda s: (s.collected_at, s.source_id or ""))
 
-    anh_chup: dict[str, dict[str, Any]] = {}
+    snapshots: dict[str, dict[str, Any]] = {}
 
-    for user_id, ds_mau in _nhom_theo_nguoi(mau).items():
-        ds_vuot = vuot_theo_nguoi.get(user_id, [])
-        ds_mau.sort(key=lambda m: (m.collected_at, m.nguon_id or ""))
+    for user_id, user_samples in _group_by_user(samples).items():
+        user_swipes = swipes_by_user.get(user_id, [])
+        user_samples.sort(key=lambda s: (s.collected_at, s.source_id or ""))
 
-        # Tiền tố tăng dần: các lượt vuốt tới thời điểm đang xét. Dựng lại
-        # hồ sơ từ đầu mỗi lần là O(n²) trên mỗi người; với ~30 lượt thì
-        # không đáng tối ưu thêm, và dựng lại từ đầu thì chắc chắn trùng kết
-        # quả với bản Dart.
+        # A growing prefix: the swipes up to the moment under consideration.
+        # Rebuilding the profile from scratch each time is O(n^2) per person;
+        # at around 30 swipes that is not worth optimising further, and
+        # rebuilding from scratch is guaranteed to match the Dart version.
         i = 0
-        tien_to: list[Mau] = []
-        for m in ds_mau:
-            while i < len(ds_vuot) and ds_vuot[i].collected_at <= m.collected_at:
-                tien_to.append(ds_vuot[i])
+        prefix: list[Sample] = []
+        for sample in user_samples:
+            while (
+                i < len(user_swipes)
+                and user_swipes[i].collected_at <= sample.collected_at
+            ):
+                prefix.append(user_swipes[i])
                 i += 1
 
-            # Loại **đúng dòng gốc** của mẫu này theo id, không loại theo
-            # món hay theo thời gian: nhờ vậy các lượt cùng giây vẫn được
-            # giữ, và một người vuốt lại cùng một món cũng không bị cắt oan.
-            bo_dong = m.nguon_id if m.source == "swipe" else None
-            cap = [
-                (mon_theo_id[v.food_id], v.action or "neutral")
-                for v in tien_to
-                if v.nguon_id != bo_dong and v.food_id in mon_theo_id
+            # Remove **the originating row** of this sample by id, not by
+            # food or by time: that keeps same-second swipes, and a person
+            # who swipes the same food twice is not wrongly cut either.
+            skip_id = sample.source_id if sample.source == "swipe" else None
+            pairs = [
+                (foods_by_id[s.food_id], s.action or "neutral")
+                for s in prefix
+                if s.source_id != skip_id and s.food_id in foods_by_id
             ]
 
-            ho_so = dung_ho_so(kg, cap) if cap else ho_so_rong(kg)
-            anh_chup[_khoa(m)] = ho_so.to_json()
+            profile = build_profile(space, pairs) if pairs else empty_profile(space)
+            snapshots[_key(sample)] = profile.to_json()
 
-    return anh_chup
-
-
-def _nhom_theo_nguoi(mau: Sequence[Mau]) -> dict[str, list[Mau]]:
-    theo: dict[str, list[Mau]] = {}
-    for m in mau:
-        theo.setdefault(m.user_id, []).append(m)
-    return theo
+    return snapshots
 
 
-def _khoa(m: Mau) -> str:
-    return f"{m.user_id}|{m.food_id}|{m.source}"
+def _group_by_user(samples: Sequence[Sample]) -> dict[str, list[Sample]]:
+    grouped: dict[str, list[Sample]] = {}
+    for sample in samples:
+        grouped.setdefault(sample.user_id, []).append(sample)
+    return grouped
 
 
-# ── Chia tập theo người dùng ──────────────────────────────────────────
+def _key(sample: Sample) -> str:
+    return f"{sample.user_id}|{sample.food_id}|{sample.source}"
 
 
-def chia_theo_nguoi(
-    nguoi: Sequence[str], so_fold: int, seed: int
-) -> dict[str, int]:
-    """Gán mỗi **người dùng** vào một fold.
+# ── Splitting folds by user ───────────────────────────────────────────
 
-    Chia theo người, không theo mẫu: nếu cùng một người xuất hiện ở cả tập
-    huấn luyện và tập kiểm tra thì mô hình đã thấy khẩu vị của họ và con số
-    đánh giá bị thổi phồng.
 
-    Cách gán: **xếp người dùng theo băm, rồi chia lần lượt vòng tròn.** Băm
-    cho một thứ tự xác định không phụ thuộc thứ tự dòng trả về từ CSDL; chia
-    vòng tròn bảo đảm **các fold lệch nhau nhiều nhất một người**.
+def assign_folds(users: Sequence[str], n_folds: int, seed: int) -> dict[str, int]:
+    """Assign each **user** to a fold.
 
-    Bản đầu tôi lấy thẳng `băm % số_fold`, vì như vậy thêm một người mới
-    không đổi fold của những người đã có. Nhưng nó **không cân**: với 10
-    người và 5 fold, thực tế chạy ra fold 0 có 5 người và **fold 4 không có
-    ai** — tập kiểm tra rỗng và không huấn luyện được gì. Tính ổn định ấy
-    không đáng giá bằng việc mọi fold đều có người, và nó cũng không cần
-    thiết: fold được **lưu cùng từng dòng** theo `dataset_version`, nên dựng
-    lại đúng tập người đó thì gán lại đúng như cũ, còn tập người khác thì
-    đằng nào cũng là một phiên bản tập dữ liệu khác.
+    Split by person, not by sample: if the same person appears in both the
+    training and the test set, the model has already seen their taste and the
+    evaluation figure is inflated.
+
+    How: **order users by hash, then deal them out round-robin.** The hash
+    gives a deterministic order independent of the row order the database
+    returns; dealing round-robin guarantees the folds differ by at most one
+    person.
+
+    The first version took `hash % n_folds` directly, because adding a new
+    user then leaves existing users' folds untouched. But it is **not
+    balanced**: with 10 users over 5 folds an actual run put 5 people in fold
+    0 and **nobody in fold 4** — an empty test set and nothing to train on.
+    That stability is not worth as much as every fold having people in it,
+    and it is not needed anyway: the fold is **stored on each row** per
+    `dataset_version`, so rebuilding over the same set of people reproduces
+    the same assignment, and a different set of people is a different dataset
+    version regardless.
     """
-    if so_fold < 2:
-        raise ValueError("số fold phải từ 2 trở lên")
-    if len(nguoi) < so_fold:
+    if n_folds < 2:
+        raise ValueError("there must be at least 2 folds")
+    if len(users) < n_folds:
         print(
-            f"  Lưu ý: chỉ có {len(nguoi)} người dùng cho {so_fold} fold — "
-            f"{so_fold - len(nguoi)} fold sẽ rỗng. Giảm --folds hoặc thu "
-            f"thêm dữ liệu."
+            f"  Note: only {len(users)} users for {n_folds} folds — "
+            f"{n_folds - len(users)} folds will be empty. Lower --folds or "
+            f"collect more data."
         )
-    theo_bam = sorted(
-        nguoi, key=lambda u: hashlib.sha256(f"{seed}:{u}".encode()).hexdigest()
+    by_hash = sorted(
+        users, key=lambda u: hashlib.sha256(f"{seed}:{u}".encode()).hexdigest()
     )
-    return {u: i % so_fold for i, u in enumerate(theo_bam)}
+    return {u: i % n_folds for i, u in enumerate(by_hash)}
 
 
-def nhan_split(fold: int, so_fold: int) -> str:
-    """Vai của một fold trong **lần chia tham chiếu**.
+def split_label(fold: int, n_folds: int) -> str:
+    """A fold's role in the **reference split**.
 
-    Cột `split` ghi lần chia mặc định để một lần huấn luyện nhanh có sẵn
-    train/val/test mà không phải tự chia. Phần kiểm định chéo thì
-    `ml/evaluate.py` tự xoay vòng fold và không dùng cột này.
+    The `split` column records a default split so a quick training run has
+    train/val/test ready without splitting anything itself. The
+    cross-validation in `ml/evaluate.py` rotates the folds and ignores this
+    column.
 
-    Với đúng 2 fold thì không có chỗ cho `val`: chia thành train/test và bỏ
-    `val`. Nếu vẫn dành một fold cho `val` thì **không còn fold nào là
-    train**, và lần chia tham chiếu trở thành vô dụng mà không báo gì.
+    With exactly 2 folds there is no room for `val`: split into train/test
+    and drop `val`. Reserving a fold for `val` would leave **no fold as
+    train**, and the reference split would become useless with no warning.
     """
-    if fold == so_fold - 1:
+    if fold == n_folds - 1:
         return "test"
-    if so_fold >= 3 and fold == so_fold - 2:
+    if n_folds >= 3 and fold == n_folds - 2:
         return "val"
     return "train"
 
 
-# ── Ghi vào CSDL ──────────────────────────────────────────────────────
+# ── Writing to the database ───────────────────────────────────────────
 
-SQL_XOA = "DELETE FROM ml_training_samples WHERE dataset_version = %s"
+SQL_DELETE = "DELETE FROM ml_training_samples WHERE dataset_version = %s"
 
-SQL_CHEN = """
+SQL_INSERT = """
 INSERT INTO ml_training_samples
     (dataset_version, user_id, food_id, label, sample_weight, source,
      context_meal_type, split, fold, collected_at, profile_snapshot)
@@ -530,99 +550,99 @@ VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 
-def ghi(
+def write_samples(
     cn,
     version: str,
-    mau: Sequence[Mau],
-    fold_theo_nguoi: dict[str, int],
-    so_fold: int,
-    anh_chup: dict[str, dict[str, Any]],
+    samples: Sequence[Sample],
+    fold_by_user: dict[str, int],
+    n_folds: int,
+    snapshots: dict[str, dict[str, Any]],
 ) -> int:
-    """Xóa phiên bản cũ rồi chèn lại toàn bộ. Một giao dịch duy nhất.
+    """Delete the old version, then insert everything. One transaction.
 
-    Xóa trước là có chủ ý: sinh lại cùng một `dataset_version` nghĩa là
-    "dựng lại tập này", nên kết quả phải là **đúng** tập mới, không phải tập
-    mới trộn với phần sót của lần trước.
+    Deleting first is deliberate: rebuilding the same `dataset_version` means
+    "rebuild this dataset", so the result has to be **exactly** the new set,
+    not the new set mixed with leftovers from the previous run.
     """
-    dong = [
+    rows = [
         (
             version,
-            m.user_id,
-            m.food_id,
-            m.label,
-            m.sample_weight,
-            m.source,
-            m.context_meal_type,
-            nhan_split(fold_theo_nguoi[m.user_id], so_fold),
-            fold_theo_nguoi[m.user_id],
-            m.collected_at,
-            json.dumps(anh_chup.get(_khoa(m)), ensure_ascii=False),
+            s.user_id,
+            s.food_id,
+            s.label,
+            s.sample_weight,
+            s.source,
+            s.context_meal_type,
+            split_label(fold_by_user[s.user_id], n_folds),
+            fold_by_user[s.user_id],
+            s.collected_at,
+            json.dumps(snapshots.get(_key(s)), ensure_ascii=False),
         )
-        for m in mau
+        for s in samples
     ]
     with cn.cursor() as cur:
-        cur.execute(SQL_XOA, (version,))
-        da_xoa = cur.rowcount
-        if dong:
-            cur.executemany(SQL_CHEN, dong)
+        cur.execute(SQL_DELETE, (version,))
+        deleted = cur.rowcount
+        if rows:
+            cur.executemany(SQL_INSERT, rows)
     cn.commit()
-    if da_xoa:
-        print(f"Đã xóa {da_xoa} dòng của phiên bản {version!r} trước đó.")
-    return len(dong)
+    if deleted:
+        print(f"Deleted {deleted} rows of the previous {version!r} version.")
+    return len(rows)
 
 
-# ── Điều phối ─────────────────────────────────────────────────────────
+# ── Orchestration ─────────────────────────────────────────────────────
 
 
-def dung_tap(
+def build(
     cn,
     *,
     version: str,
-    so_am_moi_nguoi: int | None,
-    ty_le_am: float,
-    so_fold: int,
+    fixed_negatives: int | None,
+    negative_ratio: float,
+    n_folds: int,
     seed: int,
-    ap_dung: bool,
+    apply: bool,
 ) -> int:
-    mon, bao_cao = nap_mon(cn)
-    bao_cao.in_ra()
-    kg = KhongGianDacTrung.tu_mon(mon)
-    mon_theo_id = {m.id: m for m in mon}
+    foods, report = load_foods(cn)
+    report.print_report()
+    space = FeatureSpace.from_foods(foods)
+    foods_by_id = {f.id: f for f in foods}
     print()
 
-    feedback = tu_feedback(cn)
-    vuot = tu_vuot(cn)
-    nhat_ky = tu_nhat_ky(cn)
-    thuc_don = tu_thuc_don(cn)
+    feedback = from_feedback(cn)
+    swipes = from_swipes(cn)
+    diary = from_diary(cn)
+    plans = from_meal_plans(cn)
 
-    # Món đã "hiển thị" cho người dùng: mọi món họ từng vuốt, ăn, đánh giá
-    # hoặc nhận trong thực đơn. Mẫu âm ngẫu nhiên phải nằm ngoài tập này.
-    da_hien: dict[str, set[str]] = {}
-    moc_thoi_gian: dict[str, datetime] = {}
-    for m in (*feedback, *vuot, *nhat_ky, *thuc_don):
-        da_hien.setdefault(m.user_id, set()).add(m.food_id)
-        cu = moc_thoi_gian.get(m.user_id)
-        if cu is None or m.collected_at > cu:
-            moc_thoi_gian[m.user_id] = m.collected_at
+    # Foods "shown" to the user: everything they ever swiped, ate, rated or
+    # received in a plan. Random negatives must lie outside that set.
+    already_shown: dict[str, set[str]] = {}
+    latest_signal_at: dict[str, datetime] = {}
+    for sample in (*feedback, *swipes, *diary, *plans):
+        already_shown.setdefault(sample.user_id, set()).add(sample.food_id)
+        current = latest_signal_at.get(sample.user_id)
+        if current is None or sample.collected_at > current:
+            latest_signal_at[sample.user_id] = sample.collected_at
 
-    am = tu_am_ngau_nhien(
+    negatives = random_negatives(
         cn,
-        da_hien=da_hien,
-        so_moi_nguoi=so_am_moi_nguoi,
-        ty_le=ty_le_am,
+        already_shown=already_shown,
+        fixed_count=fixed_negatives,
+        ratio=negative_ratio,
         seed=seed,
-        moc_thoi_gian=moc_thoi_gian,
+        latest_signal_at=latest_signal_at,
     )
 
-    tat_ca = [*feedback, *vuot, *nhat_ky, *thuc_don, *am]
-    tat_ca, da_gop = chong_nhan_doi(tat_ca)
-    tat_ca.sort(key=lambda m: (m.user_id, m.source, m.food_id))
+    everything = [*feedback, *swipes, *diary, *plans, *negatives]
+    everything, merged = deduplicate(everything)
+    everything.sort(key=lambda s: (s.user_id, s.source, s.food_id))
 
-    print("Tín hiệu theo nguồn:")
-    dem: dict[str, int] = {}
-    for m in tat_ca:
-        dem[m.source] = dem.get(m.source, 0) + 1
-    for nguon in (
+    print("Signals by source:")
+    counts: dict[str, int] = {}
+    for sample in everything:
+        counts[sample.source] = counts.get(sample.source, 0) + 1
+    for source in (
         "feedback",
         "swipe",
         "diary",
@@ -631,85 +651,96 @@ def dung_tap(
         "plan_skipped",
         "random_neg",
     ):
-        print(f"  {nguon:14} {dem.get(nguon, 0):6}")
-    print(f"  {'—' * 14} {'—' * 6}")
-    print(f"  {'tổng':14} {len(tat_ca):6}")
-    if da_gop:
-        print(f"  (đã gộp {da_gop} dòng trùng cặp người–món–nguồn)")
+        print(f"  {source:14} {counts.get(source, 0):6}")
+    print(f"  {'-' * 14} {'-' * 6}")
+    print(f"  {'total':14} {len(everything):6}")
+    if merged:
+        print(f"  (merged {merged} rows duplicating a person-food-source triple)")
 
-    if not tat_ca:
+    if not everything:
         print(
-            "\nChưa có tín hiệu nào trong CSDL — không có gì để dựng.\n"
-            "Phần học máy chờ dữ liệu thu từ người dùng thật; xem "
-            "docs/ML_PIPELINE.md §11.3."
+            "\nNo signals in the database — nothing to build.\n"
+            "The machine learning part is waiting on data collected from real "
+            "users; see docs/ML_PIPELINE.md section 11.3."
         )
         return 0
 
-    nguoi = sorted({m.user_id for m in tat_ca})
-    fold_theo_nguoi = chia_theo_nguoi(nguoi, so_fold, seed)
-    print(f"\n{len(nguoi)} người dùng, chia {so_fold} fold theo người:")
-    for f in range(so_fold):
-        cua_f = [u for u in nguoi if fold_theo_nguoi[u] == f]
-        so_mau = sum(1 for m in tat_ca if fold_theo_nguoi[m.user_id] == f)
+    users = sorted({s.user_id for s in everything})
+    fold_by_user = assign_folds(users, n_folds, seed)
+    print(f"\n{len(users)} users, split into {n_folds} folds by person:")
+    for fold in range(n_folds):
+        in_fold = [u for u in users if fold_by_user[u] == fold]
+        n_samples = sum(1 for s in everything if fold_by_user[s.user_id] == fold)
         print(
-            f"  fold {f} [{nhan_split(f, so_fold):5}] "
-            f"{len(cua_f):3} người, {so_mau:6} mẫu"
+            f"  fold {fold} [{split_label(fold, n_folds):5}] "
+            f"{len(in_fold):3} users, {n_samples:6} samples"
         )
 
-    anh_chup = gan_anh_chup(tat_ca, vuot, kg, mon_theo_id)
-    co_vector = sum(1 for v in anh_chup.values() if any(v["weights"]))
+    snapshots = build_snapshots(everything, swipes, space, foods_by_id)
+    with_vector = sum(1 for v in snapshots.values() if any(v["weights"]))
     print(
-        f"\nẢnh chụp hồ sơ: {len(anh_chup)} mẫu, "
-        f"{co_vector} mẫu có vector khác rỗng "
-        f"({len(anh_chup) - co_vector} mẫu không có lượt vuốt nào trước đó)"
+        f"\nProfile snapshots: {len(snapshots)} samples, "
+        f"{with_vector} with a non-empty vector "
+        f"({len(snapshots) - with_vector} with no preceding swipe)"
     )
 
-    if not ap_dung:
+    if not apply:
         print(
-            f"\nChạy thử — chưa ghi gì. Thêm --apply để ghi "
-            f"{len(tat_ca)} dòng vào ml_training_samples."
+            f"\nDry run — nothing written. Add --apply to write "
+            f"{len(everything)} rows to ml_training_samples."
         )
         return 0
 
-    n = ghi(cn, version, tat_ca, fold_theo_nguoi, so_fold, anh_chup)
-    print(f"\nĐã ghi {n} dòng vào ml_training_samples, phiên bản {version!r}.")
+    n = write_samples(cn, version, everything, fold_by_user, n_folds, snapshots)
+    print(f"\nWrote {n} rows to ml_training_samples, version {version!r}.")
     return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    in_utf8()
-    bo = argparse.ArgumentParser(description=__doc__)
-    bo.add_argument("--version", required=True, help="giá trị cho dataset_version")
-    bo.add_argument("--db", default=None, help="tên CSDL khác, dùng khi chạy thử")
-    bo.add_argument(
-        "--random-neg", type=int, default=None,
-        help="SỐ CỐ ĐỊNH mẫu âm mỗi người; để trống thì lấy theo tỉ lệ",
+    use_utf8()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--version", required=True, help="the value for dataset_version"
     )
-    bo.add_argument(
-        "--random-neg-ty-le", type=float, default=0.5, dest="ty_le_am",
-        help="số mẫu âm = tỉ lệ này × số tín hiệu của người đó (mặc định 0,5)",
+    parser.add_argument(
+        "--db", default=None, help="another database name, for trial runs"
     )
-    bo.add_argument("--folds", type=int, default=5, help="số fold (mặc định 5)")
-    bo.add_argument("--seed", type=int, default=42, help="hạt giống (mặc định 42)")
-    bo.add_argument(
-        "--apply", action="store_true", help="ghi vào CSDL, mặc định chỉ chạy thử"
+    parser.add_argument(
+        "--random-neg",
+        type=int,
+        default=None,
+        help="a FIXED number of negatives per user; omit to use the ratio",
     )
-    t = bo.parse_args(argv)
+    parser.add_argument(
+        "--random-neg-ratio",
+        type=float,
+        default=0.5,
+        dest="negative_ratio",
+        help="negatives = this ratio x that person's signal count (default 0.5)",
+    )
+    parser.add_argument("--folds", type=int, default=5, help="fold count (default 5)")
+    parser.add_argument("--seed", type=int, default=42, help="seed (default 42)")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="write to the database; dry run by default",
+    )
+    t = parser.parse_args(argv)
 
     if len(t.version) > 20:
-        print("dataset_version tối đa 20 ký tự.", file=sys.stderr)
+        print("dataset_version is limited to 20 characters.", file=sys.stderr)
         return 1
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
-        return dung_tap(
+        return build(
             cn,
             version=t.version,
-            so_am_moi_nguoi=t.random_neg,
-            ty_le_am=t.ty_le_am,
-            so_fold=t.folds,
+            fixed_negatives=t.random_neg,
+            negative_ratio=t.negative_ratio,
+            n_folds=t.folds,
             seed=t.seed,
-            ap_dung=t.apply,
+            apply=t.apply,
         )
     finally:
         cn.close()

@@ -1,43 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Phục vụ mô hình — chấm điểm ứng viên cho một người dùng thật.
+"""Model serving — scoring candidates for a real user.
 
-Đây là việc số 6 của `ML_PIPELINE.md` §12, và là chỗ **bốn giai đoạn gặp
-nhau**. Giai đoạn được chọn theo số tín hiệu người dùng đã cho, không phải
-theo mô hình nào đang có:
+This is task 6 of `ML_PIPELINE.md` section 12, and the place where **the four
+stages meet**. The stage is chosen by how many signals the user has given,
+not by which model happens to exist:
 
-| `n_signals` | Giai đoạn | Chấm điểm bằng | `generation_source` |
+| `n_signals` | Stage | Scored by | `generation_source` |
 |---|---|---|---|
-| 0 | `cold` | độ phổ biến + độ khớp macro | `rule_based` |
-| 1–29 | `content` | `(1 + cos(p_u, vᵢ)) / 2` | `content_based` |
-| 30–100 | `hybrid` | `α·ML + (1−α)·cosin` | `hybrid` |
-| > 100 | `ml` | mô hình toàn cục | `ml` |
+| 0 | `cold` | popularity + macro fit | `rule_based` |
+| 1-29 | `content` | `(1 + cos(p_u, v_i)) / 2` | `content_based` |
+| 30-100 | `hybrid` | `alpha*ML + (1-alpha)*cosine` | `hybrid` |
+| > 100 | `ml` | the global model | `ml` |
 
-**Bộ lọc F1 chạy trước, luôn luôn.** Nó là tầng an toàn, không phải một bước
-tối ưu: một món vi phạm ràng buộc cứng phải bị loại kể cả khi mô hình cho nó
-điểm cao nhất. Nên nó nằm ngoài và nằm trước mọi phép chấm điểm, không phải
-một hệ số trừ điểm.
+**The F1 filter runs first, always.** It is the safety layer, not an
+optimisation step: a food violating a hard constraint must be removed even if
+the model scores it highest. So it sits outside and before all scoring, not
+as a score penalty.
 
-**Hạ cấp có công bố.** Nếu giai đoạn đòi mô hình mà không có mô hình nào
-`is_active = 1`, hoặc mô hình đang hoạt động thuộc một phiên bản đặc trưng
-khác, thì hệ thống lùi về giai đoạn thấp hơn và **nói ra**. Âm thầm trả về
-điểm trung tính thì thực đơn vẫn sinh ra được, trông vẫn bình thường, và
-không ai biết phần học máy đã ngừng hoạt động từ bao giờ.
+**Degradation is announced.** If the stage calls for a model and none is
+`is_active = 1`, or the active model belongs to a different feature version,
+the system falls back to a lower stage and **says so**. Silently returning
+the neutral score would still produce a plan that looks normal, and nobody
+would know when the machine learning part stopped working.
 
-**Ba phép kiểm trước khi dùng một mô hình**, vì cả ba đều thất bại trong im
-lặng nếu không kiểm:
+**Three checks before a model is used**, because all three fail silently if
+unchecked:
 
-1.  `feature_version` của mô hình phải bằng của mã hiện tại — khác là mô hình
-    được nạp với một vector khác hẳn.
-2.  `ten_dac_trung` lưu trong tệp mô hình phải trùng danh sách dựng từ không
-    gian hiện tại — món mới làm phát sinh nhóm mới thì vector dài ra, và
-    `StandardScaler` sẽ nhận sai số cột.
-3.  Vector sở thích trong `user_preference_profiles` phải đủ số chiều — hồ sơ
-    cũ từ trước khi thêm chiều sẽ ngắn hơn.
+1.  The model's `feature_version` must equal the code's — a mismatch means
+    the model is loaded against an entirely different vector.
+2.  The `feature_names` stored in the model file must match the list built
+    from the current space — new foods can create a new category, which
+    lengthens the vector, and `StandardScaler` would then receive the wrong
+    number of columns.
+3.  The preference vector in `user_preference_profiles` must have the right
+    length — a profile from before a dimension was added is shorter.
 
-Chạy:
-    python -m ml.serve --user <id>            # gợi ý 20 món hàng đầu
-    python -m ml.serve --user <id> --giai-thich
+Run:
+    python -m ml.serve --user <id>            # the top 20 recommendations
+    python -m ml.serve --user <id> --explain
 """
 
 from __future__ import annotations
@@ -53,16 +54,22 @@ import joblib
 import numpy as np
 
 from . import scoring
-from .dataset import HoSoNguoi, dung_hang_dac_trung, nap_ho_so_nguoi, ten_dac_trung
-from .db import in_utf8, ket_noi
-from .f1_filter import loc_f1
-from .features import FEATURE_VERSION, KhongGianDacTrung, Mon, nap_mon
-from .rocchio import HoSoSoThich, alpha, dung_ho_so, giai_doan, ho_so_rong
+from .dataset import UserProfile, build_feature_row, feature_names, load_user_profiles
+from .db import connect, use_utf8
+from .f1_filter import allowed_foods
+from .features import FEATURE_VERSION, FeatureSpace, Food, load_foods
+from .rocchio import (
+    PreferenceProfile,
+    alpha,
+    build_profile,
+    empty_profile,
+    stage as stage_for,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
-#: `meal_plans.generation_source` tương ứng với từng giai đoạn.
-NGUON_THEO_GIAI_DOAN = {
+#: The `meal_plans.generation_source` matching each stage.
+SOURCE_BY_STAGE = {
     "cold": "rule_based",
     "content": "content_based",
     "hybrid": "hybrid",
@@ -70,101 +77,102 @@ NGUON_THEO_GIAI_DOAN = {
 }
 
 
-# ── Mô hình đang phục vụ ──────────────────────────────────────────────
+# ── The model currently serving ───────────────────────────────────────
 
 
 @dataclass
-class MoHinhDangPhucVu:
+class ServingModel:
     model_id: int
     version: str
     algorithm: str
     scaler: Any
     model: Any
-    ten_dac_trung: list[str]
+    feature_names: list[str]
 
-    def cham_diem(self, hang: Sequence[Sequence[float]]) -> np.ndarray:
-        """Xác suất thuộc lớp "thích" — điểm ưa thích trong [0, 1].
+    def score(self, rows: Sequence[Sequence[float]]) -> np.ndarray:
+        """The probability of the "liked" class — a preference score in [0, 1].
 
-        Dùng `predict_proba` chứ không `predict`: `predict` trả 0 hoặc 1 nên
-        mọi món "thích" sẽ hòa điểm và Bước 4 không còn gì để xếp hạng.
+        `predict_proba`, not `predict`: `predict` returns 0 or 1, so every
+        "liked" food would tie and Step 4 would have nothing left to rank by.
         """
-        X = self.scaler.transform(np.asarray(hang, dtype=float))
+        X = self.scaler.transform(np.asarray(rows, dtype=float))
         return self.model.predict_proba(X)[:, 1]
 
 
-def nap_mo_hinh_hoat_dong(
-    cn, kg: KhongGianDacTrung
-) -> tuple[MoHinhDangPhucVu | None, str | None]:
-    """Nạp mô hình `is_active = 1`. Trả về `(mô hình, lý do không nạp được)`.
+def load_active_model(
+    cn, space: FeatureSpace
+) -> tuple[ServingModel | None, str | None]:
+    """Load the `is_active = 1` model. Returns `(model, why not)`.
 
-    Trả về lý do thành chuỗi thay vì ném ngoại lệ, vì không có mô hình **là
-    một trạng thái hợp lệ** của hệ thống: Giai đoạn 0 và 1 chạy không cần mô
-    hình nào. Ném ngoại lệ ở đây sẽ làm sập cả đường sinh thực đơn của những
-    người dùng vốn không cần tới mô hình.
+    Returns the reason as a string rather than raising, because having no
+    model **is a valid state** of the system: Stages 0 and 1 run without one.
+    Raising here would take down the meal-plan path for users who never
+    needed a model in the first place.
     """
     with cn.cursor() as cur:
         cur.execute(
             "SELECT id, version, algorithm, feature_version, artifact_path "
             "FROM ml_models WHERE is_active = 1"
         )
-        ds = cur.fetchall()
+        rows = cur.fetchall()
 
-    if not ds:
-        return None, "không có mô hình nào is_active = 1"
-    if len(ds) > 1:
-        # `is_active` không có ràng buộc duy nhất ở mức lược đồ, nên tình
-        # huống này có thể xảy ra nếu ai đó cập nhật bằng tay. Từ chối chọn
-        # bừa: chọn bừa là một quyết định không tái lập được.
-        ten = ", ".join(d["version"] for d in ds)
-        return None, f"có {len(ds)} mô hình cùng is_active = 1 ({ten})"
+    if not rows:
+        return None, "no model has is_active = 1"
+    if len(rows) > 1:
+        # `is_active` has no uniqueness constraint at the schema level, so
+        # this can happen if someone updates it by hand. Refuse to pick
+        # arbitrarily: an arbitrary choice is not reproducible.
+        names = ", ".join(d["version"] for d in rows)
+        return None, f"{len(rows)} models share is_active = 1 ({names})"
 
-    d = ds[0]
+    d = rows[0]
     if d["feature_version"] != FEATURE_VERSION:
         return None, (
-            f"mô hình {d['version']!r} thuộc phiên bản đặc trưng "
-            f"{d['feature_version']!r}, mã hiện tại là {FEATURE_VERSION!r}"
+            f"model {d['version']!r} belongs to feature version "
+            f"{d['feature_version']!r}, the code is at {FEATURE_VERSION!r}"
         )
 
-    tep = ROOT / d["artifact_path"]
-    if not tep.exists():
-        return None, f"thiếu tệp mô hình {d['artifact_path']}"
+    path = ROOT / d["artifact_path"]
+    if not path.exists():
+        return None, f"model file {d['artifact_path']} is missing"
 
-    goi = joblib.load(tep)
-    ten_hien_tai = ten_dac_trung(kg)
-    if list(goi.get("ten_dac_trung", [])) != ten_hien_tai:
+    payload = joblib.load(path)
+    current_names = feature_names(space)
+    if list(payload.get("feature_names", [])) != current_names:
         return None, (
-            f"mô hình {d['version']!r} được huấn luyện trên "
-            f"{len(goi.get('ten_dac_trung', []))} đặc trưng, không gian hiện "
-            f"tại có {len(ten_hien_tai)} — danh mục món đã đổi, phải huấn "
-            f"luyện lại"
+            f"model {d['version']!r} was trained on "
+            f"{len(payload.get('feature_names', []))} features, the current "
+            f"space has {len(current_names)} — the food catalogue changed, "
+            f"it must be retrained"
         )
 
     return (
-        MoHinhDangPhucVu(
+        ServingModel(
             model_id=int(d["id"]),
             version=d["version"],
             algorithm=d["algorithm"],
-            scaler=goi["scaler"],
-            model=goi["model"],
-            ten_dac_trung=ten_hien_tai,
+            scaler=payload["scaler"],
+            model=payload["model"],
+            feature_names=current_names,
         ),
         None,
     )
 
 
-# ── Hồ sơ sở thích hiện tại ───────────────────────────────────────────
+# ── The current preference profile ────────────────────────────────────
 
 
-def nap_ho_so_so_thich(
-    cn, user_id: str, kg: KhongGianDacTrung
-) -> tuple[HoSoSoThich, str | None]:
-    """Đọc `user_preference_profiles`. Trả về `(hồ sơ, cảnh báo)`.
+def load_preference_profile(
+    cn, user_id: str, space: FeatureSpace
+) -> tuple[PreferenceProfile, str | None]:
+    """Read `user_preference_profiles`. Returns `(profile, warning)`.
 
-    Ở đây dùng vector **hiện tại**, không dùng ảnh chụp — và điều đó đúng.
-    Ảnh chụp chỉ cần khi *dựng tập huấn luyện*, nơi dùng vector hiện tại sẽ
-    là rò rỉ dữ liệu vì nó đã bị cập nhật bởi chính tín hiệu đang làm nhãn.
-    Lúc suy luận thì không có nhãn nào để rò rỉ: vector hiện tại chính là tất
-    cả những gì hệ thống biết về người này.
+    This uses the **current** vector, not a snapshot — and that is correct.
+    A snapshot is only needed when *building the training set*, where using
+    the current vector would be leakage because it has already been updated
+    by the very signal serving as the label. At inference there is no label
+    to leak into: the current vector is everything the system knows about
+    this person.
     """
     with cn.cursor() as cur:
         cur.execute(
@@ -175,26 +183,27 @@ def nap_ho_so_so_thich(
         d = cur.fetchone()
 
     if d is None:
-        return ho_so_rong(kg), None
+        return empty_profile(space), None
 
     if d["feature_version"] != FEATURE_VERSION:
-        return ho_so_rong(kg), (
-            f"hồ sơ sở thích thuộc phiên bản đặc trưng "
-            f"{d['feature_version']!r}, bỏ qua và lùi về Giai đoạn 0"
+        return empty_profile(space), (
+            f"the preference profile belongs to feature version "
+            f"{d['feature_version']!r}; ignoring it and falling back to Stage 0"
         )
 
-    w = json.loads(d["weights"])
-    if isinstance(w, dict):
-        w = w.get("weights", [])
-    if len(w) != kg.length:
-        return ho_so_rong(kg), (
-            f"hồ sơ sở thích có {len(w)} chiều nhưng không gian hiện tại có "
-            f"{kg.length}, bỏ qua và lùi về Giai đoạn 0"
+    weights = json.loads(d["weights"])
+    if isinstance(weights, dict):
+        weights = weights.get("weights", [])
+    if len(weights) != space.length:
+        return empty_profile(space), (
+            f"the preference profile has {len(weights)} dimensions but the "
+            f"current space has {space.length}; ignoring it and falling back "
+            f"to Stage 0"
         )
 
     return (
-        HoSoSoThich(
-            weights=tuple(float(x) for x in w),
+        PreferenceProfile(
+            weights=tuple(float(x) for x in weights),
             sum_abs_weight=float(d["sum_abs_weight"]),
             n_signals=int(d["n_signals"]),
         ),
@@ -202,22 +211,22 @@ def nap_ho_so_so_thich(
     )
 
 
-# ── Gợi ý ─────────────────────────────────────────────────────────────
+# ── Recommending ──────────────────────────────────────────────────────
 
 
 @dataclass
-class UngVien:
-    mon: Mon
-    diem: float
-    #: Điểm của từng thành phần, giữ lại để giải thích được vì sao món này
-    #: được gợi ý. Không dùng khi xếp hạng.
-    diem_noi_dung: float
-    diem_luat: float
-    diem_ml: float | None
+class Candidate:
+    food: Food
+    score: float
+    #: Each component's score, kept so the recommendation can be explained.
+    #: Not used for ranking.
+    content_score: float
+    rule_score: float
+    ml_score: float | None
 
 
 @dataclass
-class KetQuaGoiY:
+class Recommendation:
     user_id: str
     stage: str
     generation_source: str
@@ -225,171 +234,179 @@ class KetQuaGoiY:
     alpha: float
     model_id: int | None
     model_version: str | None
-    so_mon_truoc_f1: int
-    so_mon_sau_f1: int
-    ung_vien: list[UngVien]
-    #: Những gì đã phải hạ cấp hoặc bỏ qua. Rỗng là tốt.
-    canh_bao: list[str] = field(default_factory=list)
+    n_foods_before_f1: int
+    n_foods_after_f1: int
+    candidates: list[Candidate]
+    #: Everything that had to be degraded or skipped. Empty is good.
+    warnings: list[str] = field(default_factory=list)
 
 
-def goi_y(
+def recommend(
     cn,
     user_id: str,
     *,
-    gioi_han: int = 20,
-    mon_da_dung: Sequence[str] = (),
-    chi_ung_vien: Sequence[str] | None = None,
-) -> KetQuaGoiY:
-    """Chấm điểm và xếp hạng ứng viên cho một người dùng.
+    limit: int = 20,
+    exclude_foods: Sequence[str] = (),
+    only_candidates: Sequence[str] | None = None,
+) -> Recommendation:
+    """Score and rank candidates for one user.
 
-    `mon_da_dung` là những món đã dùng trong ngày — Bước 4 truyền vào để
-    không lặp món trong cùng một thực đơn. Loại ở đây thay vì để Bước 4 tự
-    bỏ, để `gioi_han` trả về đúng số món còn dùng được.
+    `exclude_foods` are the foods already used today — Step 4 passes them in
+    so a plan does not repeat a dish. Excluded here rather than left for
+    Step 4 to drop, so that `limit` returns exactly that many usable foods.
 
-    `chi_ung_vien` giới hạn phép chấm điểm vào đúng danh sách món đó, dùng
-    cho `POST /predict`: Backend đã có tập ứng viên của riêng nó và chỉ cần
-    điểm. **Bộ lọc F1 vẫn chạy trước** và vẫn cắt tiếp danh sách ấy — món
-    Backend gửi lên mà người này không được ăn thì không có điểm nào, chứ
-    không phải điểm thấp. Để F1 chạy sau hoặc bỏ F1 khi đã có danh sách là
-    biến tầng an toàn thành một ưu tiên xếp hạng, đúng điều §4 của
-    `ML_PIPELINE.md` cấm.
+    `only_candidates` restricts scoring to that list, for `POST /predict`:
+    the backend already has its own candidate set and only needs scores. **The
+    F1 filter still runs first** and still trims that list — a food the
+    backend sent that this person must not eat receives no score at all,
+    rather than a low one. Running F1 afterwards, or skipping it once a list
+    is supplied, would turn the safety layer into a ranking preference, which
+    is exactly what section 4 of `ML_PIPELINE.md` forbids.
     """
-    mon, _ = nap_mon(cn)
-    kg = KhongGianDacTrung.tu_mon(mon)
-    mon_theo_id = {m.id: m for m in mon}
+    foods, _ = load_foods(cn)
+    space = FeatureSpace.from_foods(foods)
+    foods_by_id = {f.id: f for f in foods}
 
-    canh_bao: list[str] = []
+    warnings: list[str] = []
 
-    # ── Bước F1: tầng an toàn, chạy trước mọi phép chấm điểm ──
-    an_toan = loc_f1(cn, user_id=user_id)
-    loai = set(mon_da_dung)
-    giu = None if chi_ung_vien is None else set(chi_ung_vien)
-    ds_ung_vien = [
-        mon_theo_id[d["id"]]
-        for d in an_toan
-        if d["id"] in mon_theo_id
-        and d["id"] not in loai
-        and (giu is None or d["id"] in giu)
+    # ── Step F1: the safety layer, before any scoring ──
+    safe = allowed_foods(cn, user_id=user_id)
+    excluded = set(exclude_foods)
+    keep = None if only_candidates is None else set(only_candidates)
+    candidate_foods = [
+        foods_by_id[d["id"]]
+        for d in safe
+        if d["id"] in foods_by_id
+        and d["id"] not in excluded
+        and (keep is None or d["id"] in keep)
     ]
 
-    # ── Hồ sơ và giai đoạn ──
-    ho_so, cb = nap_ho_so_so_thich(cn, user_id, kg)
-    if cb:
-        canh_bao.append(cb)
+    # ── Profile and stage ──
+    profile, warning = load_preference_profile(cn, user_id, space)
+    if warning:
+        warnings.append(warning)
 
-    n = ho_so.n_signals
-    gd = giai_doan(n)
+    n = profile.n_signals
+    stage = stage_for(n)
     a = alpha(n)
 
-    mo_hinh: MoHinhDangPhucVu | None = None
-    if gd in ("hybrid", "ml"):
-        mo_hinh, ly_do = nap_mo_hinh_hoat_dong(cn, kg)
-        if mo_hinh is None:
-            canh_bao.append(
-                f"Giai đoạn {gd} cần mô hình nhưng {ly_do} — hạ về Giai đoạn 1 "
-                f"(content_based)."
+    model: ServingModel | None = None
+    if stage in ("hybrid", "ml"):
+        model, reason = load_active_model(cn, space)
+        if model is None:
+            warnings.append(
+                f"Stage {stage} needs a model but {reason} — falling back to "
+                f"Stage 1 (content_based)."
             )
-            gd = "content"
+            stage = "content"
             a = 0.0
 
-    ho_so_suc_khoe = nap_ho_so_nguoi(cn).get(user_id)
-    if ho_so_suc_khoe is None:
-        ho_so_suc_khoe = HoSoNguoi(mac_dinh=True)
-        canh_bao.append(
-            "Người dùng chưa có health_profiles — khối đặc trưng người dùng "
-            "và độ khớp macro đang dùng giá trị mặc định."
+    health = load_user_profiles(cn).get(user_id)
+    if health is None:
+        health = UserProfile(is_default=True)
+        warnings.append(
+            "The user has no health_profiles row — the user feature block "
+            "and the macro fit are running on defaults."
         )
 
-    # ── Chấm điểm ──
+    # ── Scoring ──
     with cn.cursor() as cur:
         cur.execute(
             "SELECT id, popularity_score FROM foods WHERE owner_id IS NULL "
             "OR owner_id = %s",
             (user_id,),
         )
-        pho_bien = {d["id"]: float(d["popularity_score"]) for d in cur.fetchall()}
+        popularity = {d["id"]: float(d["popularity_score"]) for d in cur.fetchall()}
 
-    diem_ml_tat_ca: np.ndarray | None = None
-    if mo_hinh is not None and ds_ung_vien:
-        ten = ten_dac_trung(kg)
-        hang = [
-            dung_hang_dac_trung(
-                ho_so_suc_khoe,
-                ho_so.weights,
-                kg.encode(m),
-                pho_bien.get(m.id, 0.0),
-                so_chieu_mong_doi=len(ten),
+    ml_scores: np.ndarray | None = None
+    if model is not None and candidate_foods:
+        names = feature_names(space)
+        rows = [
+            build_feature_row(
+                health,
+                profile.weights,
+                space.encode(food),
+                popularity.get(food.id, 0.0),
+                expected_length=len(names),
             )
-            for m in ds_ung_vien
+            for food in candidate_foods
         ]
-        diem_ml_tat_ca = mo_hinh.cham_diem(hang)
+        ml_scores = model.score(rows)
 
-    ung_vien: list[UngVien] = []
-    for i, m in enumerate(ds_ung_vien):
-        v = kg.encode(m)
-        d_luat = scoring.diem_luat(v, ho_so_suc_khoe.muc_tieu_macro,
-                                   pho_bien.get(m.id, 0.0))
-        d_nd = scoring.diem_noi_dung(ho_so.weights, v)
-        d_ml = float(diem_ml_tat_ca[i]) if diem_ml_tat_ca is not None else None
+    candidates: list[Candidate] = []
+    for i, food in enumerate(candidate_foods):
+        vector = space.encode(food)
+        rule = scoring.rule_score(
+            vector, health.target_macro, popularity.get(food.id, 0.0)
+        )
+        content = scoring.content_score(profile.weights, vector)
+        ml = float(ml_scores[i]) if ml_scores is not None else None
 
-        if gd == "cold":
-            diem = d_luat
-        elif gd == "content":
-            diem = d_nd
-        elif gd == "hybrid":
-            diem = scoring.tron(d_ml or scoring.DIEM_TRUNG_TINH, d_nd, n)
+        if stage == "cold":
+            total = rule
+        elif stage == "content":
+            total = content
+        elif stage == "hybrid":
+            total = scoring.blend(ml or scoring.NEUTRAL_SCORE, content, n)
         else:
-            diem = d_ml if d_ml is not None else d_nd
+            total = ml if ml is not None else content
 
-        ung_vien.append(UngVien(m, diem, d_nd, d_luat, d_ml))
+        candidates.append(Candidate(food, total, content, rule, ml))
 
-    # Hòa điểm phá theo tên món để kết quả tái lập được — ở Giai đoạn 0 với
-    # `popularity_score` toàn 0 thì hòa điểm xảy ra rất nhiều.
-    ung_vien.sort(key=lambda u: (-u.diem, u.mon.name, u.mon.id))
+    # Ties break on food name so the result is reproducible — at Stage 0,
+    # with `popularity_score` all zero, ties are extremely common.
+    candidates.sort(key=lambda c: (-c.score, c.food.name, c.food.id))
 
-    return KetQuaGoiY(
+    return Recommendation(
         user_id=user_id,
-        stage=gd,
-        generation_source=NGUON_THEO_GIAI_DOAN[gd],
+        stage=stage,
+        generation_source=SOURCE_BY_STAGE[stage],
         n_signals=n,
         alpha=a,
-        model_id=mo_hinh.model_id if mo_hinh else None,
-        model_version=mo_hinh.version if mo_hinh else None,
-        so_mon_truoc_f1=len(mon),
-        so_mon_sau_f1=len(ds_ung_vien),
-        ung_vien=ung_vien[:gioi_han],
-        canh_bao=canh_bao,
+        model_id=model.model_id if model else None,
+        model_version=model.version if model else None,
+        n_foods_before_f1=len(foods),
+        n_foods_after_f1=len(candidate_foods),
+        candidates=candidates[:limit],
+        warnings=warnings,
     )
 
 
-# ── Giải thích bằng câu, không bằng số ────────────────────────────────
+# ── Explaining in sentences, not numbers ──────────────────────────────
 #
-# `giai_thich` trả về `"Tỷ lệ đạm (+0.182), Nhóm: Món canh (+0.061)"`. Nhãn
-# chiều thì đã là tiếng Việt đọc được, nhưng `+0.182` vô nghĩa với người
-# dùng: nó là một số hạng trong tử số của phép cosin, không phải phần trăm,
-# không có đơn vị, và độ lớn của nó phụ thuộc cả vào hồ sơ lẫn vào món.
+# `debug_explanation` returns `"Tỷ lệ đạm (+0.182), Nhóm: Món canh (+0.061)"`.
+# The dimension labels are already readable Vietnamese, but `+0.182` means
+# nothing to a user: it is one term in the numerator of a cosine, not a
+# percentage, with no unit, and its magnitude depends on both the profile and
+# the food.
 #
-# **Thứ tự mới là thông tin.** Nên phần dưới giữ thứ tự và tỷ lệ TƯƠNG ĐỐI
-# so với đóng góp lớn nhất, rồi bỏ giá trị tuyệt đối khỏi phần hiện ra.
+# **The order is the information.** So the code below keeps the order and the
+# RELATIVE share against the largest contribution, and drops the absolute
+# value from what is displayed.
 #
-# ## Vì sao chỉ nêu chiều dương, và vì sao câu luôn là "nhiều X"
+# ## Why only positive dimensions, and why the sentence is always "more X"
 #
-# Mọi chiều của vector món nằm trong [0, 1] — `food_vector_parity_test.dart`
-# khẳng định điều đó, và `KhongGianDacTrung._chuan_hoa` kẹp lại. Nên
-# `v[i] ≥ 0` luôn, và dấu của `p_u[i]·v[i]` chính là dấu của `p_u[i]`.
+# Every dimension of a food vector lies in [0, 1] —
+# `food_vector_parity_test.dart` asserts it and `FeatureSpace._normalize`
+# clamps it. So `v[i] >= 0` always, and the sign of `p_u[i]*v[i]` is the sign
+# of `p_u[i]`.
 #
-# Suy ra: một đóng góp DƯƠNG nghĩa là `p_u[i] > 0`, tức là món người này
-# thích có giá trị cao ở chiều đó. Câu vì vậy luôn theo chiều "nhiều X",
-# không bao giờ là "ít X" — "bạn nghiêng về món ít ngọt" ứng với `p_u` ÂM,
-# và đóng góp khi ấy là số âm nên đã bị loại khỏi danh sách này.
+# It follows that a POSITIVE contribution means `p_u[i] > 0`, that is, the
+# foods this person likes score high on that dimension. The sentence is
+# therefore always in the "more X" direction, never "less X" — "you lean
+# toward less sweet food" corresponds to a NEGATIVE `p_u`, and such a
+# contribution is negative and has already been filtered out of this list.
 
-#: Nhãn chiều → mệnh đề mô tả món, để dựng câu "Bạn thường chọn món …".
+#: Dimension label -> a phrase describing the food, to build the sentence
+#: "Bạn thường chọn món ...". **Vietnamese on purpose**: this is end-user
+#: product text, shown in a Vietnamese app.
 #:
-#: Thiếu một nhãn ở đây KHÔNG làm hàm nổ — giao diện vẫn chạy, chỉ là chiều
-#: đó không có câu. Nhưng `thieu_menh_de` báo ra và `tools/check_ml.py` gọi
-#: nó, nên một chiều mới thêm vào mà quên đặt câu thì phép kiểm sai ngay chứ
-#: không âm thầm hiện nhãn kỹ thuật cho người dùng.
-MENH_DE_THEO_CHIEU: dict[str, str] = {
+#: A missing label here does NOT raise — the interface still runs, that
+#: dimension simply has no sentence. But `dimensions_without_phrase` reports
+#: it and `tools/check_ml.py` calls that, so a newly added dimension with no
+#: phrase fails a check instead of silently showing a technical label to a
+#: user.
+PHRASE_BY_DIMENSION: dict[str, str] = {
     "Tỷ lệ đạm": "nhiều đạm",
     "Tỷ lệ bột đường": "nhiều bột đường",
     "Tỷ lệ béo": "nhiều chất béo",
@@ -400,222 +417,166 @@ MENH_DE_THEO_CHIEU: dict[str, str] = {
     "Mức cay": "có vị cay",
 }
 
-#: Tiền tố mà `KhongGianDacTrung.labels` gắn cho chiều one-hot nhóm món.
-TIEN_TO_NHOM = "Nhóm: "
+#: The prefix `FeatureSpace.labels` puts on the category one-hot dimensions.
+CATEGORY_PREFIX = "Nhóm: "
 
 
 @dataclass(frozen=True)
-class DongGop:
-    """Một chiều góp vào điểm khớp khẩu vị của một món."""
+class Contribution:
+    """One dimension's contribution to a food's taste-match score."""
 
-    #: Nhãn kỹ thuật của chiều, giữ lại để gỡ lỗi — KHÔNG hiện cho người dùng.
-    chieu: str
-    #: `p_u[i] · vᵢ[i]`. Giữ lại để kiểm và gỡ lỗi, không hiện ra.
-    gia_tri: float
-    #: So với đóng góp lớn nhất **của chính món này**, trong (0, 1].
+    #: The dimension's technical label, kept for debugging — NOT shown to
+    #: users.
+    dimension: str
+    #: `p_u[i] * v_i[i]`. Kept for testing and debugging, not displayed.
+    value: float
+    #: Relative to the largest contribution **of this same food**, in (0, 1].
     #:
-    #: Đây là thứ vẽ thành thanh so sánh, nhưng nó chỉ nói thứ tự BÊN TRONG
-    #: một món, KHÔNG nói món đó khớp khẩu vị mạnh đến đâu. Chuối tiêu — món
-    #: người dùng đã vuốt `dislike` — cho ba tỷ lệ 100% / 91% / 88% trong khi
-    #: đóng góp tuyệt đối chỉ +0,0093: chuẩn hóa theo đỉnh của chính nó nên
-    #: một món khớp rất yếu vẫn ra ba thanh gần đầy.
+    #: This is what gets drawn as a comparison bar, but it only describes the
+    #: order WITHIN one food; it does NOT say how strongly that food matches
+    #: the taste at all. Banana — a food this user swiped `dislike` — yields
+    #: three shares of 100% / 91% / 88% while the absolute contribution is
+    #: merely +0.0093: normalising against its own peak means a very weak
+    #: match still produces three nearly full bars.
     #:
-    #: Vì vậy giao diện **phải** hiện điểm khớp tổng (`scoring.diem_noi_dung`)
-    #: bên cạnh. Vẽ riêng mấy thanh này là nói với người dùng rằng mọi món
-    #: đều khớp mạnh như nhau.
-    ty_le: float
-    #: Câu cho người dùng. `None` khi chiều này chưa có mệnh đề — giao diện
-    #: bỏ qua dòng đó thay vì hiện nhãn kỹ thuật.
-    cau: str | None
+    #: The interface therefore **must** show the overall match score
+    #: (`scoring.content_score`) beside them. Drawing these bars alone tells
+    #: the user that every food matches equally strongly.
+    share: float
+    #: The sentence for the user. `None` when the dimension has no phrase —
+    #: the interface skips that line rather than showing a technical label.
+    sentence: str | None
 
 
-def _cau_cho_chieu(nhan: str) -> str | None:
-    if nhan.startswith(TIEN_TO_NHOM):
-        return f"Bạn thích nhóm {nhan[len(TIEN_TO_NHOM):]}"
-    menh_de = MENH_DE_THEO_CHIEU.get(nhan)
-    return None if menh_de is None else f"Bạn thường chọn món {menh_de}"
+def _sentence_for(label: str) -> str | None:
+    if label.startswith(CATEGORY_PREFIX):
+        return f"Bạn thích nhóm {label[len(CATEGORY_PREFIX):]}"
+    phrase = PHRASE_BY_DIMENSION.get(label)
+    return None if phrase is None else f"Bạn thường chọn món {phrase}"
 
 
-def thieu_menh_de(kg: KhongGianDacTrung) -> list[str]:
-    """Các chiều chưa có câu cho người dùng.
+def dimensions_without_phrase(space: FeatureSpace) -> list[str]:
+    """Dimensions that have no user-facing sentence.
 
-    Chiều nhóm món luôn có câu vì nó dựng từ tên nhóm, nên danh sách này
-    chỉ gồm chiều cố định bị quên trong `MENH_DE_THEO_CHIEU`.
+    Category dimensions always have one because it is built from the category
+    name, so this list only contains fixed dimensions forgotten in
+    `PHRASE_BY_DIMENSION`.
     """
-    return [nhan for nhan in kg.labels if _cau_cho_chieu(nhan) is None]
+    return [label for label in space.labels if _sentence_for(label) is None]
 
 
-def dong_gop(
-    kg: KhongGianDacTrung,
-    ho_so: HoSoSoThich,
-    m: Mon,
-    so: int = 3,
-) -> list[DongGop]:
-    """`so` chiều đóng góp nhiều nhất vào điểm khớp khẩu vị của món `m`.
+def contributions(
+    space: FeatureSpace,
+    profile: PreferenceProfile,
+    food: Food,
+    count: int = 3,
+) -> list[Contribution]:
+    """The `count` dimensions contributing most to `food`'s taste match.
 
-    Chỉ nêu chiều **dương**: một chiều âm nghĩa là món bị trừ điểm ở đó, nó
-    không phải lý do món được gợi ý. Hồ sơ rỗng trả về danh sách rỗng —
-    không có cơ sở nào để nói người này thích gì.
+    Only **positive** dimensions: a negative one means the food loses points
+    there, which is not a reason it was recommended. An empty profile returns
+    an empty list — there is no basis for saying what this person likes.
     """
-    if ho_so.is_empty:
+    if profile.is_empty:
         return []
 
-    v = kg.encode(m)
-    gop = sorted(
+    vector = space.encode(food)
+    top = sorted(
         (
-            (p * x, nhan)
-            for p, x, nhan in zip(ho_so.weights, v, kg.labels)
+            (p * x, label)
+            for p, x, label in zip(profile.weights, vector, space.labels)
             if p * x > 0
         ),
         key=lambda t: -t[0],
-    )[:so]
-    if not gop:
+    )[:count]
+    if not top:
         return []
 
-    lon_nhat = gop[0][0]
+    largest = top[0][0]
     return [
-        DongGop(
-            chieu=nhan,
-            gia_tri=g,
-            ty_le=g / lon_nhat,
-            cau=_cau_cho_chieu(nhan),
+        Contribution(
+            dimension=label,
+            value=value,
+            share=value / largest,
+            sentence=_sentence_for(label),
         )
-        for g, nhan in gop
+        for value, label in top
     ]
 
 
-def cau_giai_thich(
-    kg: KhongGianDacTrung,
-    ho_so: HoSoSoThich,
-    m: Mon,
-    so: int = 3,
+def explanation_sentences(
+    space: FeatureSpace,
+    profile: PreferenceProfile,
+    food: Food,
+    count: int = 3,
 ) -> list[str]:
-    """Các câu giải thích, đã bỏ chiều chưa có mệnh đề. Dùng cho giao diện."""
-    return [d.cau for d in dong_gop(kg, ho_so, m, so) if d.cau is not None]
+    """The explanation sentences, with phrase-less dimensions dropped. For
+    the interface."""
+    return [
+        c.sentence
+        for c in contributions(space, profile, food, count)
+        if c.sentence is not None
+    ]
 
 
-def giai_thich(kg: KhongGianDacTrung, ho_so: HoSoSoThich, m: Mon, so: int = 3) -> str:
-    """Dạng **gỡ lỗi** của lời giải thích — nhãn kỹ thuật kèm số thô.
+def debug_explanation(
+    space: FeatureSpace, profile: PreferenceProfile, food: Food, count: int = 3
+) -> str:
+    """The **debugging** form of the explanation — technical labels and raw
+    numbers.
 
-    Dùng cho dòng lệnh và khi soi lỗi, KHÔNG dùng cho giao diện: `+0.182`
-    là một số hạng trong tử số của phép cosin, vô nghĩa với người dùng.
-    Giao diện gọi `cau_giai_thich` hoặc `dong_gop`.
+    For the command line and for troubleshooting, NOT for the interface:
+    `+0.182` is one term in the numerator of a cosine and means nothing to a
+    user. The interface calls `explanation_sentences` or `contributions`.
 
-    Thứ tự và phép lọc chiều dương nằm trong `dong_gop`, hàm này chỉ định
-    dạng lại — nếu không thì hai bên có thể xếp hạng khác nhau.
+    The ordering and the positive-dimension filter live in `contributions`;
+    this function only reformats — otherwise the two could rank differently.
     """
-    if ho_so.is_empty:
-        return "chưa có hồ sơ sở thích"
-    gop = dong_gop(kg, ho_so, m, so)
-    if not gop:
-        return "không chiều nào đóng góp dương"
-    return ", ".join(f"{d.chieu} ({d.gia_tri:+.3f})" for d in gop)
+    if profile.is_empty:
+        return "no preference profile yet"
+    top = contributions(space, profile, food, count)
+    if not top:
+        return "no dimension contributes positively"
+    return ", ".join(f"{c.dimension} ({c.value:+.3f})" for c in top)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    in_utf8()
-    bo = argparse.ArgumentParser(description=__doc__)
-    bo.add_argument("--user", required=True, help="`users.id`")
-    bo.add_argument("--db", default=None)
-    bo.add_argument("--top", type=int, default=20)
-    bo.add_argument(
-        "--giai-thich", action="store_true", help="nêu chiều đóng góp của mỗi món"
-    )
-    t = bo.parse_args(argv)
-
-    cn = ket_noi(t.db)
-    try:
-        with cn.cursor() as cur:
-            cur.execute("SELECT display_name FROM users WHERE id = %s", (t.user,))
-            u = cur.fetchone()
-        if u is None:
-            print(f"Không có người dùng nào có id = {t.user!r}.", file=sys.stderr)
-            return 1
-
-        kq = goi_y(cn, t.user, gioi_han=t.top)
-
-        print(f"Người dùng: {u['display_name']}  ({t.user})")
-        print(
-            f"Giai đoạn {kq.stage} · generation_source = "
-            f"{kq.generation_source} · n_signals = {kq.n_signals} · "
-            f"α = {kq.alpha:.3f}"
-        )
-        print(
-            f"Mô hình: "
-            + (
-                f"{kq.model_version} (id={kq.model_id})"
-                if kq.model_version
-                else "không dùng"
-            )
-        )
-        print(
-            f"Bộ lọc F1: {kq.so_mon_truoc_f1} món → {kq.so_mon_sau_f1} món an toàn"
-        )
-        for c in kq.canh_bao:
-            print(f"  ⚠ {c}")
-        print()
-
-        if not kq.ung_vien:
-            print("Không còn món nào sau bộ lọc F1.")
-            return 0
-
-        kg, _ = None, None
-        if t.giai_thich:
-            mon, _ = nap_mon(cn)
-            kg = KhongGianDacTrung.tu_mon(mon)
-            ho_so, _ = nap_ho_so_so_thich(cn, t.user, kg)
-
-        print(f"{'#':>3}  {'điểm':>6}  {'nội dung':>9}  {'ML':>6}  món")
-        for i, uv in enumerate(kq.ung_vien, start=1):
-            ml = f"{uv.diem_ml:.3f}" if uv.diem_ml is not None else "—"
-            print(
-                f"{i:>3}  {uv.diem:>6.3f}  {uv.diem_noi_dung:>9.3f}  "
-                f"{ml:>6}  {uv.mon.name}  [{uv.mon.category}]"
-            )
-            if t.giai_thich and kg is not None:
-                print(f"       vì: {giai_thich(kg, ho_so, uv.mon)}")
-        return 0
-    finally:
-        cn.close()
+# ── Rebuilding the preference profile from swipe history ──────────────
 
 
-# ── Dựng lại hồ sơ sở thích từ lịch sử vuốt ──────────────────────────
+def rebuild_profile(cn, user_id: str, *, write: bool = True) -> PreferenceProfile:
+    """Recompute `user_preference_profiles` from `interactions`, then store it.
 
+    Serves `POST /profiles/{userId}/rebuild`. Called after onboarding
+    completes, and **required** again whenever the user declares a new
+    condition or changes diet.
 
-def dung_lai_ho_so(cn, user_id: str, *, ghi: bool = True) -> HoSoSoThich:
-    """Tính lại `user_preference_profiles` từ `interactions`, rồi ghi.
+    ## F1 has to run again here, even though it ran at import time
 
-    Phục vụ `POST /profiles/{userId}/rebuild`. Gọi sau khi xong onboarding,
-    và **bắt buộc** gọi lại khi người dùng khai thêm bệnh lý hay đổi chế độ
-    ăn.
+    The swipes in `interactions` were already F1-filtered once —
+    `import_swipes.py` does not write rows that violate a hard constraint.
+    But constraints **change over time**: someone who declares "Ăn thuần
+    chay" six months after the survey still has their `like` swipes on meat
+    dishes sitting in `interactions`, and rebuilding without filtering would
+    keep their vector saying "likes meat" while F1 blocks every meat dish —
+    the system contradicting itself.
 
-    ## Bộ lọc F1 phải chạy lại ở đây, dù lúc nhập đã chạy
+    Measured on the simulated set: filtering with F1 before building the
+    vector moves `cos(p_u, t_u)` from 0.119 to 0.666 across the 21 users with
+    constraints. See `tools/check_mo_phong.py` check 7.
 
-    Lượt vuốt trong `interactions` đã được lọc F1 một lần — `import_swipes.py`
-    không ghi những lượt vi phạm ràng buộc cứng. Nhưng ràng buộc **đổi theo
-    thời gian**: một người khai thêm "Ăn thuần chay" sáu tháng sau phiên
-    khảo sát vẫn còn nguyên những lượt `like` cho món thịt trong
-    `interactions`, và nếu dựng lại mà không lọc thì vector của họ tiếp tục
-    nói "thích thịt" trong khi F1 đã chặn hết món thịt — hệ thống tự mâu
-    thuẫn với chính mình.
+    ## Chronological order
 
-    Đo được trên tập mô phỏng: lọc F1 trước khi dựng vector đưa
-    `cos(p_u, t_u)` từ 0,119 lên 0,666 trên 21 người có ràng buộc. Xem
-    `tools/check_mo_phong.py` phép kiểm 7.
-
-    ## Thứ tự thời gian
-
-    Đọc theo `interacted_at` tăng dần. Rocchio là một phép trung bình có dấu
-    nên thứ tự **không** đổi kết quả, nhưng nó đổi `profile_snapshot` khi
-    dựng tập huấn luyện, và đọc cùng một thứ tự ở cả hai chỗ là cách rẻ nhất
-    để hai chỗ không lệch.
+    Read by ascending `interacted_at`. Rocchio is a signed mean so the order
+    does **not** change the result, but it does change `profile_snapshot`
+    when the training set is built, and reading in the same order in both
+    places is the cheapest way to keep the two from drifting.
     """
-    mon, _ = nap_mon(cn)
-    kg = KhongGianDacTrung.tu_mon(mon)
-    mon_theo_id = {m.id: m for m in mon}
+    foods, _ = load_foods(cn)
+    space = FeatureSpace.from_foods(foods)
+    foods_by_id = {f.id: f for f in foods}
 
-    # Món F1 cho phép, tính theo điều kiện HIỆN TẠI của người dùng.
-    cho_phep = {d["id"] for d in loc_f1(cn, user_id=user_id)}
+    # The foods F1 permits, under the user's CURRENT conditions.
+    permitted = {d["id"] for d in allowed_foods(cn, user_id=user_id)}
 
     with cn.cursor() as cur:
         cur.execute(
@@ -623,15 +584,15 @@ def dung_lai_ho_so(cn, user_id: str, *, ghi: bool = True) -> HoSoSoThich:
             "ORDER BY interacted_at, id",
             (user_id,),
         )
-        luot = [
-            (mon_theo_id[d["food_id"]], d["action"])
+        swipes = [
+            (foods_by_id[d["food_id"]], d["action"])
             for d in cur.fetchall()
-            if d["food_id"] in mon_theo_id and d["food_id"] in cho_phep
+            if d["food_id"] in foods_by_id and d["food_id"] in permitted
         ]
 
-    ho_so = dung_ho_so(kg, luot)
-    if not ghi:
-        return ho_so
+    profile = build_profile(space, swipes)
+    if not write:
+        return profile
 
     with cn.cursor() as cur:
         cur.execute(
@@ -645,16 +606,94 @@ def dung_lai_ho_so(cn, user_id: str, *, ghi: bool = True) -> HoSoSoThich:
             (
                 user_id,
                 FEATURE_VERSION,
-                json.dumps(list(ho_so.weights)),
-                ho_so.sum_abs_weight,
-                ho_so.n_signals,
-                giai_doan(ho_so.n_signals),
-                round(alpha(ho_so.n_signals), 3),
+                json.dumps(list(profile.weights)),
+                profile.sum_abs_weight,
+                profile.n_signals,
+                stage_for(profile.n_signals),
+                round(alpha(profile.n_signals), 3),
             ),
         )
     cn.commit()
-    return ho_so
+    return profile
 
+
+def main(argv: Sequence[str] | None = None) -> int:
+    use_utf8()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--user", required=True, help="`users.id`")
+    parser.add_argument("--db", default=None)
+    parser.add_argument("--top", type=int, default=20)
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="list each food's contributing dimensions",
+    )
+    t = parser.parse_args(argv)
+
+    cn = connect(t.db)
+    try:
+        with cn.cursor() as cur:
+            cur.execute("SELECT display_name FROM users WHERE id = %s", (t.user,))
+            user_row = cur.fetchone()
+        if user_row is None:
+            print(f"No user has id = {t.user!r}.", file=sys.stderr)
+            return 1
+
+        result = recommend(cn, t.user, limit=t.top)
+
+        print(f"User: {user_row['display_name']}  ({t.user})")
+        print(
+            f"Stage {result.stage} - generation_source = "
+            f"{result.generation_source} - n_signals = {result.n_signals} - "
+            f"alpha = {result.alpha:.3f}"
+        )
+        print(
+            "Model: "
+            + (
+                f"{result.model_version} (id={result.model_id})"
+                if result.model_version
+                else "none used"
+            )
+        )
+        print(
+            f"F1 filter: {result.n_foods_before_f1} foods -> "
+            f"{result.n_foods_after_f1} safe"
+        )
+        for warning in result.warnings:
+            print(f"  ! {warning}")
+        print()
+
+        if not result.candidates:
+            print("No food left after the F1 filter.")
+            return 0
+
+        space = None
+        profile = None
+        if t.explain:
+            foods, _ = load_foods(cn)
+            space = FeatureSpace.from_foods(foods)
+            profile, _ = load_preference_profile(cn, t.user, space)
+
+        print(f"{'#':>3}  {'score':>6}  {'content':>9}  {'ML':>6}  food")
+        for i, candidate in enumerate(result.candidates, start=1):
+            ml = (
+                f"{candidate.ml_score:.3f}"
+                if candidate.ml_score is not None
+                else "-"
+            )
+            print(
+                f"{i:>3}  {candidate.score:>6.3f}  "
+                f"{candidate.content_score:>9.3f}  "
+                f"{ml:>6}  {candidate.food.name}  [{candidate.food.category}]"
+            )
+            if t.explain and space is not None and profile is not None:
+                print(
+                    f"       because: "
+                    f"{debug_explanation(space, profile, candidate.food)}"
+                )
+        return 0
+    finally:
+        cn.close()
 
 
 if __name__ == "__main__":
