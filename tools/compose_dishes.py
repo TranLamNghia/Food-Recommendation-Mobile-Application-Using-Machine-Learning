@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Cộng dồn dinh dưỡng món ăn từ định lượng nguyên liệu.
+"""Sum a dish's nutrition from its ingredient quantities.
 
-Bảng thành phần thực phẩm Việt Nam 2007 liệt kê **nguyên liệu**, không liệt
-kê món ăn: có "bánh phở", "thịt bò thăn", "hành lá", nhưng không có "phở bò".
-Trong khi đó hệ thống cần dinh dưỡng của **một suất ăn thật**.
+The Vietnamese Food Composition Table 2007 lists **ingredients**, not dishes:
+it has "bánh phở", "thịt bò thăn" and "hành lá", but no "phở bò". The system,
+meanwhile, needs the nutrition of **one real serving**.
 
-Bước này bắc cầu giữa hai thứ đó. Mỗi món được mô tả bằng một công thức —
-danh sách nguyên liệu kèm khối lượng — rồi dinh dưỡng của món tính bằng tổng
-có trọng số:
+This step bridges the two. Each dish is described by a recipe — a list of
+ingredients with weights — and the dish's nutrition is the weighted sum:
 
-    giá_trị_món = Σ (giá_trị_nguyên_liệu_mỗi_100g × khối_lượng_gam / 100)
+    dish_value = sum (ingredient_value_per_100g * grams / 100)
 
-Cách này cho `data_source` một câu trả lời sạch: mọi con số truy ngược được
-về đúng một mục trong bảng gốc, và công thức được ghi lại trong cột `note`
-nên hội đồng kiểm chứng được từng bước.
+This gives `data_source` a clean answer: every figure traces back to exactly
+one entry in the source table, and the recipe is recorded in the `note`
+column so an examiner can verify each step.
 
-Chạy:
+Run:
     python tools/compose_dishes.py data/foods/recipes/mon_nuoc.json
     python tools/compose_dishes.py data/foods/recipes/*.json --write
+
+Note on language: the tag names below stay Vietnamese because they must match
+`tags.name_vi` in the database, and the `note` text stays Vietnamese because
+it goes into `foods.description`, which is shown to users.
 """
 
 from __future__ import annotations
@@ -35,58 +38,62 @@ FCT_PATH = REF_DIR / "fct2007.json"
 INGREDIENTS_PATH = REF_DIR / "ingredients.json"
 FOODS_DIR = ROOT / "data" / "foods"
 
-# Nhóm mã thực phẩm có nguồn gốc động vật, suy từ chữ số đầu của mã số:
-# 7 = thịt, 8 = thủy sản, 9 = trứng, 10 = sữa. Thêm các loại mắm ở nhóm gia
-# vị vì chúng làm từ cá và tôm — đây chính là cái bẫy: một món gắn nhãn chay
-# mà nêm nước mắm trông hoàn toàn bình thường trong bảng CSV.
+# Food-code groups of animal origin, derived from the leading digits of the
+# code: 7 = meat, 8 = seafood, 9 = egg, 10 = milk. The fermented fish sauces
+# in the seasoning group are added because they are made from fish and shrimp
+# — and that is precisely the trap: a dish tagged vegetarian but seasoned
+# with fish sauce looks entirely normal in the CSV.
 ANIMAL_GROUPS = ("7", "8", "9", "10")
 
-# Nguyên liệu là dị nguyên: mã thực phẩm → nhãn bắt buộc phải có. Quên gắn
-# nhãn ở đây là lỗi an toàn thật sự — người dị ứng đậu phộng được gợi ý món
-# có đậu phộng, và không phép kiểm nào khác nhìn thấy vì bảng CSV chỉ có con
-# số dinh dưỡng, không có danh sách nguyên liệu.
+# Allergenic ingredients: food code -> the tag that must be present. Omitting
+# a tag here is a genuine safety failure — someone with a peanut allergy gets
+# recommended a dish containing peanut, and no other check can see it because
+# the CSV holds only nutrition figures, not an ingredient list.
 ALLERGEN_INGREDIENTS = {
-    "3017": "Có đậu phộng",   # đậu phộng hạt khô
-    "3024": "Có đậu phộng",   # bột đậu phộng
-    "3007": "Có đậu nành",      # đậu tương hạt
+    "3017": "Có đậu phộng",   # dried peanut
+    "3024": "Có đậu phộng",   # peanut flour
+    "3007": "Có đậu nành",    # soybean
     "3021": "Có đậu nành",
     "3022": "Có đậu nành",
-    "3025": "Có đậu nành",      # đậu phụ
+    "3025": "Có đậu nành",    # tofu
     "3026": "Có đậu nành",
     "3027": "Có đậu nành",
     "3032": "Có đậu nành",
-    "13010": "Có đậu nành",     # nước tương
+    "13010": "Có đậu nành",   # soy sauce
     "13022": "Có đậu nành",
     "9001": "Có trứng",
     "9002": "Có trứng",
     "9004": "Có trứng",
-    "1022": "Có gluten",   # mì trứng lúa mì
-    "1012": "Có gluten",   # bánh mì
-    "1018": "Có gluten",   # bột mì
+    "1022": "Có gluten",      # wheat egg noodles
+    "1012": "Có gluten",      # bread
+    "1018": "Có gluten",      # wheat flour
 }
-# Nguyên liệu giàu purin — cơ sở của nhãn `Giàu purin` cho người bệnh gút.
+
+# High-purine ingredients — the basis for the `Giàu purin` tag used for gout.
 #
-# Vì sao phải có danh sách này thay vì dùng cột `purine_mg`: bảng gốc chỉ công
-# bố purin cho 82/526 nguyên liệu, và thiếu đúng ở nhóm quan trọng nhất — tôm,
-# cua, mực, ốc, hến đều không có số. Hệ quả: chỉ 64/305 món tính được purin,
-# tức quy tắc ngưỡng theo ngày chỉ phủ 21 % danh mục. Nhãn mới là cơ chế bảo
-# vệ chính.
+# Why this list is needed rather than the `purine_mg` column: the source table
+# publishes purine for only 82 of 526 ingredients, and it is missing exactly
+# where it matters most — shrimp, crab, squid, snail and clam all have no
+# figure. The consequence: only 64 of 305 dishes get a purine total, so the
+# per-day threshold rule covers 21% of the catalogue. The tag is the primary
+# protection mechanism.
 #
-# Phân loại theo hướng dẫn dinh dưỡng cho bệnh gút:
-#   · nội tạng, tiết      — purin rất cao, phải tránh
-#   · hải sản vỏ cứng     — purin cao, phải tránh
-#   · cá                  — purin cao, cần hạn chế mạnh
+# Classified following dietary guidance for gout:
+#   - organ meat, blood  — very high purine, must be avoided
+#   - shellfish          — high purine, must be avoided
+#   - fish               — high purine, to be strongly limited
 #
-# Thịt đỏ (bò, lợn, dê) CỐ Ý không nằm trong danh sách: purin ở mức trung bình
-# 130–170 mg, hướng dẫn nói *hạn chế* chứ không *tránh*. Gắn nhãn cả thịt đỏ sẽ
-# loại 154/305 món và chỉ còn 8 món đạm — người bệnh gút gần như không còn gì
-# để ăn, đúng kiểu thất bại của ngưỡng natri 600 mg trước đây.
+# Red meat (beef, pork, goat) is DELIBERATELY absent: its purine is moderate
+# at 130-170 mg, and the guidance says *limit* rather than *avoid*. Tagging red
+# meat too would exclude 154 of 305 dishes and leave only 8 protein dishes —
+# a gout patient would have almost nothing to eat, the same failure mode as
+# the earlier 600 mg sodium threshold.
 HIGH_PURINE_INGREDIENTS = {
-    # Nội tạng và tiết
+    # Organ meat and blood
     "7059",
-    # Hải sản vỏ cứng: tôm, cua, ốc, hến, mực, hàu
+    # Shellfish: shrimp, crab, snail, clam, squid, oyster
     "8033", "8034", "8037", "8040", "8041", "8048", "8049", "8051",
-    # Cá
+    # Fish
     "8003", "8010", "8011", "8019", "8022", "8023", "8024", "8026",
     "8030", "8038",
 }
@@ -101,18 +108,19 @@ SOURCE_URL = (
     "VTN_FCT_2007.pdf"
 )
 
-# Các chất cộng dồn được. Chất nào thiếu số liệu ở một nguyên liệu thì nguyên
-# liệu đó đóng góp 0 — nhưng số mục thiếu được đếm lại và báo ra, vì cộng dồn
-# âm thầm từ dữ liệu khuyết sẽ cho ra một con số trông có vẻ đầy đủ mà thực
-# tế là ước tính thiếu.
+# The nutrients that can be summed. An ingredient missing a figure for one
+# nutrient contributes 0 for it — but the number of missing entries is counted
+# and reported, because silently summing over incomplete data produces a
+# figure that looks complete while actually being an undercount.
 SUMMABLE = [
     "calories_kcal", "protein_g", "carbs_g", "fat_g",
     "fiber_g", "sugar_g", "sodium_mg", "cholesterol_mg",
     "purine_mg", "calcium_mg", "iron_mg", "zinc_mg",
-    # `vitamin_a_mcg` là cột **suy ra** trong bảng nguyên liệu: hoạt tính RAE
-    # quy từ retinol và ba carotenoid (xem `extract_fct.py`). Cộng dồn RAE là
-    # hợp lệ vì RAE đã là một đơn vị hoạt tính chung — không được cộng trực
-    # tiếp retinol với beta-caroten khi chưa quy đổi.
+    # `vitamin_a_mcg` is a **derived** column in the ingredient table: RAE
+    # activity converted from retinol and three carotenoids (see
+    # `extract_fct.py`). Summing RAE is valid because RAE is already a common
+    # activity unit — retinol and beta-carotene must never be added together
+    # before conversion.
     "vitamin_a_mcg", "vitamin_c_mg",
 ]
 
@@ -127,30 +135,32 @@ CSV_COLUMNS = [
 
 
 def load_ingredients() -> dict[str, dict]:
-    """Ưu tiên bảng nguyên liệu đã hợp nhất, lùi về bảng gốc nếu chưa có.
+    """Prefer the merged ingredient table, fall back to the source table.
 
-    `ingredients.json` là bảng gốc đã được bổ khuyết từ USDA, kèm nguồn cho
-    **từng trường**. Dùng nó thay vì `fct2007.json` để món ăn hưởng luôn phần
-    đã vá, và để cột `note` ghi lại được chất nào là số vay.
+    `ingredients.json` is the source table with its gaps filled from USDA, and
+    it carries a source for **each field**. Using it rather than `fct2007.json`
+    lets the dishes inherit the patched values, and lets the `note` column
+    record which nutrients are borrowed figures.
     """
     if not FCT_PATH.exists():
         sys.exit(
-            f"Chưa có {FCT_PATH}. Chạy trước:\n"
-            f"  python tools/extract_fct.py <đường-dẫn>/VTN_FCT_2007.pdf"
+            f"{FCT_PATH} is missing. Run this first:\n"
+            f"  python tools/extract_fct.py <path>/VTN_FCT_2007.pdf"
         )
 
-    # Nền là **toàn bộ** 526 mục của bảng gốc.
+    # The base is **all** 526 entries of the source table.
     data = json.loads(FCT_PATH.read_text(encoding="utf-8"))
     table = {f["code"]: {**f, "_sources": {}} for f in data}
 
     if not INGREDIENTS_PATH.exists():
-        print("⚠ Chưa có ingredients.json — dùng bảng gốc chưa bổ khuyết.\n")
+        print("! ingredients.json is missing — using the unpatched source table.\n")
         return table
 
-    # Bảng đã bổ khuyết chỉ chứa những nguyên liệu đã ánh xạ sang USDA, tức
-    # là một **tập con**. Phủ nó lên trên bảng gốc chứ không thay thế: dùng
-    # thay thế thì mọi nguyên liệu chưa ánh xạ sẽ biến mất khỏi công thức mà
-    # chỉ để lại một dòng cảnh báo, và món vẫn ra một con số trông như thật.
+    # The patched table holds only the ingredients mapped to USDA, that is a
+    # **subset**. Overlay it on the source table rather than replacing it:
+    # replacing would make every unmapped ingredient vanish from the recipes,
+    # leaving only a warning line while the dish still produces a
+    # realistic-looking figure.
     merged = json.loads(INGREDIENTS_PATH.read_text(encoding="utf-8"))
     for code, entry in merged.items():
         table[code] = {
@@ -164,7 +174,7 @@ def load_ingredients() -> dict[str, dict]:
 
 
 def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
-    """Trả về (dòng CSV, danh sách cảnh báo)."""
+    """Return (the CSV row, the list of warnings)."""
     warnings: list[str] = []
     borrowed_fields: set[str] = set()
     totals = {key: 0.0 for key in SUMMABLE}
@@ -178,7 +188,7 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
         source = fct.get(code)
 
         if source is None:
-            warnings.append(f"không có mã {code} trong bảng gốc")
+            warnings.append(f"code {code} is not in the source table")
             continue
 
         weight += grams
@@ -194,23 +204,24 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
             if source.get("_sources", {}).get(key) == "USDA":
                 borrowed_fields.add(key)
 
-    # Chất nào thiếu ở quá nửa khối lượng công thức thì để trống hẳn, thay vì
-    # ghi một con số cộng thiếu trông như thật. Trống là "chưa biết"; một số
-    # cộng thiếu là "biết sai".
+    # A nutrient missing across more than half the recipe's ingredients is
+    # left empty rather than written as an undercount that looks real. Empty
+    # means "not known"; an undercount means "known wrong".
     row = {c: "" for c in CSV_COLUMNS}
     for key in SUMMABLE:
         if len(gaps[key]) > len(recipe["ingredients"]) / 2:
-            warnings.append(f"{key}: thiếu ở {len(gaps[key])} nguyên liệu → để trống")
+            warnings.append(
+                f"{key}: missing from {len(gaps[key])} ingredients -> left empty"
+            )
             continue
         row[key] = f"{totals[key]:.1f}"
         if gaps[key]:
-            warnings.append(
-                f"{key}: cộng thiếu {', '.join(gaps[key])}"
-            )
+            warnings.append(f"{key}: undercounted, missing {', '.join(gaps[key])}")
 
-    # Nhãn chay phải khớp với công thức. Bộ kiểm tra CSV không bắt được lỗi
-    # này vì nó chỉ thấy dòng kết quả, không thấy nguyên liệu; mà đây lại là
-    # lỗi an toàn — người ăn chay được gợi ý món nêm mắm cá.
+    # Vegetarian tags must agree with the recipe. The CSV checker cannot catch
+    # this because it only sees the result row, not the ingredients; and this
+    # is a safety failure — a vegetarian gets recommended a dish seasoned with
+    # fish sauce.
     tags = set(recipe.get("tags", []))
     if tags & {"Món chay", "Món thuần chay"}:
         offenders = []
@@ -219,17 +230,18 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
             group = code[:-3] if len(code) > 3 else code
             is_dairy_or_egg = group in ("9", "10")
             if code in ANIMAL_SEASONINGS or group in ANIMAL_GROUPS:
-                # Trứng và sữa vẫn hợp lệ với `vegetarian`, chỉ phạm `vegan`.
+                # Egg and dairy are still valid for vegetarian, they only
+                # violate vegan.
                 if is_dairy_or_egg and "Món thuần chay" not in tags:
                     continue
                 offenders.append(item.get("label", code))
         if offenders:
             warnings.append(
-                "GẮN NHÃN SAI: món chay nhưng có nguyên liệu động vật — "
+                "WRONGLY TAGGED: vegetarian dish with animal ingredients — "
                 + ", ".join(offenders)
             )
 
-    # Dị nguyên suy từ nguyên liệu phải có mặt trong nhãn.
+    # An allergen implied by an ingredient has to appear in the tags.
     missing_allergens = set()
     for item in recipe["ingredients"]:
         needed = ALLERGEN_INGREDIENTS.get(str(item["code"]))
@@ -237,22 +249,22 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
             missing_allergens.add(f"{needed} ({item.get('label', item['code'])})")
     if missing_allergens:
         warnings.append(
-            "THIẾU NHÃN DỊ NGUYÊN: " + ", ".join(sorted(missing_allergens))
+            "MISSING ALLERGEN TAG: " + ", ".join(sorted(missing_allergens))
         )
 
-    # Thủy sản trong công thức cũng phải khai báo.
+    # Seafood in the recipe has to be declared too.
     if any(str(i["code"]).startswith("8") for i in recipe["ingredients"]):
         if "Có hải sản" not in tags:
-            warnings.append("THIẾU NHÃN DỊ NGUYÊN: contains_seafood")
+            warnings.append("MISSING ALLERGEN TAG: Có hải sản")
 
-    # Nguyên liệu giàu purin phải kéo theo nhãn cho người bệnh gút.
+    # A high-purine ingredient has to carry the tag for gout patients.
     purine_src = [
         i.get("label", i["code"]) for i in recipe["ingredients"]
         if str(i["code"]) in HIGH_PURINE_INGREDIENTS
     ]
     if purine_src and "Giàu purin" not in tags:
         warnings.append(
-            "THIẾU NHÃN GIÀU PURIN: " + ", ".join(sorted(set(purine_src)))
+            "MISSING HIGH-PURINE TAG: " + ", ".join(sorted(set(purine_src)))
         )
 
     row.update({
@@ -262,12 +274,13 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
         "spice_level": str(recipe.get("spice_level", 0)),
         "serving_size_g": f"{weight:.0f}",
         "tags": "|".join(recipe.get("tags", [])),
-        # `note` đi vào `foods.description` — trường HIỂN THỊ cho người dùng,
-        # nên không chứa siêu dữ liệu xuất xứ. Trước đây nó nối thêm
-        # ". Vay USDA: zinc_mg", một câu chỉ có nghĩa với người làm dữ liệu.
-        # Cột truy xuất nguồn đã bỏ khỏi lược đồ, nên thông tin này cũng không
-        # còn chỗ chứa trong CSDL; `borrowed_fields` giờ chỉ dùng để cảnh báo
-        # khi chạy công cụ.
+        # `note` goes into `foods.description` — a field DISPLAYED to users,
+        # so it carries no provenance metadata. It used to append
+        # ". Vay USDA: zinc_mg", a sentence that means something only to a
+        # data maintainer. The provenance column has been dropped from the
+        # schema, so this information has nowhere to live in the database
+        # either; `borrowed_fields` is now used only for tool-time warnings.
+        # The text stays Vietnamese because users read it.
         "note": "Công thức: " + " + ".join(parts)
                 + (". " + recipe["note"] if recipe.get("note") else ""),
     })
@@ -275,28 +288,28 @@ def compose(recipe: dict, fct: dict[str, dict]) -> tuple[dict, list[str]]:
     return row, warnings
 
 
+def _use_utf8() -> None:
+    """Make stdout accept non-ASCII output on Windows (it defaults to cp1252).
 
-def _in_utf8() -> None:
-    """Bắt stdout nhận tiếng Việt trên Windows (mặc định cp1252).
-
-    Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
-    đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
-    Bản sao của `tools/_env.use_utf8`; để ở đây vì `tools/baocao/` không chắc
-    có `tools/` trên `sys.path`.
+    Without it the script dies mid-run with `UnicodeEncodeError` as soon as
+    output is redirected through a pipe or into a file — which is to say
+    exactly when running in CI. A copy of `tools/_env.use_utf8`, kept here
+    because this script does not otherwise need `_env`.
     """
-    for luong in (sys.stdout, sys.stderr):
+    for stream in (sys.stdout, sys.stderr):
         try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         except Exception:  # pragma: no cover
             pass
 
+
 def main() -> int:
-    _in_utf8()
+    _use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("recipes", nargs="+", type=Path)
     parser.add_argument(
         "--write", action="store_true",
-        help="ghi đè vào data/foods/<category>.csv thay vì chỉ in ra",
+        help="overwrite data/foods/<category>.csv instead of only printing",
     )
     args = parser.parse_args()
 
@@ -318,24 +331,25 @@ def main() -> int:
             )
             drift = abs(check - kcal) / kcal * 100 if kcal else 0
 
-            print(f"\n{recipe['name']}  ({row['serving_size_g']} g/suất)")
+            print(f"\n{recipe['name']}  ({row['serving_size_g']} g/serving)")
             print(
-                f"  {kcal:.0f} kcal · đạm {row['protein_g']} g · "
-                f"bột đường {row['carbs_g']} g · béo {row['fat_g']} g"
-                f"  [Atwater lệch {drift:.1f} %]"
+                f"  {kcal:.0f} kcal - protein {row['protein_g']} g - "
+                f"carbohydrate {row['carbs_g']} g - fat {row['fat_g']} g"
+                f"  [Atwater off by {drift:.1f} %]"
             )
             if row["sodium_mg"]:
-                print(f"  natri {row['sodium_mg']} mg")
+                print(f"  sodium {row['sodium_mg']} mg")
             for w in warnings:
-                print(f"  ⚠ {w}")
+                print(f"  ! {w}")
                 total_warnings += 1
 
     if args.write:
-        # Tên tệp CSV lấy từ tên tệp CÔNG THỨC, không lấy từ giá trị
-        # `category`. Từ khi cột `code` bị bỏ, `category` mang tên tiếng Việt
-        # có dấu và có khoảng trắng — dùng nó làm tên tệp sẽ sinh ra
-        # "Món luộc hấp.csv" nằm cạnh "mon_luoc_hap.csv", tức hai tệp cho
-        # cùng một nhóm và dữ liệu đếm hai lần.
+        # The CSV file name comes from the RECIPE file name, not from the
+        # `category` value. Since the `code` column was dropped, `category`
+        # holds a Vietnamese name with diacritics and spaces — using it as a
+        # file name would produce "Món luộc hấp.csv" next to
+        # "mon_luoc_hap.csv", two files for one group and the data counted
+        # twice.
         stem = args.recipes[0].stem if len(args.recipes) == 1 else None
         for category, rows in by_category.items():
             path = FOODS_DIR / f"{stem or category}.csv"
@@ -343,11 +357,11 @@ def main() -> int:
                 writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
                 writer.writeheader()
                 writer.writerows(rows)
-            print(f"\nĐã ghi {len(rows)} món → {path}")
+            print(f"\nWrote {len(rows)} dishes -> {path}")
     else:
-        print("\n(Chạy lại với --write để ghi vào CSV)")
+        print("\n(Run again with --write to write the CSV)")
 
-    print(f"\nTổng {total_warnings} cảnh báo.")
+    print(f"\n{total_warnings} warnings in total.")
     return 0
 
 

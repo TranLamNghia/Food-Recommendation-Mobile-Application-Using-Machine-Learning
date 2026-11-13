@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Nạp tập dữ liệu món ăn từ CSV vào MySQL.
+"""Load the food dataset from CSV into MySQL.
 
-Một dòng CSV không nạp thẳng vào một bảng mà tách ra ba nơi:
+One CSV row does not load into one table; it splits three ways:
 
-    foods           ← định danh, phân loại, vai trò trong bữa
-    food_nutrition  ← 15 cột dinh dưỡng, quan hệ một-một với foods
-    food_tags       ← mỗi nhãn một dòng, nối qua bảng tags
+    foods           <- identity, classification, role in the meal
+    food_nutrition  <- 15 nutrition columns, one-to-one with foods
+    food_tags       <- one row per tag, joined through the tags table
 
-Vì vậy `LOAD DATA INFILE` không dùng được: cần tra `category_id` và `tag_id`
-qua mã, và cần chèn theo đúng thứ tự phụ thuộc trong một giao dịch.
+That is why `LOAD DATA INFILE` is unusable: `category_id` and `tag_id` have to
+be resolved from their codes, and the inserts have to run in dependency order
+inside one transaction.
 
-Hai chế độ:
+Two modes:
 
-    python tools/load_foods.py               → sinh db/seed_foods.sql để xem trước
-    python tools/load_foods.py --apply       → kết nối và chèn thật
+    python tools/load_foods.py               -> write db/seed_foods.sql to review
+    python tools/load_foods.py --apply       -> connect and insert for real
 
-Chế độ sinh SQL là mặc định có chủ đích. Lần nạp đầu tiên nên đọc bằng mắt
-trước khi chạy, và tệp SQL cũng chạy được trên máy khác không có Python.
+Generating SQL is the default on purpose. The first load should be read with
+your own eyes before running, and the SQL file also runs on another machine
+that has no Python.
 
-Yêu cầu trước khi chạy:
+Prerequisites:
     db/migrations/001_dataset_readiness.sql
     db/migrations/002_food_name_unique.sql
 """
@@ -43,11 +45,12 @@ OUT_SQL = ROOT / "db" / "seed_foods.sql"
 
 
 def required_nutrition_columns() -> set[str]:
-    """Cột NOT NULL của `food_nutrition`, đã trừ phần migration 001 nới ra.
+    """`food_nutrition`'s NOT NULL columns, minus those migration 001 relaxed.
 
-    Đọc từ schema thay vì liệt kê cứng: lược đồ còn đổi, mà một danh sách
-    chép tay sẽ lệch đi lúc nào không biết, và hậu quả là trình nạp để lọt
-    dòng thiếu dữ liệu rồi cả giao dịch đổ ở giữa chừng.
+    Read from the schema rather than hard-listed: the schema still changes,
+    and a hand-copied list drifts without warning. The consequence would be
+    the loader letting an incomplete row through and the whole transaction
+    failing halfway.
     """
     body = re.search(
         r"CREATE TABLE food_nutrition\s*\((.*?)\n\) ENGINE",
@@ -68,7 +71,7 @@ def required_nutrition_columns() -> set[str]:
         if len(parts) == 2 and "NOT NULL" in parts[1].upper():
             required.add(parts[0])
 
-    # Migration 001 chuyển bốn cột này sang NULL được.
+    # Migration 001 made these four columns nullable.
     if MIGRATION_001.exists():
         text = MIGRATION_001.read_text(encoding="utf-8")
         for column in re.findall(r"MODIFY (\w+)\s+DECIMAL\([\d, ]+\) NULL", text):
@@ -76,19 +79,22 @@ def required_nutrition_columns() -> set[str]:
 
     return required - {"food_id", "updated_at"}
 
+
 FOOD_COLUMNS = [
     "name", "description",
     "spice_level", "dish_role",
 ]
 
-# Món nạp từ CSV luôn thuộc DANH MỤC CHUNG nên `owner_id` để NULL.
+# Foods loaded from CSV always belong to the SHARED CATALOGUE, so `owner_id`
+# stays NULL.
 #
-# Phải nêu tường minh trong câu INSERT: `uq_food_name` là khóa trên cặp
-# (owner_id, name); bỏ sót cột này thì ON DUPLICATE KEY UPDATE không khớp
-# được dòng cũ và nạp lại lần hai sẽ nhân đôi toàn bộ món.
+# It has to be stated explicitly in the INSERT: `uq_food_name` is a key on the
+# pair (owner_id, name); omitting the column means ON DUPLICATE KEY UPDATE
+# cannot match the existing row, and a second load would duplicate every food.
 #
-# Mọi truy vấn con tra `food_id` cũng phải kèm `owner_id IS NULL`, nếu không
-# sẽ có ngày vớ phải món riêng của một người dùng trùng tên với món chung.
+# Every subquery resolving a `food_id` must carry `owner_id IS NULL` too,
+# otherwise it will one day pick up a user's private food that happens to
+# share a name with a shared one.
 PUBLIC_CATALOG = "NULL"
 
 NUTRITION_COLUMNS = [
@@ -97,7 +103,7 @@ NUTRITION_COLUMNS = [
     "calcium_mg", "iron_mg", "zinc_mg", "vitamin_a_mcg", "vitamin_c_mg",
 ]
 
-# Cột CSV → cột bảng, khi tên không trùng nhau.
+# CSV column -> table column, where the two names differ.
 RENAME = {"note": "description"}
 
 TEXT_COLUMNS = {
@@ -106,7 +112,7 @@ TEXT_COLUMNS = {
 
 
 def quote(value: str) -> str:
-    """Chuỗi cho MySQL. Thoát dấu nháy và dấu chéo ngược."""
+    """A string for MySQL. Escapes quotes and backslashes."""
     escaped = value.replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
 
@@ -135,14 +141,14 @@ def read_rows() -> list[dict]:
 
 
 def statements_for(row: dict) -> list[str]:
-    """Sinh các câu lệnh cho một món."""
+    """Build the statements for one food."""
     name = row["name"].strip()
     out = []
 
-    # ── foods ──
-    # `category_id` tra bằng truy vấn con thay vì nhúng số cứng: id do
-    # AUTO_INCREMENT sinh ra nên khác nhau giữa các lần dựng lại CSDL, còn mã
-    # danh mục thì cố định.
+    # -- foods --
+    # `category_id` is resolved with a subquery rather than a hard-coded
+    # number: ids come from AUTO_INCREMENT and therefore differ between
+    # rebuilds of the database, while the category code is fixed.
     values = []
     for column in FOOD_COLUMNS:
         csv_col = next((k for k, v in RENAME.items() if v == column), column)
@@ -165,8 +171,8 @@ def statements_for(row: dict) -> list[str]:
         )
     )
 
-    # ── food_nutrition ──
-    # `food_id` có UNIQUE nên ON DUPLICATE KEY UPDATE cập nhật đúng dòng cũ.
+    # -- food_nutrition --
+    # `food_id` is UNIQUE, so ON DUPLICATE KEY UPDATE updates the right row.
     nut_values = [sql_value(c, row.get(c, "")) for c in NUTRITION_COLUMNS]
     out.append(
         "INSERT INTO food_nutrition (food_id, {cols})\n"
@@ -181,10 +187,10 @@ def statements_for(row: dict) -> list[str]:
         )
     )
 
-    # ── food_tags ──
-    # Xóa hết rồi chèn lại: nhãn của một món là một tập hợp, và bỏ bớt nhãn
-    # cũng là một thay đổi hợp lệ. Chỉ chèn thêm thì nhãn gỡ ra vẫn còn lại —
-    # với nhãn dị nguyên thì đó là lỗi an toàn.
+    # -- food_tags --
+    # Delete then reinsert: a food's tags are a set, and removing a tag is a
+    # legitimate change too. Inserting only additions would leave a removed
+    # tag in place — and for an allergen tag that is a safety failure.
     tags = [t.strip() for t in row.get("tags", "").split("|") if t.strip()]
     out.append(
         "DELETE FROM food_tags "
@@ -204,10 +210,10 @@ def statements_for(row: dict) -> list[str]:
 
 def build_script(rows: list[dict]) -> str:
     lines = [
-        "-- Sinh tự động bởi tools/load_foods.py — ĐỪNG SỬA TAY.",
-        "-- Nguồn: data/foods/*.csv",
+        "-- Generated by tools/load_foods.py — DO NOT EDIT BY HAND.",
+        "-- Source: data/foods/*.csv",
         "--",
-        "-- Cần chạy trước:",
+        "-- Run these first:",
         "--   db/migrations/001_dataset_readiness.sql",
         "--   db/migrations/002_food_name_unique.sql",
         "",
@@ -227,7 +233,7 @@ def apply(rows: list[dict]) -> int:
     try:
         import pymysql
     except ImportError:
-        sys.exit("Cần cài pymysql:  pip install pymysql")
+        sys.exit("pymysql is required:  pip install pymysql")
 
     config = {
         "host": _env.get("MYSQL_HOST", "localhost"),
@@ -238,8 +244,10 @@ def apply(rows: list[dict]) -> int:
         "charset": "utf8mb4",
     }
 
-    print(f"Kết nối {config['user']}@{config['host']}:{config['port']}"
-          f"/{config['database']}")
+    print(
+        f"Connecting {config['user']}@{config['host']}:{config['port']}"
+        f"/{config['database']}"
+    )
 
     connection = pymysql.connect(**config, autocommit=False)
     done = 0
@@ -250,12 +258,15 @@ def apply(rows: list[dict]) -> int:
                     cursor.execute(statement)
                 done += 1
         connection.commit()
-        print(f"Đã nạp {done} món.")
+        print(f"Loaded {done} foods.")
     except Exception as exc:
         connection.rollback()
-        # Cả lô bị hoàn tác: nạp một nửa còn tệ hơn không nạp gì, vì thực đơn
-        # sinh ra từ tập món khuyết trông vẫn bình thường.
-        sys.exit(f"LỖI ở món thứ {done + 1} — đã hoàn tác toàn bộ.\n{exc}")
+        # The whole batch is rolled back: a half-load is worse than no load,
+        # because a meal plan built from an incomplete food set still looks
+        # perfectly normal.
+        sys.exit(
+            f"FAILED on food number {done + 1} — everything rolled back.\n{exc}"
+        )
     finally:
         connection.close()
 
@@ -267,17 +278,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--apply", action="store_true",
-        help="kết nối MySQL và chèn thật, thay vì chỉ sinh tệp SQL",
+        help="connect to MySQL and insert for real, instead of writing SQL",
     )
     args = parser.parse_args()
 
     rows = read_rows()
     if not rows:
-        sys.exit("Không có dòng nào trong data/foods/*.csv")
+        sys.exit("No rows found in data/foods/*.csv")
 
-    # Bỏ qua dòng chưa đủ cột bắt buộc. Chèn NULL vào cột NOT NULL sẽ làm cả
-    # giao dịch đổ, kéo theo những món hợp lệ cũng không vào được — nên lọc ở
-    # đây, và nói rõ đã bỏ những gì thay vì im lặng.
+    # Skip rows missing a required column. Inserting NULL into a NOT NULL
+    # column would fail the whole transaction, taking the valid foods down
+    # with it — so filter here, and say what was dropped rather than staying
+    # silent.
     required = required_nutrition_columns()
     skipped = []
     keep = []
@@ -289,8 +301,10 @@ def main() -> int:
             keep.append(row)
 
     if skipped:
-        print(f"Bỏ qua {len(skipped)} món chưa đủ cột bắt buộc "
-              f"({', '.join(sorted(required))}):")
+        print(
+            f"Skipping {len(skipped)} foods missing a required column "
+            f"({', '.join(sorted(required))}):"
+        )
         by_file: dict[str, int] = {}
         for origin, _, _ in skipped:
             f = origin.split(":")[0]
@@ -301,13 +315,13 @@ def main() -> int:
 
     rows = keep
     if not rows:
-        sys.exit("Không còn dòng nào hợp lệ để nạp.")
+        sys.exit("No valid rows left to load.")
 
     by_category: dict[str, int] = {}
     for row in rows:
         by_category[row["category"]] = by_category.get(row["category"], 0) + 1
 
-    print(f"{len(rows)} món:")
+    print(f"{len(rows)} foods:")
     for code in sorted(by_category):
         print(f"  {code:<14} {by_category[code]:>3}")
     print()
@@ -317,10 +331,10 @@ def main() -> int:
 
     OUT_SQL.write_text(build_script(rows), encoding="utf-8")
     size = OUT_SQL.stat().st_size / 1024
-    print(f"Đã sinh {OUT_SQL}  ({size:.0f} KB)")
-    print("\nXem lại rồi chạy:")
+    print(f"Wrote {OUT_SQL}  ({size:.0f} KB)")
+    print("\nReview it, then run:")
     print(f"  mysql -u <user> -p <database> < {OUT_SQL.relative_to(ROOT)}")
-    print("hoặc nạp thẳng:")
+    print("or load directly:")
     print("  python tools/load_foods.py --apply")
     return 0
 

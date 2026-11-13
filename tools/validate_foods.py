@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Kiểm tra tập dữ liệu món ăn trong data/foods/*.csv.
+"""Validate the food dataset in data/foods/*.csv.
 
-Tập dữ liệu này được nhiều người và nhiều tác nhân nhập từ nhiều nguồn khác
-nhau, nên sai sót là chuyện chắc chắn xảy ra chứ không phải rủi ro. Bộ kiểm
-tra chạy trước mỗi lần nạp vào MySQL, và nên chạy cả trong móc tiền-commit.
+This dataset is entered by several people and several agents from several
+sources, so mistakes are a certainty rather than a risk. The validator runs
+before every load into MySQL, and should also run in a pre-commit hook.
 
-Phép kiểm quan trọng nhất là **đối chiếu Atwater**: năng lượng công bố phải
-xấp xỉ 4·đạm + 4·bột đường + 9·béo. Phép này bắt được gần như mọi lỗi chép
-số — nhầm cột, lệch dấu thập phân, lẫn đơn vị — mà không cần biết món đó
-thật sự bao nhiêu calo.
+The most important check is the **Atwater cross-check**: the declared energy
+must approximate 4*protein + 4*carbohydrate + 9*fat. It catches nearly every
+transcription error — wrong column, misplaced decimal point, mixed units —
+without needing to know how many calories the dish really has.
 
-Chạy:
-    python tools/validate_foods.py            # kiểm tra và in báo cáo
-    python tools/validate_foods.py --strict   # cảnh báo cũng tính là lỗi
+Run:
+    python tools/validate_foods.py            # validate and print a report
+    python tools/validate_foods.py --strict    # treat warnings as errors
+
+Note on language: the category, tag and file-mapping values below stay
+Vietnamese because they must match `food_categories.name` and `tags.name_vi`
+in the database. Only the code and the report text are English.
 """
 
 from __future__ import annotations
@@ -31,7 +35,7 @@ import _env  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "foods"
 
-# ── Vốn từ hợp lệ, phải khớp enum trong db/schema.sql ────────────────────
+# -- The allowed vocabulary; must match the enums in db/schema.sql ---------
 
 CATEGORIES = {
     "Món nước", "Cơm", "Món kho",
@@ -40,11 +44,12 @@ CATEGORIES = {
     "Món gỏi / nộm", "Tráng miệng", "Đồ uống",
 }
 
-# Tên tệp CSV → tên danh mục trong CSDL.
+# CSV file name -> the category name in the database.
 #
-# Tệp vẫn đặt tên không dấu cho dễ gõ và dễ dùng trong dòng lệnh, còn cột
-# `category` trong tệp mang **tên tiếng Việt** — đúng giá trị mà
-# `food_categories.name` lưu, vì cột `code` đã được bỏ khỏi lược đồ.
+# The files keep diacritic-free names because they are easier to type and to
+# use on a command line, while the `category` column inside them holds the
+# **Vietnamese name** — exactly the value `food_categories.name` stores, since
+# the `code` column was dropped from the schema.
 FILE_TO_CATEGORY = {
     "mon_nuoc": "Món nước",
     "com": "Cơm",
@@ -60,21 +65,20 @@ FILE_TO_CATEGORY = {
     "do_uong": "Đồ uống",
 }
 
-# Vai trò món. Rộng hơn enum `foods.dish_role` hiện tại (main/side/soup/
-# dessert/drink) vì thuật toán sinh thực đơn cần tách `side_protein` khỏi
-# `side_veg` — mâm cơm Việt thiếu món mặn thì không còn là bữa ăn, mà enum
-# hiện tại gộp cả hai vào `side` nên không diễn đạt được ràng buộc đó.
+# Dish roles. Wider than the current `foods.dish_role` enum (main/side/soup/
+# dessert/drink) because the meal-plan generator needs `side_protein` apart
+# from `side_veg` — a Vietnamese meal without a savoury dish is not a meal,
+# and the current enum folds both into `side` so it cannot express that
+# constraint.
 DISH_ROLES = {
-    "main",          # món chính — cơm, phở, bún
-    "side_protein",  # món mặn — thịt, cá, trứng, đậu phụ
-    "side_veg",      # món rau — luộc, xào, nộm
-    "soup",          # món canh
-    "snack",         # món phụ, ăn vặt
-    "dessert",       # tráng miệng
-    "drink",         # đồ uống
+    "main",          # the main dish — rice, pho, noodles
+    "side_protein",  # the savoury dish — meat, fish, egg, tofu
+    "side_veg",      # the vegetable dish — boiled, stir-fried, salad
+    "soup",          # the soup
+    "snack",         # a side or a snack
+    "dessert",       # dessert
+    "drink",         # a drink
 }
-
-
 
 TAGS = {
     "Có hải sản", "Có đậu phộng", "Có trứng",
@@ -82,9 +86,9 @@ TAGS = {
     "Món chay", "Món thuần chay", "Ít natri",
     "Ít đường", "Giàu đạm", "Giàu chất xơ",
     "Giàu purin",
-    }
+}
 
-# ── Cột: bắt buộc, nên có, tùy chọn ─────────────────────────────────────
+# -- Columns: required, wanted, optional ----------------------------------
 
 REQUIRED = [
     "name", "category", "dish_role", "spice_level",
@@ -92,17 +96,17 @@ REQUIRED = [
     "protein_g", "carbs_g", "fat_g",
 ]
 
-# Bộ quy tắc F1 trong db/seed.sql tham chiếu tới các cột này. Để trống thì
-# quy tắc tương ứng lặng lẽ không bao giờ kích hoạt — người tăng huyết áp
-# vẫn nhận món mặn mà hệ thống tưởng là đã lọc.
+# The F1 rule set in db/seed.sql references these columns. Leaving one empty
+# means the matching rule silently never fires — a hypertensive user still
+# receives salty dishes while the system believes it has filtered them.
 RULE_COLUMNS = {
-    "sodium_mg": "tăng huyết áp, bệnh thận",
-    "sugar_g": "đái tháo đường",
-    "cholesterol_mg": "mỡ máu",
-    "purine_mg": "gút",
-    "calcium_mg": "loãng xương",
-    "iron_mg": "thiếu máu",
-    "vitamin_c_mg": "khuyến nghị vi chất",
+    "sodium_mg": "hypertension, kidney disease",
+    "sugar_g": "diabetes",
+    "cholesterol_mg": "dyslipidaemia",
+    "purine_mg": "gout",
+    "calcium_mg": "osteoporosis",
+    "iron_mg": "anaemia",
+    "vitamin_c_mg": "micronutrient recommendations",
 }
 
 NUMERIC = {
@@ -124,11 +128,16 @@ NUMERIC = {
     "vitamin_c_mg": (0, 1000),
 }
 
-# Sai số cho phép của phép đối chiếu Atwater. Lệch thật sự có lý do tồn tại:
-# chất xơ sinh ít năng lượng hơn bột đường, rượu sinh 7 kcal/g, và số liệu
-# công bố thường đã làm tròn. 12 % đủ rộng để không báo động giả, đủ chặt
-# để bắt lỗi lệch một chữ số thập phân.
+# The tolerance for the Atwater cross-check. Genuine drift has real causes:
+# fiber yields less energy than carbohydrate, alcohol yields 7 kcal/g, and
+# published figures are usually already rounded. 12% is wide enough to avoid
+# false alarms and tight enough to catch a misplaced decimal point.
 ATWATER_TOLERANCE = 0.12
+
+#: The two severity levels. Internal sentinels compared with `==`, so they
+#: are code rather than display text.
+ERROR = "ERROR"
+WARNING = "WARNING"
 
 
 class Issue:
@@ -148,26 +157,26 @@ class Issue:
 
 
 def normalize(text: str) -> str:
-    """Bỏ dấu và hạ chữ thường, dùng để phát hiện món trùng tên.
+    """Strip diacritics and lowercase, used to detect duplicate dish names.
 
-    "Phở bò tái" và "pho bo tai" là cùng một món; người nhập liệu khác nhau
-    rất dễ gõ khác nhau.
+    "Phở bò tái" and "pho bo tai" are the same dish, and different people
+    entering data very easily type them differently.
     """
     stripped = unicodedata.normalize("NFD", text.lower())
     return "".join(c for c in stripped if unicodedata.category(c) != "Mn").strip()
 
 
 def parse_number(value: str):
-    """Trả về (số, lỗi). Chuỗi rỗng trả về (None, None)."""
+    """Return (number, error). An empty string returns (None, None)."""
     raw = value.strip()
     if not raw:
         return None, None
-    # Người nhập quen dấu phẩy thập phân kiểu Việt Nam.
+    # Data entry habitually uses the Vietnamese decimal comma.
     raw = raw.replace(",", ".")
     try:
         return float(raw), None
     except ValueError:
-        return None, f"không phải số: {value!r}"
+        return None, f"not a number: {value!r}"
 
 
 def check_row(issues, filename, lineno, row, expected_category):
@@ -176,53 +185,66 @@ def check_row(issues, filename, lineno, row, expected_category):
     for column in REQUIRED:
         if not row.get(column, "").strip():
             issues.append(
-                Issue("LỖI", filename, lineno, name, f"thiếu cột bắt buộc `{column}`")
+                Issue(
+                    ERROR, filename, lineno, name,
+                    f"required column `{column}` is missing",
+                )
             )
 
     if not name:
         return None
 
-    # ── Vốn từ ──
+    # -- Vocabulary --
     category = row.get("category", "").strip()
     if category and category not in CATEGORIES:
-        issues.append(Issue("LỖI", filename, lineno, name, f"`category` lạ: {category!r}"))
+        issues.append(
+            Issue(ERROR, filename, lineno, name, f"unknown `category`: {category!r}")
+        )
     elif category and category != FILE_TO_CATEGORY.get(
         expected_category, expected_category
     ):
         issues.append(
             Issue(
-                "LỖI", filename, lineno, name,
-                f"`category` là {category!r} nhưng nằm trong tệp {expected_category}.csv",
+                ERROR, filename, lineno, name,
+                f"`category` is {category!r} but the row is in "
+                f"{expected_category}.csv",
             )
         )
 
     role = row.get("dish_role", "").strip()
     if role and role not in DISH_ROLES:
-        issues.append(Issue("LỖI", filename, lineno, name, f"`dish_role` lạ: {role!r}"))
+        issues.append(
+            Issue(ERROR, filename, lineno, name, f"unknown `dish_role`: {role!r}")
+        )
 
     for tag in [t.strip() for t in row.get("tags", "").split("|") if t.strip()]:
         if tag not in TAGS:
-            issues.append(Issue("LỖI", filename, lineno, name, f"nhãn lạ: {tag!r}"))
+            issues.append(
+                Issue(ERROR, filename, lineno, name, f"unknown tag: {tag!r}")
+            )
 
-    # ── Số ──
+    # -- Numbers --
     values = {}
     for column, (low, high) in NUMERIC.items():
         number, error = parse_number(row.get(column, ""))
         if error:
-            issues.append(Issue("LỖI", filename, lineno, name, f"`{column}` {error}"))
+            issues.append(
+                Issue(ERROR, filename, lineno, name, f"`{column}` {error}")
+            )
             continue
         if number is None:
             continue
         if not (low <= number <= high):
             issues.append(
                 Issue(
-                    "LỖI", filename, lineno, name,
-                    f"`{column}` = {number:g} nằm ngoài khoảng hợp lý [{low}, {high}]",
+                    ERROR, filename, lineno, name,
+                    f"`{column}` = {number:g} is outside the plausible range "
+                    f"[{low}, {high}]",
                 )
             )
         values[column] = number
 
-    # ── Đối chiếu Atwater ──
+    # -- The Atwater cross-check --
     kcal = values.get("calories_kcal")
     protein = values.get("protein_g")
     carbs = values.get("carbs_g")
@@ -235,69 +257,78 @@ def check_row(issues, filename, lineno, row, expected_category):
             if drift > ATWATER_TOLERANCE:
                 issues.append(
                     Issue(
-                        "LỖI", filename, lineno, name,
-                        f"năng lượng không khớp ba chất: công bố {kcal:g} kcal, "
-                        f"tính ra {computed:.0f} kcal (lệch {drift * 100:.0f} %)",
+                        ERROR, filename, lineno, name,
+                        f"energy does not match the three macros: declared "
+                        f"{kcal:g} kcal, computed {computed:.0f} kcal "
+                        f"(off by {drift * 100:.0f} %)",
                     )
                 )
         elif computed > 20:
             issues.append(
                 Issue(
-                    "LỖI", filename, lineno, name,
-                    f"`calories_kcal` = 0 nhưng ba chất cộng lại {computed:.0f} kcal",
+                    ERROR, filename, lineno, name,
+                    f"`calories_kcal` = 0 but the three macros sum to "
+                    f"{computed:.0f} kcal",
                 )
             )
 
-    # Đường và xơ đều là một phần của bột đường nên về lý không được vượt.
+    # Sugar and fiber are both part of carbohydrate, so in principle neither
+    # may exceed it.
     #
-    # Nhưng trong Bảng thành phần thực phẩm Việt Nam 2007, **29 trong 211 mục**
-    # có đường lớn hơn bột đường — ví dụ dưa hấu ghi bột đường 2,3 g mà đường
-    # 6,2 g. Đây là mâu thuẫn của CHÍNH BẢNG GỐC, không phải lỗi chép số: cột
-    # "Glucid" thường tính bằng hiệu số, còn "Đường tổng số" đo trực tiếp, và
-    # hai phương pháp lệch nhau ở quả nhiều nước.
+    # But in the Vietnamese Food Composition Table 2007, **29 of 211 entries**
+    # have more sugar than carbohydrate — watermelon, for instance, lists 2.3 g
+    # carbohydrate and 6.2 g sugar. This is a contradiction in THE SOURCE
+    # TABLE ITSELF, not a transcription error: the "Glucid" column is usually
+    # computed by difference while "total sugar" is measured directly, and the
+    # two methods diverge on watery fruit.
     #
-    # Vì vậy đây là CẢNH BÁO chứ không phải LỖI. Báo lỗi cho một thứ không sửa
-    # được sẽ khiến người đọc quen bỏ qua kết quả kiểm — lúc đó lỗi thật cũng
-    # trôi theo. Mã dùng tỷ lệ đường đã chặn trên ở 1,0 nên vẫn an toàn.
+    # Hence this is a WARNING, not an ERROR. Reporting an error for something
+    # that cannot be fixed trains the reader to ignore the validator's output —
+    # and then the real errors drift past too. The code caps the sugar ratio at
+    # 1.0 anyway, so it stays safe.
     for part in ("sugar_g", "fiber_g"):
         if part in values and carbs is not None and values[part] > carbs + 0.01:
             issues.append(
                 Issue(
-                    "CẢNH BÁO", filename, lineno, name,
-                    f"`{part}` = {values[part]:g} lớn hơn `carbs_g` = {carbs:g}"
-                    f" — mâu thuẫn có sẵn trong bảng gốc, giữ nguyên số nguồn",
+                    WARNING, filename, lineno, name,
+                    f"`{part}` = {values[part]:g} exceeds `carbs_g` = {carbs:g}"
+                    f" — a contradiction present in the source table, the "
+                    f"source figures are kept as published",
                 )
             )
 
-    # ── Nhất quán nhãn với số liệu ──
-    # Ba phép kiểm dưới đây từng tra nhãn bằng tên tiếng Anh — `vegan`,
-    # `vegetarian`, `contains_seafood`, `low_sodium` — trong khi từ vựng nhãn
-    # đã chuyển sang tên tiếng Việt từ lúc bỏ cột `code`. Không nhãn nào khớp
-    # nữa, nên **cả ba đều không bao giờ chạy**, kể cả phép kiểm mức LỖI
-    # "vừa là món chay vừa có hải sản".
+    # -- Tags consistent with the figures --
+    # The three checks below used to look tags up by their English names —
+    # `vegan`, `vegetarian`, `contains_seafood`, `low_sodium` — while the tag
+    # vocabulary had moved to Vietnamese names when the `code` column was
+    # dropped. No tag matched any more, so **none of the three ever ran**,
+    # including the ERROR-level check for "vegetarian and contains seafood".
     #
-    # Đáng chú ý vì đúng loại lỗi này đã để hai món gắn nhãn `Món chay` mà
-    # trong công thức có nước mắm đi qua được: phép kiểm vẫn nằm trong mã
-    # nguồn, trông như đang bảo vệ, mà thực ra là một câu `if` chết.
+    # Worth noting because exactly this kind of failure let two dishes tagged
+    # `Món chay` with fish sauce in their recipe through: the check was still
+    # in the source, looking like protection, while being a dead `if`.
     tags = {t.strip() for t in row.get("tags", "").split("|") if t.strip()}
     if "Món thuần chay" in tags and "Món chay" not in tags:
         issues.append(
-            Issue("CẢNH BÁO", filename, lineno, name,
-                  "có nhãn `Món thuần chay` nhưng thiếu `Món chay`")
+            Issue(
+                WARNING, filename, lineno, name,
+                "tagged `Món thuần chay` but missing `Món chay`",
+            )
         )
     if "Món chay" in tags and tags & {"Có hải sản"}:
         issues.append(
-            Issue("LỖI", filename, lineno, name, "vừa là món chay vừa có hải sản")
+            Issue(
+                ERROR, filename, lineno, name,
+                "tagged vegetarian and containing seafood at the same time",
+            )
         )
     if "Ít natri" in tags and values.get("sodium_mg", 0) > 400:
         issues.append(
             Issue(
-                "CẢNH BÁO", filename, lineno, name,
-                f"gắn `Ít natri` nhưng natri {values['sodium_mg']:g} mg",
+                WARNING, filename, lineno, name,
+                f"tagged `Ít natri` but sodium is {values['sodium_mg']:g} mg",
             )
         )
-
-    # ── Truy xuất nguồn ──
 
     return {"name": name, "values": values, "role": role}
 
@@ -306,13 +337,13 @@ def main() -> int:
     _env.use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--strict", action="store_true", help="coi cảnh báo là lỗi"
+        "--strict", action="store_true", help="treat warnings as errors"
     )
     args = parser.parse_args()
 
     files = sorted(DATA_DIR.glob("*.csv"))
     if not files:
-        print(f"Không tìm thấy tệp CSV nào trong {DATA_DIR}")
+        print(f"No CSV file found in {DATA_DIR}")
         return 1
 
     issues: list[Issue] = []
@@ -345,60 +376,66 @@ def main() -> int:
                     first_file, first_line = seen[key]
                     issues.append(
                         Issue(
-                            "LỖI", path.name, lineno, parsed["name"],
-                            f"trùng tên với {first_file}:{first_line}",
+                            ERROR, path.name, lineno, parsed["name"],
+                            f"duplicate name, also at {first_file}:{first_line}",
                         )
                     )
                 else:
                     seen[key] = (path.name, lineno)
 
     total = len(rows)
-    errors = [i for i in issues if i.level == "LỖI"]
-    warnings = [i for i in issues if i.level == "CẢNH BÁO"]
+    errors = [i for i in issues if i.level == ERROR]
+    warnings = [i for i in issues if i.level == WARNING]
 
-    print("═" * 72)
-    print(f"TẬP DỮ LIỆU MÓN ĂN — {total} món trong {len(files)} tệp")
-    print("═" * 72)
+    print("=" * 72)
+    print(f"FOOD DATASET — {total} dishes across {len(files)} files")
+    print("=" * 72)
 
-    print("\nSố món theo nhóm:")
+    print("\nDishes per group:")
     for code in sorted(per_file):
-        bar = "█" * min(per_file[code], 40)
+        bar = "#" * min(per_file[code], 40)
         print(f"  {code:<14} {per_file[code]:>4}  {bar}")
 
     if per_role:
-        print("\nSố món theo vai trò trong bữa:")
+        print("\nDishes per role in the meal:")
         for role in sorted(per_role):
             print(f"  {role:<14} {per_role[role]:>4}")
         missing_roles = DISH_ROLES - set(per_role)
         if missing_roles:
-            print(f"  → chưa có món nào cho: {', '.join(sorted(missing_roles))}")
+            print(f"  -> no dish yet for: {', '.join(sorted(missing_roles))}")
 
     if total:
-        print("\nĐộ phủ các cột mà bộ quy tắc F1 cần:")
+        print("\nCoverage of the columns the F1 rule set needs:")
         for column, purpose in RULE_COLUMNS.items():
             filled = coverage[column]
             pct = filled / total * 100
-            flag = "" if pct >= 80 else "  ← quy tắc chưa dùng được"
-            print(f"  {column:<16} {filled:>4}/{total}  {pct:>5.1f} %{flag}   ({purpose})")
+            flag = "" if pct >= 80 else "  <- rule not usable yet"
+            print(
+                f"  {column:<16} {filled:>4}/{total}  {pct:>5.1f} %{flag}"
+                f"   ({purpose})"
+            )
 
     if errors:
-        print(f"\n── {len(errors)} LỖI ──")
+        print(f"\n-- {len(errors)} ERRORS --")
         for issue in errors:
             print(issue)
 
     if warnings:
-        print(f"\n── {len(warnings)} CẢNH BÁO ──")
+        print(f"\n-- {len(warnings)} WARNINGS --")
         for issue in warnings:
             print(issue)
 
     print()
     if not errors and not warnings:
-        print("Không có vấn đề nào.")
+        print("No problems found.")
     else:
-        print(f"Tổng: {len(errors)} lỗi, {len(warnings)} cảnh báo.")
+        print(f"Total: {len(errors)} errors, {len(warnings)} warnings.")
 
     if total < 300:
-        print(f"Còn thiếu {300 - total} món để đạt mức tối thiểu 300 theo đề cương.")
+        print(
+            f"{300 - total} more dishes needed to reach the proposal's "
+            f"minimum of 300."
+        )
 
     return 1 if errors or (args.strict and warnings) else 0
 
