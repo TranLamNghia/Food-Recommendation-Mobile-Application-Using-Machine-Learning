@@ -138,7 +138,7 @@ STORIES = [
         ],
     ),
     (
-        "Khai báo thông tin cá nhân và tình trạng sức khỏe",
+        "Điền hoặc Chọn thông tin cá nhân phù hợp với sức khỏe cá nhân",
         "Người dùng",
         "Cao",
         "người dùng",
@@ -168,7 +168,7 @@ STORIES = [
         ],
     ),
     (
-        "Lựa chọn món ăn yêu thích",
+        "Lựa chọn món ăn yêu thích dựa vào tình trạng sức khỏe",
         "Người dùng",
         "Cao",
         "người dùng mới",

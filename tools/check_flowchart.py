@@ -37,6 +37,7 @@ from __future__ import annotations
 import pathlib
 import re
 import sys
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools" / "baocao"))
@@ -45,6 +46,7 @@ from flowchart_data import DAU_DE_XUAT, SO_DO  # noqa: E402
 
 APISPEC = ROOT / "docs" / "API_SPECIFICATION.md"
 SCHEMA = ROOT / "db" / "schema.sql"
+MDJ = ROOT / "BAOCAO" / "Diagram.mdj"
 
 #: `METHOD /đường-dẫn` ở bất cứ đâu trong chữ của một khối.
 RE_ENDPOINT = re.compile(r"\b(GET|POST|PUT|PATCH|DELETE) (/[A-Za-z0-9/{}_-]+)")
@@ -119,6 +121,92 @@ RE_DINH_DANH = re.compile(r"\b([a-z][a-z0-9_]*)\b")
 def chu_cac_khoi() -> list[tuple[str, str]]:
     """(mã sơ đồ, chữ trong khối) cho mọi khối của cả 18 sơ đồ."""
     return [(ma, k[4]) for ma, _, khoi, _ in SO_DO for k in khoi]
+
+
+def _ten_use_case_mdj() -> list[str]:
+    """Tên 18 `UMLUseCase` trong `BAOCAO/Diagram.mdj`."""
+    import json
+
+    ra: list[str] = []
+
+    def di(n: Any) -> None:
+        if isinstance(n, dict):
+            if n.get("_type") == "UMLUseCase":
+                ra.append(str(n.get("name")))
+            for v in n.values():
+                di(v)
+        elif isinstance(n, list):
+            for v in n:
+                di(v)
+
+    di(json.loads(MDJ.read_text(encoding="utf-8")))
+    return ra
+
+
+def kiem_luong_chuong2() -> list[str]:
+    """Phép suy ra kịch bản Chương 2 phải còn đúng với 18 sơ đồ.
+
+    `chuong2_data.py` suy luồng chính của từng kịch bản từ chính `SO_DO`,
+    dựa trên **quy ước vẽ** (trục chính ở cột 0, đi xuống theo dòng). Quy ước
+    đó có thể bị phá bởi một lần sửa sơ đồ hoàn toàn hợp lệ — thêm một ô ghi
+    chú bên phải, hay thêm một vòng quay lại — và khi đó kịch bản sinh ra vẫn
+    là một danh sách câu đọc được, chỉ là của một luồng không có trên sơ đồ.
+    """
+    try:
+        sys.path.insert(0, str(ROOT / "tools" / "baocao"))
+        import chuong2_data  # type: ignore
+    except ImportError as e:  # pragma: no cover
+        print(f"   ! không nạp được chuong2_data.py: {e}")
+        return [f"không nạp được chuong2_data.py: {e}"]
+
+    loi = chuong2_data.kiem_luong_chinh()
+    if not loi:
+        print(f"   ✓ {len(SO_DO)}/{len(SO_DO)} luồng chính đi tới khối Kết thúc")
+    return loi
+
+
+def kiem_ten_use_case() -> list[str]:
+    """Tên use case phải khớp giữa BA nguồn: mdj, flowchart và User story.
+
+    `them_flowchart.py` đã buộc `flowchart_data.SO_DO` khớp với mô hình Use
+    case, nhưng **không ai soát `tools/baocao/us_data.py`** — và nó đã lệch:
+    hai use case mang tên ngắn hơn trong phần User story của báo cáo so với
+    tên trên sơ đồ Use case và trên flowchart:
+
+        sơ đồ: "Điền hoặc Chọn thông tin cá nhân phù hợp với sức khỏe cá nhân"
+        story: "Khai báo thông tin cá nhân và tình trạng sức khỏe"
+
+        sơ đồ: "Lựa chọn món ăn yêu thích dựa vào tình trạng sức khỏe"
+        story: "Lựa chọn món ăn yêu thích"
+
+    Không chỗ nào gây lỗi — nhưng hội đồng đọc sơ đồ Use case ở mục 2.2.2 rồi
+    đọc User story ở mục 1.4 và thấy hai cái tên khác nhau cho cùng một chức
+    năng. Docstring của `us_data.py` tự khai là "lấy đúng 18 use case trong
+    Diagram.mdj", nên đây là lỗi theo chính hợp đồng nó đặt ra.
+    """
+    loi: list[str] = []
+    mdj = set(_ten_use_case_mdj())
+    fc = {ten for _ma, ten, _k, _c in SO_DO}
+
+    try:
+        sys.path.insert(0, str(ROOT / "tools" / "baocao"))
+        import us_data  # type: ignore
+    except ImportError as e:  # pragma: no cover
+        print(f"   ! không nạp được us_data.py: {e}")
+        return [f"không nạp được us_data.py: {e}"]
+    us = {s[0] for s in us_data.STORIES}
+
+    for ten_nguon, tap in (("flowchart_data", fc), ("us_data", us)):
+        thieu = sorted(mdj - tap)
+        thua = sorted(tap - mdj)
+        if thieu or thua:
+            for x in thieu:
+                loi.append(f"{ten_nguon} thiếu use case {x!r} (có trong mdj)")
+            for x in thua:
+                loi.append(f"{ten_nguon} có use case {x!r} mà mdj không có")
+        else:
+            print(f"   ✓ {ten_nguon}: {len(tap)} tên khớp mdj")
+    return loi
 
 
 def _in_utf8() -> None:
@@ -313,8 +401,13 @@ def main() -> int:
     loi += kiem_cot(schema)
     print("\n5. Con số khai ở mục 6 phải khớp số dòng")
     loi += kiem_con_so(spec)
+    print("\n6. Tên use case phải khớp giữa mdj, flowchart và User story")
+    loi += kiem_ten_use_case()
 
-    print("\n6. Còn chờ bổ sung")
+    print("\n7. Luồng chính của 18 kịch bản Chương 2 phải tới được Kết thúc")
+    loi += kiem_luong_chuong2()
+
+    print("\n8. Còn chờ bổ sung")
     cho = [(ma, chu) for ma, chu in chu_cac_khoi() if DAU_DE_XUAT in chu]
     for ma, chu in cho:
         print(f"   ! {ma}  {chu}")
@@ -329,7 +422,7 @@ def main() -> int:
         return 1
     print("Sơ đồ, đặc tả API và lược đồ CSDL mô tả cùng một hệ thống.")
     if cho:
-        print(f"Còn {len(cho)} chỗ chờ bổ sung — xem mục 6.")
+        print(f"Còn {len(cho)} chỗ chờ bổ sung — xem mục 8.")
     return 0
 
 
