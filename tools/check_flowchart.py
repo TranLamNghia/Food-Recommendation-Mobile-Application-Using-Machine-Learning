@@ -215,6 +215,7 @@ def check_use_case_names() -> list[str]:
         return [f"could not load us_data.py: {e}"]
     stories = {s[0] for s in us_data.STORIES}
 
+<<<<<<< HEAD
     for source_name, names in (
         ("flowchart_data", flowcharts),
         ("us_data", stories),
@@ -230,6 +231,16 @@ def check_use_case_names() -> list[str]:
                 errors.append(
                     f"{source_name} has use case {x!r} which the mdj does not"
                 )
+=======
+    for ten_nguon, tap in (("flowchart_data", fc), ("us_data", us)):
+        missing = sorted(mdj - tap)
+        thua = sorted(tap - mdj)
+        if missing or thua:
+            for x in missing:
+                loi.append(f"{ten_nguon} thiếu use case {x!r} (có trong mdj)")
+            for x in thua:
+                loi.append(f"{ten_nguon} có use case {x!r} mà mdj không có")
+>>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
         else:
             print(f"   ok   {source_name}: {len(names)} names match the mdj")
     return errors
@@ -428,6 +439,7 @@ def check_counts(spec: str) -> list[str]:
     numbers = sorted(int(m) for m in re.findall(
         r"^\| (\d+) \| .+ \| `(?:GET|POST|PUT|PATCH|DELETE)` \| `/", spec,
         re.M))
+<<<<<<< HEAD
     missing = sorted(set(range(1, declared_public + 1)) - set(numbers))
     if missing:
         errors.append(f"the summary table is missing row numbers: {missing}")
@@ -438,6 +450,16 @@ def check_counts(spec: str) -> list[str]:
         f"matching the declared counts"
     )
     return errors
+=======
+    missing = sorted(set(range(1, khai_cong + 1)) - set(so))
+    if missing:
+        loi.append(f"bảng tổng hợp thiếu số thứ tự: {missing}")
+    for n in sorted({n for n in so if so.count(n) > 1}):
+        loi.append(f"số thứ tự {n} dùng cho {so.count(n)} endpoint")
+    print(f"   {len(cong)} endpoint công khai + {len(noi)} nội bộ, "
+          "khớp con số đã khai")
+    return loi
+>>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
 
 
 def main() -> int:
