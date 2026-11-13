@@ -192,7 +192,10 @@ def xao(
 
 
 def auc_rocchio(
-    mat: dict[str, dict[str, str]], vec: dict[str, list[float]], mon: list[str]
+    mat: dict[str, dict[str, str]],
+    vec: dict[str, list[float]],
+    mon: list[str],
+    su_that: dict[str, Any] | None = None,
 ) -> tuple[float, int]:
     """AUC của hồ sơ Rocchio, kiểm chéo bỏ-một.
 
@@ -204,7 +207,14 @@ def auc_rocchio(
     duong: list[float] = []
     am: list[float] = []
     for u, chon in mat.items():
-        da_danh = [k for k in mon if chon[k] != "chua_biet"]
+        # Bỏ món F1 không cho người này ăn, như hệ thống thật làm. Giữ chúng
+        # lại thì phép đo được thổi lên một cách rỗng: vector sở thích đã
+        # nhiễm cùng một phần ràng buộc, nên nó đoán đúng `khong_thich` trên
+        # đúng những món đó mà không biết gì về khẩu vị.
+        bo_loai = set(
+            ((su_that or {}).get("nguoi", {}).get(u) or {}).get("f1_loai") or ()
+        )
+        da_danh = [k for k in mon if chon[k] != "chua_biet" and k not in bo_loai]
         for giu in da_danh:
             if chon[giu] == "binh_thuong":
                 continue  # trung tính không thuộc lớp nào trong phép so này
@@ -223,18 +233,73 @@ def khoi_phuc_vector_an(
     mon: list[str],
     su_that: dict[str, Any],
 ) -> dict[str, float]:
-    """`cos(p_u, t_u)` cho từng người: Rocchio khôi phục vector ẩn tới đâu."""
+    """`cos(p_u, t_u)` cho từng người: Rocchio khôi phục vector ẩn tới đâu.
+
+    Dựng vector **sau khi lọc F1**, vì đó là vector mà hệ thống thật dùng:
+    `import_mo_phong.py` và `import_swipes.py` đều chạy F1 trước khi gọi
+    `dung_ho_so`, nên dòng trong `user_preference_profiles` là vector đã lọc.
+    Đo trên vector chưa lọc thì phép kiểm này đang đo một đại lượng không
+    tồn tại ở đâu trong hệ thống.
+
+    Phép so giữa hai cách dựng là việc của `f1_truoc_sau` (phép kiểm 7).
+    """
     kg = KhongGianDeck(vec, len(next(iter(vec.values()))))
     ra: dict[str, float] = {}
     for u, chon in mat.items():
         t = su_that["nguoi"].get(u)
         if t is None:
             continue
-        luot = [(k, SANG_ACTION[chon[k]]) for k in mon]
+        bo_loai = set(t.get("f1_loai") or ())
+        luot = [(k, SANG_ACTION[chon[k]]) for k in mon if k not in bo_loai]
         ho_so = dung_ho_so(kg, luot)
         if not ho_so.is_empty:
             ra[u] = cosine(ho_so.weights, t["vector_khau_vi"])
     return ra
+
+
+def f1_truoc_sau(
+    mat: dict[str, dict[str, str]],
+    vec: dict[str, list[float]],
+    mon: list[str],
+    su_that: dict[str, Any],
+) -> tuple[list[float], list[float], int]:
+    """`cos(p_u, t_u)` **không lọc F1** đối lại **có lọc F1**, cho người có ràng buộc.
+
+    Đây là phép đo biện minh cho `import_swipes.loc_theo_f1` và
+    `import_mo_phong.loc_f1`, và nó chỉ làm được trên dữ liệu mô phỏng: nó
+    cần `t_u`, tức khẩu vị **thật** của người đó, thứ không ai biết ở dữ liệu
+    người thật.
+
+    Bộ món khảo sát là một bộ cố định cho mọi người, nên người ăn thuần chay
+    buộc phải đánh giá cả phở bò và họ đánh `khong_thich`. Hồ sơ Rocchio
+    `p_u = Σ w·v / Σ|w|` khi đó trừ đi vector của 24 món mà họ **không được
+    ăn**, và kết quả là một vector trỏ ra xa mọi món thịt — đọc như "không
+    thích thịt" thay vì "ăn thuần chay". Lọc F1 trước khi dựng vector gỡ
+    đúng phần đó ra.
+
+    Trả về `(cos không lọc, cos có lọc, số người có ràng buộc)`, hai danh
+    sách cùng thứ tự người.
+    """
+    kg = KhongGianDeck(vec, len(next(iter(vec.values()))))
+    tho: list[float] = []
+    sach: list[float] = []
+    for u in sorted(mat):
+        tt = su_that["nguoi"].get(u) or {}
+        bo_loai = set(tt.get("f1_loai") or ())
+        if not bo_loai:
+            continue
+        t = tt["vector_khau_vi"]
+        chon = mat[u]
+
+        a = dung_ho_so(kg, [(k, SANG_ACTION[chon[k]]) for k in mon])
+        b = dung_ho_so(
+            kg, [(k, SANG_ACTION[chon[k]]) for k in mon if k not in bo_loai]
+        )
+        if a.is_empty or b.is_empty:
+            continue
+        tho.append(cosine(a.weights, t))
+        sach.append(cosine(b.weights, t))
+    return tho, sach, len(tho)
 
 
 def cum_trong_ngoai(
@@ -314,7 +379,7 @@ def bao_cao(
         ket.append((z2 > 3.0, f"các món khác nhau thật ở `{muc}` (z > 3)"))
 
     # 3. AUC Rocchio bỏ-một
-    a, n = auc_rocchio(mat, vec, mon)
+    a, n = auc_rocchio(mat, vec, mon, su_that)
     print(f"  3. AUC Rocchio (bỏ-một)    {a:.3f}  trên {n} lượt thích/không thích")
     ket.append((a > 0.60, "Rocchio xếp hạng hơn mức ngẫu nhiên (AUC > 0,60)"))
 
@@ -376,6 +441,37 @@ def bao_cao(
             print(
                 f"       #{z} · {co[z]:>2} món · {trung_binh(gom[z]):.3f}"
                 f"   ({dai_dien}…)"
+            )
+
+        # 7. Bộ lọc F1 — phép đo biện minh cho chính nó.
+        tho, sach, n_rb = f1_truoc_sau(mat, vec, mon, su_that)
+        if n_rb == 0:
+            print(
+                "  7. không ai có ràng buộc cứng — không đo được Bộ lọc F1.\n"
+                "     Sinh lại với HAN_MUC_DIEU_KIEN khác 0 nếu Chương 3 cần "
+                "dòng này."
+            )
+            ket.append((False, "có người mang ràng buộc cứng để đo được F1"))
+        else:
+            # So theo cặp: cùng một người, hai cách dựng vector. Không so hai
+            # trung bình độc lập, vì khác biệt giữa người với người lớn hơn
+            # hẳn khác biệt mà F1 tạo ra, và nó sẽ nhấn chìm phép so.
+            hieu = [b - a for a, b in zip(tho, sach)]
+            tb_h = trung_binh(hieu)
+            sai_so = do_lech(hieu) / math.sqrt(len(hieu)) if len(hieu) > 1 else 0.0
+            tot_hon = sum(1 for d in hieu if d > 0)
+            print(
+                f"  7. Bộ lọc F1 trên {n_rb} người có ràng buộc:\n"
+                f"     cos(p_u, t_u) không lọc {trung_binh(tho):.3f}  →  "
+                f"có lọc {trung_binh(sach):.3f}\n"
+                f"     chênh theo từng người {tb_h:+.3f} ± {sai_so:.3f}  ·  "
+                f"tốt hơn ở {tot_hon}/{n_rb} người"
+            )
+            ket.append(
+                (
+                    tb_h > 2 * sai_so and tot_hon > n_rb / 2,
+                    "lọc F1 trước khi dựng vector đưa p_u về gần t_u hơn",
+                )
             )
 
     return ket

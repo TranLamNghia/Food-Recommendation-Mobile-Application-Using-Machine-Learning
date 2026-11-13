@@ -391,6 +391,24 @@ def loc_f1(
                 "bộ khảo sát đều vi phạm ràng buộc cứng của người này. Cần "
                 "một bộ món khác cho trường hợp này."
             )
+        # Đối chiếu với danh sách mà bộ sinh đã ghi vào `khau_vi_that.json`.
+        #
+        # Hai bên chạy cùng `ly_do_loai` nhưng ở hai thời điểm khác nhau, nên
+        # lệch nghĩa là `condition_rules` đã đổi sau khi dữ liệu được sinh —
+        # và khi đó dữ liệu mang một ràng buộc khác với ràng buộc mà hệ thống
+        # đang thi hành. Nó không gây lỗi ở đâu cả: trình nhập vẫn ghi xong,
+        # `build_dataset` vẫn chạy, và phép đo F1 trong `check_mo_phong.py`
+        # vẫn in ra một con số — một con số của bộ luật cũ.
+        da_ghi = set(su_that["nguoi"].get(u, {}).get("f1_loai") or ())
+        vua_tinh = {f for f, _a, _l in loai}
+        if da_ghi != vua_tinh:
+            raise LoiNap(
+                f"{u}: Bộ lọc F1 vừa tính ra {len(vua_tinh)} món bị loại, "
+                f"nhưng khau_vi_that.json ghi {len(da_ghi)} món.\n"
+                f"`condition_rules` đã đổi sau khi sinh dữ liệu. Sinh lại: "
+                "python tools/sinh_khau_vi.py --ghi"
+            )
+
         giu[u] = con
         if loai:
             bo[u] = loai

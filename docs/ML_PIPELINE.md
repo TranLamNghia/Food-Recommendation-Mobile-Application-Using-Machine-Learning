@@ -1075,16 +1075,16 @@ hai lần chạy toàn chuỗi cho ra bảng giống nhau hoàn toàn.
 Kết quả lần nạp hiện tại:
 
 ```
-users 50 · health_profiles 50 · user_conditions 0
-interactions 2250   like 799 · neutral 648 · dislike 503 · unknown 300
-user_preference_profiles 50   stage=hybrid cả 50 · n_signals 34–43 · α≈0,129
-ml_training_samples 2950      swipe 1950 + random_neg 1000
+users 50 · health_profiles 50 · user_conditions 52 (21 người có ràng buộc cứng)
+interactions 1991   (2250 lượt vuốt − 259 lượt F1 gỡ ra — xem §11.7)
+user_preference_profiles 50   hybrid 41 · content 9
+ml_training_samples 2642      swipe 1762 + random_neg 880 (tỉ lệ 0,5×n)
 ml_models 3 · ml_evaluations 825
 tuổi 17–46 · BMI 16,2–44,1 (trung vị 30,0) · hạn mức 1341–3124 kcal
 ```
 
-`n_signals` là 2250 − 300 lượt `unknown` chia cho 50: lượt "chưa từng ăn"
-không được đếm, đúng như §5.1.
+`n_signals` không đếm lượt `unknown` ("chưa từng ăn", §5.1) và cũng không
+đếm lượt mà F1 đã gỡ — nên 9 người tụt xuống giai đoạn `content`.
 
 **`alpha` được ghi đúng `alpha(n_signals)`, không ghi 0.** `import_swipes.py`
 và `check_ml_e2e.py` trước đây ghi cứng 0 vào cột đó. `ml/serve.py` tính lại α
@@ -1092,53 +1092,235 @@ lúc phục vụ nên không có gì vỡ khi chạy, nhưng cột này là th�
 thống kê của Chương 3 đọc tới — để 0 thì bảng α trong báo cáo toàn số 0 trong
 khi hệ thống thì không chạy bằng 0. Đã sửa ở cả ba chỗ.
 
-### 11.6 Bảng so sánh Chương 3 — lần chạy đầu có dữ liệu
+### 11.6 Bảng so sánh Chương 3 — và hai tạo tác đã phải bỏ trước khi tin vào nó
 
-`python -m ml.evaluate --dataset v1 --model gb-v1-1`, 5 fold chia theo người:
+Lần chạy đầu có dữ liệu cho ra một bảng **sai theo hướng tốt**: hàng `ml`
+đứng đầu (nDCG@5 = 0,883) nhờ một đặc trưng không liên quan gì tới khẩu vị.
+Hai lần sửa dưới đây mới cho bảng dùng được, và cả hai đều đổi kết luận.
 
-| phương án | nDCG@5 | nDCG@10 | P@5 | MAP | AUC |
-|---|---|---|---|---|---|
-| `popularity` | 0,710 ± 0,027 | 0,726 | 0,848 | 0,842 | 0,647 |
-| `rule_based` | 0,731 ± 0,035 | 0,714 | 0,876 | 0,844 | 0,649 |
-| `content_based` | **0,862 ± 0,040** | 0,814 | 0,920 | 0,855 | 0,701 |
-| `hybrid` | 0,861 ± 0,045 | 0,816 | 0,916 | 0,856 | 0,702 |
-| `ml` | 0,883 ± 0,023 | 0,841 | 0,960 | 0,888 | 0,746 |
+#### Tạo tác 1 — số mẫu âm cố định mỗi người
 
-Câu hỏi nghiên cứu cốt lõi có câu trả lời: **`content_based` 0,862 đối lại
-`popularity` 0,710, hơn 0,137 nDCG@5.**
+`tu_am_ngau_nhien` lấy 20 mẫu âm cho mọi người, bất kể người đó vuốt bao
+nhiêu món. Tỉ lệ mẫu nhãn 0 vì vậy là `20/(20+n)` — **giảm đơn điệu** theo số
+tín hiệu, chạy từ 0,370 ở `n = 34` xuống 0,318 ở `n = 43` — nên `n` tự nó dự
+đoán được nhãn trung bình.
 
-`hybrid` trùng `content_based` tới chữ số thứ ba, đúng như §11.4 đã báo
-trước: α = 0,129 nên công thức trộn gần như chỉ còn nhánh nội dung. Đây là
-hạn chế của **một lần khảo sát**, không của công thức — α chỉ lớn khi người
-dùng tích đủ tín hiệu qua nhiều tuần dùng app.
+Đã sửa: số mẫu âm lấy **theo tỉ lệ** `0,5 × n`, nên tỉ lệ pha trộn bằng
+`0,5/1,5` cho mọi người. Sau khi sửa, `corr(n_signals, tỉ lệ random_neg)` còn
+−0,003 và `corr(n_signals, nhãn trung bình)` còn +0,018 (t = 0,12 trên 50
+người). Cờ `--random-neg <số>` giữ đường số cố định cho `check_ml_e2e.py`,
+vốn cần một tập mẫu đếm trước được.
 
-**Một hiện tượng phải ghi vào phần hạn chế.** Ở cả ba thuật toán,
-`nguoi.n_tin_hieu` là đặc trưng mạnh nhất (hệ số −0,833 ở hồi quy logistic;
-độ quan trọng 0,188 và 0,305 ở hai mô hình cây). Nó **không** phải tín hiệu
-khẩu vị, mà là một tương quan do cách dựng tập sinh ra:
-`tu_am_ngau_nhien` lấy **một số mẫu âm cố định cho mỗi người** (20), bất kể
-người đó vuốt bao nhiêu món. Nên tỉ lệ mẫu nhãn 0 giảm đơn điệu theo
-`n_signals`:
+Tạo tác này nhỏ hơn tôi tưởng lúc phát hiện: bỏ nó chỉ hạ hàng `ml` từ 0,883
+xuống 0,878. Nó **không** phải nguyên nhân chính.
 
-| `n_signals` | 34 | 36 | 38 | 40 | 43 |
-|---|---|---|---|---|---|
-| tỉ lệ `random_neg` | 0,370 | 0,357 | 0,345 | 0,333 | 0,318 |
+#### Tạo tác 2 — `nguoi.n_tin_hieu` là mã định danh của nguồn mẫu
 
-Đo trực tiếp: `corr(n_signals, nhãn)` trong nhóm `swipe` là **+0,215**, còn
-trong nhóm `random_neg` là **+0,000** — đúng dấu hiệu của một tương quan nằm ở
-**tỉ lệ pha trộn giữa hai nguồn**, không nằm trong tín hiệu nào.
+Đây mới là nguyên nhân chính. `build_dataset` đóng dấu mỗi mẫu `random_neg`
+bằng thời điểm tín hiệu **cuối cùng** của người đó, nên ảnh chụp hồ sơ của nó
+luôn là hồ sơ đã đủ tín hiệu; mẫu `swipe` thì mang số đếm đang chạy dần:
 
-Chỉ phương án `ml` đọc đặc trưng, nên chỉ nó được lợi — tức một phần khoảng
-cách 0,883 − 0,862 là tạo tác của cách bốc mẫu âm, và **phần đó sẽ không
-chuyển sang lúc phục vụ thật**, nơi không có bước bốc mẫu âm nào. Phép sửa là
-cho số mẫu âm **tỉ lệ theo số lượt vuốt** thay vì cố định; nó đổi mọi con số
-của hàng `ml`, nên phải chạy lại cả bảng.
+| nguồn | `n_signals` min / tb / max | nhãn |
+|---|---|---|
+| `random_neg` | 34 / 39,1 / 43 | 0,100 (hằng) |
+| `swipe` | 0 / 19,1 / 42 | 0,535 |
 
-**Bộ lọc F1 không lọc gì trên tập này.** `ObesityDataSet` không có cột bệnh
-lý, dị ứng hay chế độ ăn nào, nên `benh_ly` rỗng cho cả 50 người và F1 loại
-0/2250 lượt. Chương 3 vì vậy **chưa** so được "có F1" đối lại "không F1" — cần
-hoặc dữ liệu người thật có khai bệnh lý, hoặc một bước gán bệnh lý mô phỏng
-riêng.
+Ở `n_signals ≥ 38` thì 85–100% mẫu là `random_neg`; ở `≤ 22` thì 0%. Mô hình
+học cách **nhận ra mẫu âm nhân tạo** rồi đoán 0,1 cho nó — không học khẩu vị.
+
+Và điều quyết định: **lúc chấm điểm, mọi món ứng viên của cùng một người mang
+cùng một `n_signals`.** Một đặc trưng hằng trên cả tập ứng viên cộng cùng một
+lượng vào mọi điểm nên không đổi thứ tự — nó **không thể** ảnh hưởng tới gợi
+ý, dù hệ số lớn tới đâu. Nó chỉ giúp được trong lúc huấn luyện, và chỉ giúp
+bằng cách đọc ra nguồn mẫu.
+
+Đã sửa: bỏ `nguoi.n_tin_hieu` khỏi ma trận (53 → 52 cột). `n_signals` vẫn
+làm đúng việc của nó ở chỗ khác — `ml/scoring.py` dùng nó làm hệ số trộn α.
+
+Các đặc trưng `nguoi.*` còn lại cũng hằng theo người nhưng được giữ: chúng ở
+đó để **tương tác** với đặc trưng món, và biến thiên của chúng là biến thiên
+thật giữa người với người. `n_tin_hieu` biến thiên **trong cùng một người**,
+và biến thiên đó do cách dựng tập sinh ra.
+
+#### Và một chỗ nữa: thứ tự bộ món phải khác nhau theo từng người
+
+Với thứ tự cố định cho mọi người, lượt thứ i luôn là cùng một món, nên số đếm
+tín hiệu trở thành mã định danh của món: **42/43 mức `n_tin_hieu` chỉ ứng với
+1–4 món trong 45**, và nhãn trung bình theo từng mức chạy từ 0,25 tới 0,73.
+`sinh_khau_vi.py` giờ xáo thứ tự riêng cho từng người. Đây cũng là thực hành
+chuẩn của khảo sát (xáo thứ tự để tránh hiệu ứng thứ tự), nên **phiếu giấy
+cho người thật cũng nên in mỗi người một thứ tự** — `make_survey_deck.py`
+hiện vẫn in một thứ tự duy nhất.
+
+#### Bảng dùng được
+
+`python -m ml.evaluate --dataset v1 --model gb-v1-1`, 5 fold chia theo người,
+2927 mẫu · 52 đặc trưng · 50 người:
+
+| phương án | nDCG@5 | nDCG@10 | P@5 | MAP | AUC | F1 |
+|---|---|---|---|---|---|---|
+| `popularity` | 0,710 ± 0,027 | 0,726 | 0,848 | 0,842 | 0,647 | 0,758 |
+| `rule_based` | 0,731 ± 0,035 | 0,714 | 0,876 | 0,844 | 0,649 | 0,781 |
+| `content_based` | **0,880 ± 0,026** | 0,835 | 0,948 | 0,871 | 0,708 | 0,799 |
+| `hybrid` | **0,880 ± 0,026** | 0,838 | 0,948 | 0,871 | 0,709 | 0,801 |
+| `ml` | 0,866 ± 0,039 | 0,827 | 0,932 | 0,877 | **0,724** | **0,839** |
+
+Ba kết luận, và kết luận thứ hai là kết luận mà bảng trước đã che mất.
+
+**1. Câu hỏi nghiên cứu cốt lõi có câu trả lời rõ:** `content_based` 0,880 đối
+lại `popularity` 0,710 — **hơn 0,171 nDCG@5**, và hơn `rule_based` 0,149.
+Khuyến nghị theo nội dung thắng cả hai mốc đối chứng không cá nhân hóa.
+
+**2. `ml` KHÔNG thắng `content_based` về xếp hạng** (0,866 đối lại 0,880).
+Toàn bộ lợi thế của `ml` trong bảng cũ là tạo tác 2. Nhưng nó thắng về **phân
+lớp**: AUC 0,724 đối lại 0,708 và F1 0,839 đối lại 0,799 — nó phân biệt
+thích/không thích tốt hơn, mà **xếp hạng** top-5 thì kém hơn. Hai việc khác
+nhau, và đồ án cần việc thứ hai.
+
+Đây là kết quả hợp lý, không phải thất bại: Giai đoạn 2 học một mô hình toàn
+cục từ 2927 mẫu của 50 người, trong khi `content_based` là một công thức
+**đúng theo thiết kế** cho dữ liệu mô phỏng (vector ẩn được sinh ra chính
+trong không gian mà cosine đo). Cần nhiều dữ liệu hơn mức một lần khảo sát
+mới mong `ml` vượt — và đó đúng là điều §6.3 đã dự liệu bằng hệ số α.
+
+**3. `hybrid` trùng `content_based` tới chữ số thứ ba**, đúng như §11.4 báo
+trước: α = 0,129 nên công thức trộn gần như chỉ còn nhánh nội dung. Hạn chế
+của **một lần khảo sát**, không của công thức.
+
+Độ quan trọng đặc trưng sau khi sửa đọc ra đúng thứ phải đọc được: `cheo.cos`
+đứng đầu ở cả hai mô hình cây (0,091 và 0,130) — tức độ gần giữa vector sở
+thích và vector món — rồi tới `mon.Vị mặn`, `mon.Tỷ lệ bột đường` và các tích
+chéo.
+
+**Bảng này là bảng của tập CHƯA có ràng buộc sức khỏe.** Nó được giữ lại vì
+nó là chỗ hai tạo tác ở trên đo được. Bảng đi vào báo cáo là bảng ở §11.7.
+
+### 11.7 Ràng buộc sức khỏe mô phỏng — và phép đo biện minh cho Bộ lọc F1
+
+`ObesityDataSet` không có cột bệnh lý nào, nên nếu không gán gì thì F1 loại
+0/2250 lượt và **tầng an toàn của cả hệ thống không có một dòng bằng chứng
+nào** trong Chương 3.
+
+#### Phép lấy mẫu phân tầng, và nó phải được ghi ra
+
+Tỉ lệ bệnh thật ở Việt Nam cho 50 người sẽ ra 1–2 người có ràng buộc cứng, và
+với 1–2 người thì không đo được gì. Tập này **cố ý giàu ràng buộc**: 21/50
+người bị F1 loại ít nhất một món.
+
+Điều này làm tập mẫu **không còn đại diện cho dân số về tỉ lệ bệnh**, nên mọi
+con số kiểu "x% người dùng bị loại y món" đọc từ tập này đều vô nghĩa. Thứ
+đo được là **cơ chế**: khi một người có ràng buộc, F1 có gỡ đúng phần ràng
+buộc ra khỏi khẩu vị hay không.
+
+| điều kiện | người | món bị loại khỏi bộ 45 (riêng điều kiện đó) |
+|---|---|---|
+| Tăng huyết áp | 12 | 0 |
+| Rối loạn mỡ máu | 8 | 0 |
+| Đái tháo đường | 7 | 0 |
+| Gút | 5 | 11 |
+| Dị ứng hải sản | 5 | 11 |
+| Ăn chay | 4 | 24 |
+| Dị ứng đậu nành | 3 | 5 |
+| Dị ứng trứng | 2 | 3 |
+| Dị ứng đậu phộng | 2 | 2 |
+| Không dung nạp gluten | 2 | 2 |
+| Ăn thuần chay | 2 | 24 |
+
+**Ba dòng đầu loại 0 món**, cùng với `Bệnh thận`: quy tắc của chúng là ngưỡng
+mềm theo ngày (`scope = 'per_day'`), do Bước 4 pha 5 thi hành chứ không phải
+F1. Chúng vẫn được gán — chúng là nhóm phổ biến nhất và chúng chạy tầng quy
+tắc mềm — nhưng phép so F1 chỉ dựa trên **tám điều kiện còn lại**.
+
+Bốn điều kiện chuyển hóa (và `Gút`) được gán cho những người có **điểm nguy
+cơ cao nhất** tính từ BMI, tuổi và giới, cộng một lượng nhiễu. Tương quan
+BMI → đái tháo đường là tương quan **thật**, và đưa nó vào làm phần hồ sơ sức
+khỏe của tập này có nghĩa thay vì chỉ để trang trí — nhưng nó là tương quan
+**được tiêm vào**, nên không ai được đọc tập này rồi báo cáo nó như một phát
+hiện. Nhiễu là cần: không có nó thì tập người tăng huyết áp chính là 12 người
+BMI cao nhất, một quan hệ hàm số mà mô hình nào cũng học hoàn hảo.
+
+Ràng buộc **độc lập hoàn toàn với `t_u`** — điểm nguy cơ chỉ đọc hồ sơ sức
+khỏe. Đây là điều kiện bắt buộc của phép đo bên dưới: ràng buộc tương quan
+với khẩu vị thì không tách được phần F1 gỡ ra khỏi phần khẩu vị thật.
+
+#### Nhiễu lẫn được sinh ra có chủ ý
+
+Với mỗi món F1 không cho người đó ăn, lựa chọn bị **ghi đè thành
+`khong_thich`** (xác suất 0,85; phần còn lại là `chua_biet`, không bao giờ là
+`thich`). Phép ghi đè chạy **sau** khi đã rút theo khẩu vị, nên `t_u` không
+đổi — chỉ thứ *được ghi vào phiếu* mới mang ràng buộc.
+
+Đó đúng là tình huống phiếu giấy tạo ra: một bộ món cố định cho mọi người,
+nên người ăn thuần chay buộc phải đánh giá cả phở bò. Và đó là tình huống
+`import_swipes.loc_theo_f1` tồn tại để gỡ.
+
+#### Phép đo
+
+`check_mo_phong.py` phép kiểm 7, trên 21 người có ràng buộc:
+
+| | `cos(p_u, t_u)` |
+|---|---|
+| dựng vector từ **toàn bộ** 45 lượt | **0,119** |
+| dựng vector **sau khi lọc F1** | **0,666** |
+| chênh theo từng người | **+0,546 ± 0,089** · tốt hơn ở **21/21 người** |
+
+So **theo cặp** trên cùng một người, không so hai trung bình độc lập: khác
+biệt giữa người với người lớn hơn hẳn khác biệt mà F1 tạo ra và sẽ nhấn chìm
+phép so.
+
+Đây là bằng chứng định lượng cho chính thiết kế F1-lúc-nhập, và nó **chỉ làm
+được trên dữ liệu mô phỏng**: nó cần `t_u`, thứ không ai biết ở dữ liệu người
+thật. Cơ chế đọc ra được từ con số 0,119: hồ sơ Rocchio
+`p_u = Σ w·v / Σ|w|` trừ đi vector của 24 món mà người ăn thuần chay **không
+được ăn**, nên vector kết quả trỏ ra xa mọi món thịt — đọc như "không thích
+thịt" thay vì "ăn thuần chay".
+
+Hệ quả của việc lọc: 259/2250 lượt bị gỡ, `interactions` còn 1991 dòng, và
+**9/50 người tụt từ `hybrid` xuống `content`** vì `n_signals` xuống dưới 30.
+Đó là cơ chế giai đoạn chạy đúng, không phải mất dữ liệu: người ăn thuần chay
+vuốt 45 món nhưng chỉ 21 lượt là khẩu vị.
+
+#### Mẫu âm cũng không được lấy món F1 đã chặn
+
+`ml/serve.py` chạy F1 trước mọi phép chấm điểm, nên món bị chặn không bao giờ
+là ứng viên lúc phục vụ. Trước khi sửa, **82/880 mẫu âm (9,3%)** là món mà F1
+đã loại cho đúng người đó — mẫu âm *quá dễ*: người ăn thuần chay thì mọi món
+thịt đều là nhãn 0, đoán được mà không cần biết gì về khẩu vị. `build_dataset`
+giờ loại chúng khỏi bể bốc.
+
+Nó cũng là chuyện phân vai: §4 nói F1 là tầng an toàn đặt **trước** mọi mô
+hình. Để mô hình học lại cùng phép loại đó là bắt nó làm việc của tầng khác,
+bằng một cơ chế mềm hơn, và đổi lấy một con số đánh giá cao hơn thực chất.
+
+Tập đánh giá thì không cần sửa: ứng viên của nó là **chính các mẫu kiểm tra**,
+mà chúng đã do trình nạp lọc F1 từ trước, nên món bị chặn không có mặt.
+
+#### Bảng Chương 3 sau khi có ràng buộc
+
+2642 mẫu (swipe 1762 + random_neg 880) · 52 đặc trưng · 50 người · 5 fold:
+
+| phương án | nDCG@5 | nDCG@10 | P@5 | MAP | AUC | F1 |
+|---|---|---|---|---|---|---|
+| `popularity` | 0,694 ± 0,072 | 0,688 | 0,828 | 0,812 | 0,589 | 0,774 |
+| `rule_based` | 0,652 ± 0,053 | 0,666 | 0,780 | 0,805 | 0,594 | 0,801 |
+| `content_based` | 0,862 ± 0,062 | 0,816 | 0,900 | 0,850 | 0,677 | 0,767 |
+| `hybrid` | 0,867 ± 0,060 | 0,815 | 0,908 | 0,850 | 0,678 | 0,769 |
+| `ml` | **0,901 ± 0,017** | 0,849 | 0,960 | 0,873 | 0,694 | 0,834 |
+
+**Câu hỏi nghiên cứu cốt lõi:** `content_based` 0,862 đối lại `popularity`
+0,694 — hơn **0,168** nDCG@5, và hơn `rule_based` 0,210.
+
+**`ml` 0,901 cao hơn `content_based` 0,862, nhưng phải đọc kèm độ lệch.**
+`content_based` có độ lệch giữa các fold là ± 0,062 — rộng, vì mỗi fold chỉ
+10 người và 9 người trong tập đã tụt xuống `content`. Với 5 fold thì thứ tự
+giữa hai phương án này **chưa khẳng định được**; thứ khẳng định được là cả
+hai hơn hẳn hai mốc không cá nhân hóa.
+
+So với bảng ở §11.6 (chưa có ràng buộc), `popularity` tụt 0,710 → 0,694 và
+`rule_based` tụt 0,731 → 0,652. Hợp lý: sau khi F1 gỡ phần ràng buộc, nhãn
+còn lại là khẩu vị thuần, và khẩu vị thuần thì **khó** hơn cho một phương án
+không cá nhân hóa — phần "ai cũng không thích mấy món này" đã bị gỡ đi, mà
+đó chính là phần mà độ phổ biến bắt được.
 
 ---
 
@@ -1155,7 +1337,7 @@ riêng.
 | 7 | Rocchio + cái túi đa chiều **5 pha** | **Xong** trong app Flutter |
 | 8 | Cơ chế 70-30 cấp ngày | **Xong**, có test |
 | 9 | Tính `foods.popularity_score` từ tín hiệu thật | **Xong** — `tools/update_popularity.py`, chờ dữ liệu |
-| 10 | Thu dữ liệu từ người dùng thật | Bộ công cụ **xong**; **dữ liệu thật chờ thu**. Tập **mô phỏng** đã nạp vào CSDL và cả đường ống đã chạy hết — xem §11.4–11.6 |
+| 10 | Thu dữ liệu từ người dùng thật | Bộ công cụ **xong**; **dữ liệu thật chờ thu**. Tập **mô phỏng** đã nạp vào CSDL và cả đường ống đã chạy hết — xem §11.4–11.7 |
 | 11 | Hạn mức theo ngày từ nhật ký + thực đơn | **Xong** — `ml/han_muc.py` |
 | 12 | Lý do bị F1 loại, ba bậc | **Xong** — `f1_filter.ly_do_loai` |
 | 13 | Thi hành ràng buộc mềm | **Xong** — `scoring.hinh_phat`; phạm vi `per_meal` **chưa có tầng nhận** |
@@ -1173,7 +1355,7 @@ Chưa có tín hiệu nào trong CSDL — không có gì để dựng.
 ```
 
 Đoạn trên là trạng thái của CSDL **trống**. Với tập mô phỏng đã nạp (§11.5)
-thì cùng câu lệnh đó trả về 2950 mẫu, `train.py` ghi 3 mô hình và
+thì cùng câu lệnh đó trả về 2642 mẫu, `train.py` ghi 3 mô hình và
 `evaluate.py` ghi 825 dòng `ml_evaluations` — bảng so sánh của Chương 3 ở
 §11.6. Dữ liệu người thật khi có sẽ đi đúng đường đó qua
 `tools/import_swipes.py`.
@@ -1200,7 +1382,7 @@ chuẩn bị dữ liệu, không phải một tầng của đường ống:
 ```
 tools/sinh_khau_vi.py    sinh lượt vuốt từ vector khẩu vị ẩn — §11.4
 tools/check_mo_phong.py  7 phép kiểm tín hiệu + 1 phép thử phủ định
-tools/import_mo_phong.py nạp 50 hồ sơ + 2250 lượt vào CSDL — §11.5
+tools/import_mo_phong.py nạp 50 hồ sơ + lượt vuốt vào CSDL — §11.5, §11.7
 ```
 
 ### 12.0 Hai bộ kiểm, và vì sao cần cả hai

@@ -47,7 +47,6 @@ MUC_VAN_DONG = ("sedentary", "light", "moderate", "active", "very_active")
 MUC_TIEU = ("lose_weight", "maintain", "gain_weight", "healthy_eating")
 
 #: Chặn trên của `n_signals` khi chuẩn hóa — bằng `n_max` của công thức α.
-N_TIN_HIEU_TOI_DA = 100
 
 #: Khoảng BMI dùng để chuẩn hóa. Chọn 15–40 vì đó là khoảng mà phân loại của
 #: WHO cho châu Á còn có nghĩa; ngoài khoảng thì kẹp lại.
@@ -114,7 +113,45 @@ def nap_ho_so_nguoi(cn) -> dict[str, HoSoNguoi]:
     return ket_qua
 
 
-def _khoi_nguoi(h: HoSoNguoi, n_signals: int) -> list[float]:
+def _khoi_nguoi(h: HoSoNguoi) -> list[float]:
+    """Khối hồ sơ người dùng. **Không** có `n_signals` — xem ghi chú dưới.
+
+    ## Vì sao `nguoi.n_tin_hieu` bị bỏ khỏi ma trận đặc trưng
+
+    Hai lý do, và lý do thứ nhất đủ để bỏ một mình.
+
+    **1. Nó không xếp hạng được gì.** Lúc chấm điểm, mọi món ứng viên của
+    cùng một người dùng mang **cùng một** `n_signals`. Một đặc trưng hằng
+    trên toàn bộ tập ứng viên thì cộng cùng một lượng vào mọi điểm, nên thứ
+    tự không đổi — nó không thể ảnh hưởng tới gợi ý, dù hệ số có lớn tới đâu.
+    `n_signals` có việc thật của nó ở chỗ khác: `ml/scoring.py` dùng nó làm
+    hệ số trộn α giữa Giai đoạn 1 và Giai đoạn 2. Đó là nơi nó thuộc về.
+
+    **2. Trong tập huấn luyện, nó là MÃ ĐỊNH DANH CỦA NGUỒN MẪU.**
+    `ml/build_dataset.py` đóng dấu mỗi mẫu `random_neg` bằng `moc_thoi_gian`
+    của người đó — tức thời điểm tín hiệu **cuối cùng** — nên ảnh chụp hồ sơ
+    của chúng luôn là hồ sơ đã đủ tín hiệu, còn mẫu `swipe` thì mang số đếm
+    đang chạy dần. Đo trên 50 người mô phỏng:
+
+        nguồn         n_signals (min/tb/max)    nhãn
+        random_neg        34 / 39,1 / 43        0,100  (hằng)
+        swipe              0 / 19,1 / 42        0,535
+
+    Ở `n_signals ≥ 38` thì 85–100% mẫu là `random_neg`; ở `≤ 22` thì 0%. Mô
+    hình vì vậy học được cách **nhận ra mẫu âm nhân tạo** rồi đoán 0,1 cho
+    nó, thay vì học khẩu vị — và đó chính là điều đã xảy ra: trước khi bỏ
+    đặc trưng này, `nguoi.n_tin_hieu` là đặc trưng **mạnh nhất** của cả ba
+    thuật toán (hệ số −0,714 ở hồi quy logistic; độ quan trọng 0,182 và
+    0,313 ở hai mô hình cây). Phần điểm có được nhờ nó không chuyển sang lúc
+    phục vụ thật, nơi không có mẫu âm nào để nhận ra.
+
+    Các đặc trưng `nguoi.*` còn lại cũng hằng theo người, nên cũng không tự
+    xếp hạng được gì — nhưng chúng ở đây để **tương tác** với đặc trưng món
+    (mô hình cây học được "người BMI cao thì món nhiều béo bị dìm"), và biến
+    thiên của chúng là biến thiên thật giữa người với người. `n_tin_hieu`
+    khác hẳn: nó biến thiên **trong cùng một người**, và biến thiên đó do
+    cách dựng tập sinh ra, không do dữ liệu.
+    """
     v: list[float] = [0.0] * len(GIOI_TINH)
     if h.gender in GIOI_TINH:
         v[GIOI_TINH.index(h.gender)] = 1.0
@@ -125,7 +162,6 @@ def _khoi_nguoi(h: HoSoNguoi, n_signals: int) -> list[float]:
     if h.goal in MUC_TIEU:
         mt[MUC_TIEU.index(h.goal)] = 1.0
     v += mt
-    v.append(_ep(min(n_signals, N_TIN_HIEU_TOI_DA) / N_TIN_HIEU_TOI_DA))
     return v
 
 
@@ -134,7 +170,6 @@ def ten_khoi_nguoi() -> list[str]:
         [f"nguoi.gioi_tinh={g}" for g in GIOI_TINH]
         + ["nguoi.tuoi", "nguoi.bmi", "nguoi.van_dong"]
         + [f"nguoi.muc_tieu={m}" for m in MUC_TIEU]
-        + ["nguoi.n_tin_hieu"]
     )
 
 
@@ -156,7 +191,6 @@ def ten_dac_trung(kg: KhongGianDacTrung) -> list[str]:
 
 def dung_hang_dac_trung(
     h: HoSoNguoi,
-    n_tin_hieu: int,
     p_u: Sequence[float],
     v_mon: Sequence[float],
     do_pho_bien: float,
@@ -170,10 +204,10 @@ def dung_hang_dac_trung(
     cho người dùng thật. Nếu hai nơi tự ghép riêng thì mô hình sẽ được huấn
     luyện trên một thứ tự cột và suy luận trên một thứ tự khác — cùng loại
     lỗi với việc hai bản trích đặc trưng Dart và Python lệch nhau, và cũng
-    im lặng như thế: ma trận vẫn đủ 53 cột, mô hình vẫn trả về xác suất.
+    im lặng như thế: ma trận vẫn đủ số cột, mô hình vẫn trả về xác suất.
     """
     hang = (
-        _khoi_nguoi(h, n_tin_hieu)
+        _khoi_nguoi(h)
         + list(v_mon)
         + [do_pho_bien]
         + [cosine_similarity(p_u, v_mon)]
@@ -297,7 +331,6 @@ def nap_tap(
         v = kg.encode(m)
         x = dung_hang_dac_trung(
             h,
-            n_tin_hieu,
             p_u,
             v,
             float(d["popularity_score"]),

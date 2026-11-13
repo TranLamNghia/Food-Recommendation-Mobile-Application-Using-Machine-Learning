@@ -46,6 +46,7 @@ from datetime import datetime
 from typing import Any, Iterable, Sequence
 
 from .db import in_utf8, ket_noi
+from .f1_filter import dieu_kien_cua_nguoi_dung, ly_do_loai
 from .features import KhongGianDacTrung, Mon, nap_mon
 from .rocchio import HoSoSoThich, dung_ho_so, ho_so_rong
 
@@ -243,7 +244,8 @@ def tu_am_ngau_nhien(
     cn,
     *,
     da_hien: dict[str, set[str]],
-    so_moi_nguoi: int,
+    so_moi_nguoi: int | None,
+    ty_le: float,
     seed: int,
     moc_thoi_gian: dict[str, datetime],
 ) -> list[Mau]:
@@ -258,7 +260,52 @@ def tu_am_ngau_nhien(
     Chỉ lấy từ món công khai đang hoạt động. Sinh bằng `random.Random(seed)`
     nên chạy lại cho đúng cùng một tập — một tập dữ liệu không tái lập được
     thì không so sánh được hai mô hình với nhau.
+
+    ## Số mẫu âm phải TỈ LỆ theo số tín hiệu, không được cố định
+
+    Bản đầu lấy một số cố định (20) cho mọi người. Nó tạo ra một tương quan
+    giả mà ba thuật toán đều bám vào ngay lần chạy đầu có dữ liệu:
+    `nguoi.n_tin_hieu` thành **đặc trưng mạnh nhất** của cả ba (hệ số −0,833
+    ở hồi quy logistic, độ quan trọng 0,188 và 0,305 ở hai mô hình cây).
+
+    Cơ chế: với số mẫu âm cố định, tỉ lệ mẫu nhãn 0 của một người là
+    `20 / (20 + n)` — một hàm **giảm đơn điệu** theo số tín hiệu. Đo trên 50
+    người mô phỏng, tỉ lệ `random_neg` chạy từ 0,370 ở `n = 34` xuống 0,318 ở
+    `n = 43`, và `corr(n_signals, nhãn)` là +0,215 trong nhóm `swipe` nhưng
+    +0,000 trong nhóm `random_neg` — dấu hiệu của tương quan nằm ở **tỉ lệ
+    pha trộn giữa hai nguồn**, không nằm trong tín hiệu nào.
+
+    Chỉ phương án `ml` đọc đặc trưng nên chỉ nó được lợi, và phần lợi đó
+    **không chuyển sang lúc phục vụ thật** — lúc đó không có bước bốc mẫu âm
+    nào. Tức là nó làm hàng `ml` trong bảng so sánh của Chương 3 cao hơn thực
+    chất, đúng ở cột mà cả đồ án phải chứng minh.
+
+    Lấy theo tỉ lệ thì `so_am / (so_am + n) = ty_le / (1 + ty_le)` — một hằng
+    số, không còn phụ thuộc `n`. `ty_le = 0,5` giữ cân bằng nhãn gần như cũ
+    (49,1% nhãn dương với 20 mẫu cố định trên ~39 tín hiệu).
+
+    `so_moi_nguoi` khác `None` thì quay về số cố định. Giữ đường đó vì
+    `check_ml_e2e.py` cần một tập mẫu **đếm trước được** để đối chiếu, và một
+    bộ kiểm đổi số mẫu theo số tín hiệu của dữ liệu giả thì không khẳng định
+    được gì.
+
+    ## Mẫu âm không được lấy món mà Bộ lọc F1 đã chặn
+
+    `ml/serve.py` chạy F1 **trước** mọi phép chấm điểm, nên món bị F1 chặn
+    không bao giờ là ứng viên lúc phục vụ. Đưa chúng vào tập huấn luyện là
+    huấn luyện trên một phân phối mà mô hình sẽ không bao giờ gặp — và chúng
+    là mẫu âm **quá dễ**: người ăn thuần chay thì mọi món thịt đều là nhãn 0,
+    đoán được mà không cần biết gì về khẩu vị. Đo trên 50 người mô phỏng
+    trước khi chặn: **82/880 mẫu âm (9,3%)** là món mà F1 đã loại cho đúng
+    người đó.
+
+    Nó cũng là chuyện phân vai: §4 nói F1 là tầng an toàn đặt trước mọi mô
+    hình. Để mô hình học lại cùng phép loại đó là bắt nó làm việc của tầng
+    khác, bằng một cơ chế mềm hơn — và đổi lấy một con số đánh giá cao hơn
+    thực chất.
     """
+    if so_moi_nguoi is None and ty_le <= 0:
+        raise ValueError("phải cho `so_moi_nguoi` hoặc `ty_le` dương")
     nhan, trong_so = NHAN_THEO_NGUON["random_neg"]
     with cn.cursor() as cur:
         cur.execute(
@@ -268,14 +315,38 @@ def tu_am_ngau_nhien(
         tat_ca = [d["id"] for d in cur.fetchall()]
 
     ket_qua: list[Mau] = []
+    # Nhớ theo bộ điều kiện, không theo người: 50 người thường chỉ có vài bộ
+    # điều kiện khác nhau, và `ly_do_loai` quét `condition_rules` × `foods`.
+    nho_f1: dict[tuple[tuple[int, str], ...], frozenset[str]] = {}
     for user_id in sorted(da_hien):
+        dieu_kien = dieu_kien_cua_nguoi_dung(cn, user_id)
+        khoa = tuple(sorted((d.condition_id, d.severity) for d in dieu_kien))
+        if khoa not in nho_f1:
+            nho_f1[khoa] = (
+                frozenset(ly_do_loai(cn, dieu_kien=dieu_kien, chi_mon_chung=True))
+                if dieu_kien
+                else frozenset()
+            )
+        f1_chan = nho_f1[khoa]
+
         # Hạt giống trộn thêm mã người dùng: hai người khác nhau nhận hai
         # tập âm khác nhau, nhưng chạy lại thì mỗi người vẫn nhận đúng tập
         # của mình kể cả khi số người dùng thay đổi.
         rng = random.Random(f"{seed}:{user_id}")
-        con_lai = [f for f in tat_ca if f not in da_hien[user_id]]
+        con_lai = [
+            f
+            for f in tat_ca
+            if f not in da_hien[user_id] and f not in f1_chan
+        ]
         rng.shuffle(con_lai)
-        for food_id in con_lai[:so_moi_nguoi]:
+        # Ít nhất 1: một người chỉ có 1 tín hiệu vẫn phải có mẫu âm, nếu
+        # không thì mọi mẫu của họ cùng một nhãn.
+        lay = (
+            so_moi_nguoi
+            if so_moi_nguoi is not None
+            else max(1, round(ty_le * len(da_hien[user_id])))
+        )
+        for food_id in con_lai[:lay]:
             ket_qua.append(
                 Mau(
                     user_id=user_id,
@@ -507,7 +578,8 @@ def dung_tap(
     cn,
     *,
     version: str,
-    so_am_moi_nguoi: int,
+    so_am_moi_nguoi: int | None,
+    ty_le_am: float,
     so_fold: int,
     seed: int,
     ap_dung: bool,
@@ -537,6 +609,7 @@ def dung_tap(
         cn,
         da_hien=da_hien,
         so_moi_nguoi=so_am_moi_nguoi,
+        ty_le=ty_le_am,
         seed=seed,
         moc_thoi_gian=moc_thoi_gian,
     )
@@ -609,8 +682,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     bo.add_argument("--version", required=True, help="giá trị cho dataset_version")
     bo.add_argument("--db", default=None, help="tên CSDL khác, dùng khi chạy thử")
     bo.add_argument(
-        "--random-neg", type=int, default=20,
-        help="số mẫu âm ngẫu nhiên mỗi người (mặc định 20)",
+        "--random-neg", type=int, default=None,
+        help="SỐ CỐ ĐỊNH mẫu âm mỗi người; để trống thì lấy theo tỉ lệ",
+    )
+    bo.add_argument(
+        "--random-neg-ty-le", type=float, default=0.5, dest="ty_le_am",
+        help="số mẫu âm = tỉ lệ này × số tín hiệu của người đó (mặc định 0,5)",
     )
     bo.add_argument("--folds", type=int, default=5, help="số fold (mặc định 5)")
     bo.add_argument("--seed", type=int, default=42, help="hạt giống (mặc định 42)")
@@ -629,6 +706,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cn,
             version=t.version,
             so_am_moi_nguoi=t.random_neg,
+            ty_le_am=t.ty_le_am,
             so_fold=t.folds,
             seed=t.seed,
             ap_dung=t.apply,

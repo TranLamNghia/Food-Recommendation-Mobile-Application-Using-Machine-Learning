@@ -303,7 +303,6 @@ def goi_y(
         hang = [
             dung_hang_dac_trung(
                 ho_so_suc_khoe,
-                n,
                 ho_so.weights,
                 kg.encode(m),
                 pho_bien.get(m.id, 0.0),
