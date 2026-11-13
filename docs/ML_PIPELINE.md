@@ -1381,9 +1381,26 @@ chuẩn bị dữ liệu, không phải một tầng của đường ống:
 
 ```
 tools/sinh_khau_vi.py    sinh lượt vuốt từ vector khẩu vị ẩn — §11.4
-tools/check_mo_phong.py  7 phép kiểm tín hiệu + 1 phép thử phủ định
+tools/check_mo_phong.py  8 phép kiểm tín hiệu + 1 phép thử phủ định
 tools/import_mo_phong.py nạp 50 hồ sơ + lượt vuốt vào CSDL — §11.5, §11.7
 ```
+
+Và tầng HTTP, thứ biến `ml/` từ một thư viện thành một **dịch vụ**:
+
+```
+ml/api.py                4 endpoint nội bộ — đặc tả mục 8
+ml/time_vn.py            một đồng hồ duy nhất cho Python: Asia/Ho_Chi_Minh
+tools/run_ml_service.py  nối .env, sinh ML_INTERNAL_KEY, chạy uvicorn
+tools/smoke_ml_api.py    52 phép kiểm qua HTTP thật trên CSDL thật
+```
+
+Trước `ml/api.py`, `ml/serve.py` chạy được từ dòng lệnh nhưng Backend viết
+bằng C# **không có đường nào gọi tới**. Đó là một trong hai mối nối còn thiếu
+giữa ba tầng, và nó chặn các đợt 4, 5, 6 của Backend — khảo sát khẩu vị, sinh
+thực đơn, gợi ý — chứ không phải việc thiếu endpoint công khai.
+
+Phụ thuộc Python nay ghi ở `requirements.txt`. Trước đó repo không ghi phụ
+thuộc ở đâu cả.
 
 ### 12.0 Hai bộ kiểm, và vì sao cần cả hai
 

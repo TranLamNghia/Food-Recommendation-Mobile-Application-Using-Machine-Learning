@@ -530,3 +530,22 @@ def _in_chuong() -> None:
 
 if __name__ == "__main__":
     _in_chuong()
+
+
+#: 2.2.4 và 2.2.7 — hai mục CHƯA LÀM ĐƯỢC, không phải hai mục lược bỏ.
+#:
+#: Khác `MUC_KHONG_DUNG` ở chỗ đó, và khác biệt này phải giữ cho rõ: lược bỏ
+#: có lý do là một quyết định thiết kế, còn chưa có là một việc còn nợ. Viết
+#: cái thứ hai bằng giọng của cái thứ nhất là che một chỗ trống.
+MUC_CHUA_CO: dict[str, str] = {
+    "giao_dien":
+        "Phần phác thảo giao diện chưa hoàn thiện. Ứng dụng di động hiện chạy "
+        "trên dữ liệu mẫu nội bộ và chưa kết nối với dịch vụ máy chủ, nên ảnh "
+        "chụp màn hình thu được chưa phản ánh dữ liệu thật của hệ thống. Phần "
+        "này sẽ được bổ sung sau khi tầng gọi dịch vụ của ứng dụng hoàn tất.",
+    "class":
+        "Sơ đồ lớp chưa được dựng. Cấu trúc dữ liệu của hệ thống hiện được "
+        "mô tả bằng sơ đồ thực thể – liên kết ở mục trên, gồm hai mươi bốn "
+        "bảng; sơ đồ lớp tương ứng với tầng thực thể của phần máy chủ sẽ được "
+        "bổ sung sau.",
+}

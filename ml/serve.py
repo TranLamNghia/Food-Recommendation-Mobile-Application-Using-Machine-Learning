@@ -57,7 +57,7 @@ from .dataset import HoSoNguoi, dung_hang_dac_trung, nap_ho_so_nguoi, ten_dac_tr
 from .db import in_utf8, ket_noi
 from .f1_filter import loc_f1
 from .features import FEATURE_VERSION, KhongGianDacTrung, Mon, nap_mon
-from .rocchio import HoSoSoThich, alpha, giai_doan, ho_so_rong
+from .rocchio import HoSoSoThich, alpha, dung_ho_so, giai_doan, ho_so_rong
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -238,12 +238,21 @@ def goi_y(
     *,
     gioi_han: int = 20,
     mon_da_dung: Sequence[str] = (),
+    chi_ung_vien: Sequence[str] | None = None,
 ) -> KetQuaGoiY:
     """Chấm điểm và xếp hạng ứng viên cho một người dùng.
 
     `mon_da_dung` là những món đã dùng trong ngày — Bước 4 truyền vào để
     không lặp món trong cùng một thực đơn. Loại ở đây thay vì để Bước 4 tự
     bỏ, để `gioi_han` trả về đúng số món còn dùng được.
+
+    `chi_ung_vien` giới hạn phép chấm điểm vào đúng danh sách món đó, dùng
+    cho `POST /predict`: Backend đã có tập ứng viên của riêng nó và chỉ cần
+    điểm. **Bộ lọc F1 vẫn chạy trước** và vẫn cắt tiếp danh sách ấy — món
+    Backend gửi lên mà người này không được ăn thì không có điểm nào, chứ
+    không phải điểm thấp. Để F1 chạy sau hoặc bỏ F1 khi đã có danh sách là
+    biến tầng an toàn thành một ưu tiên xếp hạng, đúng điều §4 của
+    `ML_PIPELINE.md` cấm.
     """
     mon, _ = nap_mon(cn)
     kg = KhongGianDacTrung.tu_mon(mon)
@@ -254,10 +263,13 @@ def goi_y(
     # ── Bước F1: tầng an toàn, chạy trước mọi phép chấm điểm ──
     an_toan = loc_f1(cn, user_id=user_id)
     loai = set(mon_da_dung)
+    giu = None if chi_ung_vien is None else set(chi_ung_vien)
     ds_ung_vien = [
         mon_theo_id[d["id"]]
         for d in an_toan
-        if d["id"] in mon_theo_id and d["id"] not in loai
+        if d["id"] in mon_theo_id
+        and d["id"] not in loai
+        and (giu is None or d["id"] in giu)
     ]
 
     # ── Hồ sơ và giai đoạn ──
@@ -565,6 +577,84 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     finally:
         cn.close()
+
+
+# ── Dựng lại hồ sơ sở thích từ lịch sử vuốt ──────────────────────────
+
+
+def dung_lai_ho_so(cn, user_id: str, *, ghi: bool = True) -> HoSoSoThich:
+    """Tính lại `user_preference_profiles` từ `interactions`, rồi ghi.
+
+    Phục vụ `POST /profiles/{userId}/rebuild`. Gọi sau khi xong onboarding,
+    và **bắt buộc** gọi lại khi người dùng khai thêm bệnh lý hay đổi chế độ
+    ăn.
+
+    ## Bộ lọc F1 phải chạy lại ở đây, dù lúc nhập đã chạy
+
+    Lượt vuốt trong `interactions` đã được lọc F1 một lần — `import_swipes.py`
+    không ghi những lượt vi phạm ràng buộc cứng. Nhưng ràng buộc **đổi theo
+    thời gian**: một người khai thêm "Ăn thuần chay" sáu tháng sau phiên
+    khảo sát vẫn còn nguyên những lượt `like` cho món thịt trong
+    `interactions`, và nếu dựng lại mà không lọc thì vector của họ tiếp tục
+    nói "thích thịt" trong khi F1 đã chặn hết món thịt — hệ thống tự mâu
+    thuẫn với chính mình.
+
+    Đo được trên tập mô phỏng: lọc F1 trước khi dựng vector đưa
+    `cos(p_u, t_u)` từ 0,119 lên 0,666 trên 21 người có ràng buộc. Xem
+    `tools/check_mo_phong.py` phép kiểm 7.
+
+    ## Thứ tự thời gian
+
+    Đọc theo `interacted_at` tăng dần. Rocchio là một phép trung bình có dấu
+    nên thứ tự **không** đổi kết quả, nhưng nó đổi `profile_snapshot` khi
+    dựng tập huấn luyện, và đọc cùng một thứ tự ở cả hai chỗ là cách rẻ nhất
+    để hai chỗ không lệch.
+    """
+    mon, _ = nap_mon(cn)
+    kg = KhongGianDacTrung.tu_mon(mon)
+    mon_theo_id = {m.id: m for m in mon}
+
+    # Món F1 cho phép, tính theo điều kiện HIỆN TẠI của người dùng.
+    cho_phep = {d["id"] for d in loc_f1(cn, user_id=user_id)}
+
+    with cn.cursor() as cur:
+        cur.execute(
+            "SELECT food_id, action FROM interactions WHERE user_id = %s "
+            "ORDER BY interacted_at, id",
+            (user_id,),
+        )
+        luot = [
+            (mon_theo_id[d["food_id"]], d["action"])
+            for d in cur.fetchall()
+            if d["food_id"] in mon_theo_id and d["food_id"] in cho_phep
+        ]
+
+    ho_so = dung_ho_so(kg, luot)
+    if not ghi:
+        return ho_so
+
+    with cn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO user_preference_profiles (user_id, feature_version, "
+            "weights, sum_abs_weight, n_signals, stage, alpha) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE feature_version = VALUES(feature_version), "
+            "weights = VALUES(weights), sum_abs_weight = VALUES(sum_abs_weight), "
+            "n_signals = VALUES(n_signals), stage = VALUES(stage), "
+            "alpha = VALUES(alpha)",
+            (
+                user_id,
+                FEATURE_VERSION,
+                json.dumps(list(ho_so.weights)),
+                ho_so.sum_abs_weight,
+                ho_so.n_signals,
+                giai_doan(ho_so.n_signals),
+                round(alpha(ho_so.n_signals), 3),
+            ),
+        )
+    cn.commit()
+    return ho_so
+
 
 
 if __name__ == "__main__":

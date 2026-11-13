@@ -1,0 +1,37 @@
+# Phụ thuộc Python của phần ML và bộ công cụ.
+#
+#     pip install -r requirements.txt
+#
+# Trước tệp này, repo KHÔNG ghi phụ thuộc ở đâu cả — không có
+# requirements.txt, không có pyproject.toml, và không tài liệu .md nào nhắc
+# tới `pip install`. Ai clone về sẽ gặp `ModuleNotFoundError` lần lượt từng
+# gói một, và phải đoán phiên bản nào thì chạy được.
+#
+# Ghim bằng `>=` chứ không `==`: đây là đồ án, không phải dịch vụ đang chạy
+# thật, nên khóa cứng phiên bản sẽ làm tệp này hỏng theo thời gian nhanh hơn
+# là nó giúp. Số ghi ở đây là phiên bản đã THỰC SỰ chạy qua toàn bộ bộ kiểm.
+
+# ── Cơ sở dữ liệu ─────────────────────────────────────────────────────────
+# Trình điều khiển MySQL thuần Python. Dùng PyMySQL chứ không mysqlclient vì
+# mysqlclient cần trình biên dịch C và thư viện phát triển của MySQL — thứ
+# không có sẵn trên máy Windows.
+PyMySQL>=1.2.0
+
+# ── Học máy ───────────────────────────────────────────────────────────────
+# Ba thuật toán của Giai đoạn 2 và bộ chuẩn hóa đặc trưng.
+scikit-learn>=1.9.1
+# Ghi và nạp lại mô hình đã huấn luyện (`ml/artifacts/*.joblib`).
+joblib>=1.6.0
+numpy>=2.4.6
+
+# ── ML Service ────────────────────────────────────────────────────────────
+# Bốn endpoint nội bộ ở `API_SPECIFICATION.md` mục 8 — `ml/api.py`.
+fastapi>=0.138.0
+uvicorn>=0.49.0
+pydantic>=2.13.4
+
+# ── Múi giờ ───────────────────────────────────────────────────────────────
+# `ml/time_vn.py` cần cơ sở dữ liệu múi giờ IANA cho `Asia/Ho_Chi_Minh`.
+# Linux và macOS mang sẵn; **Windows thì không**, nên thiếu gói này thì
+# `zoneinfo.ZoneInfo` ném `ZoneInfoNotFoundError` ngay lúc nạp mô-đun.
+tzdata>=2026.6; sys_platform == "win32"
