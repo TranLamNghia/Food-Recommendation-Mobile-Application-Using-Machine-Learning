@@ -1,85 +1,89 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Nạp tập mô phỏng vào CSDL: 50 người, 2250 lượt vuốt, hồ sơ Rocchio.
+"""Load the simulated set into the database: 50 people, 2250 swipes, Rocchio
+profiles.
 
-Chỗ chặn đường mà tệp này mở. `ml/build_dataset.py` trả về 0 mẫu vì CSDL
-chưa có người dùng nào, nên `train.py`, `evaluate.py` và cả bảng so sánh của
-Chương 3 đều không chạy được. Tệp này là bước thiếu giữa hai tệp CSV ở
-`data/survey/mo_phong/` và các bảng mà đường ống đọc.
+The blocker this file opens. `ml/build_dataset.py` returned 0 samples because
+the database had no users, so `train.py`, `evaluate.py` and the whole Chapter 3
+comparison table could not run. This file is the missing step between the two
+CSV files in `data/survey/mo_phong/` and the tables the pipeline reads.
 
-Khác `import_swipes.py` ở đâu: tệp kia nhập **một phiếu giấy của một người
-thật**, có khối `# khóa: giá trị` đã khai sẵn `ngay_sinh`, `chieu_cao_cm`,
-`muc_van_dong`, `muc_tieu`. Tệp này nhập **50 hồ sơ máy** từ
-`ObesityDataSet`, và tệp nguồn đó **không có** bốn trường ấy — nó có `Age`
-thập phân, `Height` theo mét, `FAF` liên tục 0–3 và `NObeyesdad` 7 nhãn. Bốn
-phép quy đổi dưới đây là toàn bộ phần phải tự quyết, nên mỗi phép đều ghi rõ
-căn cứ và ghi rõ cái nó **không** làm được.
+How it differs from `import_swipes.py`: that one imports **one paper form from
+one real person**, with a `# key: value` block already stating `ngay_sinh`,
+`chieu_cao_cm`, `muc_van_dong` and `muc_tieu`. This one imports **50 machine
+profiles** from `ObesityDataSet`, and that source file **has none** of those
+four fields — it has a decimal `Age`, a `Height` in metres, a continuous `FAF`
+of 0-3 and a `NObeyesdad` of 7 labels. The four conversions below are the whole
+of what has to be decided, so each one states its basis and states what it
+**cannot** do.
 
-## Bốn phép quy đổi
+## The four conversions
 
-**1. `Age` thập phân → `date_of_birth`.** 31/50 hồ sơ có tuổi không nguyên
-(21,47 · 36,84…) vì 75% `ObesityDataSet` là dòng SMOTE nội suy. Lược đồ lưu
-ngày sinh, không lưu tuổi — đúng, vì tuổi là đại lượng dẫn xuất đổi theo
-ngày. Phép quy đổi: làm tròn tuổi, rồi đặt ngày sinh vào khoảng 1–300 ngày
-**trước** mốc sinh nhật năm nay, lệch theo chỉ số người để 50 hồ sơ không
-cùng một ngày sinh. Lùi lại ít nhất một ngày là bắt buộc: đặt đúng mốc thì
-`age()` trả về `n` hay `n − 1` tùy giờ chạy.
+**1. Decimal `Age` -> `date_of_birth`.** 31 of 50 profiles have a non-integer
+age (21.47 · 36.84…) because 75% of `ObesityDataSet` is SMOTE-interpolated
+rows. The schema stores a date of birth, not an age — correctly, because age is
+a derived quantity that changes by the day. The conversion: round the age, then
+place the date of birth 1-300 days **before** this year's birthday, offset by
+the person's index so the 50 profiles do not share one birthday. Going back at
+least one day is mandatory: landing exactly on the birthday makes `age()`
+return `n` or `n − 1` depending on the time of day it runs.
 
-Phép quy đổi tự kiểm: `age(ngay_sinh, ngay_nap) == round(Age)` được `assert`
-cho cả 50 dòng. Không có phép tự kiểm đó thì một lỗi lệch-một ở đây đi
-thẳng vào BMR của cả 50 người và không gì báo ra.
+The conversion is self-checked: `age(date_of_birth, load_date) == round(Age)`
+is asserted for all 50 rows. Without that self-check, an off-by-one here would
+go straight into the BMR of all 50 people and nothing would report it.
 
-**2. `Height` mét → `height_cm`.** Nhân 100. Cột `health_profiles.bmi` là cột
-`VIRTUAL` tính theo `height_cm`, nên sau phép nhân này CSDL tự cho ra BMI
-đúng — khoảng 16,2–44,1. Cột `BMI` trong `f1_training_dataset_50_users.csv`
-thì sai 10 000 lần vì nó áp công thức dành cho cm vào giá trị đã là mét;
-tệp này **không đọc cột đó**.
+**2. `Height` in metres -> `height_cm`.** Multiply by 100.
+`health_profiles.bmi` is a `VIRTUAL` column computed from `height_cm`, so after
+this multiplication the database produces the correct BMI — roughly 16.2-44.1.
+The `BMI` column in `f1_training_dataset_50_users.csv` is wrong by a factor of
+10,000 because it applies the cm formula to a value already in metres; this
+file **does not read that column**.
 
-**3. `FAF` 0–3 → `activity_level` 5 bậc.** `FAF` gốc là câu hỏi bốn lựa chọn
-(0 = không tập · 1 = 1–2 ngày · 2 = 2–4 ngày · 3 = 4–5 ngày mỗi tuần), và
-giá trị thập phân chỉ là sản phẩm của SMOTE. Nên phép quy đổi là **làm tròn
-về câu trả lời nguyên gốc gần nhất**, rồi ánh xạ sang bậc có cùng tần suất
-trong `SYSTEM_ARCHITECTURE.md` §3.1.
+**3. `FAF` 0-3 -> a 5-level `activity_level`.** `FAF` is originally a
+four-choice question (0 = no exercise · 1 = 1-2 days · 2 = 2-4 days · 3 = 4-5
+days per week), and the decimal values are purely an artefact of SMOTE. So the
+conversion is to **round to the nearest original answer**, then map to the
+level with the same frequency in `SYSTEM_ARCHITECTURE.md` §3.1.
 
-**`very_active` không bao giờ xuất hiện, và đó là tính chất của bộ câu hỏi
-nguồn chứ không phải lỗi.** Bậc cao nhất của `FAF` là "4–5 ngày mỗi tuần",
-còn `very_active` là "lao động nặng hoặc tập hai buổi mỗi ngày" — thang đo
-nguồn **không với tới** bậc đó. Gán `very_active` cho `FAF = 3` sẽ nhân hạn
-mức năng lượng với 1,900 thay vì 1,725, tức bơm thêm ~10% calo cho một nhóm
-người mà dữ liệu không nói gì về họ.
+**`very_active` never appears, and that is a property of the source
+questionnaire rather than a defect.** `FAF`'s top level is "4-5 days per week",
+while `very_active` means "heavy labour or two sessions a day" — the source
+scale **does not reach** that level. Assigning `very_active` to `FAF = 3` would
+multiply the calorie limit by 1.900 instead of 1.725, that is, add ~10% calories
+for a group the data says nothing about.
 
-**4. `NObeyesdad` 7 nhãn → `goal` 4 bậc.** `Insufficient_Weight` →
-`gain_weight`; `Normal_Weight` → `maintain`; hai bậc `Overweight` và ba bậc
-`Obesity` → `lose_weight`.
+**4. `NObeyesdad` 7 labels -> a 4-level `goal`.** `Insufficient_Weight` ->
+`gain_weight`; `Normal_Weight` -> `maintain`; the two `Overweight` levels and
+the three `Obesity` levels -> `lose_weight`.
 
-**`healthy_eating` không bao giờ xuất hiện, và cũng là tính chất của nguồn.**
-Nó là một lựa chọn người dùng **tự khai** ("tôi không đặt nặng cân nặng"),
-không suy ra được từ một nhãn phân loại cân nặng. Suy ra thì tệp này đang
-bịa một ý định mà không ai phát biểu.
+**`healthy_eating` never appears, and that too is a property of the source.** It
+is a **self-declared** user choice ("I am not focused on weight"), and cannot be
+inferred from a weight classification label. Inferring it would mean this file
+is inventing an intention nobody stated.
 
-## Những gì tệp này KHÔNG ghi, và vì sao
+## What this file does NOT write, and why
 
-`user_conditions` **trống cho cả 50 người.** `ObesityDataSet` có 17 cột và
-không cột nào là bệnh lý, dị ứng hay chế độ ăn — nên Bộ lọc F1 loại 0/2250
-lượt. Tệp này vẫn **gọi** F1 chứ không bỏ qua, để khi có bước gán bệnh lý mô
-phỏng thì đường đi đã đúng sẵn; hiện giờ nó chỉ in ra con số 0 thật thà.
+The latent taste vector `t_u` **does not go into the database.** The schema has
+no column for it, and adding a column only simulated data uses would make the
+schema carry something that does not belong to the product. It stays in
+`khau_vi_that.json`, and `tools/check_simulation.py` is what reads it.
 
-Vector khẩu vị ẩn `t_u` **không vào CSDL.** Lược đồ không có cột cho nó, và
-thêm một cột chỉ dữ liệu mô phỏng mới dùng là làm lược đồ phải gánh một thứ
-không thuộc về sản phẩm. Nó ở lại `khau_vi_that.json`, và
-`tools/check_simulation.py` là chỗ đọc nó.
+## Load it all, then commit
 
-## Nạp hết rồi mới commit
+All 50 people are in **one transaction**. A half-finished load — 23 people with
+swipes, 27 without — is distinctly worse than no load at all: `build_dataset`
+runs straight through it and quietly builds a defective training set.
 
-Cả 50 người nằm trong **một giao dịch**. Một lần nạp dở — 23 người có lượt
-vuốt, 27 người không — tệ hơn hẳn một lần chưa nạp: `build_dataset` vẫn chạy
-qua nó và âm thầm dựng một tập huấn luyện khuyết.
-
-Chạy
-────
-    python tools/import_simulation.py              # xem trước, không ghi
+Run
+───
+    python tools/import_simulation.py              # preview, write nothing
     python tools/import_simulation.py --apply
-    python tools/import_simulation.py --xoa        # xóa lần nạp trước
+    python tools/import_simulation.py --delete     # remove the previous load
+
+Note on language: the email pattern, the UUID namespace URL and the display
+name are values already stored in `users` rows, so their literals stay as they
+are — changing the namespace URL would change every `user_id`, and with it the
+fold assignment in Chapter 3.
 """
 
 from __future__ import annotations
@@ -110,42 +114,45 @@ from tools.gen_buoc1_cases import (  # noqa: E402
     tdee,
 )
 
-# Dùng lại nguyên bộ của `import_swipes.py` chứ không viết bản thứ hai: phép
-# tra bệnh lý, mức độ ghi vào `user_conditions`, phép lọc F1 lúc nhập và giá
-# trị băm không dùng được đều phải **giống hệt** giữa hai đường nhập. Hai bản
-# cài đặt của cùng một phép lọc là hai chỗ để lệch, và chỗ lệch ở đây có
-# nghĩa là F1 lúc nhập loại một tập món khác F1 lúc chạy thật.
+# Reuse `import_swipes.py`'s set wholesale rather than writing a second one:
+# the condition lookup, the severity written into `user_conditions`, the F1
+# filtering at import time and the unusable password hash must all be
+# **identical** between the two import paths. Two implementations of one filter
+# are two places to drift, and drift here means F1 at import excludes a
+# different set of foods from F1 at serving time.
 from tools.import_swipes import (  # noqa: E402
-    BAM_KHONG_DUNG_DUOC,
+    UNUSABLE_PASSWORD_HASH,
     FORM_SEVERITY,
-    LoiPhieu,
-    _ly_do_ngan,
-    kiem_benh_ly,
-    loc_theo_f1,
+    FormError,
+    _short_reason,
+    filter_by_f1,
+    resolve_conditions,
 )
 from tools.make_survey_deck import CHOICES  # noqa: E402
 
-HANH_VI = ROOT / "data" / "survey" / "mo_phong" / "hanh_vi.csv"
-SU_THAT = ROOT / "data" / "survey" / "mo_phong" / "khau_vi_that.json"
-HO_SO_NGUON = ROOT / "data" / "survey" / "f1_training_dataset_50_users.csv"
+BEHAVIOUR_CSV = ROOT / "data" / "survey" / "mo_phong" / "hanh_vi.csv"
+GROUND_TRUTH = ROOT / "data" / "survey" / "mo_phong" / "khau_vi_that.json"
+PROFILES_CSV = (
+    ROOT / "data" / "survey" / "f1_training_dataset_50_users.csv"
+)
 
-#: Tên miền `.invalid` được RFC 2606 dành riêng và không bao giờ phân giải
-#: được. Tiền tố khác `khaosat-` của `import_swipes.py` có chủ ý: hai lần nạp
-#: phải phân biệt được nhau, vì `--xoa` dưới đây xóa theo đúng mẫu này và
-#: trùng tiền tố thì nó xóa luôn phiếu người thật.
-MAU_EMAIL = "mophong-{}@local.invalid"
-MAU_EMAIL_LIKE = "mophong-%@local.invalid"
+#: The `.invalid` TLD is reserved by RFC 2606 and never resolves. The prefix
+#: differs from `import_swipes.py`'s `khaosat-` on purpose: the two loads must
+#: be distinguishable, because `--delete` below removes rows matching exactly
+#: this pattern and a shared prefix would delete the real people's forms too.
+EMAIL_TEMPLATE = "mophong-{}@local.invalid"
+EMAIL_LIKE = "mophong-%@local.invalid"
 
-#: `FAF` làm tròn → `activity_level`. Xem phép quy đổi 3 ở đầu tệp.
-FAF_SANG_VAN_DONG = {
-    0: "sedentary",   # không tập
-    1: "light",       # 1–2 ngày mỗi tuần
-    2: "moderate",    # 2–4 ngày
-    3: "active",      # 4–5 ngày
+#: Rounded `FAF` -> `activity_level`. See conversion 3 at the top of the file.
+FAF_TO_ACTIVITY = {
+    0: "sedentary",   # no exercise
+    1: "light",       # 1-2 days per week
+    2: "moderate",    # 2-4 days
+    3: "active",      # 4-5 days
 }
 
-#: `NObeyesdad` → `goal`. Xem phép quy đổi 4 ở đầu tệp.
-NHAN_SANG_MUC_TIEU = {
+#: `NObeyesdad` -> `goal`. See conversion 4 at the top of the file.
+LABEL_TO_GOAL = {
     "Insufficient_Weight": "gain_weight",
     "Normal_Weight": "maintain",
     "Overweight_Level_I": "lose_weight",
@@ -155,311 +162,351 @@ NHAN_SANG_MUC_TIEU = {
     "Obesity_Type_III": "lose_weight",
 }
 
-GIOI = {"Male": "male", "Female": "female"}
+GENDER = {"Male": "male", "Female": "female"}
 
-#: Khoảng lệch ngày sinh quanh mốc sinh nhật, xem phép quy đổi 1.
-LECH_NGAY_SINH = 300
+#: How far the date of birth may be spread around the birthday; see conversion 1.
+BIRTH_DATE_SPREAD = 300
 
-#: Không gian tên để sinh `users.id` và `interactions.session_id` bằng UUID v5.
+#: The namespace for generating `users.id` and `interactions.session_id` as
+#: UUID v5.
 #:
-#: **Phải là UUID v5, không được là `uuid4()`,** và đây không phải chuyện
-#: thẩm mỹ. `ml/build_dataset.py` gán fold bằng
-#: `sorted(nguoi, key=sha256(f"{seed}:{user_id}"))` và bốc mẫu `random_neg`
-#: bằng `random.Random(f"{seed}:{user_id}")`. Khóa của cả hai là `user_id`,
-#: nên với `uuid4()` thì **mỗi lần nạp lại cho ra một cách chia fold khác và
-#: một tập mẫu âm khác** — tức mọi con số trong bảng so sánh của Chương 3 đổi
-#: sau mỗi lần chạy, mà không ai sửa gì cả.
+#: **It must be UUID v5, never `uuid4()`,** and this is not a matter of taste.
+#: `ml/build_dataset.py` assigns folds with
+#: `sorted(people, key=sha256(f"{seed}:{user_id}"))` and draws `random_neg`
+#: samples with `random.Random(f"{seed}:{user_id}")`. Both are keyed on
+#: `user_id`, so with `uuid4()` **every reload produces a different fold split
+#: and a different negative sample** — meaning every number in Chapter 3's
+#: comparison table changes after each run, with nobody having changed
+#: anything.
 #:
-#: UUID v5 là băm SHA-1 của (không gian tên, tên), nên `U001` luôn cho đúng
-#: một `user_id`. Cả chuỗi `--xoa` → `--apply` → `build_dataset` → `train` →
-#: `evaluate` vì vậy tái lập được từng chữ số.
+#: UUID v5 is a SHA-1 hash of (namespace, name), so `U001` always yields
+#: exactly one `user_id`. The whole chain `--delete` -> `--apply` ->
+#: `build_dataset` -> `train` -> `evaluate` is therefore reproducible digit for
+#: digit.
 #:
-#: `uuid.NAMESPACE_URL` với một URL `.invalid` thay vì một UUID bốc tay: tên
-#: miền đó được RFC 2606 dành riêng nên không trùng với không gian tên của ai.
-KHONG_GIAN_TEN = uuid.uuid5(uuid.NAMESPACE_URL, "https://mophong.local.invalid/")
+#: `uuid.NAMESPACE_URL` with a `.invalid` URL rather than a hand-picked UUID:
+#: that TLD is reserved by RFC 2606, so it collides with nobody's namespace.
+#: The URL string is load-bearing — see the note on language above.
+UUID_NAMESPACE = uuid.uuid5(
+    uuid.NAMESPACE_URL, "https://mophong.local.invalid/"
+)
 
 
-class LoiNap(Exception):
-    """Dữ liệu vào không dùng được. Thông điệp phải nói rõ phải sửa chỗ nào."""
+class LoadError(Exception):
+    """The input is not usable. The message must say exactly what to fix."""
 
 
-# ── đọc và quy đổi ────────────────────────────────────────────────────────
+# -- reading and converting ------------------------------------------------
 
 
-def lui_nam(moc: date, nam: int) -> date:
-    """`moc` lùi `nam` năm. 29/2 lùi về 28/2 vì năm đích có thể không nhuận."""
+def years_back(anchor: date, years: int) -> date:
+    """`anchor` minus `years`. 29 Feb falls back to 28 Feb, as the target year
+    may not be a leap year."""
     try:
-        return moc.replace(year=moc.year - nam)
+        return anchor.replace(year=anchor.year - years)
     except ValueError:
-        return moc.replace(year=moc.year - nam, day=28)
+        return anchor.replace(year=anchor.year - years, day=28)
 
 
-def ngay_sinh_tu_tuoi(tuoi_nam: int, chi_so: int, hom_nay: date) -> date:
-    """Ngày sinh cho ra đúng `tuoi_nam` tuổi vào `hom_nay`."""
-    moc = lui_nam(hom_nay, tuoi_nam)
-    ngay = moc - timedelta(days=1 + (chi_so * 7) % LECH_NGAY_SINH)
-    if age(ngay, hom_nay) != tuoi_nam:
-        raise LoiNap(
-            f"quy đổi ngày sinh sai: {ngay} cho ra {age(ngay, hom_nay)} tuổi, "
-            f"cần {tuoi_nam}. Xem `ngay_sinh_tu_tuoi`."
+def birth_date_for_age(years: int, index: int, today: date) -> date:
+    """A date of birth that yields exactly `years` of age on `today`."""
+    anchor = years_back(today, years)
+    birth = anchor - timedelta(days=1 + (index * 7) % BIRTH_DATE_SPREAD)
+    if age(birth, today) != years:
+        raise LoadError(
+            f"date-of-birth conversion is wrong: {birth} yields "
+            f"{age(birth, today)} years, {years} needed. See "
+            f"`birth_date_for_age`."
         )
-    return ngay
+    return birth
 
 
-def quy_doi_ho_so(h: dict[str, str], chi_so: int, hom_nay: date) -> dict[str, Any]:
-    """Một dòng `ObesityDataSet` → các trường của `health_profiles`."""
-    ma = h["user_id"]
+def convert_profile(
+    row: dict[str, str], index: int, today: date
+) -> dict[str, Any]:
+    """One `ObesityDataSet` row -> the fields of `health_profiles`."""
+    key = row["user_id"]
 
-    if h["Gender"] not in GIOI:
-        raise LoiNap(f"{ma}: `Gender` = {h['Gender']!r}, chỉ nhận Male/Female")
-    if h["NObeyesdad"] not in NHAN_SANG_MUC_TIEU:
-        raise LoiNap(
-            f"{ma}: `NObeyesdad` = {h['NObeyesdad']!r} không có trong bảng quy "
-            f"đổi. Bảy nhãn đã biết: {', '.join(sorted(NHAN_SANG_MUC_TIEU))}"
+    if row["Gender"] not in GENDER:
+        raise LoadError(
+            f"{key}: `Gender` = {row['Gender']!r}, only Male/Female accepted"
+        )
+    if row["NObeyesdad"] not in LABEL_TO_GOAL:
+        raise LoadError(
+            f"{key}: `NObeyesdad` = {row['NObeyesdad']!r} is not in the "
+            f"conversion table. The seven known labels: "
+            f"{', '.join(sorted(LABEL_TO_GOAL))}"
         )
 
     try:
-        tuoi_tho = float(h["Age"])
-        cao_m = float(h["Height"])
-        can = float(h["Weight"])
-        faf = float(h["FAF"])
+        raw_age = float(row["Age"])
+        height_m = float(row["Height"])
+        weight = float(row["Weight"])
+        faf = float(row["FAF"])
     except ValueError as e:
-        raise LoiNap(f"{ma}: số không đọc được — {e}") from e
+        raise LoadError(f"{key}: unreadable number — {e}") from e
 
-    faf_lam_tron = int(round(faf))
-    if faf_lam_tron not in FAF_SANG_VAN_DONG:
-        raise LoiNap(
-            f"{ma}: `FAF` = {faf} làm tròn ra {faf_lam_tron}, ngoài khoảng 0–3"
+    faf_rounded = int(round(faf))
+    if faf_rounded not in FAF_TO_ACTIVITY:
+        raise LoadError(
+            f"{key}: `FAF` = {faf} rounds to {faf_rounded}, outside 0-3"
         )
 
-    tuoi_nam = int(round(tuoi_tho))
-    cao_cm = round(cao_m * 100, 2)
-    # DECIMAL(5,2) chứa tối đa 999,99. Chiều cao mét bị quên nhân 100 sẽ lọt
-    # qua mọi phép kiểm khác và cho ra BMI gấp 10 000 lần — đúng lỗi đang có
-    # trong cột `BMI` của tệp nguồn.
-    if not 100.0 <= cao_cm <= 250.0:
-        raise LoiNap(
-            f"{ma}: chiều cao quy đổi ra {cao_cm} cm, ngoài khoảng 100–250. "
-            f"`Height` trong tệp nguồn phải tính bằng MÉT."
+    age_years = int(round(raw_age))
+    height_cm = round(height_m * 100, 2)
+    # DECIMAL(5,2) holds at most 999.99. A height in metres with the x100
+    # forgotten would pass every other check and yield a BMI 10,000 times too
+    # large — exactly the defect present in the source file's `BMI` column.
+    if not 100.0 <= height_cm <= 250.0:
+        raise LoadError(
+            f"{key}: height converts to {height_cm} cm, outside 100-250. "
+            f"`Height` in the source file must be in METRES."
         )
-    if not 20.0 <= can <= 300.0:
-        raise LoiNap(f"{ma}: cân nặng {can} kg ngoài khoảng 20–300")
-    if not 1 <= tuoi_nam <= 120:
-        raise LoiNap(f"{ma}: tuổi quy đổi ra {tuoi_nam}, ngoài khoảng 1–120")
+    if not 20.0 <= weight <= 300.0:
+        raise LoadError(f"{key}: weight {weight} kg is outside 20-300")
+    if not 1 <= age_years <= 120:
+        raise LoadError(
+            f"{key}: age converts to {age_years}, outside 1-120"
+        )
 
-    gioi = GIOI[h["Gender"]]
-    van_dong = FAF_SANG_VAN_DONG[faf_lam_tron]
-    muc_tieu = NHAN_SANG_MUC_TIEU[h["NObeyesdad"]]
-    ngay_sinh = ngay_sinh_tu_tuoi(tuoi_nam, chi_so, hom_nay)
+    gender = GENDER[row["Gender"]]
+    activity = FAF_TO_ACTIVITY[faf_rounded]
+    goal = LABEL_TO_GOAL[row["NObeyesdad"]]
+    birth = birth_date_for_age(age_years, index, today)
 
-    # Bước 1 lấy từ `gen_buoc1_cases` — bản tham chiếu Python đã được
-    # `check_be_parity.py` đối chiếu với C# và Dart. Viết lại ở đây là tạo
-    # bản thứ tư của cùng một công thức, tức tạo chỗ thứ tư để lệch.
-    d_can = Decimal(str(can))
-    d_cao = Decimal(str(cao_cm))
-    gt_bmr = bmr(gioi, d_can, d_cao, tuoi_nam)
-    gt_tdee = tdee(gt_bmr, van_dong)
-    gt_han_muc = calorie_limit(gt_tdee, gt_bmr, muc_tieu)
+    # Step 1 comes from `gen_buoc1_cases` — the Python reference that
+    # `check_be_parity.py` has already compared against the C# and the Dart.
+    # Rewriting it here would be a fourth copy of one formula, that is, a
+    # fourth place to drift.
+    d_weight = Decimal(str(weight))
+    d_height = Decimal(str(height_cm))
+    bmr_value = bmr(gender, d_weight, d_height, age_years)
+    tdee_value = tdee(bmr_value, activity)
+    limit = calorie_limit(tdee_value, bmr_value, goal)
 
     return {
-        "user_id": ma,
-        "gender": gioi,
-        "date_of_birth": ngay_sinh,
-        "height_cm": cao_cm,
-        "weight_kg": can,
-        "activity_level": van_dong,
-        "goal": muc_tieu,
-        "bmr_kcal": round_half_up(gt_bmr),
-        "tdee_kcal": round_half_up(gt_tdee),
-        "daily_calories_target": round_half_up(gt_han_muc),
-        "_tuoi": tuoi_nam,
-        "_nhan_beo": h["NObeyesdad"],
+        "user_id": key,
+        "gender": gender,
+        "date_of_birth": birth,
+        "height_cm": height_cm,
+        "weight_kg": weight,
+        "activity_level": activity,
+        "goal": goal,
+        "bmr_kcal": round_half_up(bmr_value),
+        "tdee_kcal": round_half_up(tdee_value),
+        "daily_calories_target": round_half_up(limit),
+        "_age": age_years,
+        "_weight_label": row["NObeyesdad"],
         "_faf": faf,
     }
 
 
-def doc_ho_so(hom_nay: date) -> list[dict[str, Any]]:
-    if not HO_SO_NGUON.exists():
-        raise LoiNap(f"không thấy {HO_SO_NGUON}")
-    with HO_SO_NGUON.open(encoding="utf-8-sig", newline="") as f:
-        hang = list(csv.DictReader(f))
-    if not hang:
-        raise LoiNap(f"{HO_SO_NGUON} không có dòng dữ liệu nào")
-    can = {"user_id", "Gender", "Age", "Height", "Weight", "FAF", "NObeyesdad"}
-    missing = can - set(hang[0])
+def read_profiles(today: date) -> list[dict[str, Any]]:
+    if not PROFILES_CSV.exists():
+        raise LoadError(f"{PROFILES_CSV} not found")
+    with PROFILES_CSV.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
+        raise LoadError(f"{PROFILES_CSV} contains no data row")
+    needed = {
+        "user_id", "Gender", "Age", "Height", "Weight", "FAF", "NObeyesdad",
+    }
+    missing = needed - set(rows[0])
     if missing:
-        raise LoiNap(f"{HO_SO_NGUON.name} thiếu cột: {', '.join(sorted(missing))}")
+        raise LoadError(
+            f"{PROFILES_CSV.name} is missing columns: "
+            f"{', '.join(sorted(missing))}"
+        )
 
-    dau_tien: dict[str, dict[str, str]] = {}
-    for h in hang:
-        dau_tien.setdefault(h["user_id"], h)
+    first_seen: dict[str, dict[str, str]] = {}
+    for row in rows:
+        first_seen.setdefault(row["user_id"], row)
     return [
-        quy_doi_ho_so(dau_tien[u], i, hom_nay)
-        for i, u in enumerate(sorted(dau_tien))
+        convert_profile(first_seen[u], i, today)
+        for i, u in enumerate(sorted(first_seen))
     ]
 
 
-def doc_hanh_vi(foods_by_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
-    """`user_id` → danh sách `(food_id, action)` theo đúng thứ tự trong tệp."""
-    if not HANH_VI.exists():
-        raise LoiNap(
-            f"không thấy {HANH_VI}.\n"
-            "Sinh trước bằng: python tools/gen_taste_vectors.py --write"
+def read_behaviour(
+    foods_by_id: dict[str, Any]
+) -> dict[str, list[tuple[str, str]]]:
+    """`user_id` -> a list of `(food_id, action)` in the file's own order."""
+    if not BEHAVIOUR_CSV.exists():
+        raise LoadError(
+            f"{BEHAVIOUR_CSV} not found.\n"
+            "Generate it first: python tools/gen_taste_vectors.py --write"
         )
-    with HANH_VI.open(encoding="utf-8-sig", newline="") as f:
-        doc = csv.DictReader(f)
-        missing = {"user_id", "ma_mon", "lua_chon"} - set(doc.fieldnames or ())
+    with BEHAVIOUR_CSV.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        missing = (
+            {"user_id", "ma_mon", "lua_chon"} - set(reader.fieldnames or ())
+        )
         if missing:
-            raise LoiNap(f"{HANH_VI.name} thiếu cột: {', '.join(sorted(missing))}")
-        luot: dict[str, list[tuple[str, str]]] = {}
-        thay: dict[str, set[str]] = {}
-        for stt, d in enumerate(doc, start=2):
-            u = d["user_id"].strip()
-            ma = d["ma_mon"].strip()
-            chon = d["lua_chon"].strip().lower()
-            if chon not in CHOICES:
-                raise LoiNap(
-                    f"  dòng {stt}: `lua_chon` = {chon!r} không hợp lệ; "
-                    f"phải là một trong: {', '.join(CHOICES)}"
+            raise LoadError(
+                f"{BEHAVIOUR_CSV.name} is missing columns: "
+                f"{', '.join(sorted(missing))}"
+            )
+        swipes: dict[str, list[tuple[str, str]]] = {}
+        seen: dict[str, set[str]] = {}
+        for line_no, row in enumerate(reader, start=2):
+            user = row["user_id"].strip()
+            food_id = row["ma_mon"].strip()
+            choice = row["lua_chon"].strip().lower()
+            if choice not in CHOICES:
+                raise LoadError(
+                    f"  line {line_no}: `lua_chon` = {choice!r} is not valid; "
+                    f"it must be one of: {', '.join(CHOICES)}"
                 )
-            if ma not in foods_by_id:
-                raise LoiNap(
-                    f"  dòng {stt}: `ma_mon` = {ma} không có trong `foods` "
-                    f"đang hoạt động. Bộ món đã đổi — sinh lại deck và dữ liệu."
+            if food_id not in foods_by_id:
+                raise LoadError(
+                    f"  line {line_no}: `ma_mon` = {food_id} is not an active "
+                    f"row in `foods`. The deck has changed — regenerate the "
+                    f"deck and the data."
                 )
-            if ma in thay.setdefault(u, set()):
-                raise LoiNap(f"  dòng {stt}: {u} có hai dòng cho cùng món {ma}")
-            thay[u].add(ma)
-            luot.setdefault(u, []).append((ma, CHOICES[chon]))
-    if not luot:
-        raise LoiNap(f"{HANH_VI.name} không có lượt vuốt nào")
-    return luot
+            if food_id in seen.setdefault(user, set()):
+                raise LoadError(
+                    f"  line {line_no}: {user} has two rows for the same food "
+                    f"{food_id}"
+                )
+            seen[user].add(food_id)
+            swipes.setdefault(user, []).append((food_id, CHOICES[choice]))
+    if not swipes:
+        raise LoadError(f"{BEHAVIOUR_CSV.name} contains no swipe")
+    return swipes
 
 
-def doc_su_that() -> dict[str, Any]:
-    if not SU_THAT.exists():
-        raise LoiNap(
-            f"không thấy {SU_THAT}.\n"
-            "Sinh trước bằng: python tools/gen_taste_vectors.py --write"
+def read_ground_truth() -> dict[str, Any]:
+    if not GROUND_TRUTH.exists():
+        raise LoadError(
+            f"{GROUND_TRUTH} not found.\n"
+            "Generate it first: python tools/gen_taste_vectors.py --write"
         )
-    return json.loads(SU_THAT.read_text(encoding="utf-8"))
+    return json.loads(GROUND_TRUTH.read_text(encoding="utf-8"))
 
 
-# ── Bộ lọc F1 ─────────────────────────────────────────────────────────────
+# -- The F1 filter ---------------------------------------------------------
 
 
 def allowed_foods(
     cn,
-    su_that: dict[str, Any],
-    luot: dict[str, list[tuple[str, str]]],
+    truth: dict[str, Any],
+    swipes: dict[str, list[tuple[str, str]]],
     foods_by_id: dict[str, Any],
 ) -> tuple[
     dict[str, list[tuple[str, str]]],
     dict[str, list[tuple[str, str, list[str]]]],
     dict[str, list[int]],
 ]:
-    """Loại các lượt vi phạm ràng buộc cứng, theo bệnh lý của từng người.
+    """Drop the swipes violating a hard constraint, per person's conditions.
 
-    Chạy **trước** khi dựng vector sở thích, không chỉ trước khi ghi
-    `interactions`: lọc sau khi dựng thì vector vẫn mang nguyên phần ràng
-    buộc giả dạng khẩu vị, và `n_signals` vẫn đếm cả những lượt đó nên giai
-    đoạn cũng bị tính sai.
+    Runs **before** the preference vector is built, not merely before
+    `interactions` is written: filtering afterwards leaves the vector carrying
+    the whole constraint-disguised-as-taste part, and `n_signals` still counts
+    those swipes so the stage is wrong too.
 
-    Với dữ liệu mô phỏng hiện tại thì `condition_names` rỗng cho cả 50 người, nên
-    hàm này trả về nguyên đầu vào. Nó vẫn đi qua **đúng** đường mà
-    `import_swipes.py` đi, để khi có bước gán bệnh lý mô phỏng thì không
-    phải viết lại chỗ này — và để hai đường nhập không thể lệch nhau.
+    It goes through **exactly** the path `import_swipes.py` goes through, so the
+    two import routes cannot drift apart.
 
-    Trả về `(còn lại, bị loại, mã bệnh lý theo người)`.
+    Returns `(kept, dropped, condition ids per person)`.
     """
-    moi_ten = sorted(
+    every_name = sorted(
         {
-            b
-            for u in luot
-            for b in (su_that["nguoi"].get(u, {}).get("condition_names") or [])
+            name
+            for u in swipes
+            for name in (
+                truth["nguoi"].get(u, {}).get("condition_names") or []
+            )
         }
     )
-    # Tra một lần cho mọi tên, ở pha kiểm: 50 hồ sơ cùng một mẫu sai thì phải
-    # vỡ một lần trước khi ghi, không phải vỡ ở hồ sơ thứ ba mươi.
-    kiem_benh_ly(cn, moi_ten)
+    # Resolve every name once, in the validate phase: 50 profiles sharing one
+    # wrong template must fail once before anything is written, not at the
+    # thirtieth profile.
+    resolve_conditions(cn, every_name)
 
-    giu: dict[str, list[tuple[str, str]]] = {}
-    bo: dict[str, list[tuple[str, str, list[str]]]] = {}
-    ma_benh: dict[str, list[int]] = {}
+    kept: dict[str, list[tuple[str, str]]] = {}
+    dropped: dict[str, list[tuple[str, str, list[str]]]] = {}
+    condition_ids: dict[str, list[int]] = {}
 
-    for u, ds in luot.items():
-        ten = su_that["nguoi"].get(u, {}).get("condition_names") or []
-        ma_benh[u] = kiem_benh_ly(cn, ten)
-        con, loai = loc_theo_f1(cn, ten, ds, foods_by_id)
-        if not con:
-            raise LoiNap(
-                f"{u}: Bộ lọc F1 loại toàn bộ {len(ds)} lượt — mọi món trong "
-                "bộ khảo sát đều vi phạm ràng buộc cứng của người này. Cần "
-                "một bộ món khác cho trường hợp này."
+    for u, person_swipes in swipes.items():
+        names = truth["nguoi"].get(u, {}).get("condition_names") or []
+        condition_ids[u] = resolve_conditions(cn, names)
+        remaining, excluded = filter_by_f1(
+            cn, names, person_swipes, foods_by_id
+        )
+        if not remaining:
+            raise LoadError(
+                f"{u}: the F1 filter excluded all {len(person_swipes)} swipes "
+                f"— every food in the survey deck violates one of this "
+                f"person's hard constraints. This case needs a different deck."
             )
-        # Đối chiếu với danh sách mà bộ sinh đã ghi vào `khau_vi_that.json`.
+        # Cross-check against the list the generator wrote into
+        # `khau_vi_that.json`.
         #
-        # Hai bên chạy cùng `exclusion_reasons` nhưng ở hai thời điểm khác nhau, nên
-        # lệch nghĩa là `condition_rules` đã đổi sau khi dữ liệu được sinh —
-        # và khi đó dữ liệu mang một ràng buộc khác với ràng buộc mà hệ thống
-        # đang thi hành. Nó không gây lỗi ở đâu cả: trình nhập vẫn ghi xong,
-        # `build_dataset` vẫn chạy, và phép đo F1 trong `check_simulation.py`
-        # vẫn in ra một con số — một con số của bộ luật cũ.
-        da_ghi = set(su_that["nguoi"].get(u, {}).get("f1_excluded") or ())
-        vua_tinh = {f for f, _a, _l in loai}
-        if da_ghi != vua_tinh:
-            raise LoiNap(
-                f"{u}: Bộ lọc F1 vừa tính ra {len(vua_tinh)} món bị loại, "
-                f"nhưng khau_vi_that.json ghi {len(da_ghi)} món.\n"
-                f"`condition_rules` đã đổi sau khi sinh dữ liệu. Sinh lại: "
-                "python tools/gen_taste_vectors.py --write"
+        # Both sides run the same `exclusion_reasons` but at different times,
+        # so a mismatch means `condition_rules` changed after the data was
+        # generated — and then the data carries a different constraint from the
+        # one the system enforces. It breaks nothing anywhere: the importer
+        # still finishes, `build_dataset` still runs, and the F1 measurement in
+        # `check_simulation.py` still prints a number — a number for the old
+        # rule set.
+        recorded = set(truth["nguoi"].get(u, {}).get("f1_excluded") or ())
+        just_computed = {f for f, _action, _reasons in excluded}
+        if recorded != just_computed:
+            raise LoadError(
+                f"{u}: the F1 filter just computed {len(just_computed)} "
+                f"excluded foods, but khau_vi_that.json records "
+                f"{len(recorded)}.\n"
+                f"`condition_rules` changed after the data was generated. "
+                f"Regenerate: python tools/gen_taste_vectors.py --write"
             )
 
-        giu[u] = con
-        if loai:
-            bo[u] = loai
-    return giu, bo, ma_benh
+        kept[u] = remaining
+        if excluded:
+            dropped[u] = excluded
+    return kept, dropped, condition_ids
 
 
-# ── ghi ───────────────────────────────────────────────────────────────────
+# -- writing --------------------------------------------------------------
 
 
-def dem_da_nap(cn) -> int:
+def count_loaded(cn) -> int:
     with cn.cursor() as cur:
         cur.execute(
-            "SELECT COUNT(*) n FROM users WHERE email LIKE %s", (MAU_EMAIL_LIKE,)
+            "SELECT COUNT(*) n FROM users WHERE email LIKE %s", (EMAIL_LIKE,)
         )
         return int(cur.fetchone()["n"])
 
 
-def xoa_da_nap(cn) -> int:
-    """Xóa người dùng của lần nạp trước. `ON DELETE CASCADE` dọn phần còn lại."""
+def delete_loaded(cn) -> int:
+    """Delete the previous load's users. `ON DELETE CASCADE` clears the rest."""
     with cn.cursor() as cur:
-        cur.execute("DELETE FROM users WHERE email LIKE %s", (MAU_EMAIL_LIKE,))
+        cur.execute("DELETE FROM users WHERE email LIKE %s", (EMAIL_LIKE,))
         n = cur.rowcount
     cn.commit()
     return n
 
 
-def ghi(
+def write(
     cn,
-    ho_so: list[dict[str, Any]],
-    luot: dict[str, list[tuple[str, str]]],
-    kg: FeatureSpace,
+    profiles: list[dict[str, Any]],
+    swipes: dict[str, list[tuple[str, str]]],
+    space: FeatureSpace,
     foods_by_id: dict[str, Any],
-    ma_benh: dict[str, list[int]],
-    ngay_nap: date,
+    condition_ids: dict[str, list[int]],
+    load_date: date,
 ) -> list[dict[str, Any]]:
-    """Ghi cả 50 người trong MỘT giao dịch."""
-    goc = datetime.combine(ngay_nap, datetime.min.time()).replace(hour=9)
-    ra: list[dict[str, Any]] = []
+    """Write all 50 people in ONE transaction."""
+    base_time = datetime.combine(
+        load_date, datetime.min.time()
+    ).replace(hour=9)
+    out: list[dict[str, Any]] = []
 
     with cn.cursor() as cur:
-        for i, hs in enumerate(ho_so):
-            ma = hs["user_id"]
-            user_id = str(uuid.uuid5(KHONG_GIAN_TEN, f"user:{ma}"))
-            session_id = str(uuid.uuid5(KHONG_GIAN_TEN, f"session:{ma}"))
-            email = MAU_EMAIL.format(ma)
+        for i, profile in enumerate(profiles):
+            key = profile["user_id"]
+            user_id = str(uuid.uuid5(UUID_NAMESPACE, f"user:{key}"))
+            session_id = str(uuid.uuid5(UUID_NAMESPACE, f"session:{key}"))
+            email = EMAIL_TEMPLATE.format(key)
 
             cur.execute(
                 "INSERT INTO users (id, email, password_hash, display_name, "
@@ -467,9 +514,11 @@ def ghi(
                 (
                     user_id,
                     email,
-                    BAM_KHONG_DUNG_DUOC,
-                    f"Mô phỏng {ma}",
-                    datetime.combine(ngay_nap, datetime.min.time()),
+                    UNUSABLE_PASSWORD_HASH,
+                    # The display name is a stored, user-facing value; the 50
+                    # existing rows carry this exact form.
+                    f"Mô phỏng {key}",
+                    datetime.combine(load_date, datetime.min.time()),
                 ),
             )
             cur.execute(
@@ -479,32 +528,32 @@ def ghi(
                 "VALUES (UUID(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     user_id,
-                    hs["gender"],
-                    hs["date_of_birth"],
-                    hs["height_cm"],
-                    hs["weight_kg"],
-                    hs["activity_level"],
-                    hs["goal"],
-                    hs["bmr_kcal"],
-                    hs["tdee_kcal"],
-                    hs["daily_calories_target"],
+                    profile["gender"],
+                    profile["date_of_birth"],
+                    profile["height_cm"],
+                    profile["weight_kg"],
+                    profile["activity_level"],
+                    profile["goal"],
+                    profile["bmr_kcal"],
+                    profile["tdee_kcal"],
+                    profile["daily_calories_target"],
                 ),
             )
 
-            for cid in ma_benh.get(ma, []):
+            for condition_id in condition_ids.get(key, []):
                 cur.execute(
                     "INSERT INTO user_conditions (id, user_id, condition_id, "
                     "severity) VALUES (UUID(), %s, %s, %s)",
-                    (user_id, cid, FORM_SEVERITY),
+                    (user_id, condition_id, FORM_SEVERITY),
                 )
 
-            # Mỗi người một phiên, các phiên cách nhau 1 phút, trong phiên
-            # thì các lượt cách nhau 1 giây và giữ đúng thứ tự trong tệp:
-            # `profile_snapshot` khi dựng tập huấn luyện phát lại lịch sử
-            # theo thứ tự thời gian, nên thứ tự này là dữ liệu, không phải
-            # chi tiết trình bày.
-            bat_dau = goc + timedelta(minutes=i)
-            for j, (food_id, action) in enumerate(luot[ma]):
+            # One session per person, the sessions one minute apart, and within
+            # a session the swipes one second apart keeping the file's order:
+            # `profile_snapshot` replays the history chronologically when the
+            # training set is built, so this order is data, not a presentation
+            # detail.
+            session_start = base_time + timedelta(minutes=i)
+            for j, (food_id, action) in enumerate(swipes[key]):
                 cur.execute(
                     "INSERT INTO interactions (id, user_id, food_id, action, "
                     "session_id, interacted_at) "
@@ -514,16 +563,18 @@ def ghi(
                         food_id,
                         action,
                         session_id,
-                        bat_dau + timedelta(seconds=j),
+                        session_start + timedelta(seconds=j),
                     ),
                 )
 
-            ho = build_profile(kg, [(foods_by_id[f], a) for f, a in luot[ma]])
-            # `alpha` ghi đúng `alpha(n_signals)`, không ghi 0. `ml/serve.py`
-            # tính lại α lúc phục vụ nên số 0 không làm vỡ gì khi chạy, nhưng
-            # cột này là thứ các truy vấn thống kê của Chương 3 đọc tới — để
-            # 0 thì bảng α trong báo cáo toàn số 0 mà hệ thống thì không chạy
-            # bằng 0.
+            preference = build_profile(
+                space, [(foods_by_id[f], a) for f, a in swipes[key]]
+            )
+            # `alpha` records the real `alpha(n_signals)`, not 0. `ml/serve.py`
+            # recomputes α at serving time so a 0 breaks nothing at runtime,
+            # but this column is what Chapter 3's statistical queries read —
+            # leaving it 0 makes the α table in the report all zeros while the
+            # system does not run on zero.
             cur.execute(
                 "INSERT INTO user_preference_profiles (user_id, "
                 "feature_version, weights, sum_abs_weight, n_signals, stage, "
@@ -531,177 +582,208 @@ def ghi(
                 (
                     user_id,
                     FEATURE_VERSION,
-                    json.dumps(list(ho.weights)),
-                    ho.sum_abs_weight,
-                    ho.n_signals,
-                    stage(ho.n_signals),
-                    round(alpha(ho.n_signals), 3),
+                    json.dumps(list(preference.weights)),
+                    preference.sum_abs_weight,
+                    preference.n_signals,
+                    stage(preference.n_signals),
+                    round(alpha(preference.n_signals), 3),
                 ),
             )
-            ra.append(
+            out.append(
                 {
-                    "ma": ma,
+                    "key": key,
                     "user_id": user_id,
                     "email": email,
-                    "n_signals": ho.n_signals,
-                    "stage": stage(ho.n_signals),
-                    "alpha": alpha(ho.n_signals),
+                    "n_signals": preference.n_signals,
+                    "stage": stage(preference.n_signals),
+                    "alpha": alpha(preference.n_signals),
                 }
             )
 
     cn.commit()
-    return ra
+    return out
 
 
-# ── báo cáo ───────────────────────────────────────────────────────────────
+# -- reporting ------------------------------------------------------------
 
 
-def xem_truoc(
-    ho_so: list[dict[str, Any]],
-    luot: dict[str, list[tuple[str, str]]],
-    kg: FeatureSpace,
+def preview(
+    profiles: list[dict[str, Any]],
+    swipes: dict[str, list[tuple[str, str]]],
+    space: FeatureSpace,
     foods_by_id: dict[str, Any],
 ) -> None:
-    print(f"{len(ho_so)} hồ sơ · {sum(len(v) for v in luot.values())} lượt vuốt")
-
-    for ten, khoa in (
-        ("giới tính", "gender"),
-        ("mức vận động", "activity_level"),
-        ("mục tiêu", "goal"),
-    ):
-        d = collections.Counter(h[khoa] for h in ho_so)
-        print(f"  {ten:<14} " + "  ".join(f"{k}={v}" for k, v in sorted(d.items())))
-
-    bmi = sorted(h["weight_kg"] / (h["height_cm"] / 100) ** 2 for h in ho_so)
-    hm = sorted(h["daily_calories_target"] for h in ho_so)
-    t = sorted(h["_tuoi"] for h in ho_so)
     print(
-        f"  tuổi           {t[0]}–{t[-1]} (trung vị {t[len(t)//2]})\n"
-        f"  BMI            {bmi[0]:.1f}–{bmi[-1]:.1f} "
-        f"(trung vị {bmi[len(bmi)//2]:.1f})\n"
-        f"  hạn mức kcal   {hm[0]}–{hm[-1]} (trung vị {hm[len(hm)//2]})"
+        f"{len(profiles)} profiles · "
+        f"{sum(len(v) for v in swipes.values())} swipes"
     )
 
-    gd = collections.Counter()
-    for h in ho_so:
-        ho = build_profile(kg, [(foods_by_id[f], a) for f, a in luot[h["user_id"]]])
-        gd[stage(ho.n_signals)] += 1
-    print("  giai đoạn      " + "  ".join(f"{k}={v}" for k, v in sorted(gd.items())))
+    for label, field in (
+        ("gender", "gender"),
+        ("activity level", "activity_level"),
+        ("goal", "goal"),
+    ):
+        counts = collections.Counter(p[field] for p in profiles)
+        print(
+            f"  {label:<15} "
+            + "  ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+        )
 
-    # Hai bậc không với tới được từ thang đo nguồn — nói ra chứ không để
-    # người đọc bảng trên tự đoán vì sao chúng vắng mặt.
+    bmi = sorted(
+        p["weight_kg"] / (p["height_cm"] / 100) ** 2 for p in profiles
+    )
+    limits = sorted(p["daily_calories_target"] for p in profiles)
+    ages = sorted(p["_age"] for p in profiles)
     print(
-        "\n  `very_active` và `healthy_eating` vắng mặt theo đúng thiết kế: "
-        "thang\n  đo `FAF` không với tới bậc trên, và `healthy_eating` là "
-        "lựa chọn người\n  dùng tự khai, không suy ra từ nhãn cân nặng. Xem "
-        "đầu tệp."
+        f"  age             {ages[0]}-{ages[-1]} "
+        f"(median {ages[len(ages)//2]})\n"
+        f"  BMI             {bmi[0]:.1f}-{bmi[-1]:.1f} "
+        f"(median {bmi[len(bmi)//2]:.1f})\n"
+        f"  kcal limit      {limits[0]}-{limits[-1]} "
+        f"(median {limits[len(limits)//2]})"
+    )
+
+    stages = collections.Counter()
+    for profile in profiles:
+        preference = build_profile(
+            space,
+            [(foods_by_id[f], a) for f, a in swipes[profile["user_id"]]],
+        )
+        stages[stage(preference.n_signals)] += 1
+    print(
+        "  stage           "
+        + "  ".join(f"{k}={v}" for k, v in sorted(stages.items()))
+    )
+
+    # Two levels the source scale cannot reach — stated outright rather than
+    # leaving a reader of the table above to guess why they are absent.
+    print(
+        "\n  `very_active` and `healthy_eating` are absent by design: the "
+        "`FAF`\n  scale does not reach the top level, and `healthy_eating` is "
+        "a user's\n  self-declared choice, not something inferred from a "
+        "weight label. See\n  the top of this file."
     )
 
 
 def main() -> int:
     use_utf8()
-    bo = argparse.ArgumentParser(description=__doc__)
-    bo.add_argument("--db", default=None)
-    bo.add_argument("--apply", action="store_true", help="ghi vào CSDL")
-    bo.add_argument(
-        "--xoa", action="store_true", help="xóa lần nạp trước rồi dừng"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", default=None)
+    parser.add_argument("--apply", action="store_true",
+                        help="write to the database")
+    parser.add_argument(
+        "--delete", action="store_true",
+        help="remove the previous load, then stop",
     )
-    t = bo.parse_args()
+    args = parser.parse_args()
 
-    cn = connect(t.db)
+    cn = connect(args.db)
     try:
-        if t.xoa:
-            n = xoa_da_nap(cn)
-            print(f"Đã xóa {n} người dùng mô phỏng (cùng mọi dòng phụ thuộc).")
+        if args.delete:
+            n = delete_loaded(cn)
+            print(
+                f"Deleted {n} simulated users (and every dependent row)."
+            )
             return 0
 
-        mon, _ = load_foods(cn)
-        kg = FeatureSpace.from_foods(mon)
-        foods_by_id = {m.id: m for m in mon}
-        ngay_nap = date.today()
+        foods, _ = load_foods(cn)
+        space = FeatureSpace.from_foods(foods)
+        foods_by_id = {f.id: f for f in foods}
+        load_date = date.today()
 
         try:
-            su_that = doc_su_that()
-            if su_that.get("feature_version") != FEATURE_VERSION:
-                raise LoiNap(
-                    f"lệch phiên bản đặc trưng: dữ liệu mô phỏng sinh trên "
-                    f"{su_that.get('feature_version')}, mã hiện là "
-                    f"{FEATURE_VERSION}.\nSinh lại: "
+            truth = read_ground_truth()
+            if truth.get("feature_version") != FEATURE_VERSION:
+                raise LoadError(
+                    f"feature version mismatch: the simulated data was "
+                    f"generated on {truth.get('feature_version')}, the code is "
+                    f"now {FEATURE_VERSION}.\nRegenerate: "
                     "python tools/gen_taste_vectors.py --write"
                 )
-            ho_so = doc_ho_so(ngay_nap)
-            luot = doc_hanh_vi(foods_by_id)
+            profiles = read_profiles(load_date)
+            swipes = read_behaviour(foods_by_id)
 
-            thieu_luot = [h["user_id"] for h in ho_so if h["user_id"] not in luot]
-            if thieu_luot:
-                raise LoiNap(
-                    f"{len(thieu_luot)} người có hồ sơ nhưng không có lượt "
-                    f"vuốt nào: {', '.join(thieu_luot[:5])}"
+            without_swipes = [
+                p["user_id"] for p in profiles if p["user_id"] not in swipes
+            ]
+            if without_swipes:
+                raise LoadError(
+                    f"{len(without_swipes)} people have a profile but no "
+                    f"swipes: {', '.join(without_swipes[:5])}"
                 )
-            thua_luot = set(luot) - {h["user_id"] for h in ho_so}
-            if thua_luot:
-                raise LoiNap(
-                    f"{len(thua_luot)} người có lượt vuốt nhưng không có hồ "
-                    f"sơ: {', '.join(sorted(thua_luot)[:5])}"
+            without_profile = set(swipes) - {p["user_id"] for p in profiles}
+            if without_profile:
+                raise LoadError(
+                    f"{len(without_profile)} people have swipes but no "
+                    f"profile: {', '.join(sorted(without_profile)[:5])}"
                 )
-            luot, bi_loai, ma_benh = allowed_foods(cn, su_that, luot, foods_by_id)
-        except (LoiNap, LoiPhieu) as e:
-            print(f"Không nạp được.\n{e}", file=sys.stderr)
+            swipes, dropped, condition_ids = allowed_foods(
+                cn, truth, swipes, foods_by_id
+            )
+        except (LoadError, FormError) as e:
+            print(f"Could not load.\n{e}", file=sys.stderr)
             return 1
 
-        da_co = dem_da_nap(cn)
-        if da_co:
+        already = count_loaded(cn)
+        if already:
             print(
-                f"Đã có {da_co} người dùng mô phỏng trong CSDL. Không nạp "
-                "chồng lên.\nXóa trước rồi nạp lại: "
-                "python tools/import_simulation.py --xoa",
+                f"{already} simulated users are already in the database. Not "
+                "loading on top.\nDelete first, then reload: "
+                "python tools/import_simulation.py --delete",
                 file=sys.stderr,
             )
             return 1
 
-        print(f"Nguồn: {HANH_VI.relative_to(ROOT)}")
-        print(f"       {HO_SO_NGUON.relative_to(ROOT)}  (chỉ các cột hồ sơ)")
-        print(f"       {SU_THAT.relative_to(ROOT)}  seed {su_that['params']['seed']}")
+        print(f"Source: {BEHAVIOUR_CSV.relative_to(ROOT)}")
+        print(
+            f"        {PROFILES_CSV.relative_to(ROOT)}  (profile columns only)"
+        )
+        print(
+            f"        {GROUND_TRUTH.relative_to(ROOT)}  "
+            f"seed {truth['params']['seed']}"
+        )
         print()
-        xem_truoc(ho_so, luot, kg, foods_by_id)
-        n_bo = sum(len(v) for v in bi_loai.values())
-        n_giu = sum(len(v) for v in luot.values())
-        if n_bo:
-            # Gom theo lý do, không liệt kê từng món: một người thuần chay bị
-            # loại 22 món vì ĐÚNG MỘT quy tắc, và in 22 dòng giống nhau thì
-            # che mất chuyện đó.
-            theo_ly_do: collections.Counter[str] = collections.Counter()
-            for ds in bi_loai.values():
-                for _f, _a, ly_do in ds:
-                    theo_ly_do[ly_do[0]] += 1
+        preview(profiles, swipes, space, foods_by_id)
+        n_dropped = sum(len(v) for v in dropped.values())
+        n_kept = sum(len(v) for v in swipes.values())
+        if n_dropped:
+            # Grouped by reason, not listed food by food: a vegan loses 22
+            # foods to EXACTLY ONE rule, and printing 22 identical lines hides
+            # that.
+            by_reason: collections.Counter[str] = collections.Counter()
+            for person_dropped in dropped.values():
+                for _food, _action, reasons in person_dropped:
+                    by_reason[reasons[0]] += 1
             print(
-                f"\n  Bộ lọc F1 loại {n_bo}/{n_bo + n_giu} lượt "
-                f"trên {len(bi_loai)} người:"
+                f"\n  The F1 filter excluded {n_dropped}/"
+                f"{n_dropped + n_kept} swipes across {len(dropped)} people:"
             )
-            for ly, dem_ly in theo_ly_do.most_common():
-                print(f"      {ly} → {dem_ly} lượt")
+            for reason, count in by_reason.most_common():
+                print(f"      {reason} -> {count} swipes")
             print(
-                "    Những lượt này KHÔNG được ghi và KHÔNG vào vector sở "
-                "thích:\n    chúng là ràng buộc, không phải khẩu vị."
+                "    These swipes are NOT written and do NOT enter the "
+                "preference\n    vector: they are a constraint, not a taste."
             )
         else:
             print(
-                f"\n  Bộ lọc F1 loại 0/{n_giu} lượt — `ObesityDataSet` không "
-                "có cột bệnh lý\n  nào, nên không ai có ràng buộc cứng."
+                f"\n  The F1 filter excluded 0/{n_kept} swipes — nobody in "
+                "this set\n  carries a hard constraint."
             )
 
-        if not t.apply:
-            print("\nXem trước. Thêm --apply để ghi vào CSDL.")
+        if not args.apply:
+            print("\nPreview. Add --apply to write to the database.")
             return 0
 
-        ra = ghi(cn, ho_so, luot, kg, foods_by_id, ma_benh, ngay_nap)
-        n_luot = sum(len(v) for v in luot.values())
-        print(
-            f"\nĐã ghi {len(ra)} người · {n_luot} dòng `interactions` · "
-            f"{len(ra)} dòng `health_profiles` và "
-            f"`user_preference_profiles`."
+        written = write(
+            cn, profiles, swipes, space, foods_by_id, condition_ids, load_date
         )
-        print("Bước tiếp: python -m ml.build_dataset --version v1")
+        n_swipes = sum(len(v) for v in swipes.values())
+        print(
+            f"\nWrote {len(written)} people · {n_swipes} `interactions` rows · "
+            f"{len(written)} `health_profiles` and "
+            f"`user_preference_profiles` rows."
+        )
+        print("Next: python -m ml.build_dataset --version v1")
         return 0
     finally:
         cn.close()

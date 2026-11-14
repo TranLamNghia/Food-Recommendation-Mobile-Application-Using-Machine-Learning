@@ -224,7 +224,7 @@ FORM_HEADER = [
     "# sở thích thật — xem ML_PIPELINE.md §5.1.",
     "#",
     "# Điền cả phần thông tin dưới đây rồi nhập bằng:",
-    "#     python tools/import_swipes.py --phieu <tệp này>",
+    "#     python tools/import_swipes.py --form <tệp này>",
     "#",
     "# ho_ten: ",
     "# email: ",
@@ -371,7 +371,7 @@ def main() -> int:
         "import:\n"
         "    cp data/survey/phieu_khao_sat.csv "
         "data/survey/da_dien/nguoi-01.csv\n"
-        "    python tools/import_swipes.py --phieu "
+        "    python tools/import_swipes.py --form "
         "data/survey/da_dien/nguoi-01.csv\n"
         "\nFILLED-IN forms must stay in data/survey/da_dien/ — that directory\n"
         "is blocked by .gitignore. A filled form holds a real person's name,\n"

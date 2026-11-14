@@ -398,7 +398,7 @@ def kiem_nhap_phieu(db: str) -> str | None:
                 "# chieu_cao_cm: 162\n", ""
             )
             p.write_text(noi_dung, encoding="utf-8")
-        ma = chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"])
+        ma = chay_nhap_phieu(["--form", str(p), "--db", db, "--apply"])
         kiem(ma == 1, f"từ chối phiếu: {mo_ta}")
 
     cn = connect(db)
@@ -423,7 +423,7 @@ def kiem_nhap_phieu(db: str) -> str | None:
         encoding="utf-8",
     )
     kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 1,
+        chay_nhap_phieu(["--form", str(p), "--db", db, "--apply"]) == 1,
         "từ chối phiếu: chiều cao ngoài khoảng 50–250",
     )
 
@@ -436,14 +436,14 @@ def kiem_nhap_phieu(db: str) -> str | None:
         encoding="utf-8",
     )
     kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 1,
+        chay_nhap_phieu(["--form", str(p), "--db", db, "--apply"]) == 1,
         "từ chối phiếu: tên bệnh lý không có trong `conditions`",
     )
 
     # ── Đường đúng ──
     p = viet_phieu("hop_le.csv")
     kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db]) == 0,
+        chay_nhap_phieu(["--form", str(p), "--db", db]) == 0,
         "chạy thử phiếu hợp lệ: mã trả về 0",
     )
     cn = connect(db)
@@ -455,7 +455,7 @@ def kiem_nhap_phieu(db: str) -> str | None:
         cn.close()
 
     kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 0,
+        chay_nhap_phieu(["--form", str(p), "--db", db, "--apply"]) == 0,
         "nhập phiếu hợp lệ: mã trả về 0",
     )
 
@@ -542,7 +542,7 @@ def kiem_nhap_phieu(db: str) -> str | None:
 
         # Nhập lại cùng phiếu: phải từ chối vì email đã tồn tại.
         kiem(
-            chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 1,
+            chay_nhap_phieu(["--form", str(p), "--db", db, "--apply"]) == 1,
             "nhập lại cùng phiếu thì từ chối — email đã tồn tại",
         )
     finally:

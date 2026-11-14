@@ -906,8 +906,8 @@ python tools/make_survey_deck.py --count 45 --write
 cp data/survey/phieu_khao_sat.csv data/survey/da_dien/nguoi-01.csv
 # người tham gia điền cột `lua_chon` và phần thông tin ở đầu tệp
 
-python tools/import_swipes.py --phieu data/survey/da_dien/nguoi-01.csv
-python tools/import_swipes.py --phieu data/survey/da_dien/nguoi-01.csv --apply
+python tools/import_swipes.py --form data/survey/da_dien/nguoi-01.csv
+python tools/import_swipes.py --form data/survey/da_dien/nguoi-01.csv --apply
     → users, health_profiles, user_conditions, interactions,
       user_preference_profiles (vector Rocchio tính luôn)
 ```
@@ -1034,7 +1034,7 @@ ra. Phần hồ sơ sức khỏe thì mô phỏng được; phần khẩu vị t
 ```
 python tools/import_simulation.py              # xem trước
 python tools/import_simulation.py --apply      # 50 người, một giao dịch
-python tools/import_simulation.py --xoa        # xóa lần nạp trước
+python tools/import_simulation.py --delete        # xóa lần nạp trước
 ```
 
 Khác `import_swipes.py` ở chỗ: tệp kia nhập một phiếu giấy đã khai sẵn
@@ -1068,7 +1068,7 @@ fold bằng `sorted(nguoi, key=sha256(f"{seed}:{user_id}"))` và bốc mẫu
 `user_id`, nên với `uuid4()` thì mỗi lần nạp lại cho ra một cách chia fold
 khác và một tập mẫu âm khác — **mọi con số trong bảng Chương 3 đổi sau mỗi
 lần chạy mà không ai sửa gì cả.** UUID v5 là băm của (không gian tên, tên)
-nên `U001` luôn cho đúng một `user_id`, và cả chuỗi `--xoa` → `--apply` →
+nên `U001` luôn cho đúng một `user_id`, và cả chuỗi `--delete` → `--apply` →
 `build_dataset` → `train` → `evaluate` tái lập được từng chữ số. Đã kiểm bằng
 hai lần chạy toàn chuỗi cho ra bảng giống nhau hoàn toàn.
 

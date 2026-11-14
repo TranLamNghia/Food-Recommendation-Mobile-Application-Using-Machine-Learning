@@ -12,7 +12,7 @@
 # sở thích thật — xem ML_PIPELINE.md §5.1.
 #
 # Điền cả phần thông tin dưới đây rồi nhập bằng:
-#     python tools/import_swipes.py --phieu <tệp này>
+#     python tools/import_swipes.py --form <tệp này>
 #
 # ho_ten: 
 # email: 
