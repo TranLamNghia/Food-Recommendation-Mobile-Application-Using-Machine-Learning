@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Thử đầu-cuối 9 endpoint của đợt 1 và 2, trên CSDL thật.
+"""End-to-end test of the 9 endpoints of phases 1 and 2, against the real
+database.
 
-Đây là phép thử TÍCH HỢP, không phải unit test: nó gọi HTTP thật, ghi vào
-MySQL thật, và đọc lại. Vì sao cần cả hai loại — `tools/check_be_parity.py`
-kiểm Bước 1 bằng số thuần, không cần máy chủ; tệp này kiểm những thứ chỉ sai
-khi có CSDL và có mạng: ánh xạ tên cột, kiểu dữ liệu, giao dịch, vỏ lỗi, thứ
-tự claim trong JWT.
+This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
+to real MySQL, and reads back. Why both kinds are needed —
+`tools/check_be_parity.py` checks Step 1 as pure arithmetic with no server;
+this file checks the things that only break once there is a database and a
+network: column-name mapping, data types, transactions, error envelopes, the
+order of claims in a JWT.
 
-Mỗi lần chạy tạo một tài khoản mới với email ngẫu nhiên rồi XÓA nó ở cuối,
-nên chạy lại nhiều lần không làm phình CSDL. `ON DELETE CASCADE` của 11 khóa
-ngoại tới `users` dọn hết phần còn lại.
+Every run creates a fresh account with a random email and DELETES it at the
+end, so repeated runs do not bloat the database. The `ON DELETE CASCADE` on
+the 11 foreign keys into `users` clears away the rest.
 
-Chạy (cần backend đang chạy):
-    python tools/run_backend.py          # cửa sổ khác
+Run (the backend must be running):
+    python tools/run_backend.py          # in another window
     python tools/smoke_backend.py
 """
 
@@ -32,16 +34,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import _env  # noqa: E402
 
-GOC = "http://localhost:5000/api/v1"
+BASE = "http://localhost:5000/api/v1"
 
-_loi: list[str] = []
-_so_kiem = 0
+_failures: list[str] = []
+_checks = 0
 
 
-def goi(method: str, duong: str, than=None, token: str | None = None):
-    """Gọi API, trả `(mã HTTP, thân đã giải mã JSON hoặc None)`."""
-    url = GOC + duong
-    data = json.dumps(than).encode() if than is not None else None
+def call(method: str, path: str, body=None, token: str | None = None):
+    """Call the API; returns `(HTTP status, JSON-decoded body or None)`."""
+    url = BASE + path
+    data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     if data is not None:
         req.add_header("Content-Type", "application/json")
@@ -59,27 +61,27 @@ def goi(method: str, duong: str, than=None, token: str | None = None):
             return e.code, {"_raw": raw.decode("utf-8", "replace")[:300]}
 
 
-def kiem(nhan: str, dat: bool, chi_tiet: str = "") -> bool:
-    global _so_kiem
-    _so_kiem += 1
-    print(f"  {'[ok]' if dat else '[SAI]'} {nhan}"
-          + (f"  {chi_tiet}" if chi_tiet and not dat else ""))
-    if not dat:
-        _loi.append(f"{nhan} — {chi_tiet}" if chi_tiet else nhan)
-    return dat
+def check(label: str, passed: bool, detail: str = "") -> bool:
+    global _checks
+    _checks += 1
+    print(f"  {'[ok]' if passed else '[BAD]'} {label}"
+          + (f"  {detail}" if detail and not passed else ""))
+    if not passed:
+        _failures.append(f"{label} — {detail}" if detail else label)
+    return passed
 
 
-def bang(nhan: str, duoc, mong) -> bool:
-    return kiem(nhan, duoc == mong, f"được {duoc!r}, mong {mong!r}")
+def equals(label: str, got, want) -> bool:
+    return check(label, got == want, f"got {got!r}, wanted {want!r}")
 
 
-def ma_loi(than) -> str | None:
-    if isinstance(than, dict):
-        return (than.get("error") or {}).get("code")
+def error_code(body) -> str | None:
+    if isinstance(body, dict):
+        return (body.get("error") or {}).get("code")
     return None
 
 
-def _ket_noi():
+def _connect():
     import pymysql
     return pymysql.connect(
         host=_env.get("MYSQL_HOST", "localhost"),
@@ -91,35 +93,27 @@ def _ket_noi():
     )
 
 
-def sql(sentence: str, tham=()):
-    """Chạy một câu SQL, trả các dòng. Dùng để dựng trạng thái mà API
-    không cho dựng — ví dụ khóa một tài khoản."""
-    cn = _ket_noi()
+def sql(statement: str, params=()):
+    """Run one SQL statement and return its rows. Used to set up state the
+    API does not allow setting up — disabling an account, for instance."""
+    cn = _connect()
     try:
         with cn.cursor() as cur:
-            cur.execute(sentence, tham)
-            dong = cur.fetchall()
+            cur.execute(statement, params)
+            rows = cur.fetchall()
         cn.commit()
-        return dong
+        return rows
     finally:
         cn.close()
 
 
-def xoa_tai_khoan(*email: str) -> None:
-    """Dọn các tài khoản thử. `ON DELETE CASCADE` lo phần còn lại."""
-    import pymysql
-    cn = pymysql.connect(
-        host=_env.get("MYSQL_HOST", "localhost"),
-        port=int(_env.get("MYSQL_PORT", "3306")),
-        user=_env.require("MYSQL_USER"),
-        password=_env.require("MYSQL_PASSWORD"),
-        database=_env.require("MYSQL_DATABASE"),
-        charset="utf8mb4",
-    )
+def delete_accounts(*emails: str) -> None:
+    """Clean up the test accounts. `ON DELETE CASCADE` handles the rest."""
+    cn = _connect()
     try:
         with cn.cursor() as cur:
-            for e in email:
-                cur.execute("DELETE FROM users WHERE email = %s", (e,))
+            for email in emails:
+                cur.execute("DELETE FROM users WHERE email = %s", (email,))
         cn.commit()
     finally:
         cn.close()
@@ -127,432 +121,452 @@ def xoa_tai_khoan(*email: str) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _env.use_utf8()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--giu", action="store_true",
-                    help="không xóa tài khoản thử, để soi trong CSDL")
-    ts = ap.parse_args(argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--keep", action="store_true",
+        help="do not delete the test account, to inspect it in the database",
+    )
+    args = parser.parse_args(argv)
 
     email = f"smoke-{uuid.uuid4().hex[:12]}@example.test"
-    mat_khau = "MatKhau123"
-    print(f"Thử đầu-cuối trên {GOC}")
-    print(f"Tài khoản thử: {email}")
+    password = "MatKhau123"
+    print(f"End-to-end test against {BASE}")
+    print(f"Test account: {email}")
     print("=" * 72)
 
-    # ── 7.1.1 Đăng ký ────────────────────────────────────────────────────
+    # -- 7.1.1 Register ---------------------------------------------------
     print("\n7.1.1  POST /auth/register")
-    ma, than = goi("POST", "/auth/register", {
-        "email": email, "password": mat_khau, "displayName": "Người Thử"})
-    bang("201 Created", ma, 201)
-    if ma != 201:
-        print(f"\nKhông đăng ký được, dừng: {than}")
+    status, body = call("POST", "/auth/register", {
+        "email": email, "password": password, "displayName": "Smoke Test"})
+    equals("201 Created", status, 201)
+    if status != 201:
+        print(f"\nCould not register, stopping: {body}")
         return 1
 
-    token = than["accessToken"]
-    refresh = than["refreshToken"]
-    uid = than["user"]["id"]
-    bang("tokenType là Bearer", than["tokenType"], "Bearer")
-    bang("expiresIn 3600 giây (đặc tả §2.4)", than["expiresIn"], 3600)
-    kiem("user.id là UUID 36 ký tự", len(uid) == 36, f"dài {len(uid)}")
-    bang("email đã chuẩn hóa chữ thường", than["user"]["email"], email)
-    bang("onboardingCompletedAt là null",
-         than["user"]["onboardingCompletedAt"], None)
-    kiem("avatarUrl có mặt và là null (§2.3: null, không bỏ trường)",
-         "avatarUrl" in than["user"] and than["user"]["avatarUrl"] is None)
+    token = body["accessToken"]
+    refresh = body["refreshToken"]
+    uid = body["user"]["id"]
+    equals("tokenType is Bearer", body["tokenType"], "Bearer")
+    equals("expiresIn is 3600 seconds (spec §2.4)", body["expiresIn"], 3600)
+    check("user.id is a 36-character UUID", len(uid) == 36, f"length {len(uid)}")
+    equals("the email was normalised to lower case", body["user"]["email"],
+           email)
+    equals("onboardingCompletedAt is null",
+           body["user"]["onboardingCompletedAt"], None)
+    check("avatarUrl is present and null (§2.3: null, not an omitted field)",
+          "avatarUrl" in body["user"] and body["user"]["avatarUrl"] is None)
 
-    # `sub` phải là UUID, không phải số nguyên — §2.3.
+    # `sub` must be a UUID, not an integer — §2.3.
     import base64
-    phan = token.split(".")[1]
-    phan += "=" * (-len(phan) % 4)
-    tai = json.loads(base64.urlsafe_b64decode(phan))
-    bang("JWT `sub` là users.id (UUID)", tai.get("sub"), uid)
-    bang("JWT `role` là user", tai.get("role"), "user")
-    bang("JWT `onboarded` là false", tai.get("onboarded"), "false")
+    segment = token.split(".")[1]
+    segment += "=" * (-len(segment) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(segment))
+    equals("the JWT `sub` is users.id (a UUID)", claims.get("sub"), uid)
+    equals("the JWT `role` is user", claims.get("role"), "user")
+    equals("the JWT `onboarded` is false", claims.get("onboarded"), "false")
 
-    # ── Đăng ký trùng email ──────────────────────────────────────────────
-    print("\n7.1.1  đăng ký lại cùng email")
-    ma, than = goi("POST", "/auth/register", {
-        "email": email.upper(), "password": mat_khau, "displayName": "Khác"})
-    bang("409", ma, 409)
-    bang("EMAIL_ALREADY_EXISTS (hoa thường không làm lệch)",
-         ma_loi(than), "EMAIL_ALREADY_EXISTS")
+    # -- Registering a duplicate email ------------------------------------
+    print("\n7.1.1  registering the same email again")
+    status, body = call("POST", "/auth/register", {
+        "email": email.upper(), "password": password, "displayName": "Other"})
+    equals("409", status, 409)
+    equals("EMAIL_ALREADY_EXISTS (case does not matter)",
+           error_code(body), "EMAIL_ALREADY_EXISTS")
 
-    # ── Lỗi validation phải ra đúng vỏ §2.5 ──────────────────────────────
-    print("\n§2.5  vỏ lỗi validation")
-    ma, than = goi("POST", "/auth/register", {
-        "email": "khong-phai-email", "password": "ngan", "displayName": "a"})
-    bang("400", ma, 400)
-    bang("VALIDATION_FAILED", ma_loi(than), "VALIDATION_FAILED")
-    chi_tiet = (than.get("error") or {}).get("details") or []
-    truong = {d.get("field") for d in chi_tiet}
-    kiem("details nêu từng trường sai, tên camelCase",
-         {"email", "password", "displayName"} <= truong, f"thấy {truong}")
-    kiem("có traceId", bool((than.get("error") or {}).get("traceId")))
+    # -- A validation error must use the §2.5 envelope --------------------
+    print("\n§2.5  the validation error envelope")
+    status, body = call("POST", "/auth/register", {
+        "email": "not-an-email", "password": "short", "displayName": "a"})
+    equals("400", status, 400)
+    equals("VALIDATION_FAILED", error_code(body), "VALIDATION_FAILED")
+    details = (body.get("error") or {}).get("details") or []
+    fields = {d.get("field") for d in details}
+    check("details names each bad field, in camelCase",
+          {"email", "password", "displayName"} <= fields, f"saw {fields}")
+    check("a traceId is present", bool((body.get("error") or {}).get("traceId")))
 
-    # ── Mật khẩu dài hơn 72 byte phải bị TỪ CHỐI, không bị cắt ───────────
+    # -- A password over 72 bytes must be REJECTED, not truncated ---------
     #
-    # BCrypt chỉ dùng 72 byte đầu và lặng lẽ bỏ phần còn lại, nên không có
-    # chặn trên thì hai mật khẩu trùng 72 byte đầu đăng nhập được lẫn nhau.
-    # Chặn đếm theo BYTE: 30 chữ "ậ" là 30 ký tự nhưng 90 byte UTF-8, nên một
-    # `MaxLength(72)` theo ký tự sẽ cho nó đi qua rồi bị cắt.
-    print("\n§7.1.1  chặn trên mật khẩu tính theo byte UTF-8")
-    dai_ky_tu = "Aa1" + "ậ" * 30          # 33 ký tự · 93 byte
-    ma, than = goi("POST", "/auth/register", {
-        "email": f"dai-{email}", "password": dai_ky_tu,
-        "displayName": "Thử byte"})
-    bang("400 với 33 ký tự nhưng 93 byte", ma, 400)
-    bang("VALIDATION_FAILED", ma_loi(than), "VALIDATION_FAILED")
-    chi_tiet = (than.get("error") or {}).get("details") or []
-    kiem("details chỉ đúng trường password",
-         {d.get("field") for d in chi_tiet} == {"password"},
-         f"thấy {[d.get('field') for d in chi_tiet]}")
-    kiem("93 byte > 72 — đúng là bài kiểm có nghĩa",
-         len(dai_ky_tu.encode("utf-8")) > 72
-         and len(dai_ky_tu) <= 72,
-         f"{len(dai_ky_tu)} ký tự / "
-         f"{len(dai_ky_tu.encode('utf-8'))} byte")
+    # BCrypt uses only the first 72 bytes and silently drops the rest, so
+    # without an upper bound two passwords sharing their first 72 bytes can
+    # log in as each other. The bound counts BYTES: 30 "ậ" characters are 30
+    # characters but 90 UTF-8 bytes, so a `MaxLength(72)` counted in
+    # characters would let it through and then truncate it.
+    print("\n§7.1.1  the password upper bound counts UTF-8 bytes")
+    long_password = "Aa1" + "ậ" * 30          # 33 characters · 93 bytes
+    status, body = call("POST", "/auth/register", {
+        "email": f"long-{email}", "password": long_password,
+        "displayName": "Byte test"})
+    equals("400 for 33 characters but 93 bytes", status, 400)
+    equals("VALIDATION_FAILED", error_code(body), "VALIDATION_FAILED")
+    details = (body.get("error") or {}).get("details") or []
+    check("details names the password field and nothing else",
+          {d.get("field") for d in details} == {"password"},
+          f"saw {[d.get('field') for d in details]}")
+    check("93 bytes > 72 — so this really is a meaningful test",
+          len(long_password.encode("utf-8")) > 72
+          and len(long_password) <= 72,
+          f"{len(long_password)} characters / "
+          f"{len(long_password.encode('utf-8'))} bytes")
 
-    # Đúng 72 byte thì PHẢI đi qua — chặn trên không được chặn quá tay.
-    ma, _ = goi("POST", "/auth/register", {
-        "email": f"vua-{email}", "password": "Aa1" + "b" * 69,
-        "displayName": "Thử byte"})
-    bang("201 với đúng 72 byte", ma, 201)
+    # Exactly 72 bytes MUST pass — the bound must not overreach.
+    status, _ = call("POST", "/auth/register", {
+        "email": f"fits-{email}", "password": "Aa1" + "b" * 69,
+        "displayName": "Byte test"})
+    equals("201 for exactly 72 bytes", status, 201)
 
-    # ── 7.1.2 Đăng nhập ──────────────────────────────────────────────────
+    # -- 7.1.2 Log in -----------------------------------------------------
     print("\n7.1.2  POST /auth/login")
-    ma, than = goi("POST", "/auth/login",
-                   {"email": email, "password": mat_khau})
-    bang("200", ma, 200)
-    kiem("trả accessToken mới", bool(than and than.get("accessToken")))
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    equals("200", status, 200)
+    check("a new accessToken is returned", bool(body and body.get("accessToken")))
 
-    ma, than = goi("POST", "/auth/login",
-                   {"email": email, "password": "SaiMatKhau9"})
-    bang("401 khi sai mật khẩu", ma, 401)
-    bang("INVALID_CREDENTIALS", ma_loi(than), "INVALID_CREDENTIALS")
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": "SaiMatKhau9"})
+    equals("401 for a wrong password", status, 401)
+    equals("INVALID_CREDENTIALS", error_code(body), "INVALID_CREDENTIALS")
 
-    ma, than = goi("POST", "/auth/login",
-                   {"email": "khong-ton-tai@example.test",
-                    "password": mat_khau})
-    bang("401 khi email không tồn tại", ma, 401)
-    bang("cùng mã lỗi — không lộ email nào đã đăng ký",
-         ma_loi(than), "INVALID_CREDENTIALS")
+    status, body = call("POST", "/auth/login",
+                        {"email": "does-not-exist@example.test",
+                         "password": password})
+    equals("401 for an email that does not exist", status, 401)
+    equals("the same error code — no registered email is revealed",
+           error_code(body), "INVALID_CREDENTIALS")
 
-    # ── 7.1.4 Thông tin tài khoản ────────────────────────────────────────
+    # -- 7.1.4 Account information ----------------------------------------
     print("\n7.1.4  GET /auth/me")
-    ma, than = goi("GET", "/auth/me", token=token)
-    bang("200", ma, 200)
-    bang("hasHealthProfile false khi chưa khai",
-         than and than.get("hasHealthProfile"), False)
-    bang("preferenceStage cold khi chưa có tín hiệu",
-         than and than.get("preferenceStage"), "cold")
+    status, body = call("GET", "/auth/me", token=token)
+    equals("200", status, 200)
+    equals("hasHealthProfile is false before the profile is filled in",
+           body and body.get("hasHealthProfile"), False)
+    equals("preferenceStage is cold with no signals yet",
+           body and body.get("preferenceStage"), "cold")
 
-    ma, than = goi("GET", "/auth/me")
-    bang("401 khi không có token", ma, 401)
-    ma, than = goi("GET", "/auth/me", token="rac.rac.rac")
-    bang("401 TOKEN_INVALID khi token hỏng", ma_loi(than), "TOKEN_INVALID")
+    status, body = call("GET", "/auth/me")
+    equals("401 without a token", status, 401)
+    status, body = call("GET", "/auth/me", token="junk.junk.junk")
+    equals("401 TOKEN_INVALID for a malformed token",
+           error_code(body), "TOKEN_INVALID")
 
-    # ── 7.2.3 Hạn mức trước khi có hồ sơ ─────────────────────────────────
-    print("\n7.2.3  GET /profile/nutrition-targets khi chưa có hồ sơ")
-    ma, than = goi("GET", "/profile/nutrition-targets", token=token)
-    bang("409", ma, 409)
-    bang("PROFILE_REQUIRED, không phải 404", ma_loi(than),
-         "PROFILE_REQUIRED")
+    # -- 7.2.3 Targets before a profile exists ----------------------------
+    print("\n7.2.3  GET /profile/nutrition-targets with no profile")
+    status, body = call("GET", "/profile/nutrition-targets", token=token)
+    equals("409", status, 409)
+    equals("PROFILE_REQUIRED, not 404", error_code(body), "PROFILE_REQUIRED")
 
-    print("\n7.2.1  GET /profile khi chưa có hồ sơ")
-    ma, than = goi("GET", "/profile", token=token)
-    bang("404 NOT_FOUND", (ma, ma_loi(than)), (404, "NOT_FOUND"))
+    print("\n7.2.1  GET /profile with no profile")
+    status, body = call("GET", "/profile", token=token)
+    equals("404 NOT_FOUND", (status, error_code(body)), (404, "NOT_FOUND"))
 
-    # ── 7.2.2 Tạo hồ sơ ──────────────────────────────────────────────────
-    print("\n7.2.2  PUT /profile — tạo mới")
-    # Ngày sinh SUY TỪ HÔM NAY để tuổi luôn đúng 22, không gán cứng
-    # `2004-11-14` như ví dụ trong đặc tả.
+    # -- 7.2.2 Create the profile -----------------------------------------
+    print("\n7.2.2  PUT /profile — creating")
+    # The date of birth is DERIVED FROM TODAY so the age is always exactly 22,
+    # rather than hard-coded as `2004-11-14` the way the specification's
+    # example does.
     #
-    # Bản đầu của tệp này gán cứng ngày đó và mong `age: 22`, rồi báo sai 12
-    # phép kiểm — mà mã backend hoàn toàn đúng: hôm chạy là 08/11, sinh nhật
-    # 14/11 chưa tới, nên tuổi là 21 và BMR là 1660 chứ không phải 1655. Một
-    # phép thử đổi kết quả vào đúng một ngày trong năm thì không thử được gì.
-    hom_nay = date.today()
-    ngay_sinh = date(hom_nay.year - 22, hom_nay.month, hom_nay.day)
-    ho_so = {"gender": "male", "dateOfBirth": ngay_sinh.isoformat(),
-             "heightCm": 172.0, "weightKg": 68.5,
-             "activityLevel": "moderate", "goal": "maintain"}
-    ma, than = goi("PUT", "/profile", ho_so, token=token)
-    bang("201 Created lần đầu", ma, 201)
-    if ma not in (200, 201):
-        print(f"\nKhông tạo được hồ sơ, dừng: {than}")
-        if not ts.giu:
-            xoa_tai_khoan(email)
+    # The first version of this file hard-coded that date and expected
+    # `age: 22`, then reported 12 failing checks while the backend was
+    # entirely correct: the run was on 08 Nov, the 14 Nov birthday had not
+    # happened, so the age was 21 and the BMR 1660 rather than 1655. A test
+    # whose result changes on exactly one day of the year tests nothing.
+    today = date.today()
+    birth = date(today.year - 22, today.month, today.day)
+    profile = {"gender": "male", "dateOfBirth": birth.isoformat(),
+               "heightCm": 172.0, "weightKg": 68.5,
+               "activityLevel": "moderate", "goal": "maintain"}
+    status, body = call("PUT", "/profile", profile, token=token)
+    equals("201 Created the first time", status, 201)
+    if status not in (200, 201):
+        print(f"\nCould not create the profile, stopping: {body}")
+        if not args.keep:
+            delete_accounts(email)
         return 1
 
-    hm = than["nutritionTargets"]
-    # Đúng bộ số của ví dụ ở §7.2.3, sau khi sửa lỗi số học 1660 -> 1655.
-    bang("bmi 23.15", float(hm["bmi"]), 23.15)
-    # 23.15 vượt ngưỡng 23 của WHO 2004 cho người châu Á. Với ngưỡng quốc
-    # tế 25/30 thì nó là `normal` — và đó là con số bản đặc tả cũ ghi.
-    bang("bmiCategory overweight (ngưỡng châu Á 23/25)",
-         hm["bmiCategory"], "overweight")
-    bang("bmrKcal 1655 (không phải 1660 như bản đặc tả cũ)",
-         hm["bmrKcal"], 1655)
-    bang("tdeeKcal 2565", hm["tdeeKcal"], 2565)
-    bang("activityFactor 1.550", float(hm["activityFactor"]), 1.55)
-    bang("dailyCaloriesTarget 2565", hm["dailyCaloriesTarget"], 2565)
-    bang("goalAdjustmentKcal 0 với maintain", hm["goalAdjustmentKcal"], 0)
-    mt = hm["macroTargets"]
-    bang("macro % đọc từ mặc định lược đồ 15/60/25",
-         (mt["proteinPct"], mt["carbsPct"], mt["fatPct"]), (15, 60, 25))
-    bang("proteinG 96.2", float(mt["proteinG"]), 96.2)
-    bang("carbsG 384.8", float(mt["carbsG"]), 384.8)
-    bang("fatG 71.3", float(mt["fatG"]), 71.3)
-    bua = {m["mealType"]: m for m in hm["mealDistribution"]}
-    bang("4 bữa", sorted(bua), ["breakfast", "dinner", "lunch", "snack"])
-    bang("tỷ lệ bữa là điểm giữa khoảng §3.1",
-         [float(bua[k]["pct"]) for k in
-          ("breakfast", "lunch", "dinner", "snack")],
-         [27.5, 37.5, 27.5, 7.5])
-    bang("kcal từng bữa", [bua[k]["caloriesKcal"] for k in
-                           ("breakfast", "lunch", "dinner", "snack")],
-         [705, 962, 705, 192])
-    kiem("formula.expression kết thúc bằng = 1655",
-         hm["formula"]["expression"].endswith("= 1655"),
-         hm["formula"]["expression"])
-    bang("profile.age 22", than["profile"]["age"], 22)
+    targets = body["nutritionTargets"]
+    # Exactly the numbers of the §7.2.3 example, after the 1660 -> 1655
+    # arithmetic fix.
+    equals("bmi 23.15", float(targets["bmi"]), 23.15)
+    # 23.15 is over the WHO 2004 Asian threshold of 23. On the international
+    # 25/30 thresholds it would be `normal` — and that is the figure the old
+    # specification carried.
+    equals("bmiCategory overweight (Asian thresholds 23/25)",
+           targets["bmiCategory"], "overweight")
+    equals("bmrKcal 1655 (not 1660 as the old specification said)",
+           targets["bmrKcal"], 1655)
+    equals("tdeeKcal 2565", targets["tdeeKcal"], 2565)
+    equals("activityFactor 1.550", float(targets["activityFactor"]), 1.55)
+    equals("dailyCaloriesTarget 2565", targets["dailyCaloriesTarget"], 2565)
+    equals("goalAdjustmentKcal 0 for maintain",
+           targets["goalAdjustmentKcal"], 0)
+    macros = targets["macroTargets"]
+    equals("the macro percentages come from the schema default 15/60/25",
+           (macros["proteinPct"], macros["carbsPct"], macros["fatPct"]),
+           (15, 60, 25))
+    equals("proteinG 96.2", float(macros["proteinG"]), 96.2)
+    equals("carbsG 384.8", float(macros["carbsG"]), 384.8)
+    equals("fatG 71.3", float(macros["fatG"]), 71.3)
+    meals = {m["mealType"]: m for m in targets["mealDistribution"]}
+    equals("4 meals", sorted(meals),
+           ["breakfast", "dinner", "lunch", "snack"])
+    equals("the meal shares are the midpoints of the §3.1 ranges",
+           [float(meals[k]["pct"]) for k in
+            ("breakfast", "lunch", "dinner", "snack")],
+           [27.5, 37.5, 27.5, 7.5])
+    equals("kcal per meal", [meals[k]["caloriesKcal"] for k in
+                             ("breakfast", "lunch", "dinner", "snack")],
+           [705, 962, 705, 192])
+    check("formula.expression ends with = 1655",
+          targets["formula"]["expression"].endswith("= 1655"),
+          targets["formula"]["expression"])
+    equals("profile.age 22", body["profile"]["age"], 22)
 
-    print("\n7.2.2  PUT /profile — gọi lại")
-    ma, than = goi("PUT", "/profile", ho_so, token=token)
-    bang("200, không 201", ma, 200)
+    print("\n7.2.2  PUT /profile — calling again")
+    status, body = call("PUT", "/profile", profile, token=token)
+    equals("200, not 201", status, 200)
 
-    print("\n7.2.2  PUT /profile — số ngoài khoảng")
-    ma, than = goi("PUT", "/profile", {**ho_so, "heightCm": 300},
-                   token=token)
-    bang("400 VALIDATION_FAILED", (ma, ma_loi(than)),
-         (400, "VALIDATION_FAILED"))
-    ma, than = goi("PUT", "/profile", {**ho_so, "gender": "nam"},
-                   token=token)
-    bang("400 khi enum sai", (ma, ma_loi(than)),
-         (400, "VALIDATION_FAILED"))
-    ma, than = goi("PUT", "/profile",
-                   {**ho_so,
-                    "dateOfBirth": date(hom_nay.year - 5, 1, 1).isoformat()},
-                   token=token)
-    bang("400 khi tuổi dưới 13", (ma, ma_loi(than)),
-         (400, "VALIDATION_FAILED"))
+    print("\n7.2.2  PUT /profile — out-of-range numbers")
+    status, body = call("PUT", "/profile", {**profile, "heightCm": 300},
+                        token=token)
+    equals("400 VALIDATION_FAILED", (status, error_code(body)),
+           (400, "VALIDATION_FAILED"))
+    status, body = call("PUT", "/profile", {**profile, "gender": "nam"},
+                        token=token)
+    equals("400 for an invalid enum", (status, error_code(body)),
+           (400, "VALIDATION_FAILED"))
+    status, body = call("PUT", "/profile",
+                        {**profile,
+                         "dateOfBirth": date(today.year - 5, 1, 1).isoformat()},
+                        token=token)
+    equals("400 for an age under 13", (status, error_code(body)),
+           (400, "VALIDATION_FAILED"))
 
-    # ── Mục tiêu giảm cân: ràng buộc an toàn không xuống dưới BMR ───────
-    print("\n7.2.2  lose_weight — hạn mức không được dưới BMR")
-    ma, than = goi("PUT", "/profile",
-                   {**ho_so, "goal": "lose_weight",
-                    "activityLevel": "sedentary"}, token=token)
-    hm2 = than["nutritionTargets"]
-    kiem("dailyCaloriesTarget >= bmrKcal",
-         hm2["dailyCaloriesTarget"] >= hm2["bmrKcal"],
-         f"{hm2['dailyCaloriesTarget']} < {hm2['bmrKcal']}")
-    # BMR 1655 * 1.2 = 1986; 1986 - 500 = 1486 < 1655 -> kẹp về BMR.
-    bang("kẹp đúng về BMR", hm2["dailyCaloriesTarget"], 1655)
-    goi("PUT", "/profile", ho_so, token=token)   # trả lại maintain
+    # -- The lose_weight goal: the safety floor at BMR --------------------
+    print("\n7.2.2  lose_weight — the limit must not fall below BMR")
+    status, body = call("PUT", "/profile",
+                        {**profile, "goal": "lose_weight",
+                         "activityLevel": "sedentary"}, token=token)
+    floored = body["nutritionTargets"]
+    check("dailyCaloriesTarget >= bmrKcal",
+          floored["dailyCaloriesTarget"] >= floored["bmrKcal"],
+          f"{floored['dailyCaloriesTarget']} < {floored['bmrKcal']}")
+    # BMR 1655 * 1.2 = 1986; 1986 - 500 = 1486 < 1655 -> floored at BMR.
+    equals("floored exactly at BMR", floored["dailyCaloriesTarget"], 1655)
+    call("PUT", "/profile", profile, token=token)   # back to maintain
 
-    # ── 7.2.1 và 7.2.3 sau khi có hồ sơ ─────────────────────────────────
-    print("\n7.2.1 / 7.2.3  sau khi có hồ sơ")
-    ma, than = goi("GET", "/profile", token=token)
-    bang("GET /profile 200", ma, 200)
-    bang("conditions là mảng rỗng", than and than.get("conditions"), [])
-    ma, than = goi("GET", "/profile/nutrition-targets", token=token)
-    bang("GET nutrition-targets 200", ma, 200)
-    bang("bmrKcal vẫn 1655", than and than.get("bmrKcal"), 1655)
+    # -- 7.2.1 and 7.2.3 once a profile exists ----------------------------
+    print("\n7.2.1 / 7.2.3  once a profile exists")
+    status, body = call("GET", "/profile", token=token)
+    equals("GET /profile 200", status, 200)
+    equals("conditions is an empty array", body and body.get("conditions"), [])
+    status, body = call("GET", "/profile/nutrition-targets", token=token)
+    equals("GET nutrition-targets 200", status, 200)
+    equals("bmrKcal is still 1655", body and body.get("bmrKcal"), 1655)
 
-    ma, than = goi("GET", "/auth/me", token=token)
-    bang("hasHealthProfile giờ là true",
-         than and than.get("hasHealthProfile"), True)
+    status, body = call("GET", "/auth/me", token=token)
+    equals("hasHealthProfile is now true",
+           body and body.get("hasHealthProfile"), True)
 
-    # ── 7.2.4 và 7.2.5 bệnh lý ───────────────────────────────────────────
-    print("\n7.2.4 / 7.2.5  bệnh lý")
-    ma, than = goi("GET", "/profile/conditions", token=token)
-    bang("200, mảng thuần", (ma, than), (200, []))
+    # -- 7.2.4 and 7.2.5 medical conditions -------------------------------
+    print("\n7.2.4 / 7.2.5  medical conditions")
+    status, body = call("GET", "/profile/conditions", token=token)
+    equals("200, a bare array", (status, body), (200, []))
 
-    ma, than = goi("PUT", "/profile/conditions", {"conditions": [
+    status, body = call("PUT", "/profile/conditions", {"conditions": [
         {"conditionId": 2, "severity": "mild", "note": None},
-        {"conditionId": 6, "severity": "severe", "note": "Thử"},
+        {"conditionId": 6, "severity": "severe", "note": "test"},
     ]}, token=token)
-    bang("200", ma, 200)
-    kiem("trả về 2 bệnh lý kèm nameVi tra từ bảng conditions",
-         isinstance(than, list) and len(than) == 2
-         and all(x.get("nameVi") for x in than), str(than)[:120])
+    equals("200", status, 200)
+    check("returns 2 conditions with nameVi looked up from the conditions table",
+          isinstance(body, list) and len(body) == 2
+          and all(x.get("nameVi") for x in body), str(body)[:120])
 
-    ma, than = goi("PUT", "/profile/conditions", {"conditions": [
+    status, body = call("PUT", "/profile/conditions", {"conditions": [
         {"conditionId": 2, "severity": "mild"},
         {"conditionId": 2, "severity": "severe"},
     ]}, token=token)
-    bang("400 khi conditionId lặp", (ma, ma_loi(than)),
-         (400, "VALIDATION_FAILED"))
+    equals("400 for a repeated conditionId", (status, error_code(body)),
+           (400, "VALIDATION_FAILED"))
 
-    ma, than = goi("PUT", "/profile/conditions", {"conditions": [
+    status, body = call("PUT", "/profile/conditions", {"conditions": [
         {"conditionId": 99999, "severity": "mild"}]}, token=token)
-    bang("400 khi conditionId không tồn tại", (ma, ma_loi(than)),
-         (400, "VALIDATION_FAILED"))
+    equals("400 for a conditionId that does not exist",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
 
-    ma, than = goi("GET", "/profile/conditions", token=token)
-    kiem("yêu cầu lỗi KHÔNG làm mất danh sách đang có (giao dịch)",
-         isinstance(than, list) and len(than) == 2, str(than)[:120])
+    status, body = call("GET", "/profile/conditions", token=token)
+    check("a failed request does NOT lose the existing list (transaction)",
+          isinstance(body, list) and len(body) == 2, str(body)[:120])
 
-    ma, than = goi("PUT", "/profile/conditions", {}, token=token)
-    bang("400 khi thiếu hẳn trường `conditions`", (ma, ma_loi(than)),
-         (400, "VALIDATION_FAILED"))
-    ma, than = goi("GET", "/profile/conditions", token=token)
-    kiem("thân {} không xóa sạch bệnh lý",
-         isinstance(than, list) and len(than) == 2, str(than)[:120])
+    status, body = call("PUT", "/profile/conditions", {}, token=token)
+    equals("400 when the `conditions` field is absent altogether",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+    status, body = call("GET", "/profile/conditions", token=token)
+    check("a {} body does not wipe the conditions",
+          isinstance(body, list) and len(body) == 2, str(body)[:120])
 
-    ma, than = goi("PUT", "/profile/conditions", {"conditions": []},
-                   token=token)
-    bang("mảng rỗng thì xóa hết", (ma, than), (200, []))
+    status, body = call("PUT", "/profile/conditions", {"conditions": []},
+                        token=token)
+    equals("an empty array clears them all", (status, body), (200, []))
 
-    # ── 7.1.3 Làm mới token và phát hiện tái dùng ───────────────────────
+    # -- 7.1.3 Token refresh and reuse detection --------------------------
     print("\n7.1.3  POST /auth/refresh")
-    ma, than = goi("POST", "/auth/refresh", {"refreshToken": refresh})
-    bang("200", ma, 200)
-    refresh2 = than and than.get("refreshToken")
-    kiem("refreshToken được xoay vòng (token mới khác token cũ)",
-         bool(refresh2) and refresh2 != refresh)
-    kiem("phản hồi KHÔNG mang `user` (đặc tả §7.1.3)",
-         isinstance(than, dict) and "user" not in than)
+    status, body = call("POST", "/auth/refresh", {"refreshToken": refresh})
+    equals("200", status, 200)
+    refresh2 = body and body.get("refreshToken")
+    check("the refreshToken is rotated (the new one differs from the old)",
+          bool(refresh2) and refresh2 != refresh)
+    check("the response does NOT carry `user` (spec §7.1.3)",
+          isinstance(body, dict) and "user" not in body)
 
-    ma, than = goi("POST", "/auth/refresh", {"refreshToken": refresh})
-    bang("401 khi nộp lại token đã xoay vòng", ma, 401)
-    bang("TOKEN_INVALID", ma_loi(than), "TOKEN_INVALID")
+    status, body = call("POST", "/auth/refresh", {"refreshToken": refresh})
+    equals("401 when resubmitting the rotated token", status, 401)
+    equals("TOKEN_INVALID", error_code(body), "TOKEN_INVALID")
 
-    ma, than = goi("POST", "/auth/refresh", {"refreshToken": refresh2})
-    bang("token MỚI cũng bị thu hồi — cả họ bị cắt khi phát hiện tái dùng",
-         ma, 401)
+    status, body = call("POST", "/auth/refresh", {"refreshToken": refresh2})
+    equals("the NEW token is revoked too — the whole family is cut on reuse "
+           "detection", status, 401)
 
-    ma, than = goi("POST", "/auth/refresh", {"refreshToken": "khong-co-that"})
-    bang("401 với token bịa", (ma, ma_loi(than)), (401, "TOKEN_INVALID"))
+    status, body = call("POST", "/auth/refresh",
+                        {"refreshToken": "does-not-exist"})
+    equals("401 for an invented token", (status, error_code(body)),
+           (401, "TOKEN_INVALID"))
 
-    # ── 7.1.3  hai lượt refresh ĐỒNG THỜI cùng một token ────────────────
+    # -- 7.1.3  two CONCURRENT refreshes of the same token ----------------
     #
-    # Bản trước ĐỌC dòng token rồi mới GHI, nên hai yêu cầu song song đều
-    # thấy `revoked_at IS NULL` và cả hai đều đi qua: hai token sống trong
-    # một họ, không bên nào bị coi là tái dùng, và phép phát hiện tái dùng
-    # chỉ còn là trang trí. Giờ việc đoạt dòng là MỘT lệnh
-    # `UPDATE … WHERE revoked_at IS NULL`, nên đúng một lệnh thắng.
-    print("\n7.1.3  hai lượt refresh đồng thời (cuộc đua)")
-    ma, than = goi("POST", "/auth/login",
-                   {"email": email, "password": mat_khau})
-    dua = than and than.get("refreshToken")
-    kiem("có token để thử đua", bool(dua))
+    # The earlier version READ the token row before WRITING, so two parallel
+    # requests both saw `revoked_at IS NULL` and both went through: two live
+    # tokens in one family, neither counted as reuse, and the reuse detection
+    # was merely decorative. Claiming the row is now a SINGLE
+    # `UPDATE … WHERE revoked_at IS NULL`, so exactly one statement wins.
+    print("\n7.1.3  two concurrent refreshes (a race)")
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    race_token = body and body.get("refreshToken")
+    check("got a token to race with", bool(race_token))
 
-    # TÁM luồng, không hai. Phép kiểm này là XÁC SUẤT: nó chỉ phân biệt được
-    # mã cũ với mã mới khi các yêu cầu THẬT SỰ chồng nhau. Với hai luồng mà
-    # chúng tình cờ xếp hàng thì mã CŨ cũng trả [200, 401] — lượt sau thấy
-    # dòng đã thu hồi và báo tái dùng — nên bài kiểm sẽ đạt với cả mã hỏng.
+    # EIGHT threads, not two. This check is PROBABILISTIC: it can only tell
+    # the old code from the new one when the requests genuinely overlap. With
+    # two threads that happen to queue up, the OLD code also returns
+    # [200, 401] — the second sees an already-revoked row and reports reuse —
+    # so the test would pass against broken code too.
     #
-    # Tám luồng cùng bắn một token làm chồng lấn gần như chắc chắn, và bất
-    # biến cần kiểm là: ĐÚNG MỘT lượt được 200. Mã cũ đọc-rồi-ghi sẽ cho
-    # nhiều lượt 200 ngay khi có hai lượt chồng nhau.
+    # Eight threads firing one token makes overlap all but certain, and the
+    # invariant to check is: EXACTLY ONE request gets a 200. The old
+    # read-then-write code yields several 200s as soon as two overlap.
     import concurrent.futures as cf
-    SO_LUONG = 8
-    with cf.ThreadPoolExecutor(max_workers=SO_LUONG) as bom:
-        ket = [f.result() for f in [
-            bom.submit(goi, "POST", "/auth/refresh", {"refreshToken": dua})
-            for _ in range(SO_LUONG)]]
-    mas = [m for m, _ in ket]
-    kiem(f"đúng MỘT lượt 200 trong {SO_LUONG} lượt đồng thời",
-         mas.count(200) == 1, f"mã trả về: {sorted(mas)}")
-    kiem("các lượt còn lại đều 401, không 500",
-         all(m == 401 for m in mas if m != 200), f"mã trả về: {sorted(mas)}")
+    THREADS = 8
+    with cf.ThreadPoolExecutor(max_workers=THREADS) as pool:
+        results = [f.result() for f in [
+            pool.submit(call, "POST", "/auth/refresh",
+                        {"refreshToken": race_token})
+            for _ in range(THREADS)]]
+    statuses = [s for s, _ in results]
+    check(f"exactly ONE request got a 200 out of {THREADS} concurrent ones",
+          statuses.count(200) == 1, f"statuses: {sorted(statuses)}")
+    check("all the others are 401, never 500",
+          all(s == 401 for s in statuses if s != 200),
+          f"statuses: {sorted(statuses)}")
 
-    # Và họ token phải bị cắt: lượt thắng cũng không dùng được nữa, vì lượt
-    # thua đã kích hoạt thu hồi cả chuỗi.
-    thang = next((t for m, t in ket if m == 200), None)
-    ma, _ = goi("POST", "/auth/refresh",
-                {"refreshToken": (thang or {}).get("refreshToken", "x")})
-    bang("token của lượt thắng cũng bị thu hồi theo cả họ", ma, 401)
+    # And the token family must be cut: even the winner is unusable, because
+    # a loser triggered revocation of the whole chain.
+    winner = next((b for s, b in results if s == 200), None)
+    status, _ = call("POST", "/auth/refresh",
+                     {"refreshToken": (winner or {}).get("refreshToken", "x")})
+    equals("the winner's token is revoked along with the family", status, 401)
 
-    # Đếm theo HỌ, không theo bảng. Bài thử này đăng nhập nhiều lần, và mỗi
-    # lượt đăng nhập mở một họ token RIÊNG — những họ đó còn sống là đúng.
-    # Lần đầu viết phép kiểm này tôi đếm cả bảng và nó báo sai trong khi mã
-    # hoàn toàn đúng.
+    # Counted per FAMILY, not per table. This test logs in several times, and
+    # each login opens its OWN token family — those staying alive is correct.
+    # The first time I wrote this check I counted the whole table and it
+    # reported a failure while the code was entirely right.
     #
-    # Lần theo `replaced_by` từ chính token đã nộp: cả chuỗi phải chết.
+    # Follow `replaced_by` from the token that was submitted: the whole chain
+    # must be dead.
     import hashlib
-    bam = hashlib.sha256(dua.encode()).hexdigest()
-    ho = sql(
-        "WITH RECURSIVE chuoi AS ("
+    token_hash = hashlib.sha256(race_token.encode()).hexdigest()
+    family = sql(
+        "WITH RECURSIVE chain AS ("
         "  SELECT id, replaced_by, revoked_at FROM refresh_tokens"
         "   WHERE token_hash = %s"
         "  UNION ALL"
         "  SELECT t.id, t.replaced_by, t.revoked_at FROM refresh_tokens t"
-        "   JOIN chuoi c ON t.id = c.replaced_by)"
-        " SELECT COUNT(*), SUM(revoked_at IS NULL) FROM chuoi", (bam,))[0]
-    kiem("cả họ token bị cắt, không sót mắt nào",
-         ho[0] >= 2 and ho[1] == 0,
-         f"{ho[0]} mắt trong chuỗi, {ho[1]} còn sống")
+        "   JOIN chain c ON t.id = c.replaced_by)"
+        " SELECT COUNT(*), SUM(revoked_at IS NULL) FROM chain",
+        (token_hash,))[0]
+    check("the whole token family is cut, with no link left alive",
+          family[0] >= 2 and family[1] == 0,
+          f"{family[0]} links in the chain, {family[1]} still alive")
 
-    # ── Múi giờ: DATETIME do Backend ghi phải khớp NOW() của MySQL ───────
+    # -- Time zone: DATETIMEs written by the backend must match MySQL's NOW()
     #
-    # Backend từng ghi `DateTime.UtcNow`, lệch 7 giờ so với 27 cột
-    # `DEFAULT CURRENT_TIMESTAMP` của lược đồ và so với mọi `NOW()` trong
-    # tools/*.py. Sắp theo `created_at` khi đó là trộn hai đồng hồ.
-    print("\n§2.3  mọi DATETIME theo một đồng hồ: Asia/Ho_Chi_Minh")
-    excess = sql(
+    # The backend once wrote `DateTime.UtcNow`, 7 hours off from the schema's
+    # 27 `DEFAULT CURRENT_TIMESTAMP` columns and from every `NOW()` in
+    # tools/*.py. Sorting by `created_at` then mixed two clocks.
+    print("\n§2.3  every DATETIME on one clock: Asia/Ho_Chi_Minh")
+    drift = sql(
         "SELECT TIMESTAMPDIFF(MINUTE, created_at, NOW()) FROM users "
         "WHERE email = %s", (email,))[0][0]
-    kiem("users.created_at lệch NOW() dưới 5 phút",
-         excess is not None and abs(excess) < 5,
-         f"lệch {excess} phút — 420 phút nghĩa là vẫn đang ghi UTC")
+    check("users.created_at is within 5 minutes of NOW()",
+          drift is not None and abs(drift) < 5,
+          f"off by {drift} minutes — 420 means it is still writing UTC")
 
-    # ── Tài khoản bị khóa: bộ lọc toàn cục phải chặn MỌI endpoint ────────
+    # -- A disabled account: the global filter must block EVERY endpoint --
     #
-    # `/auth/me` vẫn kiểm `is_active` từ trước, nhưng `/profile` thì không:
-    # tài khoản bị khóa đọc ghi hồ sơ được tới một giờ, tới khi accessToken
-    # hết hạn. Giờ `TaiKhoanConHoatDongFilter` chặn ở tầng bộ lọc nên endpoint
-    # mới được bảo vệ mặc định.
-    print("\n§4  tài khoản bị khóa — chặn ở mọi endpoint đã xác thực")
-    ma, than = goi("POST", "/auth/login",
-                   {"email": email, "password": mat_khau})
-    tk = than and than.get("accessToken")
-    rf = than and than.get("refreshToken")
-    kiem("lấy được token trước khi khóa", bool(tk))
+    # `/auth/me` had always checked `is_active`, but `/profile` had not: a
+    # disabled account could read and write its profile for up to an hour,
+    # until the accessToken expired. `TaiKhoanConHoatDongFilter` now blocks at
+    # the filter layer, so a new endpoint is protected by default.
+    print("\n§4  a disabled account — blocked at every authenticated endpoint")
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    access = body and body.get("accessToken")
+    refresh_token = body and body.get("refreshToken")
+    check("got a token before disabling", bool(access))
 
     sql("UPDATE users SET is_active = 0 WHERE email = %s", (email,))
 
-    for duong in ("/auth/me", "/profile", "/profile/nutrition-targets",
-                  "/profile/conditions"):
-        ma, than = goi("GET", duong, token=tk)
-        bang(f"403 ACCOUNT_DISABLED ở GET {duong}",
-             (ma, ma_loi(than)), (403, "ACCOUNT_DISABLED"))
+    for path in ("/auth/me", "/profile", "/profile/nutrition-targets",
+                 "/profile/conditions"):
+        status, body = call("GET", path, token=access)
+        equals(f"403 ACCOUNT_DISABLED at GET {path}",
+               (status, error_code(body)), (403, "ACCOUNT_DISABLED"))
 
-    ma, than = goi("PUT", "/profile/conditions", {"conditions": []}, token=tk)
-    bang("403 cả với PUT, không chỉ GET", (ma, ma_loi(than)),
-         (403, "ACCOUNT_DISABLED"))
+    status, body = call("PUT", "/profile/conditions", {"conditions": []},
+                        token=access)
+    equals("403 for PUT too, not only GET", (status, error_code(body)),
+           (403, "ACCOUNT_DISABLED"))
 
-    # Và không làm mới token được nữa — nếu không thì khóa tài khoản chỉ có
-    # hiệu lực tối đa một giờ.
-    ma, than = goi("POST", "/auth/refresh", {"refreshToken": rf})
-    bang("401 khi refresh bằng tài khoản đã khóa", ma, 401)
+    # And no more refreshing either — otherwise disabling an account would
+    # take effect for at most an hour.
+    status, body = call("POST", "/auth/refresh",
+                        {"refreshToken": refresh_token})
+    equals("401 when refreshing on a disabled account", status, 401)
 
-    ma, than = goi("POST", "/auth/login",
-                   {"email": email, "password": mat_khau})
-    bang("403 ACCOUNT_DISABLED khi đăng nhập lại",
-         (ma, ma_loi(than)), (403, "ACCOUNT_DISABLED"))
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    equals("403 ACCOUNT_DISABLED when logging in again",
+           (status, error_code(body)), (403, "ACCOUNT_DISABLED"))
 
     sql("UPDATE users SET is_active = 1 WHERE email = %s", (email,))
 
-    # ── Dọn ──────────────────────────────────────────────────────────────
+    # -- Clean up ---------------------------------------------------------
     print()
-    if ts.giu:
-        print(f"Giữ lại tài khoản thử {email} (--giu)")
+    if args.keep:
+        print(f"Keeping the test account {email} (--keep)")
     else:
-        # `fits-` là tài khoản của phép kiểm mật khẩu đúng 72 byte; `dai-`
-        # không bao giờ tạo được dòng nào nhưng vẫn xóa cho chắc, để một lần
-        # đổi chặn trên sau này không để lại rác.
-        xoa_tai_khoan(email, f"vua-{email}", f"dai-{email}")
-        print("Đã xóa 2 tài khoản thử; CASCADE dọn hồ sơ và token")
+        # `fits-` is the account from the exactly-72-byte password check;
+        # `long-` never creates a row at all but is deleted anyway, so that a
+        # later change to the upper bound leaves no litter behind.
+        delete_accounts(email, f"fits-{email}", f"long-{email}")
+        print("Deleted 2 test accounts; CASCADE cleared the profile and tokens")
 
     print("=" * 72)
-    if _loi:
-        print(f"{len(_loi)}/{_so_kiem} PHÉP KIỂM SAI:")
-        for x in _loi:
+    if _failures:
+        print(f"{len(_failures)}/{_checks} CHECKS FAILED:")
+        for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_so_kiem}/{_so_kiem} phép kiểm đạt — 9 endpoint chạy đúng đặc tả "
-          "trên CSDL thật.")
+    print(f"{_checks}/{_checks} checks passed — 9 endpoints behave per the "
+          f"specification against the real database.")
     return 0
 
 

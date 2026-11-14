@@ -46,7 +46,7 @@ Ba lớp này bắt ba loại lỗi khác nhau, và không lớp nào thay đư�
 
 Bộ kiểm này bắt được ba chỗ lệch có thật ngay lần chạy đầu — macro 17/60/23 ở Dart đối lại 15/60/25 trong CSDL và đặc tả; `mealDistribution` 25/40/27/8 trong đặc tả đối lại điểm giữa 27.5/37.5/27.5/7.5 ở `meal_plan.dart`; và `bmiCategory: "normal"` cho BMI 23.15, sai theo chính ngưỡng châu Á 23/25 mà hệ thống dùng. Không chỗ nào trong ba chỗ đó trông sai khi đọc.
 
-`tools/thu_be_parity.py` thử phủ định chính bộ kiểm ấy: tiêm 14 lỗi vào tệp ca thử rồi đòi cả hai bộ phải thất bại. Nó chỉ sửa tệp **sinh ra**, không bao giờ chạm mã nguồn — bản đầu sửa thẳng hằng số trong `NutritionTargets.cs` rồi khôi phục trong `finally`, và khi phiên làm việc bị cắt giữa chừng, `finally` không chạy: lỗi tiêm nằm lại trong mã thật.
+`tools/test_be_parity.py` thử phủ định chính bộ kiểm ấy: tiêm 14 lỗi vào tệp ca thử rồi đòi cả hai bộ phải thất bại. Nó chỉ sửa tệp **sinh ra**, không bao giờ chạm mã nguồn — bản đầu sửa thẳng hằng số trong `NutritionTargets.cs` rồi khôi phục trong `finally`, và khi phiên làm việc bị cắt giữa chừng, `finally` không chạy: lỗi tiêm nằm lại trong mã thật.
 
 **`smoke_backend.py` — những gì chỉ sai khi có CSDL và có mạng.** Ánh xạ tên cột, kiểu dữ liệu, giao dịch, vỏ lỗi, claim trong JWT. Nó tạo một tài khoản với email ngẫu nhiên rồi xóa ở cuối; `ON DELETE CASCADE` dọn phần còn lại.
 

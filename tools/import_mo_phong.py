@@ -23,9 +23,9 @@ ngày sinh, không lưu tuổi — đúng, vì tuổi là đại lượng dẫn 
 ngày. Phép quy đổi: làm tròn tuổi, rồi đặt ngày sinh vào khoảng 1–300 ngày
 **trước** mốc sinh nhật năm nay, lệch theo chỉ số người để 50 hồ sơ không
 cùng một ngày sinh. Lùi lại ít nhất một ngày là bắt buộc: đặt đúng mốc thì
-`tuoi()` trả về `n` hay `n − 1` tùy giờ chạy.
+`age()` trả về `n` hay `n − 1` tùy giờ chạy.
 
-Phép quy đổi tự kiểm: `tuoi(ngay_sinh, ngay_nap) == round(Age)` được `assert`
+Phép quy đổi tự kiểm: `age(ngay_sinh, ngay_nap) == round(Age)` được `assert`
 cho cả 50 dòng. Không có phép tự kiểm đó thì một lỗi lệch-một ở đây đi
 thẳng vào BMR của cả 50 người và không gì báo ra.
 
@@ -102,7 +102,13 @@ from ml.db import use_utf8, connect  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.rocchio import alpha, build_profile, stage  # noqa: E402
 
-from tools.gen_buoc1_cases import bmr, han_muc, tdee, tron, tuoi  # noqa: E402
+from tools.gen_buoc1_cases import (  # noqa: E402
+    age,
+    bmr,
+    calorie_limit,
+    round_half_up,
+    tdee,
+)
 
 # Dùng lại nguyên bộ của `import_swipes.py` chứ không viết bản thứ hai: phép
 # tra bệnh lý, mức độ ghi vào `user_conditions`, phép lọc F1 lúc nhập và giá
@@ -192,9 +198,9 @@ def ngay_sinh_tu_tuoi(tuoi_nam: int, chi_so: int, hom_nay: date) -> date:
     """Ngày sinh cho ra đúng `tuoi_nam` tuổi vào `hom_nay`."""
     moc = lui_nam(hom_nay, tuoi_nam)
     ngay = moc - timedelta(days=1 + (chi_so * 7) % LECH_NGAY_SINH)
-    if tuoi(ngay, hom_nay) != tuoi_nam:
+    if age(ngay, hom_nay) != tuoi_nam:
         raise LoiNap(
-            f"quy đổi ngày sinh sai: {ngay} cho ra {tuoi(ngay, hom_nay)} tuổi, "
+            f"quy đổi ngày sinh sai: {ngay} cho ra {age(ngay, hom_nay)} tuổi, "
             f"cần {tuoi_nam}. Xem `ngay_sinh_tu_tuoi`."
         )
     return ngay
@@ -253,7 +259,7 @@ def quy_doi_ho_so(h: dict[str, str], chi_so: int, hom_nay: date) -> dict[str, An
     d_cao = Decimal(str(cao_cm))
     gt_bmr = bmr(gioi, d_can, d_cao, tuoi_nam)
     gt_tdee = tdee(gt_bmr, van_dong)
-    gt_han_muc = han_muc(gt_tdee, gt_bmr, muc_tieu)
+    gt_han_muc = calorie_limit(gt_tdee, gt_bmr, muc_tieu)
 
     return {
         "user_id": ma,
@@ -263,9 +269,9 @@ def quy_doi_ho_so(h: dict[str, str], chi_so: int, hom_nay: date) -> dict[str, An
         "weight_kg": can,
         "activity_level": van_dong,
         "goal": muc_tieu,
-        "bmr_kcal": tron(gt_bmr),
-        "tdee_kcal": tron(gt_tdee),
-        "daily_calories_target": tron(gt_han_muc),
+        "bmr_kcal": round_half_up(gt_bmr),
+        "tdee_kcal": round_half_up(gt_tdee),
+        "daily_calories_target": round_half_up(gt_han_muc),
         "_tuoi": tuoi_nam,
         "_nhan_beo": h["NObeyesdad"],
         "_faf": faf,
