@@ -12,7 +12,7 @@ field-name mapping between Python's `snake_case` and the specification's
 
 It creates no new data: it reads a user already in the database and scores
 public foods. `POST /profiles/{id}/rebuild` does write — but it writes back
-exactly the values `import_swipes` / `import_mo_phong` already computed, so
+exactly the values `import_swipes` / `import_simulation` already computed, so
 repeated runs do not skew the data. One of the checks asserts precisely that.
 
 Run (the ML Service must be running):
@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     if profile is None or len(foods) < 4:
         print(
             "The database has no preference profile yet, or too few foods.\n"
-            "Load first: python tools/import_mo_phong.py --apply",
+            "Load first: python tools/import_simulation.py --apply",
             file=sys.stderr,
         )
         return 1

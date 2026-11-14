@@ -562,7 +562,7 @@ def rebuild_profile(cn, user_id: str, *, write: bool = True) -> PreferenceProfil
 
     Measured on the simulated set: filtering with F1 before building the
     vector moves `cos(p_u, t_u)` from 0.119 to 0.666 across the 21 users with
-    constraints. See `tools/check_mo_phong.py` check 7.
+    constraints. See `tools/check_simulation.py` check 7.
 
     ## Chronological order
 

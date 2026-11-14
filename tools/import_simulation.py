@@ -67,7 +67,7 @@ phỏng thì đường đi đã đúng sẵn; hiện giờ nó chỉ in ra con s
 Vector khẩu vị ẩn `t_u` **không vào CSDL.** Lược đồ không có cột cho nó, và
 thêm một cột chỉ dữ liệu mô phỏng mới dùng là làm lược đồ phải gánh một thứ
 không thuộc về sản phẩm. Nó ở lại `khau_vi_that.json`, và
-`tools/check_mo_phong.py` là chỗ đọc nó.
+`tools/check_simulation.py` là chỗ đọc nó.
 
 ## Nạp hết rồi mới commit
 
@@ -77,9 +77,9 @@ qua nó và âm thầm dựng một tập huấn luyện khuyết.
 
 Chạy
 ────
-    python tools/import_mo_phong.py              # xem trước, không ghi
-    python tools/import_mo_phong.py --apply
-    python tools/import_mo_phong.py --xoa        # xóa lần nạp trước
+    python tools/import_simulation.py              # xem trước, không ghi
+    python tools/import_simulation.py --apply
+    python tools/import_simulation.py --xoa        # xóa lần nạp trước
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ from tools.gen_buoc1_cases import (  # noqa: E402
 # nghĩa là F1 lúc nhập loại một tập món khác F1 lúc chạy thật.
 from tools.import_swipes import (  # noqa: E402
     BAM_KHONG_DUNG_DUOC,
-    SEVERITY_PHIEU,
+    FORM_SEVERITY,
     LoiPhieu,
     _ly_do_ngan,
     kiem_benh_ly,
@@ -304,7 +304,7 @@ def doc_hanh_vi(foods_by_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]
     if not HANH_VI.exists():
         raise LoiNap(
             f"không thấy {HANH_VI}.\n"
-            "Sinh trước bằng: python tools/sinh_khau_vi.py --ghi"
+            "Sinh trước bằng: python tools/gen_taste_vectors.py --write"
         )
     with HANH_VI.open(encoding="utf-8-sig", newline="") as f:
         doc = csv.DictReader(f)
@@ -340,7 +340,7 @@ def doc_su_that() -> dict[str, Any]:
     if not SU_THAT.exists():
         raise LoiNap(
             f"không thấy {SU_THAT}.\n"
-            "Sinh trước bằng: python tools/sinh_khau_vi.py --ghi"
+            "Sinh trước bằng: python tools/gen_taste_vectors.py --write"
         )
     return json.loads(SU_THAT.read_text(encoding="utf-8"))
 
@@ -403,7 +403,7 @@ def allowed_foods(
         # lệch nghĩa là `condition_rules` đã đổi sau khi dữ liệu được sinh —
         # và khi đó dữ liệu mang một ràng buộc khác với ràng buộc mà hệ thống
         # đang thi hành. Nó không gây lỗi ở đâu cả: trình nhập vẫn ghi xong,
-        # `build_dataset` vẫn chạy, và phép đo F1 trong `check_mo_phong.py`
+        # `build_dataset` vẫn chạy, và phép đo F1 trong `check_simulation.py`
         # vẫn in ra một con số — một con số của bộ luật cũ.
         da_ghi = set(su_that["nguoi"].get(u, {}).get("f1_excluded") or ())
         vua_tinh = {f for f, _a, _l in loai}
@@ -412,7 +412,7 @@ def allowed_foods(
                 f"{u}: Bộ lọc F1 vừa tính ra {len(vua_tinh)} món bị loại, "
                 f"nhưng khau_vi_that.json ghi {len(da_ghi)} món.\n"
                 f"`condition_rules` đã đổi sau khi sinh dữ liệu. Sinh lại: "
-                "python tools/sinh_khau_vi.py --ghi"
+                "python tools/gen_taste_vectors.py --write"
             )
 
         giu[u] = con
@@ -495,7 +495,7 @@ def ghi(
                 cur.execute(
                     "INSERT INTO user_conditions (id, user_id, condition_id, "
                     "severity) VALUES (UUID(), %s, %s, %s)",
-                    (user_id, cid, SEVERITY_PHIEU),
+                    (user_id, cid, FORM_SEVERITY),
                 )
 
             # Mỗi người một phiên, các phiên cách nhau 1 phút, trong phiên
@@ -627,7 +627,7 @@ def main() -> int:
                     f"lệch phiên bản đặc trưng: dữ liệu mô phỏng sinh trên "
                     f"{su_that.get('feature_version')}, mã hiện là "
                     f"{FEATURE_VERSION}.\nSinh lại: "
-                    "python tools/sinh_khau_vi.py --ghi"
+                    "python tools/gen_taste_vectors.py --write"
                 )
             ho_so = doc_ho_so(ngay_nap)
             luot = doc_hanh_vi(foods_by_id)
@@ -654,7 +654,7 @@ def main() -> int:
             print(
                 f"Đã có {da_co} người dùng mô phỏng trong CSDL. Không nạp "
                 "chồng lên.\nXóa trước rồi nạp lại: "
-                "python tools/import_mo_phong.py --xoa",
+                "python tools/import_simulation.py --xoa",
                 file=sys.stderr,
             )
             return 1

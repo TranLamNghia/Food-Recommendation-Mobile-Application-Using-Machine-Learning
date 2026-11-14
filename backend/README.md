@@ -52,7 +52,7 @@ Bộ kiểm này bắt được ba chỗ lệch có thật ngay lần chạy đ�
 
 Nó đã bắt bốn lỗi mà trình biên dịch không thấy: `food_tags` thiếu khóa chính (khai ở cấp bảng, và thiếu nó thì **mọi** endpoint trả 500, không chỉ endpoint chạm vào bảng đó); `CHAR(36)` đọc ra `System.Guid` thay vì `string`; khóa ngoại tự trỏ `replaced_by` vỡ vì EF xếp `UPDATE` trước `INSERT`; và một phép kiểm trong chính tệp thử gán cứng ngày sinh nên đổi kết quả vào đúng một ngày trong năm.
 
-**`gen_entities.py` — 24 lớp thực thể sinh từ `db/schema.sql`.** 225 cột; gõ tay thì một cột sai tên hoặc sai tính cho phép `NULL` không gây lỗi biên dịch nào — nó gây một `MySqlException` lúc chạy, ở một endpoint có thể không ai gọi tới trong nhiều tuần. Chạy không có cờ thì nó **soát** mã đang có; `--ghi` thì sinh lại.
+**`gen_entities.py` — 24 lớp thực thể sinh từ `db/schema.sql`.** 225 cột; gõ tay thì một cột sai tên hoặc sai tính cho phép `NULL` không gây lỗi biên dịch nào — nó gây một `MySqlException` lúc chạy, ở một endpoint có thể không ai gọi tới trong nhiều tuần. Chạy không có cờ thì nó **soát** mã đang có; `--write` thì sinh lại.
 
 Phép kiểm 5 của nó đối chiếu bốn mảng trong `Api/Profile/ProfileDtos.cs` — `Enums.Gender`, `.ActivityLevel`, `.Goal`, `.Severity` — với tập giá trị ENUM của `health_profiles` và `user_conditions`, **giữ cả thứ tự** vì MySQL lưu ENUM theo thứ số. Bốn mảng đó là tầng duy nhất trả `400 VALIDATION_FAILED` kèm tên trường, nên khi chúng lệch khỏi lược đồ thì API từ chối đúng thứ CSDL cho phép, và cả hai bên vẫn tự nhất quán nên không có gì báo ra. Phép kiểm soát **hai chiều**: thêm một mảng vào `Enums` mà không khai trong `ENUM_CS` cũng là lệch — nó trông như được soát mà thật ra không.
 
@@ -87,7 +87,7 @@ Chọn giờ Việt Nam chứ không chọn UTC vì đó là thứ CSDL **đang*
 python tools/run_sql.py db/migrations/00N_ten.sql --database nutrition_rec
 # 2. gộp vào db/schema.sql, cập nhật con số ở đầu tệp
 # 3. sinh lại thực thể
-python tools/gen_entities.py --ghi
+python tools/gen_entities.py --write
 ```
 
 Thêm một bảng còn lan ra bốn tài liệu nữa — `DATABASE_DESIGN.md`, `database_erd.html`, `ERD_REVIEW.md`, và con số mong đợi trong `tools/test_schema_build.py`. `python tools/check_docs_sync.py` liệt kê đúng từng chỗ.
@@ -117,4 +117,4 @@ Api/
 Api.Tests/                  44 phép kiểm, không cần CSDL
 ```
 
-Hai thư mục đánh dấu **SINH TỰ ĐỘNG** không sửa tay — sửa `db/schema.sql` rồi chạy lại `tools/gen_entities.py --ghi`.
+Hai thư mục đánh dấu **SINH TỰ ĐỘNG** không sửa tay — sửa `db/schema.sql` rồi chạy lại `tools/gen_entities.py --write`.

@@ -899,7 +899,7 @@ Phiên vuốt onboarding không phải chờ app chạy mới thu được — n
 bốn lựa chọn. Hai công cụ dưới đây làm trọn việc đó:
 
 ```
-python tools/make_survey_deck.py --so 45 --ghi
+python tools/make_survey_deck.py --count 45 --write
     → data/survey/survey_deck.json      (bộ món kèm vector, để tái lập)
     → data/survey/phieu_khao_sat.csv    (phiếu trống để chép cho từng người)
 
@@ -955,7 +955,7 @@ Lý do: `ObesityDataSet` cho hồ sơ sức khỏe, nhưng phần **lựa chọn
 biên cố định. Không mô hình nào học được gì từ đó; Chương 3 sẽ chỉ đo lại mức
 đa số 41,0%.
 
-`tools/sinh_khau_vi.py` thay phần đó bằng mô phỏng **có ground truth**: mỗi
+`tools/gen_taste_vectors.py` thay phần đó bằng mô phỏng **có ground truth**: mỗi
 người ảo nhận một vector khẩu vị ẩn `t_u` trong chính không gian 20 chiều của
 hệ thống, lựa chọn rút ra từ `cos(t_u, v_i)` qua một ordered logit. Đầu bài
 docstring của tệp đó giải thích từng lựa chọn thiết kế; ba điều quan trọng
@@ -976,19 +976,19 @@ nhất:
   mô phỏng đã tự trả lời mất câu hỏi mà đồ án đặt ra.
 
 ```
-python tools/sinh_khau_vi.py --ghi
+python tools/gen_taste_vectors.py --write
     → data/survey/mo_phong/hanh_vi.csv        2250 lượt, cùng cột với tệp gốc
     → data/survey/mo_phong/khau_vi_that.json  vector ẩn + mọi tham số sinh
 
-python tools/check_mo_phong.py --so-sanh-goc
+python tools/check_simulation.py --compare-original
 ```
 
-`check_mo_phong.py` là bộ kiểm mà lần trước **không có**, và chính chỗ thiếu
+`check_simulation.py` là bộ kiểm mà lần trước **không có**, và chính chỗ thiếu
 đó là lý do tệp nhiễu đi qua được mọi phép kiểm. Nó so tập cần kiểm với chính
 tập đó sau khi **xáo đánh giá của từng người giữa 45 món**: phép xáo phá mọi
 liên hệ món↔người mà giữ nguyên mọi đại lượng biên, nên hiệu giữa hai bên
 đúng là phần tín hiệu. Bảy phép kiểm, và phép thứ tám quan trọng hơn cả bảy:
-`--so-sanh-goc` đòi tệp nhiễu đã biết **phải trượt**. Một bộ kiểm chỉ báo xanh
+`--compare-original` đòi tệp nhiễu đã biết **phải trượt**. Một bộ kiểm chỉ báo xanh
 trên dữ liệu tốt thì chưa chứng minh được gì — nó có thể báo xanh trên mọi
 thứ.
 
@@ -1027,14 +1027,14 @@ ra. Phần hồ sơ sức khỏe thì mô phỏng được; phần khẩu vị t
 
 ### 11.5 Nạp tập mô phỏng vào CSDL
 
-`tools/import_mo_phong.py` là bước giữa hai tệp CSV ở trên và các bảng mà
+`tools/import_simulation.py` là bước giữa hai tệp CSV ở trên và các bảng mà
 đường ống đọc. Trước nó, `build_dataset` trả về 0 mẫu nên `train.py`,
 `evaluate.py` và cả bảng so sánh của Chương 3 đều không chạy được.
 
 ```
-python tools/import_mo_phong.py              # xem trước
-python tools/import_mo_phong.py --apply      # 50 người, một giao dịch
-python tools/import_mo_phong.py --xoa        # xóa lần nạp trước
+python tools/import_simulation.py              # xem trước
+python tools/import_simulation.py --apply      # 50 người, một giao dịch
+python tools/import_simulation.py --xoa        # xóa lần nạp trước
 ```
 
 Khác `import_swipes.py` ở chỗ: tệp kia nhập một phiếu giấy đã khai sẵn
@@ -1147,7 +1147,7 @@ và biến thiên đó do cách dựng tập sinh ra.
 Với thứ tự cố định cho mọi người, lượt thứ i luôn là cùng một món, nên số đếm
 tín hiệu trở thành mã định danh của món: **42/43 mức `n_tin_hieu` chỉ ứng với
 1–4 món trong 45**, và nhãn trung bình theo từng mức chạy từ 0,25 tới 0,73.
-`sinh_khau_vi.py` giờ xáo thứ tự riêng cho từng người. Đây cũng là thực hành
+`gen_taste_vectors.py` giờ xáo thứ tự riêng cho từng người. Đây cũng là thực hành
 chuẩn của khảo sát (xáo thứ tự để tránh hiệu ứng thứ tự), nên **phiếu giấy
 cho người thật cũng nên in mỗi người một thứ tự** — `make_survey_deck.py`
 hiện vẫn in một thứ tự duy nhất.
@@ -1256,7 +1256,7 @@ nên người ăn thuần chay buộc phải đánh giá cả phở bò. Và đ�
 
 #### Phép đo
 
-`check_mo_phong.py` phép kiểm 7, trên 21 người có ràng buộc:
+`check_simulation.py` phép kiểm 7, trên 21 người có ràng buộc:
 
 | | `cos(p_u, t_u)` |
 |---|---|
@@ -1380,9 +1380,9 @@ Hai công cụ dựng và kiểm dữ liệu mô phỏng nằm ngoài `ml/` vì 
 chuẩn bị dữ liệu, không phải một tầng của đường ống:
 
 ```
-tools/sinh_khau_vi.py    sinh lượt vuốt từ vector khẩu vị ẩn — §11.4
-tools/check_mo_phong.py  8 phép kiểm tín hiệu + 1 phép thử phủ định
-tools/import_mo_phong.py nạp 50 hồ sơ + lượt vuốt vào CSDL — §11.5, §11.7
+tools/gen_taste_vectors.py    sinh lượt vuốt từ vector khẩu vị ẩn — §11.4
+tools/check_simulation.py  8 phép kiểm tín hiệu + 1 phép thử phủ định
+tools/import_simulation.py nạp 50 hồ sơ + lượt vuốt vào CSDL — §11.5, §11.7
 ```
 
 Và tầng HTTP, thứ biến `ml/` từ một thư viện thành một **dịch vụ**:
@@ -1492,7 +1492,7 @@ Ba cái bẫy gặp khi dịch, ghi ở đầu `ml/features.py`: `kcal` làm tr�
 giữa Dart và Python; ba chiều macro là tỷ lệ **năng lượng** chứ không phải tỷ
 lệ gam; thứ tự sắp xếp tên nhóm món.
 
-Việc **6** đã xong ở `ml/serve.py` — xem §12.0.2. `ml/train.py --kich-hoat`
+Việc **6** đã xong ở `ml/serve.py` — xem §12.0.2. `ml/train.py --activate`
 đặt `is_active = 1` và hạ cờ của mọi mô hình khác **trong cùng giao dịch**,
 còn `scaler_params` lưu đủ tham số để nạp lại mà không tính lại gì: tính lại
 trung bình và độ lệch trên dữ liệu mới là một lỗi âm thầm làm điểm số lệch

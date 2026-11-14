@@ -1,5 +1,5 @@
 {
-  "_doc": "DỮ LIỆU MÔ PHỎNG. `vector_khau_vi` là vector ẩn đã dùng để sinh lượt vuốt trong hanh_vi.csv; Chương 3 so hồ sơ Rocchio khôi phục được với chính nó. Không phải dữ liệu người thật.",
+  "_doc": "SIMULATED DATA. `vector_khau_vi` is the latent vector used to generate the swipes in hanh_vi.csv; Chapter 3 compares the Rocchio profile recovered from them against it. Not real people's data.",
   "feature_version": "v2",
   "ten_chieu": [
     "Tỷ lệ đạm",

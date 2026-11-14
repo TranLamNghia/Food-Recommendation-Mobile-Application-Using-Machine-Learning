@@ -53,7 +53,7 @@ Note on language: the printed form's instructions, its field keys and its CSV
 header stay Vietnamese. They are a contract with the forms already collected in
 `data/survey/da_dien/`, and with the Vietnamese-speaking people who fill them
 in. The same goes for the keys of `survey_deck.json`, which
-`tools/check_mo_phong.py` and `tools/sinh_khau_vi.py` read.
+`tools/check_simulation.py` and `tools/gen_taste_vectors.py` read.
 """
 
 from __future__ import annotations

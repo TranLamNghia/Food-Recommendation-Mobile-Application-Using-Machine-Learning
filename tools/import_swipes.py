@@ -61,7 +61,7 @@ BAM_KHONG_DUNG_DUOC = "!khong-tag-dang-nhap"
 #: Khác biệt này KHÔNG phải lý thuyết: với `Gút`, F1 loại 0 món ở mức `mild`
 #: nhưng 9 món ở mức `moderate`, vì `condition_rules.severity_min` gác từng
 #: quy tắc.
-SEVERITY_PHIEU = "moderate"
+FORM_SEVERITY = "moderate"
 
 TRUONG_BAT_BUOC = (
     "gioi_tinh",
@@ -290,8 +290,8 @@ def loc_theo_f1(
         return luot, []
 
     # Cùng `severity` với dòng sẽ ghi vào `user_conditions` — xem
-    # `SEVERITY_PHIEU`.
-    conditions = conditions_by_name(cn, ten_benh, severity=SEVERITY_PHIEU)
+    # `FORM_SEVERITY`.
+    conditions = conditions_by_name(cn, ten_benh, severity=FORM_SEVERITY)
 
     # `public_only=True`: người trả lời phiếu giấy không có món riêng, và
     # cả bộ khảo sát là món chung.
@@ -390,7 +390,7 @@ def ghi(
             cur.execute(
                 "INSERT INTO user_conditions (id, user_id, condition_id, severity) "
                 "VALUES (UUID(), %s, %s, %s)",
-                (user_id, cid, SEVERITY_PHIEU),
+                (user_id, cid, FORM_SEVERITY),
             )
 
         # Rải thời điểm cách nhau 1 giây trong ngày khảo sát. Thứ tự giữ đúng
