@@ -71,7 +71,7 @@ from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.rocchio import alpha, build_profile, stage  # noqa: E402
 from ml.serve import recommend, load_active_model  # noqa: E402
 from ml.train import main as chay_huan_luyen  # noqa: E402
-from tools.make_survey_deck import chon_bo_mon  # noqa: E402
+from tools.make_survey_deck import pick_deck  # noqa: E402
 from tools.update_popularity import main as _cap_nhat_pho_bien  # noqa: E402
 
 
@@ -331,14 +331,14 @@ def kiem_nhap_phieu(db: str) -> str | None:
     finally:
         cn.close()
     kg = FeatureSpace.from_foods(mon)
-    bo = chon_bo_mon(mon, kg, 40)
+    bo = pick_deck(mon, kg, 40)
     kiem(len(bo) == 40, "chọn được bộ 40 món khảo sát")
     kiem(
         len({m.category for m in bo}) == len({m.category for m in mon}),
         "bộ món phủ đủ mọi nhóm món",
     )
     kiem(
-        chon_bo_mon(mon, kg, 40) == bo,
+        pick_deck(mon, kg, 40) == bo,
         "chọn lại cho đúng bộ cũ — thuật toán xác định, không ngẫu nhiên",
     )
 

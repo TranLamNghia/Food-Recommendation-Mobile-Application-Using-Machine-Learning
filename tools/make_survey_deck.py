@@ -1,50 +1,59 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Chọn bộ món cho phiên khảo sát khẩu vị, và in ra phiếu để điền.
+"""Pick the food deck for a taste survey session, and print the form to fill in.
 
-Việc số 10 của `ML_PIPELINE.md` §12 — nút cổ chai thật của phần học máy. Năm
-script trong `ml/` đã chạy được nhưng chưa cho ra con số nào, vì bảy nguồn
-tín hiệu đều trống. Việc duy nhất có độ trễ tính theo tuần là **thu dữ liệu**,
-và nó cần hai thứ: một bộ món để hỏi, và một cách nhập câu trả lời vào CSDL.
-Tệp này làm thứ nhất; `tools/import_swipes.py` làm thứ hai.
+Item 10 of `ML_PIPELINE.md` §12 — the real bottleneck of the machine-learning
+part. The five scripts in `ml/` already run but have produced no number at all,
+because all seven signal sources are empty. The only task whose latency is
+measured in weeks is **collecting data**, and it needs two things: a deck of
+foods to ask about, and a way to enter the answers into the database. This file
+does the first; `tools/import_swipes.py` does the second.
 
-## Chọn món thế nào, và vì sao không chọn ngẫu nhiên
+## How the foods are picked, and why not at random
 
-Mỗi người chỉ vuốt khoảng 30–40 món, nên mỗi lượt vuốt phải mang về nhiều
-thông tin nhất có thể. Rocchio dựng vector sở thích bằng trung bình có dấu
-của vector các món, nên nếu bộ món tập trung ở một góc của không gian đặc
-trưng thì mọi vector sở thích thu được cũng nằm quanh góc đó — và hệ thống
-không phân biệt được hai người có khẩu vị khác nhau.
+Each person only swipes about 30-40 foods, so every swipe has to carry as much
+information as possible. Rocchio builds the preference vector as a signed mean
+of the food vectors, so if the deck clusters in one corner of the feature
+space, every preference vector obtained also sits around that corner — and the
+system cannot tell two people with different tastes apart.
 
-Thuật toán là **duyệt điểm xa nhất** (farthest-point traversal, còn gọi là
-k-center tham lam): mỗi bước thêm món có **khoảng cách nhỏ nhất tới tập đã
-chọn là lớn nhất**. Nó cho đảm bảo xấp xỉ 2 lần tối ưu cho bài toán k-center,
-và quan trọng hơn với việc này: nó rải món ra khắp không gian thay vì gom
-cụm.
+The algorithm is a **farthest-point traversal** (also called greedy k-center):
+each step adds the food whose **minimum distance to the already-picked set is
+largest**. It gives a 2-approximation guarantee for the k-center problem, and
+more importantly for this task: it spreads the foods across the space instead
+of clustering them.
 
-Hai điều chỉnh so với bản thuần:
+Two adjustments to the plain algorithm:
 
-**Phủ đủ nhóm món trước.** Vòng đầu chọn đúng một món cho mỗi nhóm trong 12
-nhóm. Nếu để thuật toán tự do, nó sẽ bỏ qua những nhóm nằm giữa không gian
-(nhóm `Cơm` chẳng hạn) và dồn vào các nhóm ở biên — trong khi một người dùng
-cần được hỏi về cả `Cơm`, vì đó là thứ họ ăn hằng ngày.
+**Cover every category first.** The first round picks exactly one food from
+each of the 12 categories. Left to itself the algorithm skips the categories
+sitting in the middle of the space (`Cơm`, for instance) and piles up on the
+ones at the edges — while a user needs to be asked about `Cơm` too, because
+that is what they eat every day.
 
-**Bắt đầu từ món gần tâm danh mục nhất**, không bắt đầu ngẫu nhiên. Duyệt
-điểm xa nhất phụ thuộc điểm khởi đầu, nên chọn ngẫu nhiên sẽ cho một bộ món
-khác nhau mỗi lần chạy, và hai người được khảo sát bằng hai bộ khác nhau thì
-vector của họ không so được với nhau.
+**Start from the food closest to the catalogue's centroid**, not at random. A
+farthest-point traversal depends on its starting point, so a random choice
+yields a different deck on every run, and two people surveyed with two
+different decks have vectors that cannot be compared with each other.
 
-## Hạn chế đã biết, in ra cùng bộ món
+## A known limitation, printed alongside the deck
 
-Chiều **mức cay** gần như không phủ được: 294/318 món trong danh mục ở mức
-cay 0. Thuật toán sẽ nhặt hết số món cay ít ỏi vì chúng nằm xa, nhưng bộ món
-vẫn lệch nặng về phía không cay — nên vector sở thích thu được sẽ **yếu ở
-chiều cay**. Đây là hạn chế của dữ liệu, không của thuật toán, và phải ghi
-vào báo cáo thay vì để người đọc tự phát hiện.
+The **spice level** dimension is nearly impossible to cover: 294 of the 318
+foods in the catalogue are at spice level 0. The algorithm will pick up all the
+few spicy ones because they sit far away, but the deck still leans heavily
+towards not-spicy — so the preference vector obtained will be **weak in the
+spice dimension**. This is a limitation of the data, not of the algorithm, and
+it has to go into the report rather than being left for the reader to discover.
 
-Chạy:
-    python tools/make_survey_deck.py                 # 40 món, in ra màn hình
-    python tools/make_survey_deck.py --so 36 --ghi   # ghi JSON + phiếu CSV
+Run:
+    python tools/make_survey_deck.py                      # 45 foods, to screen
+    python tools/make_survey_deck.py --count 36 --write   # JSON + CSV form
+
+Note on language: the printed form's instructions, its field keys and its CSV
+header stay Vietnamese. They are a contract with the forms already collected in
+`data/survey/da_dien/`, and with the Vietnamese-speaking people who fill them
+in. The same goes for the keys of `survey_deck.json`, which
+`tools/check_mo_phong.py` and `tools/sinh_khau_vi.py` read.
 """
 
 from __future__ import annotations
@@ -63,12 +72,13 @@ sys.path.insert(0, str(ROOT))
 from ml.db import use_utf8, connect  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, Food, load_foods  # noqa: E402
 
-THU_MUC = ROOT / "data" / "survey"
-TEP_JSON = THU_MUC / "survey_deck.json"
-TEP_PHIEU = THU_MUC / "phieu_khao_sat.csv"
+SURVEY_DIR = ROOT / "data" / "survey"
+DECK_JSON = SURVEY_DIR / "survey_deck.json"
+FORM_CSV = SURVEY_DIR / "phieu_khao_sat.csv"
 
-#: Bốn lựa chọn của một lượt vuốt, đúng `interactions.action`.
-LUA_CHON = {
+#: The four choices for one swipe, mapped to `interactions.action`. The keys
+#: are what a respondent writes on the form, so they stay Vietnamese.
+CHOICES = {
     "thich": "like",
     "khong_thich": "dislike",
     "binh_thuong": "neutral",
@@ -76,113 +86,130 @@ LUA_CHON = {
 }
 
 
-def _khoang_cach(a: list[float], b: list[float]) -> float:
+def _distance(a: list[float], b: list[float]) -> float:
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
-def chon_bo_mon(
-    mon: list[Food], kg: FeatureSpace, so_can: int
+def pick_deck(
+    foods: list[Food], space: FeatureSpace, want: int
 ) -> list[Food]:
-    """Duyệt điểm xa nhất, có phủ nhóm món ở vòng đầu.
+    """Farthest-point traversal, with category coverage in the first round.
 
-    Trả về danh sách theo **thứ tự được chọn**: món đầu tiên là món gần tâm
-    danh mục nhất, các món sau xa dần. Thứ tự này có ích khi phải cắt bớt
-    phiếu — lấy 20 món đầu vẫn là một bộ phủ tốt.
+    Returns the foods in **the order they were picked**: the first is the one
+    closest to the catalogue's centroid, the later ones progressively farther.
+    That order is useful when the form has to be shortened — taking the first
+    20 foods is still a well-spread deck.
     """
-    if so_can < 1:
-        raise ValueError("số món phải từ 1 trở lên")
-    if so_can > len(mon):
-        raise ValueError(f"chỉ có {len(mon)} món, không chọn được {so_can}")
+    if want < 1:
+        raise ValueError("the food count must be at least 1")
+    if want > len(foods):
+        raise ValueError(f"only {len(foods)} foods exist, cannot pick {want}")
 
-    vec = {m.id: kg.encode(m) for m in mon}
+    vectors = {f.id: space.encode(f) for f in foods}
 
-    # Tâm danh mục, để có một điểm khởi đầu xác định.
-    tam = [
-        sum(vec[m.id][i] for m in mon) / len(mon) for i in range(kg.length)
+    # The catalogue's centroid, to have a deterministic starting point.
+    centroid = [
+        sum(vectors[f.id][i] for f in foods) / len(foods)
+        for i in range(space.length)
     ]
-    theo_nhom: dict[str, list[Food]] = {}
-    for m in mon:
-        theo_nhom.setdefault(m.category, []).append(m)
+    by_category: dict[str, list[Food]] = {}
+    for food in foods:
+        by_category.setdefault(food.category, []).append(food)
 
-    da_chon: list[Food] = []
-    remaining = {m.id: m for m in mon}
+    picked: list[Food] = []
+    remaining = {f.id: f for f in foods}
 
-    # ── Vòng 1: mỗi nhóm một món, món gần tâm nhóm nhất ──
+    # -- Round 1: one food per category, the one nearest that category's
+    #    centroid.
     #
-    # Chọn món gần tâm nhóm chứ không chọn món xa nhất: ở vòng này mục tiêu
-    # là **đại diện** cho nhóm, không phải cực trị. Món cực trị của một nhóm
-    # dễ là món lạ, và hỏi người dùng về món lạ thì phần lớn câu trả lời sẽ
-    # là "chưa biết" — một lượt vuốt không mang thông tin khẩu vị nào.
-    for nhom in sorted(theo_nhom):
-        ds = theo_nhom[nhom]
-        tam_nhom = [
-            sum(vec[m.id][i] for m in ds) / len(ds) for i in range(kg.length)
+    # The nearest rather than the farthest: the goal in this round is to
+    # REPRESENT the category, not to find an extreme. A category's extreme is
+    # easily an unusual dish, and asking a user about an unusual dish gets
+    # mostly "never eaten" answers — a swipe carrying no taste information at
+    # all.
+    for category in sorted(by_category):
+        group = by_category[category]
+        group_centroid = [
+            sum(vectors[f.id][i] for f in group) / len(group)
+            for i in range(space.length)
         ]
-        tot = min(ds, key=lambda m: (_khoang_cach(vec[m.id], tam_nhom), m.name))
-        da_chon.append(tot)
-        remaining.pop(tot.id, None)
-        if len(da_chon) >= so_can:
-            return da_chon
-
-    # Sắp lại vòng 1 theo khoảng cách tới tâm danh mục, để món đầu phiếu là
-    # món "điển hình" nhất.
-    da_chon.sort(key=lambda m: (_khoang_cach(vec[m.id], tam), m.name))
-
-    # ── Vòng 2: duyệt điểm xa nhất ──
-    kc_nho_nhat = {
-        i: min(_khoang_cach(vec[i], vec[m.id]) for m in da_chon)
-        for i in remaining
-    }
-    while len(da_chon) < so_can and remaining:
-        # Phá hòa theo tên món để kết quả tái lập được.
-        chon = max(
-            remaining,
-            key=lambda i: (kc_nho_nhat[i], remaining[i].name),
+        best = min(
+            group,
+            key=lambda f: (_distance(vectors[f.id], group_centroid), f.name),
         )
-        m = remaining.pop(chon)
-        da_chon.append(m)
-        del kc_nho_nhat[chon]
-        for i in remaining:
-            d = _khoang_cach(vec[i], vec[m.id])
-            if d < kc_nho_nhat[i]:
-                kc_nho_nhat[i] = d
+        picked.append(best)
+        remaining.pop(best.id, None)
+        if len(picked) >= want:
+            return picked
 
-    return da_chon
+    # Re-sort round 1 by distance to the catalogue's centroid, so the first
+    # food on the form is the most "typical" one.
+    picked.sort(key=lambda f: (_distance(vectors[f.id], centroid), f.name))
+
+    # -- Round 2: the farthest-point traversal --
+    nearest = {
+        fid: min(_distance(vectors[fid], vectors[f.id]) for f in picked)
+        for fid in remaining
+    }
+    while len(picked) < want and remaining:
+        # Ties broken by food name, so the result is reproducible.
+        choice = max(
+            remaining,
+            key=lambda fid: (nearest[fid], remaining[fid].name),
+        )
+        food = remaining.pop(choice)
+        picked.append(food)
+        del nearest[choice]
+        for fid in remaining:
+            d = _distance(vectors[fid], vectors[food.id])
+            if d < nearest[fid]:
+                nearest[fid] = d
+
+    return picked
 
 
-def _thong_ke(bo: list[Food], tat_ca: list[Food]) -> list[str]:
-    nhom: dict[str, int] = {}
-    cay: dict[int, int] = {}
-    vai: dict[str, int] = {}
-    for m in bo:
-        nhom[m.category] = nhom.get(m.category, 0) + 1
-        cay[m.spice_level] = cay.get(m.spice_level, 0) + 1
-        vai[m.dish_role] = vai.get(m.dish_role, 0) + 1
+def _summary(deck: list[Food], all_foods: list[Food]) -> list[str]:
+    categories: dict[str, int] = {}
+    spice: dict[int, int] = {}
+    roles: dict[str, int] = {}
+    for food in deck:
+        categories[food.category] = categories.get(food.category, 0) + 1
+        spice[food.spice_level] = spice.get(food.spice_level, 0) + 1
+        roles[food.dish_role] = roles.get(food.dish_role, 0) + 1
 
-    cay_dm: dict[int, int] = {}
-    for m in tat_ca:
-        cay_dm[m.spice_level] = cay_dm.get(m.spice_level, 0) + 1
+    spice_all: dict[int, int] = {}
+    for food in all_foods:
+        spice_all[food.spice_level] = spice_all.get(food.spice_level, 0) + 1
 
-    dong = [
-        f"{len(bo)} món, phủ {len(nhom)}/{len({m.category for m in tat_ca})} nhóm",
-        "  nhóm:  " + "  ".join(f"{k}={v}" for k, v in sorted(nhom.items())),
-        "  vai:   " + "  ".join(f"{k}={v}" for k, v in sorted(vai.items())),
-        "  cay:   "
-        + "  ".join(f"mức {k}={v}" for k, v in sorted(cay.items()))
-        + "   (danh mục: "
-        + " ".join(f"mức {k}={v}" for k, v in sorted(cay_dm.items()))
+    lines = [
+        f"{len(deck)} foods, covering {len(categories)}/"
+        f"{len({f.category for f in all_foods})} categories",
+        "  category: " + "  ".join(
+            f"{k}={v}" for k, v in sorted(categories.items())
+        ),
+        "  role:     " + "  ".join(
+            f"{k}={v}" for k, v in sorted(roles.items())
+        ),
+        "  spice:    "
+        + "  ".join(f"level {k}={v}" for k, v in sorted(spice.items()))
+        + "   (catalogue: "
+        + " ".join(f"level {k}={v}" for k, v in sorted(spice_all.items()))
         + ")",
     ]
-    if cay.get(0, 0) / len(bo) > 0.6:
-        dong.append(
-            f"  ⚠ {cay.get(0, 0)}/{len(bo)} món ở mức cay 0 — chiều 'Mức cay' "
-            f"của vector sở thích sẽ yếu. Hạn chế của dữ liệu "
-            f"({cay_dm.get(0, 0)}/{len(tat_ca)} món trong danh mục không cay)."
+    if spice.get(0, 0) / len(deck) > 0.6:
+        lines.append(
+            f"  !  {spice.get(0, 0)}/{len(deck)} foods are at spice level 0 — "
+            f"the preference vector's spice dimension will be weak. A "
+            f"limitation of the data ({spice_all.get(0, 0)}/{len(all_foods)} "
+            f"foods in the catalogue are not spicy)."
         )
-    return dong
+    return lines
 
 
-HUONG_DAN = [
+#: The printed form's header. Vietnamese on purpose: the people filling this in
+#: are Vietnamese speakers, and the field keys are the contract with the forms
+#: already collected and with `tools/import_swipes.py`.
+FORM_HEADER = [
     "# PHIẾU KHẢO SÁT KHẨU VỊ",
     "#",
     "# Điền cột `lua_chon` bằng MỘT trong bốn giá trị:",
@@ -215,52 +242,60 @@ HUONG_DAN = [
 ]
 
 
-def ghi_phieu(bo: list[Food], duong_dan: Path, ten_benh: list[str]) -> None:
-    duong_dan.parent.mkdir(parents=True, exist_ok=True)
-    with duong_dan.open("w", encoding="utf-8-sig", newline="") as f:
-        # Danh sách bệnh lý lấy THẲNG từ bảng `conditions`, không gõ tay vào
-        # phần hướng dẫn. `import_swipes.py` tra `condition_names` theo đúng
-        # `conditions.name_vi`, nên một danh sách chép tay sẽ lệch ngay lần
-        # đầu có ai thêm một bệnh lý vào CSDL — và người chịu hậu quả là
-        # người điền phiếu, sau khi đã điền xong và không sửa lại được.
-        khoi_benh = "\n".join(f"#     - {x}" for x in ten_benh)
-        for dong in HUONG_DAN:
-            if dong == "{benh_ly}":
-                f.write(khoi_benh + "\n")
+def write_form(deck: list[Food], path: Path,
+               condition_names: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        # The condition list is read STRAIGHT from the `conditions` table, not
+        # typed into the instructions by hand. `import_swipes.py` looks up
+        # `condition_names` by exact `conditions.name_vi`, so a hand-copied
+        # list would go stale the first time anyone adds a condition to the
+        # database — and the person who pays for it is the respondent, after
+        # they have finished filling the form and cannot correct it.
+        condition_block = "\n".join(f"#     - {x}" for x in condition_names)
+        for line in FORM_HEADER:
+            if line == "{benh_ly}":
+                f.write(condition_block + "\n")
                 continue
-            f.write(dong.format(ngay=date.today().isoformat()) + "\n")
-        w = csv.writer(f)
-        w.writerow(["stt", "ma_mon", "ten_mon", "nhom", "muc_cay", "lua_chon"])
-        for i, m in enumerate(bo, start=1):
-            w.writerow([i, m.id, m.name, m.category, m.spice_level, ""])
+            f.write(line.format(ngay=date.today().isoformat()) + "\n")
+        writer = csv.writer(f)
+        writer.writerow(
+            ["stt", "ma_mon", "ten_mon", "nhom", "muc_cay", "lua_chon"]
+        )
+        for i, food in enumerate(deck, start=1):
+            writer.writerow(
+                [i, food.id, food.name, food.category, food.spice_level, ""]
+            )
 
 
-def ghi_json(bo: list[Food], kg: FeatureSpace, duong_dan: Path) -> None:
-    duong_dan.parent.mkdir(parents=True, exist_ok=True)
-    duong_dan.write_text(
+def write_deck_json(deck: list[Food], space: FeatureSpace,
+                    path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps(
             {
                 "_doc": (
-                    "Bộ món khảo sát khẩu vị, sinh bởi "
-                    "tools/make_survey_deck.py. Thứ tự là thứ tự được chọn: "
-                    "món đầu gần tâm danh mục nhất, các món sau xa dần."
+                    "The taste-survey food deck, generated by "
+                    "tools/make_survey_deck.py. The order is the order they "
+                    "were picked: the first food is nearest the catalogue's "
+                    "centroid, the later ones progressively farther."
                 ),
                 "feature_version": FEATURE_VERSION,
                 "sinh_ngay": date.today().isoformat(),
-                "n_foods": len(bo),
-                "lua_chon": LUA_CHON,
+                "n_foods": len(deck),
+                "lua_chon": CHOICES,
                 "mon": [
                     {
                         "thu_tu": i,
-                        "id": m.id,
-                        "name": m.name,
-                        "category": m.category,
-                        "dish_role": m.dish_role,
-                        "spice_level": m.spice_level,
-                        "kcal": m.kcal,
-                        "vector": kg.encode(m),
+                        "id": food.id,
+                        "name": food.name,
+                        "category": food.category,
+                        "dish_role": food.dish_role,
+                        "spice_level": food.spice_level,
+                        "kcal": food.kcal,
+                        "vector": space.encode(food),
                     }
-                    for i, m in enumerate(bo, start=1)
+                    for i, food in enumerate(deck, start=1)
                 ],
             },
             ensure_ascii=False,
@@ -273,64 +308,75 @@ def ghi_json(bo: list[Food], kg: FeatureSpace, duong_dan: Path) -> None:
 
 def main() -> int:
     use_utf8()
-    bo_doc = argparse.ArgumentParser(description=__doc__)
-    # 45, KHÔNG phải 40. Lượt vuốt trên món mà Bộ lọc F1 không cho người đó
-    # ăn bị loại lúc nhập (xem `import_swipes.loc_theo_f1`), nên người có
-    # ràng buộc cứng thu được ít tín hiệu hơn hẳn:
+    parser = argparse.ArgumentParser(description=__doc__)
+    # 45, NOT 40. A swipe on a food the F1 filter would not let that person eat
+    # is dropped at import time (see the F1 filtering step in
+    # `import_swipes.py`), so someone with hard constraints collects
+    # distinctly fewer signals:
     #
-    #   cỡ phiếu   không bệnh   dị ứng hải sản   gút+THA
-    #      40        35 ✓          27              27
-    #      45        39 ✓          30 ✓            30 ✓
+    #   deck size   no condition   seafood allergy   gout+hypertension
+    #      40         35 ok           27                 27
+    #      45         39 ok           30 ok              30 ok
     #
-    # Ngưỡng `hybrid` là 30 tín hiệu (`ml.rocchio.stage`), tức mức đầu
-    # tiên mà học máy có tiếng nói. Ở cỡ 40 thì BẤT KỲ ai có ràng buộc cứng
-    # cũng dừng ở 27 — thiếu đúng 3.
+    # The `hybrid` threshold is 30 signals (`ml.rocchio.stage`), the first
+    # level at which machine learning has a say. At a size of 40, ANYONE with
+    # a hard constraint stops at 27 — exactly 3 short.
     #
-    # Mặc định phải là 45 chứ không chỉ truyền `--so 45` một lần: sinh lại
-    # phiếu bằng lệnh không cờ sẽ đổi dụng cụ đo giữa đợt thu dữ liệu, và
-    # trộn hai cỡ phiếu thì không so sánh được giữa những người trả lời.
-    bo_doc.add_argument("--so", type=int, default=45, help="số món (mặc định 45)")
-    bo_doc.add_argument("--db", default=None)
-    bo_doc.add_argument("--ghi", action="store_true", help="ghi JSON và phiếu CSV")
-    t = bo_doc.parse_args()
+    # The default has to be 45 rather than passing `--count 45` once: regene-
+    # rating the form with a bare command would change the measuring
+    # instrument mid-collection, and mixing two deck sizes makes respondents
+    # incomparable.
+    parser.add_argument("--count", type=int, default=45,
+                        help="the number of foods (default 45)")
+    parser.add_argument("--db", default=None)
+    parser.add_argument("--write", action="store_true",
+                        help="write the JSON and the CSV form")
+    args = parser.parse_args()
 
-    cn = connect(t.db)
+    cn = connect(args.db)
     try:
-        mon, bao_cao = load_foods(cn)
-        # Đọc luôn ở đây, trong cùng một lần mở kết nối. Danh sách này đi
-        # vào phần hướng dẫn của phiếu — xem `ghi_phieu`.
+        foods, report = load_foods(cn)
+        # Read this here too, within the same open connection. The list goes
+        # into the form's instructions — see `write_form`.
         with cn.cursor() as cur:
             cur.execute("SELECT name_vi FROM conditions ORDER BY id")
-            ten_benh = [d["name_vi"] for d in cur.fetchall()]
+            condition_names = [d["name_vi"] for d in cur.fetchall()]
     finally:
         cn.close()
 
-    kg = FeatureSpace.from_foods(mon)
-    bo = chon_bo_mon(mon, kg, t.so)
+    space = FeatureSpace.from_foods(foods)
+    deck = pick_deck(foods, space, args.count)
 
     print()
-    for d in _thong_ke(bo, mon):
-        print(d)
+    for line in _summary(deck, foods):
+        print(line)
     print()
-    print(f"{'#':>3}  {'cay':>3}  món")
-    for i, m in enumerate(bo, start=1):
-        print(f"{i:>3}  {m.spice_level:>3}  {m.name}  [{m.category}]")
+    print(f"{'#':>3}  {'spice':>5}  food")
+    for i, food in enumerate(deck, start=1):
+        print(f"{i:>3}  {food.spice_level:>5}  {food.name}  [{food.category}]")
 
-    if not t.ghi:
-        print("\nChạy thử — chưa ghi tệp. Thêm --ghi để xuất JSON và phiếu CSV.")
+    if not args.write:
+        print(
+            "\nDry run — nothing written. Add --write to produce the JSON and "
+            "the CSV form."
+        )
         return 0
 
-    ghi_json(bo, kg, TEP_JSON)
-    ghi_phieu(bo, TEP_PHIEU, ten_benh)
-    print(f"\nĐã ghi {TEP_JSON.relative_to(ROOT)}")
-    print(f"Đã ghi {TEP_PHIEU.relative_to(ROOT)}")
+    write_deck_json(deck, space, DECK_JSON)
+    write_form(deck, FORM_CSV, condition_names)
+    print(f"\nWrote {DECK_JSON.relative_to(ROOT)}")
+    print(f"Wrote {FORM_CSV.relative_to(ROOT)}")
     print(
-        "\nChép phiếu cho từng người vào data/survey/da_dien/ rồi nhập:\n"
-        "    cp data/survey/phieu_khao_sat.csv data/survey/da_dien/nguoi-01.csv\n"
-        "    python tools/import_swipes.py --phieu data/survey/da_dien/nguoi-01.csv\n"
-        "\nPhiếu ĐÃ ĐIỀN phải để trong data/survey/da_dien/ — thư mục đó bị\n"
-        ".gitignore chặn. Phiếu đã điền chứa họ tên, email, ngày sinh, cân nặng\n"
-        "và bệnh lý của người thật, và repo này là repo công khai."
+        "\nCopy the form per respondent into data/survey/da_dien/ then "
+        "import:\n"
+        "    cp data/survey/phieu_khao_sat.csv "
+        "data/survey/da_dien/nguoi-01.csv\n"
+        "    python tools/import_swipes.py --phieu "
+        "data/survey/da_dien/nguoi-01.csv\n"
+        "\nFILLED-IN forms must stay in data/survey/da_dien/ — that directory\n"
+        "is blocked by .gitignore. A filled form holds a real person's name,\n"
+        "email, date of birth, weight and medical conditions, and this is a\n"
+        "public repository."
     )
     return 0
 

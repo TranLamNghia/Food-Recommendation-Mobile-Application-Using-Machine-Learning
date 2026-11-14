@@ -1,33 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Chạy Bộ lọc F1 **thuần bằng SQL** để chứng minh lược đồ đã đủ.
+"""Run the F1 filter **in pure SQL** to prove the schema is sufficient.
 
-Vì sao có tệp này. Bộ lọc F1 — bước loại món không an toàn theo bệnh lý, dị
-ứng và chế độ ăn — hiện **chưa có dòng mã nào** trong ứng dụng. Câu hỏi cần
-trả lời trước khi chốt ERD không phải "đã viết chưa" mà là:
+Why this file exists. The F1 filter — the step that removes foods unsafe for a
+user's conditions, allergies and diet — has **not one line of code** in the app
+yet. The question to answer before freezing the ERD is not "has it been
+written" but:
 
-    Lược đồ hiện tại có đủ để biểu diễn F1, hay còn phải thêm bảng/cột?
+    Is the current schema enough to express F1, or are more tables/columns
+    needed?
 
-Tệp này trả lời bằng cách **chạy thật**: dựng F1 hoàn toàn bằng SQL trên
-`conditions`, `user_conditions`, `condition_rules`, `tags`, `food_tags`,
-`foods` — không thêm bảng nào, không xử lý gì ở tầng ứng dụng. Nếu nó chạy ra
-kết quả đúng thì phần còn lại chỉ là dịch truy vấn này sang Dart hoặc sang
-tầng API, và ERD không phải chờ.
+This file answers by **actually running it**: F1 built entirely in SQL over
+`conditions`, `user_conditions`, `condition_rules`, `tags`, `food_tags` and
+`foods` — no extra table, no application-layer processing. If it produces the
+right results, the rest is translating this query into Dart or into the API
+layer, and the ERD does not have to wait.
 
-Ba loại quy tắc trong `condition_rules`:
+The three rule types in `condition_rules`:
 
-    exclude_tag     loại mọi món mang nhãn đó          → lọc được ở cấp MÓN
-    require_tag     chỉ giữ món mang nhãn đó           → lọc được ở cấp MÓN
-    nutrient_limit  ngưỡng số                          → xem bên dưới
+    exclude_tag     drop every food carrying that tag    -> filterable per FOOD
+    require_tag     keep only foods carrying that tag     -> filterable per FOOD
+    nutrient_limit  a numeric threshold                   -> see below
 
-`nutrient_limit` **cứng** đều có `scope = 'per_day'`, nên nó KHÔNG lọc món
-nào ở cấp ứng viên — một món mặn vẫn hợp lệ nếu cả ngày vẫn dưới ngưỡng. Đó
-là chủ ý: bản trước đặt ngưỡng cứng theo từng suất và ngưỡng natri 600 mg
-loại 58/60 món, khiến Bước 4 không dựng nổi thực đơn. Phần theo ngày do Bước 4
-pha 5 thi hành, không phải F1.
+Every **hard** `nutrient_limit` has `scope = 'per_day'`, so it filters NO food
+at the candidate stage — a salty dish is still valid if the whole day stays
+under the threshold. That is deliberate: an earlier version set hard
+per-serving thresholds, and a 600 mg sodium limit removed 58 of 60 foods,
+leaving Step 4 unable to build a meal plan at all. The daily part is enforced
+by Step 4 phase 5, not by F1.
 
-Chạy:
+Run:
     python tools/check_f1.py
+
+Note on language: the condition names in `SCENARIOS` are `conditions.name_vi`
+values from the database and stay as they are; the `dish_role` keys are enum
+values.
 """
 
 from __future__ import annotations
@@ -38,22 +45,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _env  # noqa: E402
 
-# ── Bộ lọc F1, viết một lần bằng SQL ──────────────────────────────────
+# -- The F1 filter, written once in SQL ----------------------------------
 #
-# Tham số duy nhất là danh sách id bệnh lý của người dùng. Trong hệ thống
-# thật nó lấy từ `user_conditions WHERE user_id = ?`; ở đây truyền trực tiếp
-# để thử được mọi tổ hợp mà không cần tạo người dùng giả.
+# The only parameter is the user's list of condition ids. In the real system
+# it comes from `user_conditions WHERE user_id = ?`; here it is passed
+# directly so every combination can be tried without creating fake users.
 #
-# `owner_id IS NULL OR owner_id = ?` là phần phạm vi món: món danh mục chung
-# cộng món riêng của chính người đó. Chỉ mục `idx_active_category` đặt
-# `owner_id` đứng đầu đúng vì mệnh đề này.
+# `owner_id IS NULL OR owner_id = ?` is the food-scope part: the shared
+# catalogue plus the user's own foods. The `idx_active_category` index puts
+# `owner_id` first precisely because of this clause.
 F1_SQL = """
 SELECT f.id, f.name
 FROM foods f
 WHERE f.is_active = 1
   AND (f.owner_id IS NULL OR f.owner_id = %(user_id)s)
 
-  -- (1) exclude_tag — loại món mang nhãn bị cấm
+  -- (1) exclude_tag — drop foods carrying a forbidden tag
   AND NOT EXISTS (
         SELECT 1
         FROM condition_rules cr
@@ -64,7 +71,7 @@ WHERE f.is_active = 1
           AND ft.food_id = f.id
       )
 
-  -- (2) require_tag — món phải mang MỌI nhãn bắt buộc
+  -- (2) require_tag — the food must carry EVERY required tag
   AND NOT EXISTS (
         SELECT 1
         FROM condition_rules cr
@@ -77,9 +84,9 @@ WHERE f.is_active = 1
               )
       )
 
-  -- (3) nutrient_limit cứng theo SUẤT — hiện không có dòng nào, giữ mệnh đề
-  --     để lược đồ vẫn đúng nếu sau này thêm. Thiếu số liệu thì LOẠI, vì
-  --     không chứng minh được là an toàn.
+  -- (3) hard PER-SERVING nutrient_limit — no such row exists today; the
+  --     clause is kept so the schema still holds if one is added later.
+  --     Missing data means EXCLUDE, because safety cannot be proven.
   AND NOT EXISTS (
         SELECT 1
         FROM condition_rules cr
@@ -116,7 +123,7 @@ WHERE f.is_active = 1
       )
 """
 
-# Ngưỡng CỨNG theo NGÀY — không lọc món, Bước 4 pha 5 thi hành.
+# Hard PER-DAY thresholds — these filter no food; Step 4 phase 5 enforces them.
 PER_DAY_SQL = """
 SELECT co.name_vi, cr.nutrient, cr.comparator, cr.threshold
 FROM condition_rules cr
@@ -128,7 +135,7 @@ WHERE cr.rule_type = 'nutrient_limit'
 ORDER BY co.name_vi, cr.nutrient
 """
 
-# Mục tiêu người dùng tự khai — tra theo giới tính và tuổi.
+# The user's self-declared targets — looked up by gender and age.
 RDA_SQL = """
 SELECT nutrient, rda_value, unit, source
 FROM rda_reference
@@ -137,41 +144,44 @@ WHERE nutrient = %(nutrient)s
   AND %(age)s BETWEEN age_min AND age_max
 """
 
-# Những tổ hợp đáng thử. Tên lấy đúng `conditions.name_vi`.
+# The combinations worth trying. The condition names are exactly
+# `conditions.name_vi`.
 SCENARIOS = [
-    ("Không bệnh gì", []),
-    ("Tăng huyết áp", ["Tăng huyết áp"]),
-    ("Gút", ["Gút"]),
-    ("Bệnh thận", ["Bệnh thận"]),
-    ("Đái tháo đường", ["Đái tháo đường"]),
-    ("Rối loạn mỡ máu", ["Rối loạn mỡ máu"]),
-    ("Dị ứng hải sản", ["Dị ứng hải sản"]),
-    ("Dị ứng đậu phộng", ["Dị ứng đậu phộng"]),
-    ("Ăn chay", ["Ăn chay"]),
-    ("Ăn thuần chay", ["Ăn thuần chay"]),
-    # Tổ hợp — chỗ dễ vỡ nhất, vì các quy tắc giao nhau.
-    ("Gút + dị ứng hải sản", ["Gút", "Dị ứng hải sản"]),
-    ("Ăn chay + dị ứng trứng", ["Ăn chay", "Dị ứng trứng"]),
+    ("No condition", []),
+    ("Hypertension", ["Tăng huyết áp"]),
+    ("Gout", ["Gút"]),
+    ("Kidney disease", ["Bệnh thận"]),
+    ("Diabetes", ["Đái tháo đường"]),
+    ("Dyslipidaemia", ["Rối loạn mỡ máu"]),
+    ("Seafood allergy", ["Dị ứng hải sản"]),
+    ("Peanut allergy", ["Dị ứng đậu phộng"]),
+    ("Vegetarian", ["Ăn chay"]),
+    ("Vegan", ["Ăn thuần chay"]),
+    # Combinations — the most fragile part, because the rules intersect.
+    ("Gout + seafood allergy", ["Gút", "Dị ứng hải sản"]),
+    ("Vegetarian + egg allergy", ["Ăn chay", "Dị ứng trứng"]),
     (
-        "Thuần chay + gút + tăng huyết áp",
+        "Vegan + gout + hypertension",
         ["Ăn thuần chay", "Gút", "Tăng huyết áp"],
     ),
     (
-        "Bốn bệnh chuyển hóa cùng lúc",
+        "Four metabolic conditions at once",
         ["Tăng huyết áp", "Đái tháo đường", "Gút", "Rối loạn mỡ máu"],
     ),
-    # Ca biên khó nhất: đậu phụ và nước tương đều LÀ đậu nành, nên nếu mọi
-    # món chay đều dựa vào chúng thì tổ hợp này về 0 món mặn và 0 món canh.
-    # Danh mục có sẵn món chay nêm muối và lấy đạm từ nấm đúng vì ca này.
-    ("Ăn chay + dị ứng đậu nành", ["Ăn chay", "Dị ứng đậu nành"]),
+    # The hardest edge case: tofu and soy sauce ARE soy, so if every
+    # vegetarian dish relies on them, this combination drops to 0 savoury
+    # dishes and 0 soups. The catalogue deliberately includes vegetarian
+    # dishes seasoned with salt and taking their protein from mushrooms
+    # because of this case.
+    ("Vegetarian + soy allergy", ["Ăn chay", "Dị ứng đậu nành"]),
     (
-        "Thuần chay + dị ứng đậu nành + tăng huyết áp",
+        "Vegan + soy allergy + hypertension",
         ["Ăn thuần chay", "Dị ứng đậu nành", "Tăng huyết áp"],
     ),
-    ("Dị ứng đậu nành", ["Dị ứng đậu nành"]),
+    ("Soy allergy", ["Dị ứng đậu nành"]),
 ]
 
-# Số món tối thiểu mỗi vai trò để Bước 4 dựng nổi một ngày.
+# The minimum number of foods per role for Step 4 to build one day.
 ROLES_NEEDED = {
     "main": 3,
     "side_protein": 2,
@@ -187,7 +197,7 @@ def main() -> int:
     try:
         import pymysql
     except ImportError:
-        sys.exit("Cần cài pymysql:  pip install pymysql")
+        sys.exit("pymysql is required:  pip install pymysql")
 
     conn = pymysql.connect(
         host=_env.get("MYSQL_HOST", "localhost"),
@@ -203,90 +213,96 @@ def main() -> int:
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT id, name_vi FROM conditions")
-            by_name = {name: cid for cid, name in cur.fetchall()}
+            id_by_name = {name: cid for cid, name in cur.fetchall()}
 
             cur.execute("SELECT COUNT(*) FROM foods WHERE is_active = 1")
             total = cur.fetchone()[0]
 
-            print("═" * 78)
-            print("BỘ LỌC F1 CHẠY THUẦN BẰNG SQL")
-            print(f"Danh mục: {total} món đang hoạt động")
-            print("═" * 78)
+            print("=" * 78)
+            print("THE F1 FILTER RUNNING IN PURE SQL")
+            print(f"Catalogue: {total} active foods")
+            print("=" * 78)
 
-            print(f"\n{'Tình huống':<36}{'ứng viên':>10}{'%':>7}"
-                  f"{'đủ vai trò':>13}")
-            print("─" * 78)
+            print(f"\n{'Scenario':<36}{'candidates':>10}{'%':>7}"
+                  f"{'roles met':>13}")
+            print("-" * 78)
 
             for label, names in SCENARIOS:
-                missing_name = [n for n in names if n not in by_name]
-                if missing_name:
+                unknown = [n for n in names if n not in id_by_name]
+                if unknown:
                     problems.append(
-                        f"{label}: không có bệnh {missing_name} trong bảng "
-                        f"`conditions`"
+                        f"{label}: condition {unknown} is not in the "
+                        f"`conditions` table"
                     )
                     continue
 
-                ids = [by_name[n] for n in names]
-                # IN () rỗng là lỗi cú pháp; dùng NULL để mệnh đề luôn sai.
+                ids = [id_by_name[n] for n in names]
+                # An empty IN () is a syntax error; NULL makes the clause
+                # always false instead.
                 conds = ", ".join(str(i) for i in ids) if ids else "NULL"
 
                 cur.execute(
                     F1_SQL.format(conds=conds), {"user_id": None}
                 )
-                kept = cur.fetchall()
+                allowed = cur.fetchall()
 
-                # Đếm theo vai trò để biết Bước 4 còn dựng nổi bữa không.
-                if kept:
-                    # `foods.id` là chuỗi UUID, không phải số, nên không nối
-                    # thẳng vào câu lệnh được — thiếu dấu nháy là lỗi cú pháp
-                    # ngay. Truyền qua tham số, cũng đúng cách hơn.
-                    kept_ids = [r[0] for r in kept]
-                    cho = ", ".join(["%s"] * len(kept_ids))
+                # Count per role, to see whether Step 4 can still build a meal.
+                if allowed:
+                    # `foods.id` is a UUID string, not a number, so it cannot
+                    # be interpolated into the statement directly — a missing
+                    # quote is an immediate syntax error. Pass them as
+                    # parameters, which is also the right way.
+                    allowed_ids = [r[0] for r in allowed]
+                    placeholders = ", ".join(["%s"] * len(allowed_ids))
                     cur.execute(
                         f"SELECT dish_role, COUNT(*) FROM foods "
-                        f"WHERE id IN ({cho}) GROUP BY dish_role",
-                        kept_ids,
+                        f"WHERE id IN ({placeholders}) GROUP BY dish_role",
+                        allowed_ids,
                     )
                     per_role = dict(cur.fetchall())
                 else:
                     per_role = {}
 
-                short = [
+                shortfall = [
                     f"{role} {per_role.get(role, 0)}/{need}"
                     for role, need in ROLES_NEEDED.items()
                     if per_role.get(role, 0) < need
                 ]
-                mark = "✓" if not short else "✗"
+                mark = "ok" if not shortfall else "BAD"
                 print(
-                    f"{label:<36}{len(kept):>8}{len(kept) / total * 100:>8.0f}%"
-                    f"{mark:>9}  {', '.join(short)}"
+                    f"{label:<36}{len(allowed):>8}"
+                    f"{len(allowed) / total * 100:>8.0f}%"
+                    f"{mark:>9}  {', '.join(shortfall)}"
                 )
-                if short:
+                if shortfall:
                     problems.append(
-                        f"{label}: thiếu món ở vai trò {', '.join(short)} — "
-                        f"Bước 4 không dựng nổi một ngày"
+                        f"{label}: too few foods in role "
+                        f"{', '.join(shortfall)} — Step 4 cannot build a day"
                     )
 
-            # ── Ngưỡng theo ngày: không lọc món, nhưng phải tra được ──
-            print("\n" + "─" * 78)
-            print("Ngưỡng CỨNG theo NGÀY — F1 không lọc, Bước 4 pha 5 thi hành")
-            print("─" * 78)
-            everything = ", ".join(str(i) for i in by_name.values())
-            cur.execute(PER_DAY_SQL.format(conds=everything))
+            # -- Daily thresholds: filter nothing, but must be queryable --
+            print("\n" + "-" * 78)
+            print(
+                "Hard PER-DAY thresholds — F1 does not filter; Step 4 phase 5 "
+                "enforces"
+            )
+            print("-" * 78)
+            all_ids = ", ".join(str(i) for i in id_by_name.values())
+            cur.execute(PER_DAY_SQL.format(conds=all_ids))
             rows = cur.fetchall()
             for name, nutrient, comparator, threshold in rows:
-                sign = "≤" if comparator == "lte" else "≥"
+                sign = "<=" if comparator == "lte" else ">="
                 print(f"   {name:<20}{nutrient:<16}{sign} {threshold}")
             if not rows:
                 problems.append(
-                    "không tra được ngưỡng cứng theo ngày nào — "
-                    "`condition_rules` trống?"
+                    "no hard per-day threshold could be queried — is "
+                    "`condition_rules` empty?"
                 )
 
-            # ── Mục tiêu tự khai: tra được từ rda_reference ──
-            print("\n" + "─" * 78)
-            print("Mục tiêu tự khai tra từ `rda_reference`")
-            print("─" * 78)
+            # -- Self-declared targets: queryable from rda_reference --
+            print("\n" + "-" * 78)
+            print("Self-declared targets looked up in `rda_reference`")
+            print("-" * 78)
             for gender, age in (("male", 24), ("female", 24), ("male", 8)):
                 cur.execute(
                     RDA_SQL,
@@ -295,29 +311,29 @@ def main() -> int:
                 found = cur.fetchall()
                 if not found:
                     problems.append(
-                        f"không tra được nhu cầu chất xơ cho {gender} {age} "
-                        f"tuổi"
+                        f"no fibre requirement could be found for {gender} "
+                        f"aged {age}"
                     )
-                    print(f"   ✗ {gender} {age} tuổi: không có dòng nào")
+                    print(f"   BAD  {gender} aged {age}: no row")
                     continue
                 nutrient, value, unit, source = found[0]
                 print(
-                    f"   ✓ {gender} {age} tuổi: {nutrient} ≥ {value} {unit}"
-                    f"   ({source})"
+                    f"   ok   {gender} aged {age}: {nutrient} >= {value} "
+                    f"{unit}   ({source})"
                 )
     finally:
         conn.close()
 
-    print("\n" + "═" * 78)
+    print("\n" + "=" * 78)
     if problems:
-        print(f"{len(problems)} vấn đề:\n")
+        print(f"{len(problems)} problems:\n")
         for p in problems:
-            print(f"  ✗ {p}")
+            print(f"  BAD  {p}")
     else:
-        print("F1 BIỂU DIỄN ĐƯỢC HOÀN TOÀN BẰNG LƯỢC ĐỒ HIỆN TẠI.")
-        print("Không thiếu bảng, không thiếu cột. Phần còn lại là dịch truy")
-        print("vấn này sang tầng ứng dụng.")
-    print("═" * 78)
+        print("F1 IS FULLY EXPRESSIBLE WITH THE CURRENT SCHEMA.")
+        print("No table missing, no column missing. What remains is")
+        print("translating this query into the application layer.")
+    print("=" * 78)
     return 1 if problems else 0
 
 

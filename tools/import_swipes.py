@@ -48,7 +48,7 @@ from ml.f1_filter import conditions_by_name, exclusion_reasons  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.rocchio import alpha, build_profile, stage  # noqa: E402
 
-from tools.make_survey_deck import LUA_CHON  # noqa: E402
+from tools.make_survey_deck import CHOICES  # noqa: E402
 
 #: Giá trị băm không dùng được — xem phần đầu tệp.
 BAM_KHONG_DUNG_DUOC = "!khong-tag-dang-nhap"
@@ -190,10 +190,10 @@ def kiem_luot_vuot(
 
         if not chon:
             continue  # bỏ trống: người trả lời không chọn, không phải lỗi
-        if chon not in LUA_CHON:
+        if chon not in CHOICES:
             loi.append(
                 f"  dòng {stt}: `lua_chon` = {chon!r} không hợp lệ; "
-                f"phải là {' | '.join(LUA_CHON)}"
+                f"phải là {' | '.join(CHOICES)}"
             )
             continue
         if ma not in foods_by_id:
@@ -206,7 +206,7 @@ def kiem_luot_vuot(
             continue
 
         da_gap.add(ma)
-        ket_qua.append((ma, LUA_CHON[chon]))
+        ket_qua.append((ma, CHOICES[chon]))
 
     if loi:
         raise LoiPhieu("phiếu có lỗi:\n" + "\n".join(loi))

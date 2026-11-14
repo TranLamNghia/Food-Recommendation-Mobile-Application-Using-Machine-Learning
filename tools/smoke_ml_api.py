@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Thử đầu-cuối 4 endpoint nội bộ của ML Service, trên CSDL thật.
+"""End-to-end test of the ML Service's 4 internal endpoints, against the real
+database.
 
-Bản song song của `tools/smoke_backend.py` cho tầng ML, và cần thiết vì cùng
-một lẽ: `tools/check_ml.py` kiểm công thức bằng số thuần không cần máy chủ,
-còn tệp này kiểm những thứ **chỉ sai khi có HTTP và có CSDL** — xác thực bằng
-khóa dùng chung, vỏ lỗi, ánh xạ tên trường giữa `snake_case` của Python và
-`camelCase` của đặc tả, mã trạng thái, và cơ chế suy giảm mềm.
+The counterpart of `tools/smoke_backend.py` for the ML layer, and needed for
+the same reason: `tools/check_ml.py` checks the formulas as pure arithmetic
+with no server, while this file checks the things that **only break once there
+is HTTP and a database** — shared-key authentication, error envelopes, the
+field-name mapping between Python's `snake_case` and the specification's
+`camelCase`, status codes, and the graceful-degradation path.
 
-Không tạo dữ liệu mới: nó đọc một người dùng đã có trong CSDL và chấm điểm
-trên món công khai. `POST /profiles/{id}/rebuild` có ghi — nhưng nó ghi lại
-đúng giá trị mà `import_swipes` / `import_mo_phong` đã tính, nên chạy lại
-không làm lệch dữ liệu. Phép kiểm đối chiếu chính điều đó.
+It creates no new data: it reads a user already in the database and scores
+public foods. `POST /profiles/{id}/rebuild` does write — but it writes back
+exactly the values `import_swipes` / `import_mo_phong` already computed, so
+repeated runs do not skew the data. One of the checks asserts precisely that.
 
-Chạy (cần ML Service đang chạy):
-    python tools/run_ml_service.py       # cửa sổ khác
+Run (the ML Service must be running):
+    python tools/run_ml_service.py       # in another window
     python tools/smoke_ml_api.py
 """
 
@@ -37,23 +39,24 @@ import _env  # noqa: E402
 from ml.db import connect  # noqa: E402
 from ml.features import FEATURE_VERSION  # noqa: E402
 
-GOC = "http://127.0.0.1:8000"
-TEN_KHOA = "ML_INTERNAL_KEY"
+BASE = "http://127.0.0.1:8000"
+KEY_ENV = "ML_INTERNAL_KEY"
 
-_so_kiem = 0
-_loi: list[str] = []
+_checks = 0
+_failures: list[str] = []
 
 
-def goi(method: str, duong: str, than=None, khoa: str | None = None, cho: int = 30):
-    """Gọi API, trả `(mã HTTP, thân đã giải mã JSON hoặc None)`."""
-    data = json.dumps(than).encode() if than is not None else None
-    req = urllib.request.Request(GOC + duong, data=data, method=method)
+def call(method: str, path: str, body=None, key: str | None = None,
+         timeout: int = 30):
+    """Call the API; returns `(HTTP status, JSON-decoded body or None)`."""
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(BASE + path, data=data, method=method)
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    if khoa:
-        req.add_header("X-Internal-Key", khoa)
+    if key:
+        req.add_header("X-Internal-Key", key)
     try:
-        with urllib.request.urlopen(req, timeout=cho) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             raw = r.read()
             return r.status, (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as e:
@@ -64,36 +67,36 @@ def goi(method: str, duong: str, than=None, khoa: str | None = None, cho: int = 
             return e.code, {"_raw": raw.decode("utf-8", "replace")[:300]}
     except urllib.error.URLError as e:
         print(
-            f"\nKhông gọi được {GOC} — ML Service chưa chạy?\n"
-            f"  {e}\nChạy trước: python tools/run_ml_service.py",
+            f"\nCould not reach {BASE} — is the ML Service running?\n"
+            f"  {e}\nStart it first: python tools/run_ml_service.py",
             file=sys.stderr,
         )
         raise SystemExit(2)
 
 
-def kiem(nhan: str, dat: bool, chi_tiet: str = "") -> bool:
-    global _so_kiem
-    _so_kiem += 1
+def check(label: str, passed: bool, detail: str = "") -> bool:
+    global _checks
+    _checks += 1
     print(
-        f"  {'[ok]' if dat else '[SAI]'} {nhan}"
-        + (f"  {chi_tiet}" if chi_tiet and not dat else "")
+        f"  {'[ok]' if passed else '[BAD]'} {label}"
+        + (f"  {detail}" if detail and not passed else "")
     )
-    if not dat:
-        _loi.append(f"{nhan} — {chi_tiet}" if chi_tiet else nhan)
-    return dat
+    if not passed:
+        _failures.append(f"{label} — {detail}" if detail else label)
+    return passed
 
 
-def bang(nhan: str, duoc, mong) -> bool:
-    return kiem(nhan, duoc == mong, f"được {duoc!r}, mong {mong!r}")
+def equals(label: str, got, want) -> bool:
+    return check(label, got == want, f"got {got!r}, wanted {want!r}")
 
 
-def ma_loi(than) -> str | None:
-    if isinstance(than, dict):
-        return (than.get("error") or {}).get("code")
+def error_code(body) -> str | None:
+    if isinstance(body, dict):
+        return (body.get("error") or {}).get("code")
     return None
 
 
-def _cac_mo_hinh() -> dict[int, dict]:
+def _models() -> dict[int, dict]:
     cn = connect(None)
     try:
         with cn.cursor() as cur:
@@ -106,58 +109,59 @@ def _cac_mo_hinh() -> dict[int, dict]:
         cn.close()
 
 
-def _ban_dang_phuc_vu() -> str | None:
-    for d in _cac_mo_hinh().values():
+def _serving_version() -> str | None:
+    for d in _models().values():
         if int(d["is_active"]) == 1:
             return str(d["version"])
     return None
 
 
-def _cho_mo_hinh_moi(truoc: dict[int, dict], giay: int) -> dict | None:
-    """Đợi một dòng `ml_models` mới xuất hiện, tối đa `giay` giây."""
-    het = time.time() + giay
-    while time.time() < het:
-        for ma, d in _cac_mo_hinh().items():
-            if ma not in truoc:
+def _wait_for_new_model(before: dict[int, dict], seconds: int) -> dict | None:
+    """Wait for a new `ml_models` row to appear, for at most `seconds`."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        for model_id, d in _models().items():
+            if model_id not in before:
                 return d
         time.sleep(1.0)
     return None
 
 
-def _xoa_mo_hinh(d: dict) -> bool:
-    """Xóa dòng `ml_models` và tệp artifact của nó."""
+def _delete_model(d: dict) -> bool:
+    """Delete an `ml_models` row and its artifact file."""
     cn = connect(None)
     try:
         with cn.cursor() as cur:
             cur.execute("DELETE FROM ml_models WHERE id = %s", (d["id"],))
-            xoa = cur.rowcount
+            deleted = cur.rowcount
         cn.commit()
     finally:
         cn.close()
-    tep = ROOT / str(d.get("artifact_path") or "")
-    if d.get("artifact_path") and tep.exists():
-        tep.unlink()
-    return xoa == 1
+    path = ROOT / str(d.get("artifact_path") or "")
+    if d.get("artifact_path") and path.exists():
+        path.unlink()
+    return deleted == 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    global GOC
+    global BASE
     _env.use_utf8()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--goc", default=GOC, help="địa chỉ ML Service")
-    t = ap.parse_args(argv)
-    GOC = t.goc.rstrip("/")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", default=BASE,
+                        help="the ML Service address")
+    args = parser.parse_args(argv)
+    BASE = args.base.rstrip("/")
 
-    khoa = _env.get(TEN_KHOA, "")
-    if not khoa:
+    key = _env.get(KEY_ENV, "")
+    if not key:
         print(
-            f"Thiếu {TEN_KHOA} trong .env. Chạy "
-            "`python tools/run_ml_service.py` một lần để nó sinh khóa.",
+            f"{KEY_ENV} is missing from .env. Run "
+            "`python tools/run_ml_service.py` once to have it generated.",
             file=sys.stderr,
         )
         return 1
 
-    # ── Lấy dữ liệu thật để thử ──
+    # -- Fetch real data to test with --
     cn = connect(None)
     try:
         with cn.cursor() as cur:
@@ -166,294 +170,329 @@ def main(argv: list[str] | None = None) -> int:
                 "FROM user_preference_profiles p "
                 "ORDER BY p.n_signals DESC LIMIT 1"
             )
-            hs = cur.fetchone()
+            profile = cur.fetchone()
             cur.execute(
                 "SELECT id FROM foods WHERE owner_id IS NULL AND is_active = 1 "
                 "ORDER BY id LIMIT 8"
             )
-            mon = [d["id"] for d in cur.fetchall()]
+            foods = [d["id"] for d in cur.fetchall()]
             cur.execute(
                 "SELECT dataset_version v, COUNT(*) n FROM ml_training_samples "
                 "GROUP BY dataset_version ORDER BY n DESC LIMIT 1"
             )
-            tap = cur.fetchone()
+            dataset = cur.fetchone()
     finally:
         cn.close()
 
-    if hs is None or len(mon) < 4:
+    if profile is None or len(foods) < 4:
         print(
-            "CSDL chưa có hồ sơ sở thích hoặc chưa đủ món để thử.\n"
-            "Nạp trước: python tools/import_mo_phong.py --apply",
+            "The database has no preference profile yet, or too few foods.\n"
+            "Load first: python tools/import_mo_phong.py --apply",
             file=sys.stderr,
         )
         return 1
 
-    uid = hs["user_id"]
-    print(f"ML Service: {GOC}")
+    uid = profile["user_id"]
+    print(f"ML Service: {BASE}")
     print(
-        f"Dữ liệu thử: người dùng {uid[:8]}… (n_signals={hs['n_signals']}, "
-        f"{hs['stage']}) · {len(mon)} món"
+        f"Test data: user {uid[:8]}… (n_signals={profile['n_signals']}, "
+        f"{profile['stage']}) · {len(foods)} foods"
     )
 
-    # ── GET /health ──
+    # -- GET /health --
     print("\n§8.4  GET /health")
-    ma, than = goi("GET", "/health")
-    bang("health trả 200", ma, 200)
-    kiem(
-        "không đòi khóa — phép kiểm sống của hạ tầng không mang bí mật ứng dụng",
-        ma == 200,
+    status, body = call("GET", "/health")
+    equals("health returns 200", status, 200)
+    check(
+        "requires no key — an infrastructure liveness probe carries no "
+        "application secret",
+        status == 200,
     )
-    bang("featureVersion khớp mã nguồn", (than or {}).get("featureVersion"), FEATURE_VERSION)
-    kiem(
-        "status thuộc {healthy, degraded}",
-        (than or {}).get("status") in ("healthy", "degraded"),
-        f"được {(than or {}).get('status')!r}",
+    equals("featureVersion matches the source",
+           (body or {}).get("featureVersion"), FEATURE_VERSION)
+    check(
+        "status is one of {healthy, degraded}",
+        (body or {}).get("status") in ("healthy", "degraded"),
+        f"got {(body or {}).get('status')!r}",
     )
-    co_mo_hinh = (than or {}).get("activeModel") is not None
-    if co_mo_hinh:
-        am = than["activeModel"]
-        kiem(
-            "activeModel có version và algorithm",
-            bool(am.get("version")) and bool(am.get("algorithm")),
-            f"được {am!r}",
+    has_model = (body or {}).get("activeModel") is not None
+    if has_model:
+        active = body["activeModel"]
+        check(
+            "activeModel carries a version and an algorithm",
+            bool(active.get("version")) and bool(active.get("algorithm")),
+            f"got {active!r}",
         )
-        bang("status = healthy khi có mô hình", than["status"], "healthy")
+        equals("status = healthy when a model is present", body["status"],
+               "healthy")
     else:
-        bang("status = degraded khi không có mô hình", than["status"], "degraded")
-        kiem("degraded kèm lý do đọc được", bool((than or {}).get("reason")))
+        equals("status = degraded with no model", body["status"], "degraded")
+        check("degraded comes with a readable reason",
+              bool((body or {}).get("reason")))
 
-    # ── Xác thực ──
-    print("\n§8     Xác thực bằng X-Internal-Key")
-    ma, than = goi("POST", "/predict", {"userId": uid, "candidateFoodIds": mon})
-    bang("thiếu khóa → 401", ma, 401)
-    bang("mã lỗi UNAUTHORIZED", ma_loi(than), "UNAUTHORIZED")
-    ma, than = goi(
-        "POST", "/predict", {"userId": uid, "candidateFoodIds": mon}, khoa="sai-khoa"
+    # -- Authentication --
+    print("\n§8     Authentication via X-Internal-Key")
+    status, body = call("POST", "/predict",
+                        {"userId": uid, "candidateFoodIds": foods})
+    equals("a missing key gives 401", status, 401)
+    equals("the error code is UNAUTHORIZED", error_code(body), "UNAUTHORIZED")
+    status, body = call(
+        "POST", "/predict", {"userId": uid, "candidateFoodIds": foods},
+        key="wrong-key"
     )
-    bang("sai khóa → 401", ma, 401)
-    kiem(
-        "vỏ lỗi {\"error\": {code, message}} như mục 2.5",
-        isinstance(than, dict) and "error" in than,
-        f"được {than!r}",
+    equals("a wrong key gives 401", status, 401)
+    check(
+        'the error envelope is {"error": {code, message}} as in §2.5',
+        isinstance(body, dict) and "error" in body,
+        f"got {body!r}",
     )
 
-    # ── POST /predict ──
+    # -- POST /predict --
     print("\n§8.1  POST /predict")
-    ma, than = goi(
+    status, body = call(
         "POST",
         "/predict",
-        {"userId": uid, "candidateFoodIds": mon, "contextMealType": "lunch"},
-        khoa=khoa,
+        {"userId": uid, "candidateFoodIds": foods,
+         "contextMealType": "lunch"},
+        key=key,
     )
-    bang("predict trả 200", ma, 200)
-    diem = (than or {}).get("scores") or []
-    bang("chấm điểm đủ số món gửi lên", len(diem), len(mon))
-    kiem(
-        "mọi foodId trả về đều nằm trong danh sách gửi lên",
-        all(d["foodId"] in mon for d in diem),
+    equals("predict returns 200", status, 200)
+    scores = (body or {}).get("scores") or []
+    equals("scores as many foods as were sent", len(scores), len(foods))
+    check(
+        "every returned foodId was in the list that was sent",
+        all(s["foodId"] in foods for s in scores),
     )
-    kiem(
-        "điểm nằm trong [0, 1]",
-        all(0.0 <= d["score"] <= 1.0 for d in diem),
-        f"được {[d['score'] for d in diem][:5]}",
+    check(
+        "the scores are within [0, 1]",
+        all(0.0 <= s["score"] <= 1.0 for s in scores),
+        f"got {[s['score'] for s in scores][:5]}",
     )
-    kiem(
-        "đã sắp giảm dần theo điểm",
-        all(diem[i]["score"] >= diem[i + 1]["score"] for i in range(len(diem) - 1)),
+    check(
+        "already sorted by score descending",
+        all(scores[i]["score"] >= scores[i + 1]["score"]
+            for i in range(len(scores) - 1)),
     )
-    kiem(
-        "mỗi món có cả ba thành phần điểm, tách ra để phân tích ngược được",
+    check(
+        "each food carries all three score components, separated so the "
+        "result can be traced back",
         all(
-            "scoreContent" in d and "scoreRule" in d and "scoreMl" in d for d in diem
+            "scoreContent" in s and "scoreRule" in s and "scoreMl" in s
+            for s in scores
         ),
     )
-    bang("featureVersion trong phản hồi", than.get("featureVersion"), FEATURE_VERSION)
-    kiem(
-        "stage thuộc bốn giai đoạn",
-        than.get("stage") in ("cold", "content", "hybrid", "ml"),
-        f"được {than.get('stage')!r}",
+    equals("featureVersion in the response", body.get("featureVersion"),
+           FEATURE_VERSION)
+    check(
+        "stage is one of the four stages",
+        body.get("stage") in ("cold", "content", "hybrid", "ml"),
+        f"got {body.get('stage')!r}",
     )
-    kiem(
-        "alpha trong [0, 1]",
-        0.0 <= float(than.get("alpha", -1)) <= 1.0,
-        f"được {than.get('alpha')!r}",
+    check(
+        "alpha is within [0, 1]",
+        0.0 <= float(body.get("alpha", -1)) <= 1.0,
+        f"got {body.get('alpha')!r}",
     )
-    kiem(
-        "elapsedMs có mặt và dưới ngưỡng 2 giây của Backend",
-        isinstance(than.get("elapsedMs"), int) and than["elapsedMs"] < 2000,
-        f"được {than.get('elapsedMs')!r} ms",
+    check(
+        "elapsedMs is present and under the backend's 2-second budget",
+        isinstance(body.get("elapsedMs"), int) and body["elapsedMs"] < 2000,
+        f"got {body.get('elapsedMs')!r} ms",
     )
-    # Giai đoạn `hybrid`/`ml` phải có điểm ML; `cold`/`content` thì không.
-    if than.get("stage") in ("hybrid", "ml"):
-        kiem(
-            "giai đoạn hybrid/ml có scoreMl khác null",
-            all(d["scoreMl"] is not None for d in diem),
+    # The `hybrid`/`ml` stages must carry an ML score; `cold`/`content` must
+    # not.
+    if body.get("stage") in ("hybrid", "ml"):
+        check(
+            "the hybrid/ml stages have a non-null scoreMl",
+            all(s["scoreMl"] is not None for s in scores),
         )
-        kiem("modelVersion khác null khi đã dùng mô hình", bool(than.get("modelVersion")))
+        check("modelVersion is non-null once a model is in use",
+              bool(body.get("modelVersion")))
     else:
-        kiem(
-            "giai đoạn cold/content thì scoreMl là null",
-            all(d["scoreMl"] is None for d in diem),
-            f"được {[d['scoreMl'] for d in diem][:3]}",
+        check(
+            "the cold/content stages leave scoreMl null",
+            all(s["scoreMl"] is None for s in scores),
+            f"got {[s['scoreMl'] for s in scores][:3]}",
         )
 
-    print("\n§8.1  predict — các ca lỗi")
-    ma, than = goi("POST", "/predict", {"userId": uid, "candidateFoodIds": []}, khoa=khoa)
-    bang("candidateFoodIds rỗng → 422", ma, 422)
-    ma, than = goi(
+    print("\n§8.1  predict — the error cases")
+    status, body = call("POST", "/predict",
+                        {"userId": uid, "candidateFoodIds": []}, key=key)
+    equals("an empty candidateFoodIds gives 422", status, 422)
+    status, body = call(
         "POST",
         "/predict",
-        {"userId": "00000000-0000-4000-8000-000000000000", "candidateFoodIds": mon},
-        khoa=khoa,
+        {"userId": "00000000-0000-4000-8000-000000000000",
+         "candidateFoodIds": foods},
+        key=key,
     )
-    bang("userId không tồn tại → 404", ma, 404)
-    bang("mã lỗi USER_NOT_FOUND", ma_loi(than), "USER_NOT_FOUND")
-    ma, than = goi("POST", "/predict", {"candidateFoodIds": mon}, khoa=khoa)
-    bang("thiếu userId → 422", ma, 422)
+    equals("a userId that does not exist gives 404", status, 404)
+    equals("the error code is USER_NOT_FOUND", error_code(body),
+           "USER_NOT_FOUND")
+    status, body = call("POST", "/predict", {"candidateFoodIds": foods},
+                        key=key)
+    equals("a missing userId gives 422", status, 422)
 
-    print("\n§8.1  predict — Bộ lọc F1 vẫn chạy TRƯỚC, dù Backend đã gửi ứng viên")
-    ma, than = goi(
+    print("\n§8.1  predict — F1 still runs FIRST, even though the backend "
+          "sent the candidates")
+    status, body = call(
         "POST",
         "/predict",
         {
             "userId": uid,
-            "candidateFoodIds": mon + ["00000000-0000-4000-8000-0000000000ff"],
+            "candidateFoodIds": foods
+            + ["00000000-0000-4000-8000-0000000000ff"],
             "userFeatures": {"gender": "other", "goal": "gain_weight"},
         },
-        khoa=khoa,
+        key=key,
     )
-    bang("món không tồn tại không làm vỡ yêu cầu", ma, 200)
-    kiem(
-        "món không chấm được nằm trong skippedFoodIds",
-        "00000000-0000-4000-8000-0000000000ff" in (than.get("skippedFoodIds") or []),
-        f"được {than.get('skippedFoodIds')!r}",
+    equals("a nonexistent food does not break the request", status, 200)
+    check(
+        "the unscorable food appears in skippedFoodIds",
+        "00000000-0000-4000-8000-0000000000ff"
+        in (body.get("skippedFoodIds") or []),
+        f"got {body.get('skippedFoodIds')!r}",
     )
-    kiem(
-        "userFeatures lệch CSDL được báo trong warnings, không bỏ qua im lặng",
-        any("userFeatures" in w for w in (than.get("warnings") or [])),
-        f"được {than.get('warnings')!r}",
+    check(
+        "userFeatures differing from the database is reported in warnings, "
+        "not silently ignored",
+        any("userFeatures" in w for w in (body.get("warnings") or [])),
+        f"got {body.get('warnings')!r}",
     )
 
-    # ── POST /profiles/{id}/rebuild ──
+    # -- POST /profiles/{id}/rebuild --
     print("\n§8.2  POST /profiles/{userId}/rebuild")
-    ma, than = goi("POST", f"/profiles/{uid}/rebuild", {}, khoa=khoa)
-    bang("rebuild trả 200", ma, 200)
-    bang("userId trả về đúng", (than or {}).get("userId"), uid)
-    bang(
-        "nSignals khớp giá trị trình nhập đã tính",
-        (than or {}).get("nSignals"),
-        int(hs["n_signals"]),
+    status, body = call("POST", f"/profiles/{uid}/rebuild", {}, key=key)
+    equals("rebuild returns 200", status, 200)
+    equals("the userId comes back correct", (body or {}).get("userId"), uid)
+    equals(
+        "nSignals matches the value the importer computed",
+        (body or {}).get("nSignals"),
+        int(profile["n_signals"]),
     )
-    kiem(
-        "sumAbsWeight khớp giá trị đã lưu",
-        abs(float(than["sumAbsWeight"]) - float(hs["sum_abs_weight"])) < 1e-6,
-        f"được {than['sumAbsWeight']}, đã lưu {float(hs['sum_abs_weight'])}",
+    check(
+        "sumAbsWeight matches the stored value",
+        abs(float(body["sumAbsWeight"])
+            - float(profile["sum_abs_weight"])) < 1e-6,
+        f"got {body['sumAbsWeight']}, stored "
+        f"{float(profile['sum_abs_weight'])}",
     )
-    bang("stage khớp", (than or {}).get("stage"), hs["stage"])
-    kiem(
-        "updatedAt mang múi giờ +07:00, không phải UTC",
-        "+07:00" in str((than or {}).get("updatedAt")),
-        f"được {(than or {}).get('updatedAt')!r}",
+    equals("stage matches", (body or {}).get("stage"), profile["stage"])
+    check(
+        "updatedAt carries the +07:00 offset, not UTC",
+        "+07:00" in str((body or {}).get("updatedAt")),
+        f"got {(body or {}).get('updatedAt')!r}",
     )
-    ma, than = goi(
-        "POST", "/profiles/00000000-0000-4000-8000-000000000000/rebuild", {}, khoa=khoa
+    status, body = call(
+        "POST", "/profiles/00000000-0000-4000-8000-000000000000/rebuild", {},
+        key=key
     )
-    bang("userId không tồn tại → 404", ma, 404)
-    ma, _ = goi("POST", f"/profiles/{uid}/rebuild", {})
-    bang("rebuild đòi khóa", ma, 401)
+    equals("a userId that does not exist gives 404", status, 404)
+    status, _ = call("POST", f"/profiles/{uid}/rebuild", {})
+    equals("rebuild requires the key", status, 401)
 
-    # ── POST /train ──
+    # -- POST /train --
     print("\n§8.3  POST /train")
-    ma, than = goi(
+    status, body = call(
         "POST",
         "/train",
-        {"datasetVersion": "khong-ton-tai-abc", "algorithm": "random_forest"},
-        khoa=khoa,
+        {"datasetVersion": "does-not-exist-abc",
+         "algorithm": "random_forest"},
+        key=key,
     )
-    bang("datasetVersion không có mẫu nào → 404", ma, 404)
-    bang("mã lỗi DATASET_NOT_FOUND", ma_loi(than), "DATASET_NOT_FOUND")
-    ma, than = goi(
-        "POST", "/train", {"datasetVersion": "v1", "algorithm": "khong-co"}, khoa=khoa
+    equals("a datasetVersion with no samples gives 404", status, 404)
+    equals("the error code is DATASET_NOT_FOUND", error_code(body),
+           "DATASET_NOT_FOUND")
+    status, body = call(
+        "POST", "/train",
+        {"datasetVersion": "v1", "algorithm": "no-such-algorithm"}, key=key
     )
-    bang("algorithm lạ → 422", ma, 422)
-    ma, _ = goi("POST", "/train", {"datasetVersion": "v1"})
-    bang("train đòi khóa", ma, 401)
+    equals("an unknown algorithm gives 422", status, 422)
+    status, _ = call("POST", "/train", {"datasetVersion": "v1"})
+    equals("train requires the key", status, 401)
 
-    if tap:
+    if dataset:
         print(
-            f"\n§8.3  train thật trên dataset_version = {tap['v']!r} "
-            f"({tap['n']} mẫu)"
+            f"\n§8.3  a real training run on dataset_version = "
+            f"{dataset['v']!r} ({dataset['n']} samples)"
         )
-        truoc_train = _cac_mo_hinh()
-        dang_phuc_vu_truoc = _ban_dang_phuc_vu()
-        ma, than = goi(
+        before_train = _models()
+        serving_before = _serving_version()
+        status, body = call(
             "POST",
             "/train",
             {
-                "datasetVersion": tap["v"],
+                "datasetVersion": dataset["v"],
                 "algorithm": "logistic_regression",
                 "activate": False,
             },
-            khoa=khoa,
+            key=key,
         )
-        bang("train trả 202 Accepted, không chặn", ma, 202)
-        kiem("có jobId", bool((than or {}).get("jobId")), f"được {than!r}")
-        bang("status = queued", (than or {}).get("status"), "queued")
-        kiem(
-            "startedAt mang múi giờ +07:00",
-            "+07:00" in str((than or {}).get("startedAt")),
-            f"được {(than or {}).get('startedAt')!r}",
+        equals("train returns 202 Accepted and does not block", status, 202)
+        check("a jobId is present", bool((body or {}).get("jobId")),
+              f"got {body!r}")
+        equals("status = queued", (body or {}).get("status"), "queued")
+        check(
+            "startedAt carries the +07:00 offset",
+            "+07:00" in str((body or {}).get("startedAt")),
+            f"got {(body or {}).get('startedAt')!r}",
         )
-        # Phiên thứ hai ngay lập tức phải bị từ chối: mục 8.3 nói `409` khi
-        # đang có phiên chạy. Đây là phép kiểm của chính cái khóa — không có
-        # nó thì hai phiên cùng ghi `ml_models`.
-        ma2, than2 = goi(
+        # A second run immediately after must be refused: §8.3 says `409`
+        # while a run is in progress. This is the test of that very lock —
+        # without it, two runs would write `ml_models` at once.
+        status2, body2 = call(
             "POST",
             "/train",
-            {"datasetVersion": tap["v"], "algorithm": "random_forest"},
-            khoa=khoa,
+            {"datasetVersion": dataset["v"], "algorithm": "random_forest"},
+            key=key,
         )
-        bang("phiên thứ hai khi phiên đầu chưa xong → 409", ma2, 409)
-        bang("mã lỗi TRAINING_IN_PROGRESS", ma_loi(than2), "TRAINING_IN_PROGRESS")
+        equals("a second run before the first finishes gives 409", status2, 409)
+        equals("the error code is TRAINING_IN_PROGRESS", error_code(body2),
+               "TRAINING_IN_PROGRESS")
 
-        # Đợi phiên huấn luyện xong rồi DỌN mô hình nó sinh ra.
+        # Wait for the training run to finish, then CLEAN UP the model it
+        # produced.
         #
-        # Phải kiểm điều này, vì `202 Accepted` chỉ nói "đã nhận", không nói
-        # "đã làm". Một `/train` nhận yêu cầu rồi lặng lẽ chết trong luồng
-        # nền vẫn qua được mọi phép kiểm phía trên.
+        # This has to be checked, because `202 Accepted` only says "received",
+        # not "done". A `/train` that accepts the request and then dies
+        # quietly in its background thread passes every check above.
         #
-        # Và phải dọn, vì ngược với `smoke_backend.py` — tệp đó tạo một tài
-        # khoản rồi xóa — một lần chạy ở đây sinh thêm một dòng `ml_models`
-        # cùng một tệp `.joblib`. Chạy bộ kiểm mười lần thì có mười mô hình
-        # rác, và `load_active_model` từ chối phục vụ khi có nhiều hơn
-        # một dòng `is_active = 1`.
-        print("\n§8.3  phiên huấn luyện phải thật sự chạy, rồi được dọn")
-        moi = _cho_mo_hinh_moi(truoc_train, giay=90)
-        kiem(
-            "mô hình mới xuất hiện trong ml_models — 202 không phải lời hứa suông",
-            moi is not None,
-            "sau 90 giây vẫn không thấy dòng mới",
+        # And it has to be cleaned up, because unlike `smoke_backend.py` —
+        # which creates one account and deletes it — a run here adds an
+        # `ml_models` row and a `.joblib` file. Ten runs of the checker leave
+        # ten junk models, and `load_active_model` refuses to serve when more
+        # than one row has `is_active = 1`.
+        print("\n§8.3  the training run must really run, then be cleaned up")
+        created = _wait_for_new_model(before_train, seconds=90)
+        check(
+            "a new model appeared in ml_models — the 202 was not an empty "
+            "promise",
+            created is not None,
+            "no new row after 90 seconds",
         )
-        if moi is not None:
-            bang("thuật toán đúng cái đã yêu cầu", moi["algorithm"], "logistic_regression")
-            bang("activate=false nên KHÔNG được bật", int(moi["is_active"]), 0)
-            kiem(
-                "mô hình đang phục vụ không bị đổi",
-                _ban_dang_phuc_vu() == dang_phuc_vu_truoc,
-                f"trước {dang_phuc_vu_truoc!r}, sau {_ban_dang_phuc_vu()!r}",
+        if created is not None:
+            equals("the algorithm is the one that was requested",
+                   created["algorithm"], "logistic_regression")
+            equals("activate=false so it must NOT be switched on",
+                   int(created["is_active"]), 0)
+            check(
+                "the model being served did not change",
+                _serving_version() == serving_before,
+                f"before {serving_before!r}, after {_serving_version()!r}",
             )
-            kiem("đã dọn mô hình do bộ kiểm sinh ra", _xoa_mo_hinh(moi))
+            check("the model the checker created was cleaned up",
+                  _delete_model(created))
     else:
-        print("\n§8.3  bỏ qua phần train thật — chưa có ml_training_samples")
+        print("\n§8.3  skipping the real training run — no ml_training_samples")
 
-    # ── Kết ──
+    # -- Conclusion --
     print("\n" + "=" * 68)
-    if _loi:
-        print(f"{len(_loi)}/{_so_kiem} phép kiểm TRƯỢT:")
-        for x in _loi:
+    if _failures:
+        print(f"{len(_failures)}/{_checks} checks FAILED:")
+        for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_so_kiem}/{_so_kiem} phép kiểm đạt — 4 endpoint nội bộ chạy đúng đặc tả.")
+    print(f"{_checks}/{_checks} checks passed — the 4 internal endpoints "
+          f"behave per the specification.")
     return 0
 
 

@@ -123,7 +123,7 @@ from tools.import_swipes import (  # noqa: E402
     kiem_benh_ly,
     loc_theo_f1,
 )
-from tools.make_survey_deck import LUA_CHON  # noqa: E402
+from tools.make_survey_deck import CHOICES  # noqa: E402
 
 HANH_VI = ROOT / "data" / "survey" / "mo_phong" / "hanh_vi.csv"
 SU_THAT = ROOT / "data" / "survey" / "mo_phong" / "khau_vi_that.json"
@@ -317,10 +317,10 @@ def doc_hanh_vi(foods_by_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]
             u = d["user_id"].strip()
             ma = d["ma_mon"].strip()
             chon = d["lua_chon"].strip().lower()
-            if chon not in LUA_CHON:
+            if chon not in CHOICES:
                 raise LoiNap(
                     f"  dòng {stt}: `lua_chon` = {chon!r} không hợp lệ; "
-                    f"phải là một trong: {', '.join(LUA_CHON)}"
+                    f"phải là một trong: {', '.join(CHOICES)}"
                 )
             if ma not in foods_by_id:
                 raise LoiNap(
@@ -330,7 +330,7 @@ def doc_hanh_vi(foods_by_id: dict[str, Any]) -> dict[str, list[tuple[str, str]]]
             if ma in thay.setdefault(u, set()):
                 raise LoiNap(f"  dòng {stt}: {u} có hai dòng cho cùng món {ma}")
             thay[u].add(ma)
-            luot.setdefault(u, []).append((ma, LUA_CHON[chon]))
+            luot.setdefault(u, []).append((ma, CHOICES[chon]))
     if not luot:
         raise LoiNap(f"{HANH_VI.name} không có lượt vuốt nào")
     return luot

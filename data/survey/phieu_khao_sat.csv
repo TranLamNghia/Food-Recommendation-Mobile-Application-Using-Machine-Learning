@@ -15,6 +15,7 @@
 #     python tools/import_swipes.py --phieu <tệp này>
 #
 # ho_ten: 
+# email: 
 # gioi_tinh: male            # male | female | other
 # ngay_sinh: 2004-01-01      # YYYY-MM-DD
 # chieu_cao_cm: 170
@@ -36,7 +37,7 @@
 #     - Không dung nạp gluten
 #     - Ăn chay
 #     - Ăn thuần chay
-# ngay_khao_sat: 2026-11-10
+# ngay_khao_sat: 2026-11-14
 #
 stt,ma_mon,ten_mon,nhom,muc_cay,lua_chon
 1,6420f9d1-cfc9-11f1-88ca-d49390348b80,Giá đậu nành luộc,Món luộc hấp,0,
