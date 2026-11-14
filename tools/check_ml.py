@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Kiểm phần học máy — **không cần CSDL**.
+"""Check the machine-learning layer — **no database needed**.
 
-Vì sao có tệp này. Các script trong `ml/` đã được chạy thử trên CSDL nháp,
-nhưng phép chạy thử đó chỉ đi qua những ca mà dữ liệu thật tình cờ có. Những
-chỗ dễ sai nhất lại là **ca biên**: cả tập chỉ có một mức năng lượng, người
-dùng vuốt toàn `neutral`, một người không có món nào đáng gợi ý, tập huấn
-luyện chỉ có một lớp. Dữ liệu thật hiện không có ca nào trong số đó, nên
-chúng phải được dựng bằng tay.
+Why this file exists. The scripts in `ml/` have been exercised against a
+scratch database, but that only covers the cases the real data happens to
+contain. The most error-prone places are the **edge cases**: a dataset with one
+single energy level, a user who swipes nothing but `neutral`, a person with no
+food worth recommending, a training set with only one class. The real data has
+none of those today, so they have to be constructed by hand.
 
-Mọi phép kiểm ở đây chạy trên hàm thuần, nên tệp này chạy được day sau khi
-clone, không cần MySQL và không cần tín hiệu người dùng.
+Every check here runs on pure functions, so this file works immediately after a
+clone — no MySQL, no user signals.
 
-Các chỉ số xếp hạng được đối chiếu với **giá trị tính bằng tay**, không phải
-với kết quả của chính đoạn mã đang kiểm. Một bài kiểm so mã với chính nó thì
-chỉ phát hiện được thay đổi, không phát hiện được sai.
+The ranking metrics are compared against **hand-computed values**, not against
+the output of the code being checked. A test that compares code with itself
+only detects change, never error.
 
-Chạy:
+Run:
     python tools/check_ml.py
+
+Note on language: the asserted string literals stay as they are — condition
+names and tag names come from the database, the explanation sentences and
+`EVIDENCE_LABELS` are shown to users, and the dimension labels are the contract
+shared with `food_vector.dart`.
 """
 
 from __future__ import annotations
@@ -84,582 +89,756 @@ from datetime import date, datetime  # noqa: E402
 
 import numpy as np  # noqa: E402
 
-SAI_SO = 1e-9
+TOLERANCE = 1e-9
 
-_dat = 0
-_loi: list[str] = []
+_passed = 0
+_failures: list[str] = []
 
 
-def kiem(conditions: bool, mo_ta: str) -> None:
-    global _dat
-    if conditions:
-        _dat += 1
+def check(condition: bool, description: str) -> None:
+    global _passed
+    if condition:
+        _passed += 1
     else:
-        _loi.append(mo_ta)
-        print(f"  ✗ {mo_ta}")
+        _failures.append(description)
+        print(f"  BAD  {description}")
 
 
-def gan(thuc_te: float, mong_doi: float, mo_ta: str) -> None:
-    kiem(
-        abs(thuc_te - mong_doi) < SAI_SO,
-        f"{mo_ta}: được {thuc_te!r}, mong đợi {mong_doi!r}",
+def approx(actual: float, expected: float, description: str) -> None:
+    check(
+        abs(actual - expected) < TOLERANCE,
+        f"{description}: got {actual!r}, expected {expected!r}",
     )
 
 
-def gan4(thuc_te: float, mong_doi: float, mo_ta: str) -> None:
-    """So ở 4 chữ số thập phân — đúng độ chính xác của `DECIMAL(5,4)`.
+def approx4(actual: float, expected: float, description: str) -> None:
+    """Compare at 4 decimal places — exactly `DECIMAL(5,4)`'s precision.
 
-    Dùng cho những giá trị mà số đối chiếu được tính tay và ghi tròn 4 chữ
-    số. So khít hơn thế là so với cách tôi làm tròn khi viết tài liệu, không
-    phải so với công thức.
+    Used for values whose reference number was computed by hand and written
+    rounded to 4 places. Comparing more tightly would compare against how I
+    rounded when writing the documentation, not against the formula.
     """
-    kiem(
-        abs(round(thuc_te, 4) - mong_doi) < 1e-9,
-        f"{mo_ta}: được {round(thuc_te, 4)!r}, mong đợi {mong_doi!r}",
+    check(
+        abs(round(actual, 4) - expected) < 1e-9,
+        f"{description}: got {round(actual, 4)!r}, expected {expected!r}",
     )
 
 
-def nem(ham, loai, mo_ta: str) -> None:
+def raises(fn, exception_type, description: str) -> None:
     try:
-        ham()
-    except loai:
-        kiem(True, mo_ta)
+        fn()
+    except exception_type:
+        check(True, description)
         return
     except Exception as e:  # pragma: no cover
-        kiem(False, f"{mo_ta}: ném {type(e).__name__} thay vì {loai.__name__}")
+        check(
+            False,
+            f"{description}: raised {type(e).__name__} instead of "
+            f"{exception_type.__name__}",
+        )
         return
-    kiem(False, f"{mo_ta}: không ném gì")
+    check(False, f"{description}: raised nothing")
 
 
-def _mon(**ghi_de) -> Food:
-    """Món mẫu. Mặc định: 10 g đạm, 20 g bột đường, 5 g béo."""
+def _food(**overrides) -> Food:
+    """A sample food. Defaults: 10 g protein, 20 g carbohydrate, 5 g fat."""
     params = dict(
-        id="m1", name="Món thử", category="Cơm", dish_role="main",
+        id="m1", name="Test dish", category="Cơm", dish_role="main",
         spice_level=0, kcal=200, protein=10.0, carb=20.0, fat=5.0,
         sugar=4.0, sodium=300.0, fiber=2.0,
     )
-    params.update(ghi_de)
+    params.update(overrides)
     return Food(**params)  # type: ignore[arg-type]
 
 
-# ── 1. Làm tròn năng lượng ────────────────────────────────────────────
+# -- 1. Energy rounding ------------------------------------------------
 
 
-def kiem_lam_tron() -> None:
-    print("1. Làm tròn kcal — phải giống `num.round()` của Dart")
-    # `round()` của Python cho 2 ở đây; Dart cho 3. Đây là cả lý do hàm tồn tại.
-    kiem(round_kcal(2.5) == 3, "round_kcal(2.5) = 3 (Python round cho 2)")
-    kiem(round_kcal(3.5) == 4, "round_kcal(3.5) = 4")
-    kiem(round_kcal(2.4) == 2, "round_kcal(2.4) = 2")
-    kiem(round_kcal(0.5) == 1, "round_kcal(0.5) = 1")
-    kiem(round_kcal(-2.5) == -3, "round_kcal(-2.5) = -3 (ra xa số không)")
-    kiem(round(2.5) == 2, "xác nhận round() của Python thật sự làm tròn về số chẵn")
+def check_rounding() -> None:
+    print("1. kcal rounding — must match Dart's `num.round()`")
+    # Python's `round()` gives 2 here; Dart gives 3. That is the whole reason
+    # the function exists.
+    check(round_kcal(2.5) == 3, "round_kcal(2.5) = 3 (Python round gives 2)")
+    check(round_kcal(3.5) == 4, "round_kcal(3.5) = 4")
+    check(round_kcal(2.4) == 2, "round_kcal(2.4) = 2")
+    check(round_kcal(0.5) == 1, "round_kcal(0.5) = 1")
+    check(round_kcal(-2.5) == -3, "round_kcal(-2.5) = -3 (away from zero)")
+    check(
+        round(2.5) == 2,
+        "confirming Python's round() really does round to even",
+    )
 
 
-# ── 2. Vector đặc trưng ───────────────────────────────────────────────
+# -- 2. The feature vector ---------------------------------------------
 
 
-def kiem_vector() -> None:
-    print("2. Vector đặc trưng món")
+def check_feature_vector() -> None:
+    print("2. The food feature vector")
 
-    m = _mon()
-    # Tỷ lệ NĂNG LƯỢNG: 10·4 = 40, 20·4 = 80, 5·9 = 45, tổng 165.
-    dam, bot, beo = m.macro_share
-    gan(dam, 40 / 165, "tỷ lệ đạm là tỷ lệ năng lượng, không phải tỷ lệ gam")
-    gan(bot, 80 / 165, "tỷ lệ bột đường")
-    gan(beo, 45 / 165, "tỷ lệ béo")
-    gan(dam + bot + beo, 1.0, "ba tỷ lệ macro cộng lại bằng 1")
-    # Nếu ai dịch thành tỷ lệ gam thì tỷ lệ đạm sẽ là 10/35 — khác hẳn.
-    kiem(abs(dam - 10 / 35) > 0.01, "tỷ lệ đạm KHÁC tỷ lệ gam 10/35")
+    food = _food()
+    # ENERGY shares: 10*4 = 40, 20*4 = 80, 5*9 = 45, total 165.
+    protein, carbs, fat = food.macro_share
+    approx(
+        protein, 40 / 165,
+        "the protein share is an energy share, not a gram share",
+    )
+    approx(carbs, 80 / 165, "the carbohydrate share")
+    approx(fat, 45 / 165, "the fat share")
+    approx(protein + carbs + fat, 1.0, "the three macro shares sum to 1")
+    # Were anyone to port this as a gram share, protein would be 10/35 —
+    # entirely different.
+    check(
+        abs(protein - 10 / 35) > 0.01,
+        "the protein share DIFFERS from the gram share 10/35",
+    )
 
-    rong = _mon(protein=0, carb=0, fat=0)
-    kiem(rong.macro_share == (0.0, 0.0, 0.0), "món không có macro cho (0, 0, 0)")
+    empty = _food(protein=0, carb=0, fat=0)
+    check(
+        empty.macro_share == (0.0, 0.0, 0.0),
+        "a food with no macros gives (0, 0, 0)",
+    )
 
-    # Nồng độ đường: đường trên mỗi gam món, KHÔNG chia cho bột đường.
-    gan(
-        _mon(sugar=20, serving_size_g=200).sugar_density,
+    # Sugar density: sugar per gram of food, NOT divided by carbohydrate.
+    approx(
+        _food(sugar=20, serving_size_g=200).sugar_density,
         0.1,
-        "nồng độ đường = đường / khối lượng suất",
+        "sugar density = sugar / serving weight",
     )
-    gan(
-        _mon(sugar=0, serving_size_g=200).sugar_density,
+    approx(
+        _food(sugar=0, serving_size_g=200).sugar_density,
         0.0,
-        "không có đường thì nồng độ = 0",
+        "no sugar means a density of 0",
     )
-    gan(
-        _mon(sugar=5, serving_size_g=0).sugar_density,
+    approx(
+        _food(sugar=5, serving_size_g=0).sugar_density,
         0.0,
-        "khẩu phần 0 g thì trả 0, không chia cho 0",
+        "a 0 g serving returns 0 rather than dividing by zero",
     )
-    # Đây là cả lý do đổi mẫu số ở v2: món ít bột đường KHÔNG còn bị đẩy lên
-    # ngọt tối đa. Trứng luộc thật: 0,6 g bột đường, 2 g đường, suất 120 g.
-    trung = _mon(sugar=2.0, carb=0.6, serving_size_g=120)
-    chuoi = _mon(sugar=35.5, carb=35.5, serving_size_g=200)
-    kiem(
-        trung.sugar_density < chuoi.sugar_density / 5,
-        f"trứng luộc ({trung.sugar_density:.4f}) ngọt kém hẳn chuối sứ "
-        f"({chuoi.sugar_density:.4f})",
+    # This is the whole reason the denominator changed in v2: a low-carb food
+    # is no longer pushed to maximum sweetness. Real boiled egg: 0.6 g
+    # carbohydrate, 2 g sugar, a 120 g serving.
+    egg = _food(sugar=2.0, carb=0.6, serving_size_g=120)
+    banana = _food(sugar=35.5, carb=35.5, serving_size_g=200)
+    check(
+        egg.sugar_density < banana.sugar_density / 5,
+        f"boiled egg ({egg.sugar_density:.4f}) is far less sweet than banana "
+        f"({banana.sugar_density:.4f})",
     )
-    # Công thức cũ `sugar/carb` thì hai món này BẰNG NHAU ở mức 1,0.
-    kiem(
-        min(1, trung.sugar / trung.carb) == min(1, chuoi.sugar / chuoi.carb),
-        "xác nhận công thức v1 cho hai món đó bằng điểm nhau",
+    # Under the old `sugar/carb` formula these two scored EQUALLY, at 1.0.
+    check(
+        min(1, egg.sugar / egg.carb) == min(1, banana.sugar / banana.carb),
+        "confirming the v1 formula scored those two foods identically",
     )
 
-    # Không gian hai nhóm món, giá trị trải rộng.
-    ds = [
-        _mon(id="a", category="Cơm", kcal=100, sodium=0, fiber=0, sugar=0),
-        _mon(
+    # A two-category space with values spread wide.
+    foods = [
+        _food(id="a", category="Cơm", kcal=100, sodium=0, fiber=0, sugar=0),
+        _food(
             id="b", category="Món nước", kcal=300, sodium=600, fiber=10,
             sugar=40, serving_size_g=200,
         ),
     ]
-    kg = FeatureSpace.from_foods(ds)
-    kiem(kg.length == 10, f"số chiều = 8 + 2 nhóm (được {kg.length})")
-    kiem(len(kg.labels) == kg.length, "số nhãn khớp số chiều")
-    kiem(
-        kg.categories == ["Cơm", "Món nước"],
-        f"nhóm món được sắp xếp (được {kg.categories})",
+    space = FeatureSpace.from_foods(foods)
+    check(
+        space.length == 10,
+        f"dimensions = 8 + 2 categories (got {space.length})",
+    )
+    check(
+        len(space.labels) == space.length,
+        "the label count matches the dimension count",
+    )
+    check(
+        space.categories == ["Cơm", "Món nước"],
+        f"the categories are sorted (got {space.categories})",
     )
 
-    va = kg.encode(ds[0])
-    vb = kg.encode(ds[1])
-    gan(va[3], 0.0, "năng lượng nhỏ nhất → 0")
-    gan(vb[3], 1.0, "năng lượng lớn nhất → 1")
-    gan(va[4], 0.0, "nồng độ đường nhỏ nhất → 0")
-    gan(vb[4], 1.0, "nồng độ đường lớn nhất → 1")
-    gan(sum(va[8:]), 1.0, "đúng một chiều one-hot được bật")
-    gan(va[8], 1.0, "món nhóm 'Cơm' bật chiều đầu")
-    gan(vb[9], 1.0, "món nhóm 'Món nước' bật chiều sau")
-    gan(va[7], 0.0, "mức cay 0 → 0")
-    gan(kg.encode(_mon(spice_level=3))[7], 1.0, "mức cay 3 → 1")
+    va = space.encode(foods[0])
+    vb = space.encode(foods[1])
+    approx(va[3], 0.0, "the lowest energy maps to 0")
+    approx(vb[3], 1.0, "the highest energy maps to 1")
+    approx(va[4], 0.0, "the lowest sugar density maps to 0")
+    approx(vb[4], 1.0, "the highest sugar density maps to 1")
+    approx(sum(va[8:]), 1.0, "exactly one one-hot dimension is set")
+    approx(va[8], 1.0, "a 'Cơm' food sets the first category dimension")
+    approx(vb[9], 1.0, "a 'Món nước' food sets the second")
+    approx(va[7], 0.0, "spice level 0 maps to 0")
+    approx(space.encode(_food(spice_level=3))[7], 1.0, "spice level 3 maps to 1")
 
-    # Ca biên: cả tập chỉ có một mức năng lượng → mẫu số bằng 0.
-    mot_muc = [_mon(id="x", kcal=200), _mon(id="y", kcal=200)]
-    kg1 = FeatureSpace.from_foods(mot_muc)
-    gan(kg1.encode(mot_muc[0])[3], 0.5, "khoảng năng lượng bằng 0 → 0,5")
-    gan(kg1.encode(mot_muc[0])[4], 0.5, "khoảng nồng độ đường bằng 0 → 0,5")
+    # Edge case: the whole set has one single energy level -> a zero
+    # denominator.
+    one_level = [_food(id="x", kcal=200), _food(id="y", kcal=200)]
+    space1 = FeatureSpace.from_foods(one_level)
+    approx(
+        space1.encode(one_level[0])[3], 0.5,
+        "a zero energy range maps to 0.5",
+    )
+    approx(
+        space1.encode(one_level[0])[4], 0.5,
+        "a zero sugar-density range maps to 0.5",
+    )
 
-    # Món thuộc nhóm không có trong không gian: cả khối one-hot bằng 0.
-    la = kg.encode(_mon(id="z", category="Nhóm chưa có"))
-    gan(sum(la[8:]), 0.0, "nhóm lạ thì không bật chiều nào")
+    # A food in a category the space does not know: the whole one-hot block
+    # is zero.
+    unknown = space.encode(_food(id="z", category="Nhóm chưa có"))
+    approx(
+        sum(unknown[8:]), 0.0,
+        "an unknown category sets no dimension at all",
+    )
 
-    nem(
+    raises(
         lambda: FeatureSpace.from_foods([]),
         ValueError,
-        "dựng không gian từ tập rỗng thì ném ValueError",
+        "building a space from an empty set raises ValueError",
     )
 
-    # Lưu rồi nạp lại phải ra đúng không gian cũ.
-    lai = FeatureSpace.from_params(kg.params())
-    kiem(
-        lai.encode(ds[1]) == vb,
-        "nạp lại từ scaler_params cho đúng vector cũ",
+    # Saving and reloading must reproduce the same space.
+    reloaded = FeatureSpace.from_params(space.params())
+    check(
+        reloaded.encode(foods[1]) == vb,
+        "reloading from scaler_params reproduces the same vector",
     )
-    sai_ban = dict(kg.params())
-    sai_ban["feature_version"] = "v0-cu"
-    nem(
-        lambda: FeatureSpace.from_params(sai_ban),
+    wrong_version = dict(space.params())
+    wrong_version["feature_version"] = "v0-old"
+    raises(
+        lambda: FeatureSpace.from_params(wrong_version),
         ValueError,
-        "scaler_params sai phiên bản đặc trưng thì ném ValueError",
+        "scaler_params with the wrong feature version raises ValueError",
     )
-    kiem(FEATURE_VERSION == "v2", f"phiên bản đặc trưng hiện tại là v2")
+    check(FEATURE_VERSION == "v2", "the current feature version is v2")
 
 
-def kiem_cosin() -> None:
-    print("3. Độ tương đồng cosin")
-    gan(cosine_similarity([1, 0], [1, 0]), 1.0, "hai vector trùng nhau → 1")
-    gan(cosine_similarity([1, 0], [-1, 0]), -1.0, "hai vector đối nhau → −1")
-    gan(cosine_similarity([1, 0], [0, 1]), 0.0, "hai vector vuông góc → 0")
-    gan(cosine_similarity([0, 0], [1, 1]), 0.0, "vector độ dài 0 → 0, không chia 0")
-    nem(
+def check_cosine() -> None:
+    print("3. Cosine similarity")
+    approx(cosine_similarity([1, 0], [1, 0]), 1.0, "identical vectors give 1")
+    approx(cosine_similarity([1, 0], [-1, 0]), -1.0, "opposite vectors give -1")
+    approx(
+        cosine_similarity([1, 0], [0, 1]), 0.0, "orthogonal vectors give 0"
+    )
+    approx(
+        cosine_similarity([0, 0], [1, 1]), 0.0,
+        "a zero-length vector gives 0, with no division by zero",
+    )
+    raises(
         lambda: cosine_similarity([1, 0], [1, 0, 0]),
         ValueError,
-        "hai vector khác số chiều thì ném ValueError",
+        "vectors of different lengths raise ValueError",
     )
 
 
-# ── 4. Rocchio ────────────────────────────────────────────────────────
+# -- 4. Rocchio ---------------------------------------------------------
 
 
-def kiem_rocchio() -> None:
-    print("4. Hồ sơ sở thích Rocchio")
+def check_rocchio() -> None:
+    print("4. The Rocchio preference profile")
 
-    ds = [
-        _mon(id="a", category="Cơm", kcal=100, sodium=0, fiber=0),
-        _mon(id="b", category="Món nước", kcal=300, sodium=600, fiber=10),
+    foods = [
+        _food(id="a", category="Cơm", kcal=100, sodium=0, fiber=0),
+        _food(id="b", category="Món nước", kcal=300, sodium=600, fiber=10),
     ]
-    kg = FeatureSpace.from_foods(ds)
-    va, vb = kg.encode(ds[0]), kg.encode(ds[1])
+    space = FeatureSpace.from_foods(foods)
+    va, vb = space.encode(foods[0]), space.encode(foods[1])
 
-    # Thích a, không thích b: p_u = (1·va − 1·vb) / 2
-    h = build_profile(kg, [(ds[0], "like"), (ds[1], "dislike")])
-    mong = [(x - y) / 2 for x, y in zip(va, vb)]
-    kiem(
-        all(abs(a - b) < SAI_SO for a, b in zip(h.weights, mong)),
-        "công thức Rocchio: (Σ w·v) / Σ|w|",
+    # Like a, dislike b: p_u = (1*va - 1*vb) / 2
+    profile = build_profile(
+        space, [(foods[0], "like"), (foods[1], "dislike")]
     )
-    gan(h.sum_abs_weight, 2.0, "mẫu số = Σ|w| = 2")
-    kiem(h.n_signals == 2, "đếm 2 tín hiệu")
-
-    # `unknown` bị loại khỏi CẢ tử số lẫn mẫu số.
-    h2 = build_profile(
-        kg, [(ds[0], "like"), (ds[1], "dislike"), (ds[0], "unknown")]
+    expected = [(x - y) / 2 for x, y in zip(va, vb)]
+    check(
+        all(
+            abs(a - b) < TOLERANCE
+            for a, b in zip(profile.weights, expected)
+        ),
+        "the Rocchio formula: (Σ w·v) / Σ|w|",
     )
-    gan(h2.sum_abs_weight, 2.0, "`unknown` không làm phình mẫu số")
-    kiem(h2.n_signals == 2, "`unknown` không được đếm là tín hiệu")
-    kiem(
-        all(abs(a - b) < SAI_SO for a, b in zip(h2.weights, h.weights)),
-        "thêm một lượt `unknown` không đổi vector",
+    approx(profile.sum_abs_weight, 2.0, "the denominator Σ|w| = 2")
+    check(profile.n_signals == 2, "2 signals counted")
+
+    # `unknown` is excluded from BOTH the numerator and the denominator.
+    with_unknown = build_profile(
+        space,
+        [(foods[0], "like"), (foods[1], "dislike"), (foods[0], "unknown")],
+    )
+    approx(
+        with_unknown.sum_abs_weight, 2.0,
+        "`unknown` does not inflate the denominator",
+    )
+    check(
+        with_unknown.n_signals == 2,
+        "`unknown` is not counted as a signal",
+    )
+    check(
+        all(
+            abs(a - b) < TOLERANCE
+            for a, b in zip(with_unknown.weights, profile.weights)
+        ),
+        "adding an `unknown` swipe does not change the vector",
     )
 
-    # Toàn `neutral`: mẫu số bằng 0 → giữ vector rỗng, KHÔNG chia cho 0.
-    h3 = build_profile(kg, [(ds[0], "neutral"), (ds[1], "neutral")])
-    kiem(h3.is_empty, "phiên toàn `neutral` cho hồ sơ rỗng")
-    gan(h3.sum_abs_weight, 0.0, "mẫu số bằng 0")
-    kiem(h3.n_signals == 2, "`neutral` VẪN được đếm là tín hiệu")
-    gan(h3.score(kg, ds[0]), 0.5, "hồ sơ rỗng cho mọi món điểm 0,5")
+    # All `neutral`: the denominator is 0 -> keep an empty vector, do NOT
+    # divide by zero.
+    all_neutral = build_profile(
+        space, [(foods[0], "neutral"), (foods[1], "neutral")]
+    )
+    check(
+        all_neutral.is_empty,
+        "an all-`neutral` session gives an empty profile",
+    )
+    approx(all_neutral.sum_abs_weight, 0.0, "the denominator is 0")
+    check(
+        all_neutral.n_signals == 2,
+        "`neutral` IS still counted as a signal",
+    )
+    approx(
+        all_neutral.score(space, foods[0]), 0.5,
+        "an empty profile scores every food 0.5",
+    )
 
-    gan(empty_profile(kg).score(kg, ds[0]), 0.5, "hồ sơ rỗng dựng sẵn cũng cho 0,5")
-    kiem(len(empty_profile(kg).weights) == kg.length, "hồ sơ rỗng đủ số chiều")
+    approx(
+        empty_profile(space).score(space, foods[0]), 0.5,
+        "the prebuilt empty profile also gives 0.5",
+    )
+    check(
+        len(empty_profile(space).weights) == space.length,
+        "the empty profile has the full dimension count",
+    )
 
-    # Thích đúng một món thì cosin với chính nó bằng 1 → điểm 1,0.
-    h4 = build_profile(kg, [(ds[0], "like")])
-    gan(h4.score(kg, ds[0]), 1.0, "thích đúng một món → món đó được điểm 1,0")
+    # Liking exactly one food gives cosine 1 with itself -> a score of 1.0.
+    one_like = build_profile(space, [(foods[0], "like")])
+    approx(
+        one_like.score(space, foods[0]), 1.0,
+        "liking exactly one food scores that food 1.0",
+    )
 
-    nem(
-        lambda: build_profile(kg, [(ds[0], "ghe")]),
+    raises(
+        lambda: build_profile(space, [(foods[0], "ghe")]),
         ValueError,
-        "hành động lạ thì ném ValueError",
+        "an unknown action raises ValueError",
     )
 
-    kiem(h.to_json()["feature_version"] == FEATURE_VERSION,
-         "to_json ghi kèm phiên bản đặc trưng")
+    check(
+        profile.to_json()["feature_version"] == FEATURE_VERSION,
+        "to_json records the feature version alongside",
+    )
 
 
-def kiem_alpha() -> None:
-    print("5. Hệ số trộn α và giai đoạn")
-    gan(alpha(0), 0.0, "α(0) = 0")
-    gan(alpha(29), 0.0, "α(29) = 0 — dưới n_min")
-    gan(alpha(30), 0.0, "α(30) = 0 — đúng tại n_min")
-    gan(alpha(65), 0.5, "α(65) = 0,5 — giữa khoảng")
-    gan(alpha(100), 1.0, "α(100) = 1 — đúng tại n_max")
-    gan(alpha(500), 1.0, "α(500) = 1")
-    nem(lambda: alpha(50, 100, 100), ValueError, "n_max ≤ n_min thì ném ValueError")
+def check_alpha() -> None:
+    print("5. The blend coefficient α and the stage")
+    approx(alpha(0), 0.0, "α(0) = 0")
+    approx(alpha(29), 0.0, "α(29) = 0 — below n_min")
+    approx(alpha(30), 0.0, "α(30) = 0 — exactly at n_min")
+    approx(alpha(65), 0.5, "α(65) = 0.5 — mid-range")
+    approx(alpha(100), 1.0, "α(100) = 1 — exactly at n_max")
+    approx(alpha(500), 1.0, "α(500) = 1")
+    raises(
+        lambda: alpha(50, 100, 100),
+        ValueError,
+        "n_max <= n_min raises ValueError",
+    )
 
-    kiem(stage(0) == "cold", "0 tín hiệu → cold")
-    kiem(stage(10) == "content", "10 tín hiệu → content")
-    kiem(stage(30) == "hybrid", "30 tín hiệu → hybrid")
-    kiem(stage(101) == "ml", "101 tín hiệu → ml")
+    check(stage(0) == "cold", "0 signals -> cold")
+    check(stage(10) == "content", "10 signals -> content")
+    check(stage(30) == "hybrid", "30 signals -> hybrid")
+    check(stage(101) == "ml", "101 signals -> ml")
 
 
-# ── 6. Chấm điểm ──────────────────────────────────────────────────────
+# -- 6. Scoring --------------------------------------------------------
 
 
-def kiem_cham_diem() -> None:
-    print("6. Chấm điểm bốn giai đoạn")
+def check_scoring() -> None:
+    print("6. Scoring across the four stages")
 
-    gan(scoring.popularity_score(0.4), 0.4, "điểm phổ biến dùng thẳng")
-    gan(scoring.popularity_score(1.7), 1.0, "điểm phổ biến bị kẹp về 1")
-    gan(scoring.popularity_score(-0.2), 0.0, "điểm phổ biến bị kẹp về 0")
+    approx(
+        scoring.popularity_score(0.4), 0.4,
+        "the popularity score is used directly",
+    )
+    approx(
+        scoring.popularity_score(1.7), 1.0,
+        "the popularity score is clamped to 1",
+    )
+    approx(
+        scoring.popularity_score(-0.2), 0.0,
+        "the popularity score is clamped to 0",
+    )
 
-    # Khớp hoàn hảo: tỷ lệ món đúng bằng tỷ lệ mục tiêu.
-    gan(
+    # A perfect match: the food's shares equal the target shares.
+    approx(
         scoring.macro_fit([0.15, 0.60, 0.25], [15, 60, 25]),
         1.0,
-        "khớp macro hoàn hảo → 1,0",
+        "a perfect macro match gives 1.0",
     )
-    # Lệch tối đa: món toàn đạm, mục tiêu toàn béo → tổng lệch = 2 → khớp 0.
-    gan(
+    # Maximum divergence: an all-protein food against an all-fat target ->
+    # total deviation 2 -> a fit of 0.
+    approx(
         scoring.macro_fit([1.0, 0.0, 0.0], [0, 0, 100]),
         0.0,
-        "lệch macro tối đa → 0,0",
+        "maximum macro divergence gives 0.0",
     )
-    # Lệch 0,1 ở hai chiều → tổng lệch 0,2 → khớp 0,9.
-    gan(
+    # A 0.1 deviation in two dimensions -> total 0.2 -> a fit of 0.9.
+    approx(
         scoring.macro_fit([0.25, 0.50, 0.25], [15, 60, 25]),
         0.9,
-        "tổng lệch 0,2 → khớp 0,9",
+        "a total deviation of 0.2 gives a fit of 0.9",
     )
-    gan(
+    approx(
         scoring.macro_fit([0.15, 0.60, 0.25], [0, 0, 0]),
         0.5,
-        "mục tiêu macro rỗng → điểm trung tính",
+        "an empty macro target gives the neutral score",
     )
-    nem(
+    raises(
         lambda: scoring.macro_fit([0.5, 0.5], [15, 60, 25]),
         ValueError,
-        "vector món dưới 3 chiều thì ném ValueError",
+        "a food vector under 3 dimensions raises ValueError",
     )
 
-    # Giai đoạn 0 = nửa phổ biến + nửa khớp macro.
-    gan(
+    # Stage 0 = half popularity + half macro fit.
+    approx(
         scoring.rule_score([0.15, 0.60, 0.25], [15, 60, 25], 0.4),
         0.5 * 0.4 + 0.5 * 1.0,
-        "điểm luật = 0,5·phổ biến + 0,5·khớp macro",
+        "rule score = 0.5*popularity + 0.5*macro fit",
     )
 
-    # Giai đoạn 1.
-    gan(scoring.content_score([0, 0, 0], [1, 1, 1]), 0.5,
-        "hồ sơ rỗng → điểm trung tính 0,5")
-    gan(scoring.content_score([1, 0], [1, 0]), 1.0, "cosin 1 → điểm 1,0")
-    gan(scoring.content_score([1, 0], [-1, 0]), 0.0, "cosin −1 → điểm 0,0")
-    gan(scoring.content_score([1, 0], [0, 1]), 0.5, "cosin 0 → điểm 0,5")
-
-    # Trộn.
-    gan(scoring.blend(1.0, 0.0, 0), 0.0, "α = 0 → lấy trọn điểm nội dung")
-    gan(scoring.blend(1.0, 0.0, 500), 1.0, "α = 1 → lấy trọn điểm ML")
-    gan(scoring.blend(1.0, 0.0, 65), 0.5, "α = 0,5 → trộn đều")
-    gan(scoring.blend(0.8, 0.4, 65), 0.6, "trộn 0,8 và 0,4 ở α = 0,5")
-
-
-# ── 7. Nhãn và chống nhân đôi ─────────────────────────────────────────
-
-
-def kiem_nhan() -> None:
-    print("7. Nhãn, chống nhân đôi, chia fold")
-
-    gan(label_from_rating(5), 1.0, "5 sao → 1,000")
-    gan(label_from_rating(4), 0.75, "4 sao → 0,750")
-    gan(label_from_rating(3), 0.5, "3 sao → 0,500")
-    gan(label_from_rating(1), 0.0, "1 sao → 0,000")
-    nem(lambda: label_from_rating(0), ValueError, "0 sao thì ném ValueError")
-    nem(lambda: label_from_rating(6), ValueError, "6 sao thì ném ValueError")
-    kiem(label_from_rating(3) == LIKE_THRESHOLD, "3 sao nằm đúng tại ngưỡng thích")
-
-    cu = Sample("u1", "f1", "feedback", 1.0, 1.0, datetime(2026, 1, 1))
-    moi = Sample("u1", "f1", "feedback", 0.25, 1.0, datetime(2026, 2, 1))
-    khac_nguon = Sample("u1", "f1", "diary", 0.8, 0.9, datetime(2026, 1, 15))
-    giu, bo = deduplicate([cu, moi, khac_nguon])
-    kiem(len(giu) == 2, f"gộp còn 2 dòng (được {len(giu)})")
-    kiem(bo == 1, "báo đã gộp 1 dòng")
-    fb = [m for m in giu if m.source == "feedback"][0]
-    gan(fb.label, 0.25, "giữ dòng MỚI NHẤT của cùng nguồn")
-    kiem(
-        any(m.source == "diary" for m in giu),
-        "cùng cặp người–món nhưng khác nguồn thì giữ cả hai",
+    # Stage 1.
+    approx(
+        scoring.content_score([0, 0, 0], [1, 1, 1]), 0.5,
+        "an empty profile gives the neutral score 0.5",
     )
-    # Thứ tự đầu vào không được ảnh hưởng kết quả.
-    giu2, _ = deduplicate([moi, cu, khac_nguon])
-    gan(
-        [m for m in giu2 if m.source == "feedback"][0].label,
+    approx(
+        scoring.content_score([1, 0], [1, 0]), 1.0, "cosine 1 gives a score of 1.0"
+    )
+    approx(
+        scoring.content_score([1, 0], [-1, 0]), 0.0,
+        "cosine -1 gives a score of 0.0",
+    )
+    approx(
+        scoring.content_score([1, 0], [0, 1]), 0.5,
+        "cosine 0 gives a score of 0.5",
+    )
+
+    # Blending.
+    approx(scoring.blend(1.0, 0.0, 0), 0.0, "α = 0 takes the content score whole")
+    approx(scoring.blend(1.0, 0.0, 500), 1.0, "α = 1 takes the ML score whole")
+    approx(scoring.blend(1.0, 0.0, 65), 0.5, "α = 0.5 blends evenly")
+    approx(scoring.blend(0.8, 0.4, 65), 0.6, "blending 0.8 and 0.4 at α = 0.5")
+
+
+# -- 7. Labels and deduplication ---------------------------------------
+
+
+def check_labels() -> None:
+    print("7. Labels, deduplication, fold assignment")
+
+    approx(label_from_rating(5), 1.0, "5 stars -> 1.000")
+    approx(label_from_rating(4), 0.75, "4 stars -> 0.750")
+    approx(label_from_rating(3), 0.5, "3 stars -> 0.500")
+    approx(label_from_rating(1), 0.0, "1 star -> 0.000")
+    raises(
+        lambda: label_from_rating(0), ValueError, "0 stars raises ValueError"
+    )
+    raises(
+        lambda: label_from_rating(6), ValueError, "6 stars raises ValueError"
+    )
+    check(
+        label_from_rating(3) == LIKE_THRESHOLD,
+        "3 stars sits exactly at the like threshold",
+    )
+
+    older = Sample("u1", "f1", "feedback", 1.0, 1.0, datetime(2026, 1, 1))
+    newer = Sample("u1", "f1", "feedback", 0.25, 1.0, datetime(2026, 2, 1))
+    other_source = Sample("u1", "f1", "diary", 0.8, 0.9, datetime(2026, 1, 15))
+    kept, removed = deduplicate([older, newer, other_source])
+    check(len(kept) == 2, f"deduplication leaves 2 rows (got {len(kept)})")
+    check(removed == 1, "it reports 1 row removed")
+    feedback = [s for s in kept if s.source == "feedback"][0]
+    approx(
+        feedback.label, 0.25,
+        "the NEWEST row of a given source is kept",
+    )
+    check(
+        any(s.source == "diary" for s in kept),
+        "the same user-food pair from a different source keeps both",
+    )
+    # The input order must not affect the result.
+    kept2, _ = deduplicate([newer, older, other_source])
+    approx(
+        [s for s in kept2 if s.source == "feedback"][0].label,
         0.25,
-        "đảo thứ tự đầu vào vẫn giữ dòng mới nhất",
+        "reversing the input order still keeps the newest row",
     )
 
-    nguoi = [f"u{i:02d}" for i in range(10)]
-    gan_fold = assign_folds(nguoi, 5, 42)
-    dem = [sum(1 for u in nguoi if gan_fold[u] == f) for f in range(5)]
-    kiem(dem == [2, 2, 2, 2, 2], f"10 người / 5 fold chia đều (được {dem})")
-    kiem(
-        assign_folds(nguoi, 5, 42) == gan_fold,
-        "chia lại cùng hạt giống cho đúng kết quả cũ",
+    users = [f"u{i:02d}" for i in range(10)]
+    folds = assign_folds(users, 5, 42)
+    sizes = [sum(1 for u in users if folds[u] == f) for f in range(5)]
+    check(
+        sizes == [2, 2, 2, 2, 2],
+        f"10 users across 5 folds split evenly (got {sizes})",
     )
-    kiem(
-        assign_folds(nguoi, 5, 43) != gan_fold,
-        "đổi hạt giống thì đổi cách chia",
+    check(
+        assign_folds(users, 5, 42) == folds,
+        "reassigning with the same seed reproduces the same split",
     )
-    # 13 người / 5 fold: lệch nhiều nhất 1.
-    nguoi13 = [f"v{i:02d}" for i in range(13)]
-    g13 = assign_folds(nguoi13, 5, 42)
-    d13 = [sum(1 for u in nguoi13 if g13[u] == f) for f in range(5)]
-    kiem(max(d13) - min(d13) <= 1, f"13 người / 5 fold lệch ≤ 1 (được {d13})")
-    nem(lambda: assign_folds(nguoi, 1, 42), ValueError, "1 fold thì ném ValueError")
-
-    vai5 = [split_label(f, 5) for f in range(5)]
-    kiem(
-        vai5 == ["train", "train", "train", "val", "test"],
-        f"5 fold → 3 train, 1 val, 1 test (được {vai5})",
+    check(
+        assign_folds(users, 5, 43) != folds,
+        "changing the seed changes the split",
     )
-    vai2 = [split_label(f, 2) for f in range(2)]
-    kiem(
-        vai2 == ["train", "test"],
-        f"2 fold → train/test, KHÔNG có val (được {vai2})",
+    # 13 users across 5 folds: an imbalance of at most 1.
+    users13 = [f"v{i:02d}" for i in range(13)]
+    folds13 = assign_folds(users13, 5, 42)
+    sizes13 = [sum(1 for u in users13 if folds13[u] == f) for f in range(5)]
+    check(
+        max(sizes13) - min(sizes13) <= 1,
+        f"13 users across 5 folds differ by <= 1 (got {sizes13})",
+    )
+    raises(
+        lambda: assign_folds(users, 1, 42), ValueError,
+        "a single fold raises ValueError",
     )
 
+    roles5 = [split_label(f, 5) for f in range(5)]
+    check(
+        roles5 == ["train", "train", "train", "val", "test"],
+        f"5 folds -> 3 train, 1 val, 1 test (got {roles5})",
+    )
+    roles2 = [split_label(f, 2) for f in range(2)]
+    check(
+        roles2 == ["train", "test"],
+        f"2 folds -> train/test, with NO val (got {roles2})",
+    )
 
-# ── 8. Chỉ số xếp hạng, đối chiếu với tính tay ────────────────────────
+
+# -- 8. Ranking metrics, against hand-computed values ------------------
 
 
-def kiem_chi_so() -> None:
-    print("8. Chỉ số xếp hạng — đối chiếu giá trị tính tay")
+def check_metrics() -> None:
+    print("8. Ranking metrics — against hand-computed values")
 
-    gan(_dcg([1.0]), 1.0, "DCG một phần tử = g / log2(2) = g")
-    gan(_dcg([0.0, 1.0]), 1 / math.log2(3), "DCG vị trí thứ hai chia log2(3)")
+    approx(_dcg([1.0]), 1.0, "a one-element DCG = g / log2(2) = g")
+    approx(
+        _dcg([0.0, 1.0]), 1 / math.log2(3),
+        "the second DCG position divides by log2(3)",
+    )
 
-    # Ba món của một người. Điểm giảm dần theo đúng thứ tự liệt kê.
-    #   món  điểm  nhãn   nhị phân
-    #    0   0,9   0,0       0
-    #    1   0,8   1,0       1
-    #    2   0,7   0,5       1
-    diem = np.array([0.9, 0.8, 0.7])
-    label = np.array([0.0, 1.0, 0.5])
-    lop = np.array([0, 1, 1])
-    nguoi = ["u1", "u1", "u1"]
+    # Three foods for one user. The scores descend in the listed order.
+    #   food  score  label   binary
+    #    0     0.9    0.0      0
+    #    1     0.8    1.0      1
+    #    2     0.7    0.5      1
+    scores = np.array([0.9, 0.8, 0.7])
+    labels = np.array([0.0, 1.0, 0.5])
+    classes = np.array([0, 1, 1])
+    users = ["u1", "u1", "u1"]
 
-    cs = ranking_metrics(diem, label, lop, nguoi, 2)
-    gan(cs.precision, 0.5, "precision@2 = 1 đúng / 2 vị trí")
-    gan(cs.recall, 0.5, "recall@2 = 1 đúng / 2 món đáng gợi ý")
+    at2 = ranking_metrics(scores, labels, classes, users, 2)
+    approx(at2.precision, 0.5, "precision@2 = 1 hit / 2 positions")
+    approx(at2.recall, 0.5, "recall@2 = 1 hit / 2 recommendable foods")
     dcg = 0.0 / math.log2(2) + 1.0 / math.log2(3)
     idcg = 1.0 / math.log2(2) + 0.5 / math.log2(3)
-    gan(cs.ndcg, dcg / idcg, "nDCG@2 dùng lợi ích phân mức theo nhãn liên tục")
-    kiem(cs.n_users == 1, "đếm 1 người góp vào trung bình")
-
-    cs3 = ranking_metrics(diem, label, lop, nguoi, 3)
-    gan(cs3.recall, 1.0, "recall@3 = 1,0 khi k phủ hết danh sách")
-    gan(cs3.precision, 2 / 3, "precision@3 = 2/3")
-
-    # k lớn hơn số món: mẫu số là số món, không phải k — nếu chia cho k thì
-    # precision bị dìm xuống một cách vô cớ.
-    cs9 = ranking_metrics(diem, label, lop, nguoi, 9)
-    gan(cs9.precision, 2 / 3, "k > số món thì precision chia cho số món")
-
-    # Người không có món nào đáng gợi ý bị bỏ khỏi trung bình.
-    cs0 = ranking_metrics(
-        np.array([0.9, 0.8]), np.array([0.0, 0.1]), np.array([0, 0]), ["u2", "u2"], 2
+    approx(
+        at2.ndcg, dcg / idcg,
+        "nDCG@2 uses graded gain from the continuous label",
     )
-    kiem(cs0.n_users == 0, "người không có món đáng gợi ý bị bỏ khỏi trung bình")
+    check(at2.n_users == 1, "1 user contributes to the average")
 
-    # Hai người, một người không có món đáng gợi ý → chỉ người kia được tính.
-    cs2 = ranking_metrics(
+    at3 = ranking_metrics(scores, labels, classes, users, 3)
+    approx(at3.recall, 1.0, "recall@3 = 1.0 once k covers the whole list")
+    approx(at3.precision, 2 / 3, "precision@3 = 2/3")
+
+    # k larger than the food count: the denominator is the food count, not k —
+    # dividing by k would depress precision for no reason.
+    at9 = ranking_metrics(scores, labels, classes, users, 9)
+    approx(
+        at9.precision, 2 / 3,
+        "with k > the food count, precision divides by the food count",
+    )
+
+    # A user with no recommendable food is left out of the average.
+    none_relevant = ranking_metrics(
+        np.array([0.9, 0.8]), np.array([0.0, 0.1]), np.array([0, 0]),
+        ["u2", "u2"], 2,
+    )
+    check(
+        none_relevant.n_users == 0,
+        "a user with no recommendable food is left out of the average",
+    )
+
+    # Two users, one with no recommendable food -> only the other counts.
+    two_users = ranking_metrics(
         np.array([0.9, 0.8, 0.9, 0.8]),
         np.array([0.0, 1.0, 0.0, 0.1]),
         np.array([0, 1, 0, 0]),
         ["u1", "u1", "u2", "u2"],
         1,
     )
-    kiem(cs2.n_users == 1, "chỉ người có món đáng gợi ý góp vào trung bình")
-    gan(cs2.precision, 0.0, "precision@1 của người đó = 0 (món đúng xếp thứ hai)")
-
-    # MAP trên toàn danh sách: món đúng ở vị trí 2 và 3.
-    gt_map, count=mean_average_precision(diem, lop, nguoi)
-    gan(gt_map, (1 / 2 + 2 / 3) / 2, "MAP = trung bình của 1/2 và 2/3")
-    kiem(count== 1, "MAP đếm 1 người")
-
-    # Xếp hạng hoàn hảo → MAP = 1.
-    gt_hoan_hao, _ = mean_average_precision(
-        np.array([0.9, 0.8, 0.7]), np.array([1, 1, 0]), nguoi
+    check(
+        two_users.n_users == 1,
+        "only the user with a recommendable food contributes",
     )
-    gan(gt_hoan_hao, 1.0, "xếp hạng hoàn hảo → MAP = 1,0")
+    approx(
+        two_users.precision, 0.0,
+        "that user's precision@1 = 0 (their hit ranks second)",
+    )
 
-    # Hòa điểm phải được phá theo chỉ số, không theo thứ tự duyệt — nếu không
-    # thì phương án `popularity` (hòa rất nhiều) cho kết quả khác nhau mỗi lần.
-    hoa = np.array([0.5, 0.5, 0.5])
-    a, _ = mean_average_precision(hoa, lop, nguoi)
-    b, _ = mean_average_precision(hoa, lop, nguoi)
-    gan(a, b, "hòa điểm cho kết quả tái lập được")
+    # MAP over the whole list: the hits are at positions 2 and 3.
+    map_value, map_users = mean_average_precision(scores, classes, users)
+    approx(
+        map_value, (1 / 2 + 2 / 3) / 2,
+        "MAP = the mean of 1/2 and 2/3",
+    )
+    check(map_users == 1, "MAP counts 1 user")
+
+    # A perfect ranking -> MAP = 1.
+    perfect, _ = mean_average_precision(
+        np.array([0.9, 0.8, 0.7]), np.array([1, 1, 0]), users
+    )
+    approx(perfect, 1.0, "a perfect ranking gives MAP = 1.0")
+
+    # Ties must be broken by index, not by iteration order — otherwise the
+    # `popularity` variant (which ties a great deal) gives a different result
+    # every run.
+    ties = np.array([0.5, 0.5, 0.5])
+    first, _ = mean_average_precision(ties, classes, users)
+    second, _ = mean_average_precision(ties, classes, users)
+    approx(first, second, "ties produce a reproducible result")
 
 
-# ── 9. Độ phổ biến ────────────────────────────────────────────────────
+# -- 9. Popularity -----------------------------------------------------
 
 
-def kiem_pho_bien() -> None:
-    print("9. Chặn dưới Wilson cho `popularity_score`")
+def check_popularity() -> None:
+    print("9. The Wilson lower bound for `popularity_score`")
 
-    # Giá trị đối chiếu tính riêng từ công thức Wilson, không lấy từ mã.
-    gan4(wilson_lower_bound(2, 2), 0.3424, "2/2 → 0,3424 chứ không phải 1,00")
-    gan4(wilson_lower_bound(1, 1), 0.2065, "1/1 → 0,2065")
-    gan4(wilson_lower_bound(90, 100), 0.8256, "90/100 → 0,8256")
-    gan4(wilson_lower_bound(9, 10), 0.5958, "9/10 → 0,5958")
+    # The reference values were computed separately from the Wilson formula,
+    # not taken from the code.
+    approx4(
+        wilson_lower_bound(2, 2), 0.3424, "2/2 -> 0.3424, not 1.00"
+    )
+    approx4(wilson_lower_bound(1, 1), 0.2065, "1/1 -> 0.2065")
+    approx4(wilson_lower_bound(90, 100), 0.8256, "90/100 -> 0.8256")
+    approx4(wilson_lower_bound(9, 10), 0.5958, "9/10 -> 0.5958")
 
-    # Điều quan trọng nhất: cỡ mẫu nhỏ KHÔNG được đứng trên cỡ mẫu lớn.
-    kiem(
+    # The most important property: a small sample must NOT outrank a large one.
+    check(
         wilson_lower_bound(2, 2) < wilson_lower_bound(90, 100),
-        "món 2/2 bị xếp DƯỚI món 90/100 — đây là cả lý do dùng Wilson",
+        "a 2/2 food ranks BELOW a 90/100 food — the whole reason for Wilson",
     )
-    # Tỷ lệ thuần sẽ cho kết luận ngược lại.
-    kiem(2 / 2 > 90 / 100, "xác nhận tỷ lệ thuần cho kết luận ngược")
+    # A raw proportion reaches the opposite conclusion.
+    check(
+        2 / 2 > 90 / 100,
+        "confirming the raw proportion reaches the opposite conclusion",
+    )
 
-    gan(wilson_lower_bound(0, 10), 0.0, "0 người thích / 10 người thấy → 0")
-    gan(wilson_lower_bound(0, 0), 0.0, "chưa có tín hiệu nào → 0")
+    approx(
+        wilson_lower_bound(0, 10), 0.0, "0 likes out of 10 views -> 0"
+    )
+    approx(wilson_lower_bound(0, 0), 0.0, "no signal at all -> 0")
 
-    # Cùng tỷ lệ, cỡ mẫu lớn hơn thì điểm cao hơn — chặn dưới siết lại dần.
-    kiem(
+    # The same proportion with a larger sample scores higher — the lower bound
+    # tightens.
+    check(
         wilson_lower_bound(5, 10)
         < wilson_lower_bound(50, 100)
         < wilson_lower_bound(500, 1000),
-        "cùng tỷ lệ 50 %, cỡ mẫu lớn hơn thì điểm cao hơn",
+        "at the same 50% rate, a larger sample scores higher",
     )
-    kiem(
+    check(
         wilson_lower_bound(500, 1000) < 0.5,
-        "chặn dưới luôn nhỏ hơn tỷ lệ quan sát",
+        "the lower bound is always below the observed rate",
     )
 
-    # Mọi giá trị phải nằm trong [0, 1] — cột là DECIMAL(5,4) UNSIGNED.
-    kiem(
+    # Every value must lie within [0, 1] — the column is DECIMAL(5,4) UNSIGNED.
+    check(
         all(
             0.0 <= wilson_lower_bound(a, b) <= 1.0
             for b in range(1, 40)
             for a in range(b + 1)
         ),
-        "mọi tổ hợp tới 40 mẫu đều cho giá trị trong [0, 1]",
+        "every combination up to 40 samples stays within [0, 1]",
     )
-    nem(
+    raises(
         lambda: wilson_lower_bound(5, 2),
         ValueError,
-        "số người thích lớn hơn cỡ mẫu thì ném ValueError",
+        "more likes than the sample size raises ValueError",
     )
-    kiem(POSITIVE_STARS == 4, "ngưỡng sao dương là 4, không phải 3 (3 sao = trung tính)")
+    check(
+        POSITIVE_STARS == 4,
+        "the positive star threshold is 4, not 3 (3 stars = neutral)",
+    )
 
-    print("10. Độ phổ biến dựng lại từ fold huấn luyện — chống rò rỉ")
+    print("10. Popularity rebuilt from the training folds — leakage control")
 
-    #  i  người  món   nhãn   nguồn        fold
-    #  0   u1     fA   0,9    swipe         0   ← huấn luyện
-    #  1   u2     fA   0,9    swipe         0   ← huấn luyện
-    #  2   u3     fA   0,9    swipe         1   ← KIỂM TRA, phải bị bỏ
-    #  3   u1     fB   0,0    swipe         0   ← huấn luyện
-    #  4   u1     fC   0,1    random_neg    0   ← phải bị bỏ khỏi phép đếm
-    nguoi = ["u1", "u2", "u3", "u1", "u1"]
-    mon = ["fA", "fA", "fA", "fB", "fC"]
-    label = [0.9, 0.9, 0.9, 0.0, 0.1]
-    nguon = ["swipe", "swipe", "swipe", "swipe", "random_neg"]
+    #  i  user  food  label   source       fold
+    #  0   u1    fA   0.9     swipe         0   <- training
+    #  1   u2    fA   0.9     swipe         0   <- training
+    #  2   u3    fA   0.9     swipe         1   <- TEST, must be excluded
+    #  3   u1    fB   0.0     swipe         0   <- training
+    #  4   u1    fC   0.1     random_neg    0   <- must be excluded from counts
+    users = ["u1", "u2", "u3", "u1", "u1"]
+    foods = ["fA", "fA", "fA", "fB", "fC"]
+    labels = [0.9, 0.9, 0.9, 0.0, 0.1]
+    sources = ["swipe", "swipe", "swipe", "swipe", "random_neg"]
     train = [0, 1, 3, 4]
 
-    pb = from_samples(nguoi, mon, label, nguon, train, positive_threshold=0.5)
-    gan4(pb["fA"], 0.3424, "fA: 2/2 người trong fold huấn luyện → Wilson 2/2")
-    gan(pb["fB"], 0.0, "fB: 0/1 người thích → 0")
-    kiem("fC" not in pb, "`random_neg` không vào phép đếm — món chưa từng hiển thị")
-
-    # Nếu tính trên CẢ fold kiểm tra thì fA thành 3/3 — cao hơn hẳn. Chính
-    # khoảng chênh này là phần rò rỉ mà `ml/evaluate.py` phải loại bỏ.
-    pb_ro_ri = from_samples(
-        nguoi, mon, label, nguon, range(len(nguoi)), positive_threshold=0.5
+    popularity = from_samples(
+        users, foods, labels, sources, train, positive_threshold=0.5
     )
-    gan4(pb_ro_ri["fA"], 0.4385, "nếu gộp cả fold kiểm tra thì fA lên 3/3")
-    kiem(
-        pb_ro_ri["fA"] > pb["fA"],
-        "gộp fold kiểm tra làm độ phổ biến cao lên — đúng là rò rỉ",
+    approx4(
+        popularity["fA"], 0.3424,
+        "fA: 2/2 users in the training folds -> Wilson 2/2",
+    )
+    approx(popularity["fB"], 0.0, "fB: 0/1 users liked it -> 0")
+    check(
+        "fC" not in popularity,
+        "`random_neg` does not enter the counts — the food was never shown",
     )
 
-    kiem(
-        from_samples(nguoi, mon, label, nguon, [], positive_threshold=0.5) == {},
-        "fold huấn luyện rỗng → không món nào có điểm",
+    # Counting the TEST fold too would make fA 3/3 — distinctly higher. That
+    # gap is exactly the leakage `ml/evaluate.py` has to remove.
+    leaky = from_samples(
+        users, foods, labels, sources, range(len(users)),
+        positive_threshold=0.5,
     )
-    # Một người ăn cùng món nhiều lần chỉ được đếm MỘT lần.
-    lap = from_samples(
+    approx4(
+        leaky["fA"], 0.4385,
+        "including the test fold pushes fA to 3/3",
+    )
+    check(
+        leaky["fA"] > popularity["fA"],
+        "including the test fold raises popularity — that is the leakage",
+    )
+
+    check(
+        from_samples(
+            users, foods, labels, sources, [], positive_threshold=0.5
+        ) == {},
+        "an empty training fold leaves no food with a score",
+    )
+    # One person eating the same food many times counts ONCE.
+    repeats = from_samples(
         ["u1"] * 20, ["fA"] * 20, [0.9] * 20, ["diary"] * 20,
         range(20), positive_threshold=0.5,
     )
-    gan4(lap["fA"], 0.2065, "20 lượt của cùng một người chỉ tính là 1 người")
+    approx4(
+        repeats["fA"], 0.2065,
+        "20 swipes from one person count as 1 person",
+    )
 
 
-# ── 11. Hạn mức theo ngày ─────────────────────────────────────────────
+# -- 11. Daily limits --------------------------------------------------
 
 
-def kiem_han_muc() -> None:
-    print("11. Hạn mức cứng theo ngày — trần, sàn và phần còn lại")
+def check_daily_limits() -> None:
+    print("11. Hard daily limits — ceilings, floors and what remains")
 
-    # Tình huống lấy từ bản thiết kế giao diện, và mọi số là số thật trong
-    # `nutrition_rec`. Giữ hai nơi dùng CÙNG con số là có chủ ý: nếu công
-    # thức đổi, phép kiểm này sai day, chứ không để mockup và mã lệch nhau
-    # âm thầm.
+    # The scenario comes from the interface mock-up, and every number is a
+    # real one in `nutrition_rec`. Keeping both places on the SAME numbers is
+    # deliberate: if the formula changes, this check fails immediately rather
+    # than letting the mock-up and the code drift apart silently.
     #
-    #   đã ăn    Bánh cuốn nóng            natri 807,9   purin  76,2
-    #   kế hoạch Cơm gạo lứt + giá đậu nành natri  20,8   purin  96,0
-    #            Canh chua chay             natri 458,7   purin  55,9
-    #            Cá chiên xù                natri 464,0   purin   2,8
-    #            Bắp cải luộc               natri  56,0   purin  44,0
-    natri = DailyLimit(
+    #   eaten    Bánh cuốn nóng             sodium 807.9   purine  76.2
+    #   planned  Cơm gạo lứt + giá đậu nành sodium  20.8   purine  96.0
+    #            Canh chua chay             sodium 458.7   purine  55.9
+    #            Cá chiên xù                sodium 464.0   purine   2.8
+    #            Bắp cải luộc               sodium  56.0   purine  44.0
+    sodium = DailyLimit(
         condition="Tăng huyết áp",
         nutrient="sodium_mg",
         comparator="lte",
@@ -667,12 +846,12 @@ def kiem_han_muc() -> None:
         eaten=807.9,
         planned=20.8 + 458.7 + 464.0 + 56.0,
     )
-    gan(natri.used, 1807.4, "natri đã dùng = đã ăn + đã lên kế hoạch")
-    gan(natri.remaining, 192.6, "natri còn lại 192,6 mg")
-    kiem(not natri.is_exceeded, "1 807,4 / 2 000 thì chưa vượt")
-    gan4(natri.ratio, 0.9037, "tỷ lệ dùng 90,37%")
+    approx(sodium.used, 1807.4, "sodium used = eaten + planned")
+    approx(sodium.remaining, 192.6, "192.6 mg of sodium remains")
+    check(not sodium.is_exceeded, "1807.4 / 2000 is not yet exceeded")
+    approx4(sodium.ratio, 0.9037, "a usage ratio of 90.37%")
 
-    purin = DailyLimit(
+    purine = DailyLimit(
         condition="Gút",
         nutrient="purine_mg",
         comparator="lte",
@@ -680,24 +859,28 @@ def kiem_han_muc() -> None:
         eaten=76.2,
         planned=96.0 + 55.9 + 2.8 + 44.0,
     )
-    gan(purin.used, 274.9, "purin đã dùng 274,9 mg")
-    gan(purin.remaining, 125.1, "purin còn lại 125,1 mg")
+    approx(purine.used, 274.9, "274.9 mg of purine used")
+    approx(purine.remaining, 125.1, "125.1 mg of purine remains")
 
-    # `fits` là phép mà giao diện gọi cho từng ứng viên.
-    kiem(
-        not natri.fits(1022.3),
-        "Phở sốt vang 1 022,3 mg natri KHÔNG vừa phần còn lại 192,6 mg",
+    # `fits` is what the interface calls for each candidate.
+    check(
+        not sodium.fits(1022.3),
+        "Phở sốt vang at 1022.3 mg sodium does NOT fit the remaining 192.6 mg",
     )
-    kiem(natri.fits(14.0), "Đậu phụ hấp 14 mg natri thì vừa")
-    kiem(natri.fits(192.6), "đúng bằng phần còn lại thì vẫn vừa (lte)")
-    kiem(
-        not natri.fits(192.7),
-        "hơn phần còn lại 0,1 mg là không vừa — biên phải chặt",
+    check(sodium.fits(14.0), "Đậu phụ hấp at 14 mg sodium does fit")
+    check(
+        sodium.fits(192.6),
+        "exactly the remaining amount still fits (lte)",
+    )
+    check(
+        not sodium.fits(192.7),
+        "0.1 mg over the remainder does not fit — the boundary must be strict",
     )
 
-    # Vượt trần: `remaining` KHÔNG được kẹp về 0, vì giao diện cần nói vượt
-    # bao nhiêu. Kẹp về 0 thì câu "vượt 222 mg" không viết được.
-    is_exceeded = DailyLimit(
+    # Over the ceiling: `remaining` must NOT be clamped to 0, because the
+    # interface needs to say by how much. Clamped to 0, the sentence
+    # "222 mg over" cannot be written.
+    exceeded = DailyLimit(
         condition="Tăng huyết áp",
         nutrient="sodium_mg",
         comparator="lte",
@@ -705,14 +888,18 @@ def kiem_han_muc() -> None:
         eaten=1500.0,
         planned=700.0,
     )
-    kiem(is_exceeded.is_exceeded, "2 200 / 2 000 là đã vượt")
-    gan(is_exceeded.remaining, -200.0, "vượt thì `remaining` âm, không bị kẹp về 0")
-    kiem(is_exceeded.ratio > 1.0, "tỷ lệ vượt 100% thì không bị kẹp")
+    check(exceeded.is_exceeded, "2200 / 2000 is exceeded")
+    approx(
+        exceeded.remaining, -200.0,
+        "when exceeded, `remaining` goes negative rather than clamping to 0",
+    )
+    check(exceeded.ratio > 1.0, "a ratio over 100% is not clamped")
 
-    # Hai chiều của ngưỡng không đối xứng. Hỏi sai chiều phải nổ, chứ không
-    # trả về một số vô nghĩa — đây là chỗ một ngưỡng sàn thêm vào sau này sẽ
-    # âm thầm chặn món nếu cả hai dùng chung một phép trừ.
-    san = DailyLimit(
+    # The two directions of a threshold are not symmetric. Asking the wrong
+    # way must blow up rather than return a meaningless number — this is where
+    # a floor added later would silently block foods if both shared one
+    # subtraction.
+    floor = DailyLimit(
         condition="Thiếu máu",
         nutrient="iron_mg",
         comparator="gte",
@@ -720,16 +907,23 @@ def kiem_han_muc() -> None:
         eaten=5.0,
         planned=4.0,
     )
-    kiem(not san.is_ceiling, "`gte` không phải trần")
-    gan(san.shortfall, 9.0, "sàn sắt: còn thiếu 9 mg")
-    kiem(not san.is_exceeded, "không bao giờ `vượt` một cái sàn")
-    kiem(san.fits(999.0), "ăn thêm không bao giờ làm hỏng một cái sàn")
-    nem(lambda: san.remaining, ValueError, "hỏi `remaining` của ngưỡng sàn phải nổ")
-    nem(lambda: natri.shortfall, ValueError, "hỏi `shortfall` của trần phải nổ")
+    check(not floor.is_ceiling, "`gte` is not a ceiling")
+    approx(floor.shortfall, 9.0, "the iron floor: 9 mg short")
+    check(not floor.is_exceeded, "a floor is never `exceeded`")
+    check(floor.fits(999.0), "eating more never breaks a floor")
+    raises(
+        lambda: floor.remaining, ValueError,
+        "asking a floor for `remaining` must blow up",
+    )
+    raises(
+        lambda: sodium.shortfall, ValueError,
+        "asking a ceiling for `shortfall` must blow up",
+    )
 
-    # Hai bệnh hạn chế cùng một chất: phải lấy ngưỡng CHẶT NHẤT, không phải
-    # ngưỡng đầu tiên gặp. Tăng huyết áp và Bệnh thận đều giới hạn natri.
-    than = DailyLimit(
+    # Two conditions limiting the same nutrient: the TIGHTEST threshold must
+    # win, not the first one encountered. Hypertension and kidney disease both
+    # limit sodium.
+    kidney = DailyLimit(
         condition="Bệnh thận",
         nutrient="sodium_mg",
         comparator="lte",
@@ -737,90 +931,125 @@ def kiem_han_muc() -> None:
         eaten=807.9,
         planned=1000.0,
     )
-    tt = DailyLimitStatus(
+    status = DailyLimitStatus(
         user_id="u1",
         day=date(2026, 11, 7),
-        limits=(natri, purin, than),
+        limits=(sodium, purine, kidney),
     )
-    kiem(not tt.is_empty, "có ngưỡng thì không rỗng")
-    kiem(len(tt.for_nutrient("sodium_mg")) == 2, "natri có hai ngưỡng đang áp")
-    chat_nhat = tt.tightest_limit("sodium_mg")
-    kiem(
-        chat_nhat is not None and chat_nhat.condition == "Bệnh thận",
-        "lấy ngưỡng natri còn ít dư địa nhất (Bệnh thận: 192,1 < 192,6)",
+    check(not status.is_empty, "with limits present it is not empty")
+    check(
+        len(status.for_nutrient("sodium_mg")) == 2,
+        "sodium has two limits in force",
     )
-    kiem(tt.tightest_limit("calcium_mg") is None, "chất không bị hạn chế → None")
-    kiem(DailyLimitStatus(user_id="u1", day=date(2026, 11, 7)).is_empty, "không ngưỡng → rỗng")
+    tightest = status.tightest_limit("sodium_mg")
+    check(
+        tightest is not None and tightest.condition == "Bệnh thận",
+        "takes the sodium limit with the least headroom "
+        "(Bệnh thận: 192.1 < 192.6)",
+    )
+    check(
+        status.tightest_limit("calcium_mg") is None,
+        "an unlimited nutrient gives None",
+    )
+    check(
+        DailyLimitStatus(user_id="u1", day=date(2026, 11, 7)).is_empty,
+        "no limits means empty",
+    )
 
-    # `classify_foods`: đầu vào là các dòng đã qua F1, nên lý do duy nhất còn
-    # lại để bỏ một món là hạn mức hôm nay — và món đó HÔM KHÁC VẪN HỢP.
-    tt_toi = DailyLimitStatus(
-        user_id="u1", day=date(2026, 11, 7), limits=(natri, purin)
+    # `classify_foods` takes rows that have already passed F1, so the only
+    # remaining reason to drop a food is today's limit — and that food is
+    # STILL VALID ON ANOTHER DAY.
+    today_status = DailyLimitStatus(
+        user_id="u1", day=date(2026, 11, 7), limits=(sodium, purine)
     )
     candidates = [
-        {"id": "f1", "name": "Phở sốt vang", "sodium_mg": 1022.3, "purine_mg": 12.4},
-        {"id": "f2", "name": "Hủ tiếu sa tế", "sodium_mg": 990.0, "purine_mg": 15.0},
-        {"id": "f3", "name": "Đậu phụ hấp", "sodium_mg": 14.0, "purine_mg": 136.0},
-        {"id": "f4", "name": "Bắp cải luộc", "sodium_mg": 56.0, "purine_mg": 44.0},
+        {"id": "f1", "name": "Phở sốt vang", "sodium_mg": 1022.3,
+         "purine_mg": 12.4},
+        {"id": "f2", "name": "Hủ tiếu sa tế", "sodium_mg": 990.0,
+         "purine_mg": 15.0},
+        {"id": "f3", "name": "Đậu phụ hấp", "sodium_mg": 14.0,
+         "purine_mg": 136.0},
+        {"id": "f4", "name": "Bắp cải luộc", "sodium_mg": 56.0,
+         "purine_mg": 44.0},
     ]
-    kq = classify_foods(tt_toi, candidates)
-    does_not_fit = kq.does_not_fit
-    kiem(set(does_not_fit) == {"f1", "f2", "f3"}, "ba món không vừa, Bắp cải luộc thì vừa")
-    kiem(kq.fits("f4"), "Bắp cải luộc vừa cả hai hạn mức")
-    gan(does_not_fit["f1"][0].excess, 1022.3 - 192.6, "Phở vượt 829,7 mg natri")
-    kiem(
+    result = classify_foods(today_status, candidates)
+    does_not_fit = result.does_not_fit
+    check(
+        set(does_not_fit) == {"f1", "f2", "f3"},
+        "three foods do not fit; Bắp cải luộc does",
+    )
+    check(result.fits("f4"), "Bắp cải luộc fits both limits")
+    approx(
+        does_not_fit["f1"][0].excess, 1022.3 - 192.6,
+        "Phở exceeds sodium by 829.7 mg",
+    )
+    check(
         does_not_fit["f1"][0].nutrient == "sodium_mg"
         and does_not_fit["f1"][0].condition == "Tăng huyết áp",
-        "lý do nêu đúng chất và đúng bệnh",
+        "the reason names the right nutrient and the right condition",
     )
 
-    # Mục đáng giá nhất của cả phần này. Đậu phụ hấp có natri 14 mg — THẤP
-    # NHẤT trong mọi ứng viên — nhưng purin 136 mg thì vượt phần purin còn
-    # lại 125,1 mg của người bị gút. Một món có thể rất tốt ở chất đang
-    # thiếu và vẫn bị chặn bởi một chất khác, nên giao diện không được xếp
-    # hạng theo một chất rồi kết luận.
-    kiem(
-        [l.nutrient for l in does_not_fit["f3"]] == ["purine_mg"],
-        "Đậu phụ hấp bị chặn bởi PURIN, không phải natri",
+    # The most valuable item in this whole section. Đậu phụ hấp has 14 mg
+    # sodium — the LOWEST of any candidate — but its 136 mg of purine exceeds
+    # the gout patient's remaining 125.1 mg. A food can be excellent on the
+    # nutrient that is short and still be blocked by another, so the interface
+    # must not rank by one nutrient and conclude.
+    check(
+        [limit.nutrient for limit in does_not_fit["f3"]] == ["purine_mg"],
+        "Đậu phụ hấp is blocked by PURINE, not by sodium",
     )
-    gan(does_not_fit["f3"][0].excess, 136.0 - 125.1, "vượt purin 10,9 mg")
-    kiem(
-        all(l.nutrient == "sodium_mg" for l in does_not_fit["f2"]),
-        "Hủ tiếu sa tế chỉ vướng natri, purin 15 mg thì dư sức",
+    approx(
+        does_not_fit["f3"][0].excess, 136.0 - 125.1,
+        "10.9 mg over on purine",
     )
-
-    # Món thiếu số đo chất bị hạn chế thì KHÔNG được coi là vừa một cách
-    # lặng lẽ — nhưng cũng không được coi là vượt. Nó đơn giản là không xét
-    # được, và F1 đã lọc trước nên dòng tới đây luôn có số.
-    # Món thiếu số đo KHÔNG được kết luận vượt, nhưng cũng KHÔNG được coi là
-    # vừa. `purine_mg` khuyết ở 248/318 món, nên gộp nhóm chưa biết vào nhóm
-    # vừa sẽ làm trần purin gần như không bao giờ chạm tới.
-    kq_thieu = classify_foods(tt_toi, [{"id": "f9", "name": "Món lạ"}])
-    kiem(kq_thieu.does_not_fit == {}, "món thiếu số đo không bị kết luận vượt")
-    kiem(
-        kq_thieu.undecidable == {"f9": ["sodium_mg", "purine_mg"]},
-        "món thiếu số đo vào nhóm `undecidable`, nêu đủ hai chất",
-    )
-    kiem(not kq_thieu.fits("f9"), "`fits()` phải là Sai với món chưa xét được")
-
-    # Vướng một ngưỡng ĐÃ BIẾT thì kết luận được day, dù ngưỡng khác khuyết.
-    kq_mot_nua = classify_foods(
-        tt_toi, [{"id": "f8", "name": "Nửa số", "sodium_mg": 9999.0}]
-    )
-    kiem(
-        set(kq_mot_nua.does_not_fit) == {"f8"} and kq_mot_nua.undecidable == {},
-        "đã chắc chắn vượt thì không xếp vào nhóm chưa biết",
+    check(
+        all(limit.nutrient == "sodium_mg" for limit in does_not_fit["f2"]),
+        "Hủ tiếu sa tế only trips sodium; its 15 mg of purine is ample",
     )
 
-    kq_rong = classify_foods(DailyLimitStatus("u1", date(2026, 11, 7)), candidates)
-    kiem(
-        kq_rong.does_not_fit == {} and kq_rong.undecidable == {},
-        "không có ngưỡng nào thì không món nào bị bỏ",
+    # A food missing a measurement for a limited nutrient must NOT be quietly
+    # treated as fitting — but must not be treated as exceeding either. It is
+    # simply undecidable. `purine_mg` is absent for 248 of 318 foods, so
+    # folding the unknown group into the fitting group would make the purine
+    # ceiling essentially unreachable.
+    missing = classify_foods(today_status, [{"id": "f9", "name": "Món lạ"}])
+    check(
+        missing.does_not_fit == {},
+        "a food with no measurement is not declared exceeding",
+    )
+    check(
+        missing.undecidable == {"f9": ["sodium_mg", "purine_mg"]},
+        "it goes into `undecidable`, naming both nutrients",
+    )
+    check(
+        not missing.fits("f9"),
+        "`fits()` must be False for an undecidable food",
     )
 
-    # ── Cờ đủ dữ liệu ──
-    kiem(natri.has_full_data, "mọi suất đều có số liệu natri → đủ dữ liệu")
-    thieu_sl = DailyLimit(
+    # Tripping a KNOWN limit decides it immediately, even if another is absent.
+    half_known = classify_foods(
+        today_status, [{"id": "f8", "name": "Nửa số", "sodium_mg": 9999.0}]
+    )
+    check(
+        set(half_known.does_not_fit) == {"f8"}
+        and half_known.undecidable == {},
+        "a certain exceedance is not filed as unknown",
+    )
+
+    no_limits = classify_foods(
+        DailyLimitStatus("u1", date(2026, 11, 7)), candidates
+    )
+    check(
+        no_limits.does_not_fit == {} and no_limits.undecidable == {},
+        "with no limits in force, no food is dropped",
+    )
+
+    # -- The data-completeness flag --
+    check(
+        sodium.has_full_data,
+        "every serving has sodium data -> complete data",
+    )
+    incomplete = DailyLimit(
         condition="Gút",
         nutrient="purine_mg",
         comparator="lte",
@@ -830,96 +1059,136 @@ def kiem_han_muc() -> None:
         missing_eaten=1,
         missing_planned=3,
     )
-    kiem(not thieu_sl.has_full_data, "có suất khuyết số liệu → KHÔNG đủ dữ liệu")
-    kiem(thieu_sl.n_missing_servings == 4, "đếm đủ 4 suất thiếu số liệu")
-    kiem(
-        thieu_sl.remaining > 0,
-        "còn lại vẫn tính được, nhưng nó CAO hơn thực tế — cờ `has_full_data` "
-        "là chỗ duy nhất nói ra điều đó",
+    check(
+        not incomplete.has_full_data,
+        "a serving with missing data -> NOT complete data",
+    )
+    check(
+        incomplete.n_missing_servings == 4,
+        "all 4 servings with missing data are counted",
+    )
+    check(
+        incomplete.remaining > 0,
+        "the remainder is still computable, but it is HIGHER than reality — "
+        "the `has_full_data` flag is the only thing that says so",
     )
 
-    tc = NutrientTotals(totals={"purine_mg": 140.6}, missing={"purine_mg": 4}, n_servings=6)
-    kiem(not tc.has_full_data("purine_mg"), "NutrientTotals báo thiếu đúng chất")
-    kiem(tc.has_full_data("sodium_mg"), "chất không khuyết thì đủ")
+    totals = NutrientTotals(
+        totals={"purine_mg": 140.6}, missing={"purine_mg": 4}, n_servings=6
+    )
+    check(
+        not totals.has_full_data("purine_mg"),
+        "NutrientTotals reports the right nutrient as incomplete",
+    )
+    check(
+        totals.has_full_data("sodium_mg"),
+        "a nutrient with nothing missing is complete",
+    )
 
 
-# ── 12. Lý do bị F1 loại ──────────────────────────────────────────────
+# -- 12. F1 exclusion reasons ------------------------------------------
 
 
-def kiem_ly_do_loai() -> None:
-    print("12. Phân loại lý do bị F1 loại")
+def check_exclusion_reasons() -> None:
+    print("12. Classifying the reasons F1 excludes a food")
 
-    def _reason(**ghi_de) -> ExclusionReason:
-        goc = dict(
+    def _reason(**overrides) -> ExclusionReason:
+        base = dict(
             food_id="f1",
-            name="Món thử",
+            name="Test dish",
             dish_role="main",
             rule_type="nutrient_limit",
             condition="Tăng huyết áp",
             severity_min="mild",
         )
-        goc.update(ghi_de)
-        return ExclusionReason(**goc)
+        base.update(overrides)
+        return ExclusionReason(**base)
 
-    nhan_cam = _reason(rule_type="exclude_tag", tag="Giàu purin", condition="Gút")
-    nhan_thieu = _reason(rule_type="require_tag", tag="Món chay", condition="Ăn chay")
-    kiem(nhan_cam.kind == "tag", "nhãn bị cấm → bậc `tag`")
-    kiem(nhan_thieu.kind == "tag", "thiếu nhãn bắt buộc → bậc `tag`")
+    forbidden_tag = _reason(
+        rule_type="exclude_tag", tag="Giàu purin", condition="Gút"
+    )
+    missing_tag = _reason(
+        rule_type="require_tag", tag="Món chay", condition="Ăn chay"
+    )
+    check(forbidden_tag.kind == "tag", "a forbidden tag -> kind `tag`")
+    check(missing_tag.kind == "tag", "a missing required tag -> kind `tag`")
 
-    vuot = _reason(nutrient="sodium_mg", comparator="lte", threshold=500.0, value=879.4)
-    kiem(vuot.kind == "serving_threshold", "vượt ngưỡng theo suất → bậc `serving_threshold`")
-    gan(vuot.excess, 379.4, "vượt trần: số đo − ngưỡng")
+    over = _reason(
+        nutrient="sodium_mg", comparator="lte", threshold=500.0, value=879.4
+    )
+    check(
+        over.kind == "serving_threshold",
+        "over a per-serving threshold -> kind `serving_threshold`",
+    )
+    approx(over.excess, 379.4, "over a ceiling: measurement - threshold")
 
-    duoi_san = _reason(nutrient="fiber_g", comparator="gte", threshold=5.0, value=1.2)
-    kiem(duoi_san.kind == "serving_threshold", "dưới sàn cũng là `serving_threshold`")
-    gan(duoi_san.excess, 3.8, "dưới sàn: ngưỡng − số đo, vẫn là số dương")
-
-    # Phân biệt quan trọng nhất của cả phần này. `allowed_foods` loại món thiếu số
-    # liệu ở ngưỡng theo suất, và nói với người dùng "món này vượt ngưỡng"
-    # khi thật ra là "chúng tôi không biết" là sai sự thật.
-    khuyet = _reason(nutrient="purine_mg", comparator="lte", threshold=150.0, value=None)
-    kiem(khuyet.missing_data, "`nutrient_limit` không có số đo → thiếu số liệu")
-    kiem(khuyet.kind == "missing_data", "bậc riêng, không gộp vào `serving_threshold`")
-    kiem(
-        khuyet.excess is None,
-        "không có số đo thì không bịa ra một lượng vượt",
+    under = _reason(
+        nutrient="fiber_g", comparator="gte", threshold=5.0, value=1.2
+    )
+    check(
+        under.kind == "serving_threshold",
+        "under a floor is also `serving_threshold`",
+    )
+    approx(
+        under.excess, 3.8,
+        "under a floor: threshold - measurement, still positive",
     )
 
-    # Bẫy: luật nhãn cũng có `value` rỗng, nhưng nó KHÔNG phải thiếu số
-    # liệu — nó không cần số liệu nào. Gộp hai thứ sẽ làm 181 món bị loại
-    # vì nhãn hiện ra như thể hệ thống không biết gì về chúng.
-    kiem(
-        not nhan_cam.missing_data,
-        "luật nhãn có `value` rỗng nhưng KHÔNG phải thiếu số liệu",
+    # The most important distinction in this whole section. `allowed_foods`
+    # excludes foods with missing data at a per-serving threshold, and telling
+    # the user "this food exceeds the limit" when the truth is "we do not know"
+    # is a false statement.
+    no_data = _reason(
+        nutrient="purine_mg", comparator="lte", threshold=150.0, value=None
     )
-    kiem(
-        nhan_cam.excess is None,
-        "luật nhãn không có lượng vượt — và không được nổ khi hỏi",
+    check(
+        no_data.missing_data,
+        "a `nutrient_limit` with no measurement -> missing data",
     )
-    kiem(
-        not nhan_thieu.missing_data,
-        "`require_tag` cũng vậy",
+    check(
+        no_data.kind == "missing_data",
+        "its own kind, not folded into `serving_threshold`",
     )
-
-    # Chiều của hai tầng trái nhau, và đó là chủ ý: xem docstring
-    # `ExclusionReason.missing_data`. Giữ phép kiểm này để ai đổi một bên phải
-    # đọc lý do trước.
-    kiem(
-        khuyet.kind == "missing_data",
-        "theo SUẤT: thiếu số liệu thì LOẠI (ngược với hạn mức theo NGÀY, "
-        "nơi thiếu số liệu thì cộng 0 kèm cờ)",
+    check(
+        no_data.excess is None,
+        "with no measurement it invents no excess amount",
     )
 
+    # The trap: a tag rule also has an empty `value`, but it is NOT missing
+    # data — it needs no measurement at all. Conflating the two would make the
+    # 181 foods excluded by a tag look as if the system knew nothing about them.
+    check(
+        not forbidden_tag.missing_data,
+        "a tag rule has an empty `value` but is NOT missing data",
+    )
+    check(
+        forbidden_tag.excess is None,
+        "a tag rule has no excess — and must not blow up when asked",
+    )
+    check(
+        not missing_tag.missing_data,
+        "`require_tag` likewise",
+    )
 
-# ── 13. Hình phạt mềm ─────────────────────────────────────────────────
+    # The two layers go in opposite directions, and deliberately so: see the
+    # `ExclusionReason.missing_data` docstring. This check is kept so that
+    # anyone changing one side has to read the reason first.
+    check(
+        no_data.kind == "missing_data",
+        "PER SERVING: missing data means EXCLUDE (the opposite of the PER DAY "
+        "limit, where missing data adds 0 and raises a flag)",
+    )
 
 
-def kiem_hinh_phat_mem() -> None:
-    print("13. Ràng buộc mềm — hệ số nhân, và phép cộng hình phạt")
+# -- 13. Soft penalties ------------------------------------------------
 
-    # Hai dải LỒNG NHAU của cùng một bệnh, cùng một chất. Đây là ca mà một
-    # phép nhân thẳng sẽ đếm đôi.
-    tha_nhe = SoftRule(
+
+def check_soft_penalty() -> None:
+    print("13. Soft constraints — the multiplier, and how penalties combine")
+
+    # Two NESTED bands of the same condition and the same nutrient. This is
+    # the case where a plain multiplication would double-count.
+    mild_band = SoftRule(
         condition="Tăng huyết áp",
         severity_min="mild",
         nutrient="sodium_mg",
@@ -928,7 +1197,7 @@ def kiem_hinh_phat_mem() -> None:
         penalty=0.600,
         scope="per_serving",
     )
-    tha_nang = SoftRule(
+    severe_band = SoftRule(
         condition="Tăng huyết áp",
         severity_min="severe",
         nutrient="sodium_mg",
@@ -937,7 +1206,7 @@ def kiem_hinh_phat_mem() -> None:
         penalty=0.400,
         scope="per_serving",
     )
-    gut = SoftRule(
+    gout = SoftRule(
         condition="Gút",
         severity_min="mild",
         nutrient="purine_mg",
@@ -947,62 +1216,102 @@ def kiem_hinh_phat_mem() -> None:
         scope="per_serving",
     )
 
-    # `penalty` là HỆ SỐ NHÂN. Chứng cứ nằm trong chính dữ liệu: ghi chú của
-    # dòng mức nặng viết "phạt nặng hơn cho mức nặng" và giá trị là 0,400 so
-    # với 0,600 của mức nhẹ. Đọc theo phép trừ thì 0,400 trừ ÍT hơn, tức
-    # mức nặng bị phạt nhẹ hơn — ngược hẳn ghi chú.
-    kiem(tha_nang.penalty < tha_nhe.penalty, "mức nặng có hệ số NHỎ hơn")
+    # `penalty` is a MULTIPLIER. The evidence is in the data itself: the
+    # severe row's note reads "a heavier penalty for the severe level" and its
+    # value is 0.400 against the mild level's 0.600. Read as a subtraction,
+    # 0.400 subtracts LESS, that is, the severe level is penalised more
+    # lightly — the exact opposite of the note.
+    check(
+        severe_band.penalty < mild_band.penalty,
+        "the severe level has the SMALLER coefficient",
+    )
 
-    mot_nhom = penalty({"sodium_mg": 800.0, "purine_mg": 10.0}, [tha_nhe, tha_nang, gut])
-    gan(
-        mot_nhom.factor,
+    one_group = penalty(
+        {"sodium_mg": 800.0, "purine_mg": 10.0},
+        [mild_band, severe_band, gout],
+    )
+    approx(
+        one_group.factor,
         0.400,
-        "800 mg natri vượt CẢ HAI dải của cùng bệnh → lấy nặng nhất 0,400, "
-        "không nhân thành 0,240",
+        "800 mg of sodium breaches BOTH bands of one condition -> take the "
+        "harshest, 0.400, rather than multiplying to 0.240",
     )
-    kiem(len(mot_nhom.violations) == 1, "một mối lo thì nêu một vi phạm, không hai")
-    kiem(
-        mot_nhom.violations[0].threshold == 500.0,
-        "vi phạm được nêu là dải chặt hơn (500 mg), không phải dải 700 mg",
+    check(
+        len(one_group.violations) == 1,
+        "one concern reports one violation, not two",
     )
-    gan(mot_nhom.violations[0].excess, 300.0, "lệch so với dải được nêu: 800 − 500")
-
-    hai_nhom = penalty(
-        {"sodium_mg": 800.0, "purine_mg": 200.0}, [tha_nhe, tha_nang, gut]
+    check(
+        one_group.violations[0].threshold == 500.0,
+        "the violation reported is the tighter band (500 mg), not the 700 mg one",
     )
-    gan(hai_nhom.factor, 0.200, "hai bệnh khác nhau thì NHÂN qua nhóm: 0,4 × 0,5")
-    kiem(len(hai_nhom.violations) == 2, "hai mối lo thì nêu hai vi phạm")
-    kiem(
-        [v.condition for v in hai_nhom.violations] == ["Tăng huyết áp", "Gút"],
-        "vi phạm xếp theo mức phạt nặng trước",
+    approx(
+        one_group.violations[0].excess, 300.0,
+        "the excess is against the reported band: 800 - 500",
     )
 
-    sach = penalty({"sodium_mg": 100.0, "purine_mg": 10.0}, [tha_nhe, tha_nang, gut])
-    gan(sach.factor, 1.0, "không vượt gì thì hệ số 1,0")
-    kiem(not sach.is_penalised, "hệ số 1,0 thì không bị trừ điểm")
-    kiem(sach.violations == (), "không vi phạm nào")
-    gan(sach.apply(0.78), 0.78, "hệ số 1,0 không đổi điểm")
-    gan(mot_nhom.apply(0.78), 0.312, "điểm 0,78 × 0,400 = 0,312")
-
-    # Biên: đúng bằng ngưỡng thì KHÔNG vượt.
-    bien = penalty({"sodium_mg": 700.0, "purine_mg": 150.0}, [tha_nhe, gut])
-    gan(bien.factor, 1.0, "đúng bằng ngưỡng `lte` thì không vượt")
-    hon = penalty({"sodium_mg": 700.01, "purine_mg": 10.0}, [tha_nhe, gut])
-    kiem(hon.is_penalised, "hơn ngưỡng 0,01 mg là vượt — biên phải chặt")
-
-    # Thiếu số liệu: KHÔNG phạt, nhưng phải ghi lại. Ràng buộc mềm là quyết
-    # định về xếp hạng, nên hạ điểm một món vì danh mục thiếu số liệu là
-    # phạt sai đối tượng.
-    khuyet = penalty({"sodium_mg": None, "purine_mg": 10.0}, [tha_nhe, tha_nang, gut])
-    gan(khuyet.factor, 1.0, "thiếu số liệu thì không phạt")
-    kiem(
-        khuyet.missing_data == ("sodium_mg",),
-        "nhưng ghi lại chất không xét được, và chỉ ghi một lần cho hai luật",
+    two_groups = penalty(
+        {"sodium_mg": 800.0, "purine_mg": 200.0},
+        [mild_band, severe_band, gout],
     )
-    kiem(khuyet.violations == (), "không bịa ra vi phạm từ số liệu không có")
+    approx(
+        two_groups.factor, 0.200,
+        "two different conditions MULTIPLY across groups: 0.4 x 0.5",
+    )
+    check(
+        len(two_groups.violations) == 2,
+        "two concerns report two violations",
+    )
+    check(
+        [v.condition for v in two_groups.violations]
+        == ["Tăng huyết áp", "Gút"],
+        "violations are ordered harshest penalty first",
+    )
 
-    # Ngưỡng `gte` là sàn: thiếu thì phạt, chứ không phải vượt thì phạt.
-    san = SoftRule(
+    clean = penalty(
+        {"sodium_mg": 100.0, "purine_mg": 10.0},
+        [mild_band, severe_band, gout],
+    )
+    approx(clean.factor, 1.0, "breaching nothing gives a factor of 1.0")
+    check(not clean.is_penalised, "a factor of 1.0 means no penalty")
+    check(clean.violations == (), "no violations")
+    approx(clean.apply(0.78), 0.78, "a factor of 1.0 leaves the score alone")
+    approx(one_group.apply(0.78), 0.312, "a score of 0.78 x 0.400 = 0.312")
+
+    # The boundary: exactly at the threshold is NOT a breach.
+    at_boundary = penalty(
+        {"sodium_mg": 700.0, "purine_mg": 150.0}, [mild_band, gout]
+    )
+    approx(
+        at_boundary.factor, 1.0,
+        "exactly at an `lte` threshold is not a breach",
+    )
+    just_over = penalty(
+        {"sodium_mg": 700.01, "purine_mg": 10.0}, [mild_band, gout]
+    )
+    check(
+        just_over.is_penalised,
+        "0.01 mg over is a breach — the boundary must be strict",
+    )
+
+    # Missing data: NO penalty, but it must be recorded. A soft constraint is
+    # a ranking decision, so lowering a food's score because the catalogue
+    # lacks data penalises the wrong party.
+    no_data = penalty(
+        {"sodium_mg": None, "purine_mg": 10.0},
+        [mild_band, severe_band, gout],
+    )
+    approx(no_data.factor, 1.0, "missing data means no penalty")
+    check(
+        no_data.missing_data == ("sodium_mg",),
+        "but it records the nutrient it could not judge, once for both rules",
+    )
+    check(
+        no_data.violations == (),
+        "it invents no violation out of data that is not there",
+    )
+
+    # A `gte` threshold is a floor: being short is penalised, not being over.
+    iron_floor = SoftRule(
         condition="Thiếu máu",
         severity_min="mild",
         nutrient="iron_mg",
@@ -1011,17 +1320,31 @@ def kiem_hinh_phat_mem() -> None:
         penalty=0.800,
         scope="per_serving",
     )
-    duoi_san = penalty({"iron_mg": 1.5}, [san])
-    gan(duoi_san.factor, 0.800, "dưới sàn sắt thì bị phạt")
-    gan(duoi_san.violations[0].excess, 2.5, "lệch của sàn: ngưỡng − số đo")
-    gan(penalty({"iron_mg": 9.0}, [san]).factor, 1.0, "trên sàn thì không phạt")
-    kiem(san.direction_word == "thiếu", "chữ cho sàn là `thiếu`")
-    kiem(tha_nhe.direction_word == "vượt", "chữ cho trần là `vượt`")
+    below = penalty({"iron_mg": 1.5}, [iron_floor])
+    approx(below.factor, 0.800, "below the iron floor is penalised")
+    approx(
+        below.violations[0].excess, 2.5,
+        "a floor's gap: threshold - measurement",
+    )
+    approx(
+        penalty({"iron_mg": 9.0}, [iron_floor]).factor, 1.0,
+        "above the floor is not penalised",
+    )
+    check(
+        iron_floor.direction_word == "thiếu",
+        "the word for a floor is `thiếu`",
+    )
+    check(
+        mild_band.direction_word == "vượt",
+        "the word for a ceiling is `vượt`",
+    )
 
-    # Phạm vi sai phải NỔ, không được âm thầm tính ra một con số trông hợp lý.
-    # Áp luật `per_meal` cho từng món sai cả hai chiều: bỏ sót khi tổng bữa
-    # vượt dù không món nào vượt, và phạt oan món lớn trong bữa còn dư địa.
-    bua = SoftRule(
+    # The wrong scope must BLOW UP rather than quietly compute a
+    # plausible-looking number. Applying a `per_meal` rule per food is wrong in
+    # both directions: it misses the case where the meal total is over while no
+    # single food is, and it wrongly penalises a large food in a meal with
+    # headroom to spare.
+    per_meal = SoftRule(
         condition="Đái tháo đường",
         severity_min="mild",
         nutrient="carbs_g",
@@ -1030,7 +1353,7 @@ def kiem_hinh_phat_mem() -> None:
         penalty=0.700,
         scope="per_meal",
     )
-    day = SoftRule(
+    per_day = SoftRule(
         condition="Đái tháo đường",
         severity_min="mild",
         nutrient="sugar_g",
@@ -1039,250 +1362,323 @@ def kiem_hinh_phat_mem() -> None:
         penalty=0.600,
         scope="per_day",
     )
-    nem(lambda: penalty({"carbs_g": 80.0}, [bua]), ValueError, "luật per_meal phải nổ")
-    nem(lambda: penalty({"sugar_g": 30.0}, [day]), ValueError, "luật per_day phải nổ")
-
-    # Phân luồng theo phạm vi, và luật chưa có tầng thi hành.
-    theo = soft_rules_by_scope([tha_nhe, gut, bua, day])
-    kiem(len(theo["per_serving"]) == 2, "hai luật theo suất")
-    kiem(len(theo["per_meal"]) == 1 and len(theo["per_day"]) == 1, "mỗi phạm vi một luật")
-    chua = unenforced_rules([tha_nhe, gut, bua, day])
-    kiem(
-        [l.scope for l in chua] == ["per_meal"],
-        "chỉ `per_meal` là chưa có tầng thi hành — Bước 4 chưa nhận nó",
+    raises(
+        lambda: penalty({"carbs_g": 80.0}, [per_meal]), ValueError,
+        "a per_meal rule must blow up",
     )
-    kiem(
+    raises(
+        lambda: penalty({"sugar_g": 30.0}, [per_day]), ValueError,
+        "a per_day rule must blow up",
+    )
+
+    # Routing by scope, and the rules with no enforcing layer yet.
+    by_scope = soft_rules_by_scope([mild_band, gout, per_meal, per_day])
+    check(len(by_scope["per_serving"]) == 2, "two per-serving rules")
+    check(
+        len(by_scope["per_meal"]) == 1 and len(by_scope["per_day"]) == 1,
+        "one rule per remaining scope",
+    )
+    unenforced = unenforced_rules([mild_band, gout, per_meal, per_day])
+    check(
+        [rule.scope for rule in unenforced] == ["per_meal"],
+        "only `per_meal` has no enforcing layer — Step 4 has not taken it on",
+    )
+    check(
         ENFORCED_BY["per_serving"] is not None
         and ENFORCED_BY["per_day"] is not None,
-        "hai phạm vi còn lại đã có chủ",
+        "the other two scopes already have an owner",
     )
 
 
-# ── 14. Giải thích bằng câu ───────────────────────────────────────────
+# -- 14. Explanations in sentences -------------------------------------
 
 
-def kiem_cau_giai_thich() -> None:
-    print("14. Giải thích gợi ý — câu cho người dùng, không phải số thô")
+def check_explanations() -> None:
+    print("14. Recommendation explanations — sentences for users, not raw numbers")
 
-    # Không gian hai nhóm, để kiểm cả chiều cố định lẫn chiều one-hot nhóm.
-    mon = [
-        _mon(id="a", name="Canh A", category="Món canh", protein=20, carb=5, fat=2),
-        _mon(id="b", name="Cơm B", category="Cơm", protein=5, carb=60, fat=3),
+    # A two-category space, to test both the fixed dimensions and the category
+    # one-hot ones.
+    foods = [
+        _food(
+            id="a", name="Canh A", category="Món canh", protein=20, carb=5,
+            fat=2,
+        ),
+        _food(
+            id="b", name="Cơm B", category="Cơm", protein=5, carb=60, fat=3
+        ),
     ]
-    kg = FeatureSpace.from_foods(mon)
+    space = FeatureSpace.from_foods(foods)
 
-    # Mọi chiều phải có câu. Đây là phép kiểm giữ cho một chiều mới thêm vào
-    # không âm thầm hiện nhãn kỹ thuật cho người dùng.
-    kiem(
-        dimensions_without_phrase(kg) == [],
-        f"mọi chiều đều có mệnh đề, thiếu: {dimensions_without_phrase(kg)}",
+    # Every dimension must have a phrase. This check keeps a newly added
+    # dimension from silently showing a technical label to users.
+    check(
+        dimensions_without_phrase(space) == [],
+        f"every dimension has a phrase; missing: "
+        f"{dimensions_without_phrase(space)}",
     )
 
-    # Hồ sơ rỗng: không có cơ sở nào để nói người này thích gì.
-    rong = empty_profile(kg)
-    kiem(contributions(kg, rong, mon[0]) == [], "hồ sơ rỗng → không đóng góp nào")
-    kiem(explanation_sentences(kg, rong, mon[0]) == [], "và không câu nào")
-    kiem(
-        debug_explanation(kg, rong, mon[0]) == "no preference profile yet",
-        "dạng gỡ lỗi nói rõ là chưa có hồ sơ",
+    # An empty profile: there is no basis for saying what this person likes.
+    empty = empty_profile(space)
+    check(
+        contributions(space, empty, foods[0]) == [],
+        "an empty profile gives no contribution",
+    )
+    check(
+        explanation_sentences(space, empty, foods[0]) == [],
+        "and no sentence either",
+    )
+    check(
+        debug_explanation(space, empty, foods[0])
+        == "no preference profile yet",
+        "the debug form says plainly that there is no profile yet",
     )
 
-    ho_so = build_profile(kg, [(mon[0], "like"), (mon[1], "dislike")])
-    gop = contributions(kg, ho_so, mon[0])
-    kiem(len(gop) > 0, "món được thích có đóng góp dương")
+    profile = build_profile(
+        space, [(foods[0], "like"), (foods[1], "dislike")]
+    )
+    parts = contributions(space, profile, foods[0])
+    check(len(parts) > 0, "a liked food has positive contributions")
 
-    # Chiều one-hot nhóm dựng câu từ tên nhóm, không cần bảng tra.
-    nhom = [d for d in gop if d.dimension.startswith(CATEGORY_PREFIX)]
-    kiem(len(nhom) == 1, "đúng một chiều nhóm đóng góp (one-hot)")
-    kiem(
-        nhom[0].sentence == "Bạn thích nhóm Món canh",
-        f"câu cho chiều nhóm: được {nhom[0].sentence!r}",
+    # The category one-hot dimension builds its sentence from the category
+    # name, needing no lookup table.
+    category_parts = [
+        p for p in parts if p.dimension.startswith(CATEGORY_PREFIX)
+    ]
+    check(
+        len(category_parts) == 1,
+        "exactly one category dimension contributes (one-hot)",
+    )
+    check(
+        category_parts[0].sentence == "Bạn thích nhóm Món canh",
+        f"the category sentence: got {category_parts[0].sentence!r}",
     )
 
-    # Chiều cố định tra bảng.
-    dam = [d for d in gop if d.dimension == "Tỷ lệ đạm"]
-    if dam:
-        kiem(
-            dam[0].sentence == "Bạn thường chọn món nhiều đạm",
-            f"câu cho chiều đạm: được {dam[0].sentence!r}",
+    # A fixed dimension uses the lookup table.
+    protein_parts = [p for p in parts if p.dimension == "Tỷ lệ đạm"]
+    if protein_parts:
+        check(
+            protein_parts[0].sentence == "Bạn thường chọn món nhiều đạm",
+            f"the protein sentence: got {protein_parts[0].sentence!r}",
         )
 
-    # Thứ tự giảm dần, và tỷ lệ chuẩn hóa theo đỉnh của CHÍNH món đó.
-    kiem(
-        all(a.value >= b.value for a, b in zip(gop, gop[1:])),
-        "đóng góp xếp giảm dần",
+    # Descending order, and the share normalised to THAT food's own peak.
+    check(
+        all(a.value >= b.value for a, b in zip(parts, parts[1:])),
+        "contributions are sorted descending",
     )
-    gan(gop[0].share, 1.0, "đóng góp đầu có tỷ lệ 1,0")
-    kiem(
-        all(0.0 < d.share <= 1.0 for d in gop),
-        "mọi tỷ lệ nằm trong (0, 1]",
+    approx(parts[0].share, 1.0, "the first contribution has a share of 1.0")
+    check(
+        all(0.0 < p.share <= 1.0 for p in parts),
+        "every share lies within (0, 1]",
     )
 
-    # Mọi chiều NÊU RA phải dương. Đây là điều khiến câu luôn theo chiều
-    # "nhiều X": vì mọi chiều vector nằm trong [0, 1] nên dấu của
-    # `p_u[i]·v[i]` là dấu của `p_u[i]`, và đóng góp dương nghĩa là người
-    # này nghiêng về giá trị CAO ở chiều đó.
-    v = kg.encode(mon[0])
-    kiem(all(0.0 <= x <= 1.0 for x in v), "mọi chiều vector trong [0, 1]")
-    kiem(all(d.value > 0 for d in gop), "mọi đóng góp nêu ra đều dương")
-    for d in gop:
-        i = kg.labels.index(d.dimension)
-        kiem(
-            ho_so.weights[i] > 0,
-            f"{d.dimension}: đóng góp dương ⟹ trọng số hồ sơ dương, nên câu "
-            f"phải theo chiều `nhiều`, không bao giờ `ít`",
+    # Every dimension REPORTED must be positive. This is what makes the
+    # sentences always take the "high X" direction: because every vector
+    # dimension lies in [0, 1], the sign of `p_u[i]·v[i]` is the sign of
+    # `p_u[i]`, and a positive contribution means this person leans towards a
+    # HIGH value on that dimension.
+    v = space.encode(foods[0])
+    check(
+        all(0.0 <= x <= 1.0 for x in v),
+        "every vector dimension lies within [0, 1]",
+    )
+    check(
+        all(p.value > 0 for p in parts),
+        "every reported contribution is positive",
+    )
+    for part in parts:
+        i = space.labels.index(part.dimension)
+        check(
+            profile.weights[i] > 0,
+            f"{part.dimension}: a positive contribution implies a positive "
+            f"profile weight, so the sentence must take the `high` direction, "
+            f"never `low`",
         )
 
-    # `so` giới hạn số chiều.
-    kiem(len(contributions(kg, ho_so, mon[0], count=1)) == 1, "`count=1` trả đúng một chiều")
-    kiem(len(contributions(kg, ho_so, mon[0], count=99)) <= kg.length, "`so` lớn không vượt số chiều")
-
-    # Dạng gỡ lỗi và dạng giao diện phải xếp hạng GIỐNG nhau — chúng dùng
-    # chung `contributions`, và phép kiểm này giữ cho ai đó không cài lại.
-    chuoi = debug_explanation(kg, ho_so, mon[0])
-    kiem(
-        all(d.dimension in chuoi for d in gop),
-        "dạng gỡ lỗi nêu đúng các chiều mà `contributions` chọn",
+    # `count` limits the number of dimensions.
+    check(
+        len(contributions(space, profile, foods[0], count=1)) == 1,
+        "`count=1` returns exactly one dimension",
     )
-    kiem(
-        chuoi.index(gop[0].dimension) < chuoi.index(gop[-1].dimension) or len(gop) == 1,
-        "và theo cùng thứ tự",
-    )
-    sentence = explanation_sentences(kg, ho_so, mon[0])
-    kiem(
-        sentence == [d.sentence for d in gop if d.sentence is not None],
-        "dạng giao diện chỉ bỏ chiều chưa có câu, không đổi thứ tự",
-    )
-    kiem(
-        all("+" not in c and "0." not in c for c in sentence),
-        "không câu nào lọt số thô ra giao diện",
+    check(
+        len(contributions(space, profile, foods[0], count=99)) <= space.length,
+        "a large `count` does not exceed the dimension count",
     )
 
-    # Chiều chưa có mệnh đề: bỏ dòng, KHÔNG hiện nhãn kỹ thuật.
-    luu = PHRASE_BY_DIMENSION.pop("Tỷ lệ đạm")
+    # The debug form and the interface form must rank IDENTICALLY — they share
+    # `contributions`, and this check keeps anyone from reimplementing it.
+    debug_text = debug_explanation(space, profile, foods[0])
+    check(
+        all(p.dimension in debug_text for p in parts),
+        "the debug form names exactly the dimensions `contributions` picked",
+    )
+    check(
+        debug_text.index(parts[0].dimension)
+        < debug_text.index(parts[-1].dimension)
+        or len(parts) == 1,
+        "and in the same order",
+    )
+    sentences = explanation_sentences(space, profile, foods[0])
+    check(
+        sentences == [p.sentence for p in parts if p.sentence is not None],
+        "the interface form only drops phraseless dimensions, keeping the order",
+    )
+    check(
+        all("+" not in s and "0." not in s for s in sentences),
+        "no sentence leaks a raw number to the interface",
+    )
+
+    # A dimension with no phrase yet: drop the line, do NOT show a technical
+    # label.
+    saved = PHRASE_BY_DIMENSION.pop("Tỷ lệ đạm")
     try:
-        kiem(
-            dimensions_without_phrase(kg) == ["Tỷ lệ đạm"],
-            "`dimensions_without_phrase` báo đúng chiều bị quên",
+        check(
+            dimensions_without_phrase(space) == ["Tỷ lệ đạm"],
+            "`dimensions_without_phrase` reports the forgotten dimension",
         )
-        gop2 = contributions(kg, ho_so, mon[0])
-        missing = [d for d in gop2 if d.dimension == "Tỷ lệ đạm"]
-        if missing:
-            kiem(missing[0].sentence is None, "chiều bị quên có `sentence` rỗng")
-            kiem(
-                "Tỷ lệ đạm" not in explanation_sentences(kg, ho_so, mon[0]),
-                "và không lọt vào danh sách câu của giao diện",
+        parts2 = contributions(space, profile, foods[0])
+        forgotten = [p for p in parts2 if p.dimension == "Tỷ lệ đạm"]
+        if forgotten:
+            check(
+                forgotten[0].sentence is None,
+                "the forgotten dimension has an empty `sentence`",
+            )
+            check(
+                "Tỷ lệ đạm"
+                not in explanation_sentences(space, profile, foods[0]),
+                "and does not reach the interface's sentence list",
             )
     finally:
-        PHRASE_BY_DIMENSION["Tỷ lệ đạm"] = luu
-    kiem(dimensions_without_phrase(kg) == [], "đã phục hồi bảng mệnh đề")
+        PHRASE_BY_DIMENSION["Tỷ lệ đạm"] = saved
+    check(
+        dimensions_without_phrase(space) == [],
+        "the phrase table has been restored",
+    )
 
 
-# ── 15. Mức tin cậy của ngưỡng ────────────────────────────────────────
+# -- 15. Threshold evidence levels -------------------------------------
 
 
-def kiem_muc_tin_cay() -> None:
-    print("15. Mức tin cậy của ngưỡng — bốn mức, và mức nào dẫn được nguồn")
+def check_evidence_levels() -> None:
+    print("15. Threshold evidence levels — four levels, and which can cite a source")
 
-    kiem(
+    check(
         set(EVIDENCE_LEVELS) == set(EVIDENCE_LABELS),
-        "mọi mức đều có nhãn tiếng Việt cho giao diện",
+        "every level has a Vietnamese label for the interface",
     )
-    kiem(
+    check(
         CITABLE_EVIDENCE == {"published"},
-        "CHỈ `published` được dẫn như khuyến cáo có nguồn — `derived` kèm "
-        "giả thiết nên không, `unsupported` thì không có nguồn nào",
+        "ONLY `published` may be cited as a sourced recommendation — "
+        "`derived` carries assumptions so it may not, and `unsupported` has "
+        "no source at all",
     )
-    kiem(
+    check(
         "definitional" not in CITABLE_EVIDENCE,
-        "`definitional` không dẫn nguồn được vì nó không có ngưỡng nào — "
-        '"dị ứng trứng thì loại món có trứng" không cần WHO công bố',
+        "`definitional` cannot cite a source because it has no threshold — "
+        '"an egg allergy excludes foods with egg" needs no WHO publication',
     )
 
-    def _ly(muc: str) -> ExclusionReason:
+    def _reason(level: str) -> ExclusionReason:
         return ExclusionReason(
             food_id="f",
-            name="Món",
+            name="Food",
             dish_role="main",
             rule_type="nutrient_limit",
             condition="Tăng huyết áp",
             severity_min="mild",
-            evidence_level=muc,
+            evidence_level=level,
         )
 
-    kiem(_ly("published").is_citable, "ngưỡng `published` dẫn được nguồn")
-    kiem(not _ly("derived").is_citable, "ngưỡng `derived` thì không")
-    kiem(not _ly("unsupported").is_citable, "ngưỡng `unsupported` thì không")
-    kiem(
-        _ly("unsupported").evidence_label == "không có nguồn đang hiệu lực",
-        f"nhãn của `unsupported`: được {_ly('unsupported').evidence_label!r}",
+    check(
+        _reason("published").is_citable,
+        "a `published` threshold can cite a source",
+    )
+    check(not _reason("derived").is_citable, "a `derived` one cannot")
+    check(
+        not _reason("unsupported").is_citable, "an `unsupported` one cannot"
+    )
+    check(
+        _reason("unsupported").evidence_label
+        == "không có nguồn đang hiệu lực",
+        f"the `unsupported` label: got "
+        f"{_reason('unsupported').evidence_label!r}",
     )
 
-    # Mặc định phải là mức KHÔNG dẫn được nguồn. Chọn `published` làm mặc
-    # định sẽ khiến mọi quy tắc thêm vào mà quên khai tự nhận là có nguồn.
-    is_default = ExclusionReason(
-        food_id="f", name="Món", dish_role="main",
+    # The default must be a NON-citable level. Choosing `published` as the
+    # default would make every rule added without declaring one claim to be
+    # sourced.
+    default = ExclusionReason(
+        food_id="f", name="Food", dish_role="main",
         rule_type="nutrient_limit", condition="X", severity_min="mild",
     )
-    kiem(
-        not is_default.is_citable,
-        f"mặc định `{is_default.evidence_level}` KHÔNG dẫn được nguồn",
+    check(
+        not default.is_citable,
+        f"the default `{default.evidence_level}` is NOT citable",
     )
 
-    # Một mức lạ không được làm hàm nổ, nhưng cũng không được dẫn nguồn.
-    la = _ly("muc_la_nao_do")
-    kiem(not la.is_citable, "mức lạ thì không dẫn nguồn được")
-    kiem(la.evidence_label == "muc_la_nao_do", "mức lạ hiện nguyên văn, không nổ")
-
-    # `SoftRule` và `DailyLimit` dùng cùng một quy ước.
-    lm = SoftRule(
-        condition="Rối loạn mỡ máu", severity_min="mild", nutrient="cholesterol_mg",
-        comparator="lte", threshold=300.0, penalty=0.700, scope="per_day",
-        evidence_level="unsupported",
+    # An unknown level must not blow the function up, but must not be citable
+    # either.
+    unknown = _reason("some_unknown_level")
+    check(not unknown.is_citable, "an unknown level cannot cite a source")
+    check(
+        unknown.evidence_label == "some_unknown_level",
+        "an unknown level shows verbatim rather than blowing up",
     )
-    kiem(not lm.is_citable, "SoftRule `unsupported` không dẫn nguồn")
-    hm_ = DailyLimit(
+
+    # `SoftRule` and `DailyLimit` follow the same convention.
+    soft = SoftRule(
+        condition="Rối loạn mỡ máu", severity_min="mild",
+        nutrient="cholesterol_mg", comparator="lte", threshold=300.0,
+        penalty=0.700, scope="per_day", evidence_level="unsupported",
+    )
+    check(
+        not soft.is_citable,
+        "an `unsupported` SoftRule cannot cite a source",
+    )
+    daily = DailyLimit(
         condition="Tăng huyết áp", nutrient="sodium_mg", comparator="lte",
         threshold=2000.0, eaten=0.0, planned=0.0,
         evidence_level="published",
     )
-    kiem(hm_.is_citable, "DailyLimit `published` dẫn được nguồn")
-    kiem(
-        hm_.evidence_label == lm.evidence_label.replace(
+    check(
+        daily.is_citable, "a `published` DailyLimit can cite a source"
+    )
+    check(
+        daily.evidence_label == soft.evidence_label.replace(
             "không có nguồn đang hiệu lực", "có nguồn công bố"
         ),
-        "ba lớp dùng cùng một bảng nhãn, không ai cài lại",
+        "all three classes share one label table, with nobody reimplementing it",
     )
 
 
 def main() -> int:
     use_utf8()
-    print("Kiểm phần học máy — hàm thuần, không cần CSDL")
+    print("Machine-learning checks — pure functions, no database needed")
     print("=" * 62)
-    for ham in (
-        kiem_lam_tron,
-        kiem_vector,
-        kiem_cosin,
-        kiem_rocchio,
-        kiem_alpha,
-        kiem_cham_diem,
-        kiem_nhan,
-        kiem_chi_so,
-        kiem_pho_bien,
-        kiem_han_muc,
-        kiem_ly_do_loai,
-        kiem_hinh_phat_mem,
-        kiem_cau_giai_thich,
-        kiem_muc_tin_cay,
+    for section in (
+        check_rounding,
+        check_feature_vector,
+        check_cosine,
+        check_rocchio,
+        check_alpha,
+        check_scoring,
+        check_labels,
+        check_metrics,
+        check_popularity,
+        check_daily_limits,
+        check_exclusion_reasons,
+        check_soft_penalty,
+        check_explanations,
+        check_evidence_levels,
     ):
-        ham()
+        section()
     print("=" * 62)
-    if _loi:
-        print(f"{_dat} mục đạt, {len(_loi)} MỤC SAI:")
-        for x in _loi:
+    if _failures:
+        print(f"{_passed} checks passed, {len(_failures)} FAILED:")
+        for x in _failures:
             print("  -", x)
         return 1
-    print(f"Tất cả {_dat} mục kiểm đều đạt.")
+    print(f"All {_passed} checks passed.")
     return 0
 
 
