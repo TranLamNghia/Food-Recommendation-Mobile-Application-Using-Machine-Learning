@@ -81,16 +81,9 @@ def main(argv: list[str] | None = None) -> int:
         if value:
             environ[name] = value
 
-<<<<<<< HEAD
     missing = [n for n in ("MYSQL_USER", "MYSQL_PASSWORD") if not environ.get(n)]
     if missing:
         print(f"Missing {', '.join(missing)} in .env", file=sys.stderr)
-=======
-    missing = [t for t in ("MYSQL_USER", "MYSQL_PASSWORD")
-             if not moi_truong.get(t)]
-    if missing:
-        print(f"Thiếu {', '.join(missing)} trong .env", file=sys.stderr)
->>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
         return 1
 
     if args.build:

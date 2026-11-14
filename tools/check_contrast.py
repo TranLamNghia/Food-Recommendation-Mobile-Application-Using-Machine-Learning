@@ -66,21 +66,12 @@ THRESHOLD_GRAPHICS = 3.0
 class Pair:
     """One (foreground, background) pair in real use, with its usage."""
 
-<<<<<<< HEAD
     foreground: str
     background: str
     threshold: float
     used_for: str
     exempt: bool = False
     exemption_reason: str = ""
-=======
-    truoc: str
-    sau: str
-    threshold: float
-    cho_dung: str
-    mien_tru: bool = False
-    ly_do_mien_tru: str = ""
->>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
 
 
 #: Every colour pair in use. See the docstring: this is hand-written.
@@ -264,7 +255,6 @@ def main() -> int:
     palette = read_palette()
     print(f"Read {len(palette)} colours from {COLOR_FILE.relative_to(ROOT)}\n")
 
-<<<<<<< HEAD
     failures: list[str] = []
     missing: list[str] = []
     passed = 0
@@ -297,46 +287,13 @@ def main() -> int:
                 f"{label} = {ratio:.2f}:1, needs {pair.threshold:.1f}:1 "
                 f"({_hex(palette[pair.foreground])} on "
                 f"{_hex(palette[pair.background])}) — {pair.used_for}"
-=======
-    loi: list[str] = []
-    missing: list[str] = []
-    dat = 0
-    mien = 0
-
-    for cap in CAC_CAP:
-        if cap.truoc not in mau or cap.sau not in mau:
-            con = [t for t in (cap.truoc, cap.sau) if t not in mau]
-            missing.append(f"{cap.truoc} trên {cap.sau}: chưa khai {', '.join(con)}")
-            continue
-
-        ty_so = tuong_phan(mau[cap.truoc], mau[cap.sau])
-        nhan = f"{cap.truoc} trên {cap.sau}"
-        so = f"{ty_so:5.2f}:1 cần {cap.threshold:.1f}:1"
-
-        if ty_so >= cap.threshold:
-            dat += 1
-            print(f"  ✓ {nhan:34s} {so}")
-        elif cap.mien_tru:
-            mien += 1
-            print(f"  ~ {nhan:34s} {so}  MIỄN TRỪ")
-            print(f"      {cap.ly_do_mien_tru}")
-        else:
-            loi.append(
-                f"{nhan} = {ty_so:.2f}:1, cần {cap.threshold:.1f}:1 "
-                f"({_hex(mau[cap.truoc])} trên {_hex(mau[cap.sau])}) "
-                f"— {cap.cho_dung}"
->>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
             )
             print(f"  BAD  {label:34s} {figures}")
             print(f"      {pair.used_for}")
 
     print("\n" + "=" * 72)
     if missing:
-<<<<<<< HEAD
         print(f"{len(missing)} pairs could not be checked:")
-=======
-        print(f"{len(missing)} cặp không kiểm được:")
->>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
         for x in missing:
             print("  -", x)
     if failures:

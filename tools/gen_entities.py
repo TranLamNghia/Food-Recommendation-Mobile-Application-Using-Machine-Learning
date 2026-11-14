@@ -181,7 +181,6 @@ def read_schema(text: str) -> dict[str, list[dict]]:
             parts = definition.split(None, 1)
             if len(parts) < 2:
                 continue
-<<<<<<< HEAD
             column_name, remaining = parts[0], parts[1]
             if not re.fullmatch(r"[a-z_][a-z0-9_]*", column_name):
                 continue
@@ -194,18 +193,6 @@ def read_schema(text: str) -> dict[str, list[dict]]:
             )
             family = type_match.group(1).upper() if type_match else ""
             argument = (type_match.group(2) or "").strip() if type_match else ""
-=======
-            ten_cot, remaining = phan[0], phan[1]
-            if not re.fullmatch(r"[a-z_][a-z0-9_]*", ten_cot):
-                continue
-            hoa = remaining.upper()
-            if not hoa.startswith(TU_KHOA_KIEU):
-                continue
-
-            km = re.match(r"([A-Za-z]+)\s*(?:\((.*?)\))?", remaining, re.S)
-            ho = km.group(1).upper() if km else ""
-            doi_so = (km.group(2) or "").strip() if km else ""
->>>>>>> 57de08cb4d1bf75662c388cd72fd064d2816daba
 
             # A primary key is implicitly NOT NULL even when unwritten.
             is_pk = "PRIMARY KEY" in upper
