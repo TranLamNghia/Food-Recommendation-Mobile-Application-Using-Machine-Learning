@@ -513,7 +513,7 @@ def main(argv: list[str] | None = None) -> int:
     #
     # `/auth/me` had always checked `is_active`, but `/profile` had not: a
     # disabled account could read and write its profile for up to an hour,
-    # until the accessToken expired. `TaiKhoanConHoatDongFilter` now blocks at
+    # until the accessToken expired. `ActiveAccountFilter` now blocks at
     # the filter layer, so a new endpoint is protected by default.
     print("\n§4  a disabled account — blocked at every authenticated endpoint")
     status, body = call("POST", "/auth/login",

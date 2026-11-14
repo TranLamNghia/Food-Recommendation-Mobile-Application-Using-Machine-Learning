@@ -140,7 +140,7 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
         Users user, bool onboarded, string? idCu)
     {
         var refresh = NewRefreshToken();
-        var now = DongHo.BayGio;
+        var now = Clock.Now;
         var row = new RefreshTokens
         {
             Id = Guid.NewGuid().ToString(),
@@ -238,7 +238,7 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
         {
             return (RefreshOutcome.Reused, row);
         }
-        if (row.ExpiresAt <= DongHo.BayGio)
+        if (row.ExpiresAt <= Clock.Now)
         {
             return (RefreshOutcome.Unknown, row);
         }
@@ -260,7 +260,7 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
     /// </summary>
     public async Task RevokeFamilyAsync(string idBatDau)
     {
-        var now = DongHo.BayGio;
+        var now = Clock.Now;
         var seen = new HashSet<string>();
         string? id = idBatDau;
 
@@ -309,7 +309,7 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
     /// </summary>
     public async Task RevokeAllAsync(string userId)
     {
-        var now = DongHo.BayGio;
+        var now = Clock.Now;
         await db.RefreshTokens
             .Where(t => t.UserId == userId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now));

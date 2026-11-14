@@ -54,7 +54,7 @@ builder.Services
         // khoản bị khóa hoặc đã xóa. Còn 38 endpoint chưa làm, và một phép
         // kiểm phải nhớ gõ lại ở từng chỗ là một phép kiểm sẽ bị quên. Bỏ
         // bảo vệ phải tường minh bằng `[AllowAnonymous]`.
-        o.Filters.Add<TaiKhoanConHoatDongFilter>();
+        o.Filters.Add<ActiveAccountFilter>();
     })
     .AddJsonOptions(o =>
     {

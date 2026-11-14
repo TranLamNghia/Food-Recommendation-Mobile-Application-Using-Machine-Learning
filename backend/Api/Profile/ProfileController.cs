@@ -62,7 +62,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         }
 
         var ngay_sinh = req.DateOfBirth!.Value;
-        var hom_nay = DongHo.HomNay;
+        var hom_nay = Clock.Today;
         var tuoi = NutritionTargets.Age(ngay_sinh, hom_nay);
 
         // Khoảng tuổi 13–100 ở §7.2.2 KHÔNG có ràng buộc CSDL tương ứng —
@@ -98,7 +98,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 TargetProteinPct = 15,
                 TargetCarbsPct = 60,
                 TargetFatPct = 25,
-                CreatedAt = DongHo.BayGio,
+                CreatedAt = Clock.Now,
             };
             db.HealthProfiles.Add(ho_so);
         }
@@ -109,7 +109,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         ho_so.WeightKg = req.WeightKg!.Value;
         ho_so.ActivityLevel = req.ActivityLevel;
         ho_so.Goal = req.Goal;
-        ho_so.UpdatedAt = DongHo.BayGio;
+        ho_so.UpdatedAt = Clock.Now;
 
         // Tính lại Bước 1 ở MỌI lần gọi. Cả sáu trường người dùng sửa được
         // đều chảy vào công thức, nên không có trường hợp nào sửa mà hạn mức
@@ -164,7 +164,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         // thực đơn cũ giữ đúng hạn mức cũ; còn endpoint này trả hạn mức
         // HIỆN TẠI, và nó phải bao gồm cả phần không được lưu — gram macro
         // và phân bổ bữa đều không có cột nào.
-        var buoc1 = TinhBuoc1(ho_so, DongHo.HomNay);
+        var buoc1 = TinhBuoc1(ho_so, Clock.Today);
         return Ok(DungHanMuc(ho_so, buoc1));
     }
 
@@ -252,7 +252,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 ConditionId = c.ConditionId!.Value,
                 Severity = c.Severity,
                 Note = string.IsNullOrWhiteSpace(c.Note) ? null : c.Note,
-                CreatedAt = DongHo.BayGio,
+                CreatedAt = Clock.Now,
             });
         }
 
@@ -286,7 +286,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
 
     private async Task<ProfileResponse> DungHoSo(HealthProfiles h)
     {
-        var hom_nay = DongHo.HomNay;
+        var hom_nay = Clock.Today;
         // `bmi` của CSDL là DECIMAL(5,2) đã làm tròn. Dùng nó nếu có, để
         // phản hồi khớp đúng thứ một truy vấn SQL trả về; tính lại chỉ khi
         // dòng chưa qua CSDL.

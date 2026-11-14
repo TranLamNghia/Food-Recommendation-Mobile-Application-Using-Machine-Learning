@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """One clock for the Python side: Asia/Ho_Chi_Minh.
 
-The Python twin of `backend/Api/Time/DongHo.cs`, and it exists for the same
+The Python twin of `backend/Api/Time/Clock.cs`, and it exists for the same
 reason. Three layers of this system used to read three different clocks: the
 database used `CURRENT_TIMESTAMP` on 27 columns and `NOW()` in every script,
 both resolving to `@@session.time_zone`, which defaults to `SYSTEM`, which is

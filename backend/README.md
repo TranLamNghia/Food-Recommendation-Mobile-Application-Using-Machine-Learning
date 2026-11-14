@@ -62,7 +62,7 @@ Phép kiểm 5 của nó đối chiếu bốn mảng trong `Api/Profile/ProfileD
 
 ### Một múi giờ duy nhất: Asia/Ho_Chi_Minh
 
-`Api/Time/DongHo.cs` là chỗ duy nhất đọc đồng hồ. Mọi cột `DATETIME` lấy `DongHo.BayGio`, mọi cột `DATE` và mọi phép tính theo ngày lịch lấy `DongHo.HomNay`.
+`Api/Time/Clock.cs` là chỗ duy nhất đọc đồng hồ. Mọi cột `DATETIME` lấy `Clock.Now`, mọi cột `DATE` và mọi phép tính theo ngày lịch lấy `Clock.Today`.
 
 Trước đó ba tầng đọc ba đồng hồ: CSDL dùng `CURRENT_TIMESTAMP` ở 27 cột và `NOW()` trong mọi `tools/*.py`, cả hai trả theo `@@session.time_zone` mặc định là `SYSTEM` tức giờ Việt Nam; app Flutter dùng `DateTime.now()`, giờ địa phương; còn Backend dùng `DateTime.UtcNow`, **lệch 7 giờ so với cả hai**. Hậu quả im lặng: `users.created_at` do Backend ghi lùi 7 giờ so với dòng do `check_ml_e2e.py` ghi, nên sắp theo `created_at` là trộn hai đồng hồ. Và "hôm nay" tính bằng UTC lùi một **ngày** trong khoảng 00:00–07:00, nên đúng ngày sinh nhật app hiện 23 tuổi còn `GET /profile` trả `age: 22`.
 
@@ -72,7 +72,7 @@ Chọn giờ Việt Nam chứ không chọn UTC vì đó là thứ CSDL **đang*
 
 ### Chặn tài khoản bị khóa bằng bộ lọc toàn cục, không bằng phép kiểm từng chỗ
 
-`TaiKhoanConHoatDongFilter` đăng ký trong `MvcOptions.Filters`, nên endpoint mới được bảo vệ **mặc định**; bỏ bảo vệ phải tường minh bằng `[AllowAnonymous]`. Trước đó `is_active` được kiểm ở `/auth/login`, `/auth/refresh` và `/auth/me` nhưng **không** ở bất cứ endpoint nào của `/profile`, nên tài khoản bị khóa vẫn đọc ghi hồ sơ được tới một giờ. Còn 38 endpoint chưa làm, và một phép kiểm phải nhớ gõ lại ở từng chỗ là một phép kiểm sẽ bị quên.
+`ActiveAccountFilter` đăng ký trong `MvcOptions.Filters`, nên endpoint mới được bảo vệ **mặc định**; bỏ bảo vệ phải tường minh bằng `[AllowAnonymous]`. Trước đó `is_active` được kiểm ở `/auth/login`, `/auth/refresh` và `/auth/me` nhưng **không** ở bất cứ endpoint nào của `/profile`, nên tài khoản bị khóa vẫn đọc ghi hồ sơ được tới một giờ. Còn 38 endpoint chưa làm, và một phép kiểm phải nhớ gõ lại ở từng chỗ là một phép kiểm sẽ bị quên.
 
 `/auth/login` và `/auth/refresh` giữ phép kiểm riêng, và đó không phải trùng lặp: chúng `[AllowAnonymous]` và xác thực bằng mật khẩu hoặc refreshToken, nên không có claim `sub` để bộ lọc tra.
 
@@ -109,8 +109,8 @@ Api/
 ├── Entities/               24 lớp           ← SINH TỰ ĐỘNG
 ├── Http/
 │   ├── ApiError.cs         vỏ lỗi + danh mục 21 mã lỗi của §4
-│   └── TaiKhoanConHoatDong.cs   chặn tài khoản bị khóa ở MỌI endpoint
-├── Time/DongHo.cs          một múi giờ duy nhất: Asia/Ho_Chi_Minh
+│   └── ActiveAccount.cs         chặn tài khoản bị khóa ở MỌI endpoint
+├── Time/Clock.cs           một múi giờ duy nhất: Asia/Ho_Chi_Minh
 ├── Nutrition/              Bước 1: BMI, BMR, TDEE, macro, phân bổ bữa
 ├── Auth/                   7.1.1 – 7.1.4
 └── Profile/                7.2.1 – 7.2.5

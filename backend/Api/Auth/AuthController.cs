@@ -46,7 +46,7 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
                        "Email này đã được đăng ký");
         }
 
-        var now = DongHo.BayGio;
+        var now = Clock.Now;
         var user = new Users
         {
             Id = Guid.NewGuid().ToString(),
@@ -246,7 +246,7 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
 
         if (ket_qua is null)
         {
-            // `TaiKhoanConHoatDongFilter` đã tra `is_active` trước khi vào
+            // `ActiveAccountFilter` đã tra `is_active` trước khi vào
             // đây, nên nhánh này chỉ chạy khi người dùng bị xóa GIỮA hai
             // truy vấn. Giữ lại vì nếu không thì phải `!` một giá trị có
             // thể null.
@@ -255,7 +255,7 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         }
 
         // KHÔNG kiểm `IsActive` ở đây nữa. Bộ lọc toàn cục
-        // `TaiKhoanConHoatDongFilter` làm việc đó cho MỌI endpoint đã xác
+        // `ActiveAccountFilter` làm việc đó cho MỌI endpoint đã xác
         // thực. Một phép kiểm thứ hai ở đây sẽ là mã chết trông như lưới an
         // toàn, và nó che đi việc 38 endpoint còn lại không có lưới nào.
 
