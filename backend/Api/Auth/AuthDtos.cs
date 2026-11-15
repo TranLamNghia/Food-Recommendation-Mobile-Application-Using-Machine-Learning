@@ -4,26 +4,34 @@ using System.Text;
 namespace Api.Auth;
 
 /// <summary>
-/// Chuỗi không được dài quá <paramref name="toi_da"/> <b>byte</b> khi mã hóa
-/// UTF-8.
+/// The string must not be longer than <paramref name="maxBytes"/>
+/// <b>bytes</b> once encoded as UTF-8.
 ///
-/// <para>Tồn tại vì BCrypt chỉ dùng <b>72 byte đầu</b> của mật khẩu và lặng
-/// lẽ bỏ phần còn lại: hai mật khẩu khác nhau mà trùng 72 byte đầu sẽ đăng
-/// nhập được lẫn nhau. <c>MaxLength</c> không đủ — nó đếm KÝ TỰ, còn một chữ
-/// tiếng Việt có dấu chiếm 2–3 byte UTF-8, nên 72 ký tự có thể là hơn 200
-/// byte và vẫn bị cắt.</para>
+/// <para>It exists because BCrypt only uses the <b>first 72 bytes</b> of a
+/// password and silently drops the rest: two different passwords that share
+/// their first 72 bytes can each log into the other's account.
+/// <c>MaxLength</c> is not enough — it counts CHARACTERS, and an accented
+/// Vietnamese letter takes 2–3 UTF-8 bytes, so 72 characters can be more than
+/// 200 bytes and still get truncated.</para>
+///
+/// <para>Note on language: the message returned by
+/// <see cref="FormatErrorMessage"/> stays in Vietnamese, as do every
+/// <c>ErrorMessage</c> in this file — they are the <c>error.details[].message</c>
+/// strings of specification §2.5, which end users read. The stable part the
+/// frontend branches on is <c>error.code</c>, not these sentences.</para>
 /// </summary>
-public sealed class MaxUtf8BytesAttribute(int toi_da) : ValidationAttribute
+public sealed class MaxUtf8BytesAttribute(int maxBytes) : ValidationAttribute
 {
     public override bool IsValid(object? value)
         => value is not string s
-            || Encoding.UTF8.GetByteCount(s) <= toi_da;
+            || Encoding.UTF8.GetByteCount(s) <= maxBytes;
 
     public override string FormatErrorMessage(string name)
-        => $"Tối đa {toi_da} byte UTF-8 (chữ có dấu chiếm 2–3 byte mỗi chữ)";
+        => $"Tối đa {maxBytes} byte UTF-8 (chữ có dấu chiếm 2–3 byte mỗi chữ)";
 }
 
-/// <summary>Thân của <c>POST /auth/register</c> — đặc tả §7.1.1.</summary>
+/// <summary>Body of <c>POST /auth/register</c> — specification
+/// §7.1.1.</summary>
 public sealed class RegisterRequest
 {
     [Required(ErrorMessage = "Thiếu email")]
@@ -33,14 +41,16 @@ public sealed class RegisterRequest
 
     [Required(ErrorMessage = "Thiếu mật khẩu")]
     [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
-    // Chặn trên 72 BYTE, bằng đúng giới hạn BCrypt dùng. Đặc tả §7.1.1 chỉ
-    // nói "tối thiểu 8 ký tự, có chữ và số" nên không đòi chặn trên — nhưng
-    // không có nó thì mật khẩu dài hơn bị cắt im lặng, và người dùng sẽ
-    // không bao giờ biết phần sau không được tính.
+    // An upper bound of 72 BYTES, exactly the limit BCrypt uses.
+    // Specification §7.1.1 only says "at least 8 characters, with letters and
+    // digits", so it does not ask for an upper bound — but without one, a
+    // longer password gets silently truncated and the user would never know
+    // the tail of it was not counted.
     [MaxUtf8Bytes(72)]
-    // Đặc tả §7.1.1 đòi "có chữ và số". `RegularExpression` chứ không kiểm
-    // trong controller, để lỗi đi qua cùng một đường với mọi lỗi validation
-    // khác và ra đúng vỏ `details` ở §2.5.
+    // Specification §7.1.1 requires "letters and digits". A
+    // `RegularExpression` rather than a check in the controller, so the error
+    // travels the same path as every other validation error and comes out in
+    // the §2.5 `details` envelope.
     [RegularExpression(@"^(?=.*[A-Za-z])(?=.*\d).+$",
         ErrorMessage = "Mật khẩu phải có cả chữ và số")]
     public string Password { get; set; } = string.Empty;
@@ -51,7 +61,7 @@ public sealed class RegisterRequest
     public string DisplayName { get; set; } = string.Empty;
 }
 
-/// <summary>Thân của <c>POST /auth/login</c> — đặc tả §7.1.2.</summary>
+/// <summary>Body of <c>POST /auth/login</c> — specification §7.1.2.</summary>
 public sealed class LoginRequest
 {
     [Required(ErrorMessage = "Thiếu email")]
@@ -61,14 +71,15 @@ public sealed class LoginRequest
     public string Password { get; set; } = string.Empty;
 }
 
-/// <summary>Thân của <c>POST /auth/refresh</c> — đặc tả §7.1.3.</summary>
+/// <summary>Body of <c>POST /auth/refresh</c> — specification
+/// §7.1.3.</summary>
 public sealed class RefreshRequest
 {
     [Required(ErrorMessage = "Thiếu refreshToken")]
     public string RefreshToken { get; set; } = string.Empty;
 }
 
-/// <summary>Người dùng trong phản hồi đăng ký và đăng nhập.</summary>
+/// <summary>The user as returned by register and login.</summary>
 public sealed class UserSummary
 {
     public string Id { get; init; } = string.Empty;
@@ -79,7 +90,7 @@ public sealed class UserSummary
     public DateTime CreatedAt { get; init; }
 }
 
-/// <summary>Phản hồi của đăng ký và đăng nhập — §7.1.1 và §7.1.2.</summary>
+/// <summary>The register and login response — §7.1.1 and §7.1.2.</summary>
 public sealed class AuthResponse
 {
     public string AccessToken { get; init; } = string.Empty;
@@ -90,10 +101,11 @@ public sealed class AuthResponse
 }
 
 /// <summary>
-/// Phản hồi của <c>POST /auth/refresh</c> — §7.1.3.
+/// The <c>POST /auth/refresh</c> response — §7.1.3.
 ///
-/// <para>Không có <c>user</c>, đúng theo đặc tả: Frontend đã có thông tin đó
-/// từ lúc đăng nhập, và endpoint này chỉ đổi token.</para>
+/// <para>No <c>user</c>, exactly as the specification says: the frontend
+/// already has that from logging in, and this endpoint only exchanges
+/// tokens.</para>
 /// </summary>
 public sealed class RefreshResponse
 {
@@ -103,7 +115,7 @@ public sealed class RefreshResponse
     public int ExpiresIn { get; init; }
 }
 
-/// <summary>Phản hồi của <c>GET /auth/me</c> — §7.1.4.</summary>
+/// <summary>The <c>GET /auth/me</c> response — §7.1.4.</summary>
 public sealed class MeResponse
 {
     public string Id { get; init; } = string.Empty;
@@ -114,13 +126,13 @@ public sealed class MeResponse
     public bool HasHealthProfile { get; init; }
 
     /// <summary>
-    /// <c>cold</c> · <c>content</c> · <c>hybrid</c> · <c>ml</c>, đọc từ
+    /// <c>cold</c> · <c>content</c> · <c>hybrid</c> · <c>ml</c>, read from
     /// <c>user_preference_profiles.stage</c>.
     ///
-    /// <para><c>cold</c> khi chưa có dòng nào: giai đoạn 0 là trạng thái của
-    /// người chưa cho tín hiệu nào, không phải một trạng thái thiếu dữ liệu.
-    /// Trả <c>null</c> ở đây sẽ buộc Frontend tự đoán, và nó sẽ đoán khác
-    /// với <c>ml/serve.py</c>.</para>
+    /// <para><c>cold</c> when there is no row yet: stage 0 is the state of
+    /// someone who has given no signal, not a state of missing data.
+    /// Returning <c>null</c> here would force the frontend to guess, and it
+    /// would guess differently from <c>ml/serve.py</c>.</para>
     /// </summary>
     public string PreferenceStage { get; init; } = "cold";
 
