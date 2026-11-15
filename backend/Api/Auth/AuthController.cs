@@ -9,23 +9,28 @@ using Microsoft.EntityFrameworkCore;
 namespace Api.Auth;
 
 /// <summary>
-/// Nhóm Xác thực — đặc tả §7.1.1 đến §7.1.4.
+/// The Authentication group — specification §7.1.1 through §7.1.4.
 ///
-/// <para>Bốn endpoint này là đợt 1 trong thứ tự hiện thực ở §10.2, vì mọi
-/// endpoint khác đều cần token.</para>
+/// <para>These four endpoints are wave 1 in the implementation order of
+/// §10.2, because every other endpoint needs a token.</para>
+///
+/// <para>Note on language: every <c>message</c> passed to <see cref="Fail"/>
+/// stays in Vietnamese. It is the <c>error.message</c> of specification §2.5,
+/// which end users read; the stable string the frontend branches on is
+/// <c>error.code</c>.</para>
 /// </summary>
 [ApiController]
 [Route("api/v1/auth")]
 public sealed class AuthController(AppDbContext db, TokenService tokens)
     : ControllerBase
 {
-    private ObjectResult Loi(
+    private ObjectResult Fail(
         int status, string code, string message,
         List<ApiError.FieldError>? details = null)
         => ApiProblem.Make(status, code, message, HttpContext.TraceIdentifier,
                         details);
 
-    // ── 7.1.1 Đăng ký ────────────────────────────────────────────────────
+    // ── 7.1.1 Register ───────────────────────────────────────────────────
 
     [HttpPost("register")]
     [AllowAnonymous]
@@ -33,17 +38,17 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
     {
         var email = req.Email.Trim().ToLowerInvariant();
 
-        // Email so khớp KHÔNG phân biệt hoa thường. `users.email` là UNIQUE
-        // với collation `utf8mb4_unicode_ci`, nên CSDL coi `A@x.com` và
-        // `a@x.com` là một — nhưng nếu lưu nguyên dạng người dùng gõ thì
-        // đăng nhập bằng dạng khác sẽ phụ thuộc vào collation chứ không phải
-        // vào mã, và điều đó đổi theo cấu hình máy chủ. Chuẩn hóa về chữ
-        // thường ngay tại đây.
+        // Emails are matched case-INSENSITIVELY. `users.email` is UNIQUE with
+        // the `utf8mb4_unicode_ci` collation, so the database already treats
+        // `A@x.com` and `a@x.com` as one — but storing whatever form the user
+        // typed would make logging in with a different form depend on the
+        // collation rather than on the code, and that changes with the server
+        // configuration. Normalise to lower case right here.
         if (await db.Users.AnyAsync(u => u.Email == email))
         {
-            return Loi(StatusCodes.Status409Conflict,
-                       ErrorCode.EmailAlreadyExists,
-                       "Email này đã được đăng ký");
+            return Fail(StatusCodes.Status409Conflict,
+                        ErrorCode.EmailAlreadyExists,
+                        "Email này đã được đăng ký");
         }
 
         var now = Clock.Now;
@@ -51,14 +56,16 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         {
             Id = Guid.NewGuid().ToString(),
             Email = email,
-            // `role` mặc định `user`. KHÔNG nhận `role` từ thân yêu cầu —
-            // đó là cách tự cấp quyền quản trị bằng một dòng JSON.
+            // `role` defaults to `user`. `role` is NEVER taken from the
+            // request body — that is how someone grants themselves admin
+            // rights with one line of JSON.
             Role = "user",
             IsActive = true,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
             DisplayName = req.DisplayName.Trim(),
             AvatarUrl = null,
-            // `null` = chưa hoàn tất phiên vuốt thăm dò, nên còn ở Giai đoạn 0.
+            // `null` = the exploratory swipe session is not finished, so they
+            // are still in Stage 0.
             OnboardingCompletedAt = null,
             CreatedAt = now,
             UpdatedAt = now,
@@ -71,32 +78,33 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         }
         catch (DbUpdateException)
         {
-            // Hai yêu cầu đăng ký cùng một email cùng lúc: phép kiểm ở trên
-            // cho cả hai đi qua, rồi `UNIQUE (email)` chặn cái thứ hai. Đây
-            // là lý do ràng buộc UNIQUE phải tồn tại — phép kiểm ở tầng ứng
-            // dụng không bao giờ nguyên tử.
+            // Two registrations for the same email at the same time: the
+            // check above lets both through, and then `UNIQUE (email)` stops
+            // the second one. This is why that UNIQUE constraint has to exist
+            // — a check at the application layer is never atomic.
             //
-            // Không thể `await` trong mệnh đề `when` của `catch`, nên phải
-            // tra lại trong thân. Và phải GỠ dòng vừa thêm khỏi ChangeTracker
-            // trước khi truy vấn: nếu không, EF sẽ cố ghi lại nó ở lần
-            // SaveChanges kế tiếp trong cùng phạm vi yêu cầu.
+            // `await` is not allowed in a `catch`'s `when` clause, so the
+            // lookup has to happen in the body. And the row just added has to
+            // be DETACHED from the ChangeTracker before querying: otherwise
+            // EF would try to write it again on the next SaveChanges in the
+            // same request scope.
             db.Entry(user).State = EntityState.Detached;
 
             if (await db.Users.AnyAsync(u => u.Email == email))
             {
-                return Loi(StatusCodes.Status409Conflict,
-                           ErrorCode.EmailAlreadyExists,
-                           "Email này đã được đăng ký");
+                return Fail(StatusCodes.Status409Conflict,
+                            ErrorCode.EmailAlreadyExists,
+                            "Email này đã được đăng ký");
             }
             throw;
         }
 
         var pair = await tokens.IssueAsync(user, onboarded: false);
         return StatusCode(StatusCodes.Status201Created,
-                          Dung(pair, user));
+                          BuildResponse(pair, user));
     }
 
-    // ── 7.1.2 Đăng nhập ──────────────────────────────────────────────────
+    // ── 7.1.2 Log in ─────────────────────────────────────────────────────
 
     [HttpPost("login")]
     [AllowAnonymous]
@@ -105,106 +113,113 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         var email = req.Email.Trim().ToLowerInvariant();
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-        // So mật khẩu NGAY CẢ KHI không có người dùng nào, với một băm giả.
+        // The password is verified EVEN WHEN there is no such user, against a
+        // dummy hash.
         //
-        // Thoát sớm khi email không tồn tại làm lộ thông tin qua thời gian
-        // trả lời: BCrypt mất khoảng 100 ms, nên "email không có" trả về tức
-        // thì còn "sai mật khẩu" mất 100 ms. Đo thời gian là đọc được email
-        // nào đã đăng ký — đúng thứ mà đặc tả §7.1.2 cố bịt bằng cách trả
-        // chung một mã lỗi.
-        var hash = user?.PasswordHash ?? BamGia;
-        var dung = BCrypt.Net.BCrypt.Verify(req.Password, hash);
+        // Returning early when the email does not exist leaks information
+        // through the response time: BCrypt takes around 100 ms, so "no such
+        // email" would answer instantly while "wrong password" took 100 ms.
+        // Timing the responses then reads out which emails are registered —
+        // exactly what specification §7.1.2 tries to hide by returning one
+        // single error code.
+        var hash = user?.PasswordHash ?? DummyHash;
+        var matches = BCrypt.Net.BCrypt.Verify(req.Password, hash);
 
-        if (user is null || !dung)
+        if (user is null || !matches)
         {
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.InvalidCredentials,
-                       "Email hoặc mật khẩu không đúng");
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.InvalidCredentials,
+                        "Email hoặc mật khẩu không đúng");
         }
 
-        // Tài khoản bị khóa thì nói thẳng, không trả INVALID_CREDENTIALS:
-        // người dùng thật cần biết để liên hệ quản trị, chứ không ngồi thử
-        // lại mật khẩu. Phép kiểm đặt SAU khi đã xác thực mật khẩu — nếu
-        // không thì ai cũng dò được tài khoản nào đang bị khóa.
+        // A disabled account is told so plainly rather than given
+        // INVALID_CREDENTIALS: a genuine user needs to know to contact an
+        // administrator instead of sitting there retrying their password. The
+        // check comes AFTER the password has been verified — otherwise anyone
+        // could probe which accounts are disabled.
         if (!user.IsActive)
         {
-            return Loi(StatusCodes.Status403Forbidden,
-                       ErrorCode.AccountDisabled,
-                       "Tài khoản đã bị khóa, vui lòng liên hệ quản trị");
+            return Fail(StatusCodes.Status403Forbidden,
+                        ErrorCode.AccountDisabled,
+                        "Tài khoản đã bị khóa, vui lòng liên hệ quản trị");
         }
 
         var pair = await tokens.IssueAsync(
             user, onboarded: user.OnboardingCompletedAt is not null);
-        return Ok(Dung(pair, user));
+        return Ok(BuildResponse(pair, user));
     }
 
     /// <summary>
-    /// Băm BCrypt của một mật khẩu không ai biết, dùng để so khi email không
-    /// tồn tại. Giá trị cụ thể không quan trọng — chỉ cần nó là một băm
-    /// BCrypt hợp lệ để <c>Verify</c> làm đủ số vòng.
+    /// The BCrypt hash of a password nobody knows, verified against when the
+    /// email does not exist. The particular value does not matter — it only
+    /// has to be a valid BCrypt hash so that <c>Verify</c> performs the full
+    /// number of rounds.
     /// </summary>
-    private const string BamGia =
+    private const string DummyHash =
         "$2a$11$N9qo8uLOickgx2ZMRZoMye" +
         "IjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
-    // ── 7.1.3 Làm mới token ──────────────────────────────────────────────
+    // ── 7.1.3 Refresh a token ────────────────────────────────────────────
 
     [HttpPost("refresh")]
     [AllowAnonymous]
     public async Task<IActionResult> Refresh(RefreshRequest req)
     {
-        var (ket_qua, dong) = await tokens.InspectAsync(req.RefreshToken);
+        var (outcome, row) = await tokens.InspectAsync(req.RefreshToken);
 
-        if (ket_qua == TokenService.RefreshOutcome.Reused && dong is not null)
+        if (outcome == TokenService.RefreshOutcome.Reused && row is not null)
         {
-            // Token đã thu hồi mà được nộp lại. Hai khả năng, không phân
-            // biệt được: người dùng thật mất mạng giữa lúc xoay vòng, hoặc
-            // token đã rò. Cắt cả chuỗi.
-            await tokens.RevokeFamilyAsync(dong.Id);
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.TokenInvalid,
-                       "refreshToken đã bị thu hồi — vui lòng đăng nhập lại");
+            // An already-revoked token sent in again. Two possibilities, and
+            // they cannot be told apart: a genuine user who lost their
+            // connection mid-rotation, or a token that has leaked. Cut the
+            // whole chain.
+            await tokens.RevokeFamilyAsync(row.Id);
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid,
+                        "refreshToken đã bị thu hồi — vui lòng đăng nhập lại");
         }
 
-        if (ket_qua != TokenService.RefreshOutcome.Valid || dong is null)
+        if (outcome != TokenService.RefreshOutcome.Valid || row is null)
         {
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.TokenInvalid,
-                       "refreshToken không hợp lệ hoặc đã hết hạn");
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid,
+                        "refreshToken không hợp lệ hoặc đã hết hạn");
         }
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == dong.UserId);
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == row.UserId);
         if (user is null || !user.IsActive)
         {
-            // Tài khoản bị khóa sau khi token được phát. Thu hồi luôn, nếu
-            // không thì người đó còn làm mới được token suốt 30 ngày.
-            await tokens.RevokeAllAsync(dong.UserId);
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.TokenInvalid,
-                       "Tài khoản không còn hoạt động");
+            // The account was disabled after the token was issued. Revoke
+            // them all, otherwise that person could keep refreshing for 30
+            // days.
+            await tokens.RevokeAllAsync(row.UserId);
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid,
+                        "Tài khoản không còn hoạt động");
         }
 
         var pair = await tokens.RotateAsync(
             user,
             onboarded: user.OnboardingCompletedAt is not null,
-            idCu: dong.Id);
+            oldId: row.Id);
 
         if (pair is null)
         {
-            // MẤT CUỘC ĐUA: giữa lượt `InspectAsync` ở trên và lượt đoạt dòng
-            // trong `RotateAsync`, một yêu cầu khác đã thu hồi đúng token
-            // này. Cùng một token được nộp hai lần — không phân biệt được
-            // với rò rỉ, nên xử lý y như tái dùng.
+            // LOST THE RACE: between the `InspectAsync` above and the row
+            // claim inside `RotateAsync`, another request revoked this exact
+            // token. The same token was sent in twice — indistinguishable
+            // from a leak, so it is handled exactly like a reuse.
             //
-            // Nghĩa là nộp trùng (người dùng bấm hai lần, hoặc app thử lại
-            // sau một gói mất) sẽ ĐĂNG XUẤT người dùng. Đó là giá của phép
-            // phát hiện tái dùng, và nó đã được chấp nhận ở nhánh `Reused`
-            // phía trên; chỗ này chỉ làm cho nó đúng cả khi có đồng thời.
-            await tokens.RevokeFamilyAsync(dong.Id);
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.TokenInvalid,
-                       "refreshToken đã được dùng ở một yêu cầu khác — vui "
-                       + "lòng đăng nhập lại");
+            // Which means a duplicate submission (the user tapping twice, or
+            // the app retrying after a dropped packet) will LOG THE USER OUT.
+            // That is the price of reuse detection, and it was already
+            // accepted in the `Reused` branch above; this only makes it hold
+            // under concurrency too.
+            await tokens.RevokeFamilyAsync(row.Id);
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid,
+                        "refreshToken đã được dùng ở một yêu cầu khác — vui "
+                        + "lòng đăng nhập lại");
         }
 
         return Ok(new RefreshResponse
@@ -215,7 +230,7 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         });
     }
 
-    // ── 7.1.4 Thông tin tài khoản ────────────────────────────────────────
+    // ── 7.1.4 Account information ────────────────────────────────────────
 
     [HttpGet("me")]
     [Authorize]
@@ -224,61 +239,62 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         var userId = User.FindFirst("sub")?.Value;
         if (userId is null)
         {
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.TokenInvalid, "Token thiếu `sub`");
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
 
-        // Một truy vấn, không ba. Ba lượt đi CSDL cho một endpoint mà
-        // Frontend gọi NGAY khi mở app là ba lượt mạng nội bộ trước khi màn
-        // hình đầu tiên vẽ được.
-        var ket_qua = await db.Users
+        // One query, not three. Three round trips to the database for an
+        // endpoint the frontend calls the MOMENT the app opens is three
+        // internal network hops before the first screen can be drawn.
+        var found = await db.Users
             .Where(u => u.Id == userId)
             .Select(u => new
             {
                 User = u,
-                CoHoSo = db.HealthProfiles.Any(h => h.UserId == u.Id),
-                GiaiDoan = db.UserPreferenceProfiles
+                HasProfile = db.HealthProfiles.Any(h => h.UserId == u.Id),
+                Stage = db.UserPreferenceProfiles
                     .Where(p => p.UserId == u.Id)
                     .Select(p => p.Stage)
                     .FirstOrDefault(),
             })
             .FirstOrDefaultAsync();
 
-        if (ket_qua is null)
+        if (found is null)
         {
-            // `ActiveAccountFilter` đã tra `is_active` trước khi vào
-            // đây, nên nhánh này chỉ chạy khi người dùng bị xóa GIỮA hai
-            // truy vấn. Giữ lại vì nếu không thì phải `!` một giá trị có
-            // thể null.
-            return Loi(StatusCodes.Status401Unauthorized,
-                       ErrorCode.TokenInvalid, "Tài khoản không còn tồn tại");
+            // `ActiveAccountFilter` already looked up `is_active` before
+            // reaching here, so this branch only runs when the user was
+            // deleted BETWEEN the two queries. It stays because otherwise a
+            // possibly-null value would have to be `!`-ed.
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid, "Tài khoản không còn tồn tại");
         }
 
-        // KHÔNG kiểm `IsActive` ở đây nữa. Bộ lọc toàn cục
-        // `ActiveAccountFilter` làm việc đó cho MỌI endpoint đã xác
-        // thực. Một phép kiểm thứ hai ở đây sẽ là mã chết trông như lưới an
-        // toàn, và nó che đi việc 38 endpoint còn lại không có lưới nào.
+        // `IsActive` is NOT checked here any more. The global
+        // `ActiveAccountFilter` does that for EVERY authenticated endpoint. A
+        // second check here would be dead code that looks like a safety net,
+        // and it would hide the fact that the other 38 endpoints have no net
+        // at all.
 
         return Ok(new MeResponse
         {
-            Id = ket_qua.User.Id,
-            Email = ket_qua.User.Email,
-            DisplayName = ket_qua.User.DisplayName,
-            AvatarUrl = ket_qua.User.AvatarUrl,
-            OnboardingCompletedAt = ket_qua.User.OnboardingCompletedAt,
-            HasHealthProfile = ket_qua.CoHoSo,
-            // Chưa có dòng `user_preference_profiles` nghĩa là chưa cho tín
-            // hiệu nào — đó chính là Giai đoạn 0, `cold`.
-            PreferenceStage = string.IsNullOrEmpty(ket_qua.GiaiDoan)
+            Id = found.User.Id,
+            Email = found.User.Email,
+            DisplayName = found.User.DisplayName,
+            AvatarUrl = found.User.AvatarUrl,
+            OnboardingCompletedAt = found.User.OnboardingCompletedAt,
+            HasHealthProfile = found.HasProfile,
+            // No `user_preference_profiles` row yet means no signal has been
+            // given — which is precisely Stage 0, `cold`.
+            PreferenceStage = string.IsNullOrEmpty(found.Stage)
                 ? "cold"
-                : ket_qua.GiaiDoan,
-            CreatedAt = ket_qua.User.CreatedAt,
+                : found.Stage,
+            CreatedAt = found.User.CreatedAt,
         });
     }
 
-    // ── chung ────────────────────────────────────────────────────────────
+    // ── shared ───────────────────────────────────────────────────────────
 
-    private static AuthResponse Dung(TokenPair pair, Users user)
+    private static AuthResponse BuildResponse(TokenPair pair, Users user)
         => new()
         {
             AccessToken = pair.AccessToken,

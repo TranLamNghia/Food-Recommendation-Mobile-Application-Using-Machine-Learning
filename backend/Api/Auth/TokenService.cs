@@ -10,7 +10,8 @@ using Api.Time;
 
 namespace Api.Auth;
 
-/// <summary>Cấu hình JWT, đọc từ <c>appsettings</c> hoặc biến môi trường.</summary>
+/// <summary>JWT configuration, read from <c>appsettings</c> or from
+/// environment variables.</summary>
 public sealed class JwtOptions
 {
     public const string Section = "Jwt";
@@ -19,69 +20,75 @@ public sealed class JwtOptions
     public string Audience { get; set; } = "nutrition-rec-mobile";
 
     /// <summary>
-    /// Khóa ký HMAC-SHA256. <b>Không có giá trị mặc định</b>, có chủ ý:
-    /// một khóa mặc định trong mã nguồn sẽ đi theo lên môi trường thật, và
-    /// mọi ai đọc được repo đều ký được token hợp lệ. Repo này là repo công
-    /// khai.
+    /// The HMAC-SHA256 signing key. <b>No default value</b>, deliberately: a
+    /// default key in the source would travel along into the real
+    /// environment, and anyone who can read the repository could sign valid
+    /// tokens. This repository is public.
     /// </summary>
     public string SigningKey { get; set; } = string.Empty;
 
-    /// <summary>1 giờ — đặc tả §2.4.</summary>
+    /// <summary>1 hour — specification §2.4.</summary>
     public int AccessTokenMinutes { get; set; } = 60;
 
-    /// <summary>30 ngày — đặc tả §2.4.</summary>
+    /// <summary>30 days — specification §2.4.</summary>
     public int RefreshTokenDays { get; set; } = 30;
 }
 
-/// <summary>Cặp token trả về cho Frontend.</summary>
+/// <summary>The token pair returned to the frontend.</summary>
 public sealed record TokenPair(
     string AccessToken, string RefreshToken, int ExpiresInSeconds);
 
 /// <summary>
-/// Phát và xoay vòng token.
+/// Issues and rotates tokens.
 ///
-/// <para><b>accessToken</b> là JWT tự chứa: mọi endpoint
-/// <c>🔒 Protected</c> xác thực nó bằng chữ ký, không cần tra CSDL. Đó là lý
-/// do nó chỉ sống một giờ — không thu hồi được trong một giờ đó.</para>
+/// <para>The <b>accessToken</b> is a self-contained JWT: every
+/// <c>🔒 Protected</c> endpoint authenticates it by its signature, with no
+/// database lookup. That is why it only lives for an hour — it cannot be
+/// revoked within that hour.</para>
 ///
-/// <para><b>refreshToken</b> thì ngược lại: một chuỗi ngẫu nhiên, băm rồi lưu
-/// vào bảng <c>refresh_tokens</c>. Nó phải có trạng thái phía máy chủ vì đặc
-/// tả §7.1.3 hứa "thu hồi token cũ" và §7.1.7 hứa "thu hồi mọi token khi đổi
-/// mật khẩu" — hai lời hứa mà một JWT tự chứa không giữ được.</para>
+/// <para>The <b>refreshToken</b> is the opposite: a random string, hashed and
+/// stored in the <c>refresh_tokens</c> table. It has to have server-side
+/// state because specification §7.1.3 promises "the old token is revoked" and
+/// §7.1.7 promises "every token is revoked on a password change" — two
+/// promises a self-contained JWT cannot keep.</para>
 /// </summary>
 public sealed class TokenService(AppDbContext db, JwtOptions opt)
 {
     /// <summary>
-    /// Băm token để lưu. SHA-256 chứ không BCrypt: token là 32 byte ngẫu
-    /// nhiên, không dò được bằng từ điển, nên cái chậm cố ý của BCrypt chỉ
-    /// còn là chi phí trên mỗi lượt gọi <c>/auth/refresh</c>.
+    /// Hashes a token for storage. SHA-256 rather than BCrypt: the token is
+    /// 32 random bytes, so it cannot be guessed from a dictionary, which
+    /// leaves BCrypt's deliberate slowness as nothing but a cost on every
+    /// <c>/auth/refresh</c> call.
     /// </summary>
     public static string Hash(string token)
         => Convert.ToHexStringLower(
             SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     /// <summary>
-    /// Sinh refreshToken: 32 byte từ bộ sinh số ngẫu nhiên mật mã.
+    /// Generates a refreshToken: 32 bytes from the cryptographic random
+    /// number generator.
     ///
-    /// <para><b>Không dùng <c>Guid.NewGuid()</c></b> dù đặc tả vẽ token dưới
-    /// dạng UUID. <c>Guid.NewGuid()</c> trên .NET là ngẫu nhiên mật mã nên về
-    /// kỹ thuật thì được, nhưng nó chỉ có 122 bit entropy và không có gì bảo
-    /// đảm điều đó theo hợp đồng API của nó. 32 byte từ
-    /// <c>RandomNumberGenerator</c> thì được bảo đảm.</para>
+    /// <para><b>Not <c>Guid.NewGuid()</c></b>, even though the specification
+    /// draws the token as a UUID. <c>Guid.NewGuid()</c> on .NET is
+    /// cryptographically random, so technically it would do, but it only has
+    /// 122 bits of entropy and nothing in its API contract guarantees the
+    /// randomness. 32 bytes from <c>RandomNumberGenerator</c> is
+    /// guaranteed.</para>
     /// </summary>
     public static string NewRefreshToken()
         => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace('+', '-').Replace('/', '_').TrimEnd('=');
 
     /// <summary>
-    /// Phát accessToken cho một người dùng.
+    /// Issues an accessToken for a user.
     ///
-    /// <para><b>Chỗ duy nhất trong dự án còn dùng <c>DateTime.UtcNow</c>, và
-    /// phải như vậy.</b> <c>nbf</c> và <c>exp</c> của JWT là số giây tính từ
-    /// mốc Unix, luôn theo UTC (RFC 7519 §2). Đưa giờ Việt Nam vào đây thì
-    /// <c>nbf</c> nằm ở 7 giờ trong tương lai, và với
-    /// <c>ClockSkew = TimeSpan.Zero</c> ở <c>Program.cs</c> thì MỌI token bị
-    /// từ chối ngay lúc vừa phát ra.</para>
+    /// <para><b>The only place left in the project that uses
+    /// <c>DateTime.UtcNow</c>, and it has to.</b> A JWT's <c>nbf</c> and
+    /// <c>exp</c> are seconds since the Unix epoch, always in UTC (RFC 7519
+    /// §2). Putting Vietnam time in here would place <c>nbf</c> 7 hours in
+    /// the future, and with <c>ClockSkew = TimeSpan.Zero</c> in
+    /// <c>Program.cs</c> EVERY token would be rejected the moment it was
+    /// issued.</para>
     /// </summary>
     public string CreateAccessToken(Users user, bool onboarded)
     {
@@ -89,9 +96,9 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
             Encoding.UTF8.GetBytes(opt.SigningKey));
         var now = DateTime.UtcNow;
 
-        // `sub` là UUID 36 ký tự của `users.id`, theo đặc tả §2.3. Bản trước
-        // của ví dụ trong đặc tả ghi `"sub": "1"` — khóa số nguyên của một
-        // bản thiết kế đã bỏ.
+        // `sub` is the 36-character UUID of `users.id`, per specification
+        // §2.3. An earlier version of the example in the specification said
+        // `"sub": "1"` — the integer key of a design that was dropped.
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
@@ -113,31 +120,32 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
     }
 
     /// <summary>
-    /// Phát một cặp token mới cho đăng ký và đăng nhập — không xoay vòng gì.
+    /// Issues a fresh pair for register and login — nothing is rotated.
     /// </summary>
     public async Task<TokenPair> IssueAsync(Users user, bool onboarded)
     {
-        var (cap, _) = await GhiAsync(user, onboarded, null);
-        return cap!;
+        var (pair, _) = await WriteAsync(user, onboarded, null);
+        return pair!;
     }
 
     /// <summary>
-    /// Xoay vòng: thu hồi <paramref name="idCu"/> và phát cặp mới.
+    /// Rotates: revokes <paramref name="oldId"/> and issues a new pair.
     ///
-    /// <para>Trả <c>null</c> khi <b>mất cuộc đua</b> — một yêu cầu khác đã
-    /// thu hồi đúng dòng đó trước. Người gọi phải xử lý y như trường hợp
-    /// <see cref="RefreshOutcome.Reused"/>; xem <c>AuthController.Refresh</c>.
+    /// <para>Returns <c>null</c> when it <b>lost the race</b> — another
+    /// request revoked that same row first. The caller has to handle it
+    /// exactly like <see cref="RefreshOutcome.Reused"/>; see
+    /// <c>AuthController.Refresh</c>.
     /// </para>
     /// </summary>
     public async Task<TokenPair?> RotateAsync(
-        Users user, bool onboarded, string idCu)
+        Users user, bool onboarded, string oldId)
     {
-        var (cap, _) = await GhiAsync(user, onboarded, idCu);
-        return cap;
+        var (pair, _) = await WriteAsync(user, onboarded, oldId);
+        return pair;
     }
 
-    private async Task<(TokenPair? Cap, bool Doat)> GhiAsync(
-        Users user, bool onboarded, string? idCu)
+    private async Task<(TokenPair? Pair, bool Claimed)> WriteAsync(
+        Users user, bool onboarded, string? oldId)
     {
         var refresh = NewRefreshToken();
         var now = Clock.Now;
@@ -146,47 +154,51 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
             Id = Guid.NewGuid().ToString(),
             UserId = user.Id,
             TokenHash = Hash(refresh),
-            // `chk_refresh_window CHECK (expires_at > created_at)` đòi
-            // `created_at` phải nhỏ hơn. Không để CSDL tự đặt `created_at`
-            // bằng CURRENT_TIMESTAMP: hai lượt ghi khác nhau sẽ lấy hai mốc
-            // khác nhau, và khi đó ràng buộc có thể chặn một dòng hợp lệ.
+            // `chk_refresh_window CHECK (expires_at > created_at)` requires
+            // `created_at` to be the smaller one. `created_at` is not left to
+            // the database's CURRENT_TIMESTAMP: two separate writes would
+            // then take two different instants, and the constraint could
+            // reject a perfectly valid row.
             CreatedAt = now,
             ExpiresAt = now.AddDays(opt.RefreshTokenDays),
         };
 
-        if (idCu is null)
+        if (oldId is null)
         {
             db.RefreshTokens.Add(row);
             await db.SaveChangesAsync();
-            return (Cap(user, onboarded, refresh), true);
+            return (MakePair(user, onboarded, refresh), true);
         }
 
-        await using var gd = await db.Database.BeginTransactionAsync();
+        await using var tx = await db.Database.BeginTransactionAsync();
 
-        // ── ĐOẠT dòng cũ trước, bằng MỘT lệnh UPDATE có điều kiện ──
+        // ── CLAIM the old row first, with ONE conditional UPDATE ──
         //
-        // Đây là chỗ sửa cuộc đua. Bản trước ĐỌC dòng cũ rồi mới GHI, nên
-        // hai yêu cầu đồng thời cùng một token đều thấy `revoked_at IS NULL`
-        // trước khi bên nào kịp ghi — cả hai đi qua, cả hai phát token mới,
-        // và kết quả là HAI token sống trong một họ mà không bên nào bị coi
-        // là tái dùng. Phép phát hiện tái dùng khi đó chỉ còn là trang trí.
+        // This is where the race is fixed. An earlier version READ the old
+        // row and only then WROTE, so two concurrent requests carrying the
+        // same token both saw `revoked_at IS NULL` before either had written
+        // — both got through, both issued new tokens, and the result was TWO
+        // live tokens in one family with neither counted as a reuse. Reuse
+        // detection was decoration at that point.
         //
-        // `WHERE id = @id AND revoked_at IS NULL` đẩy phép kiểm và phép ghi
-        // vào cùng một lệnh, nên InnoDB khóa dòng và đúng MỘT lệnh thấy
-        // `affected = 1`. Lệnh còn lại thấy 0 và biết mình đã mất.
-        var doat = await db.RefreshTokens
-            .Where(t => t.Id == idCu && t.RevokedAt == null)
+        // `WHERE id = @id AND revoked_at IS NULL` pushes the check and the
+        // write into a single statement, so InnoDB locks the row and exactly
+        // ONE statement sees `affected = 1`. The other sees 0 and knows it
+        // lost.
+        var claimed = await db.RefreshTokens
+            .Where(t => t.Id == oldId && t.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now));
 
-        if (doat == 0)
+        if (claimed == 0)
         {
-            await gd.RollbackAsync();
+            await tx.RollbackAsync();
             return (null, false);
         }
 
-        // INSERT trước, rồi mới trỏ `replaced_by`. Khóa ngoại TỰ TRỎ về
-        // `refresh_tokens(id)` đòi dòng mới phải tồn tại trước; EF không suy
-        // ra thứ tự đó — nó xếp UPDATE trước INSERT và MySQL trả:
+        // INSERT first, and only then point `replaced_by` at it. The
+        // SELF-REFERENTIAL foreign key back to `refresh_tokens(id)` requires
+        // the new row to exist first; EF does not infer that ordering — it
+        // puts the UPDATE before the INSERT and MySQL answers:
         //
         //   Cannot add or update a child row: a foreign key constraint fails
         //   (`refresh_tokens`, CONSTRAINT `refresh_tokens_ibfk_2` ...)
@@ -194,35 +206,36 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
         await db.SaveChangesAsync();
 
         await db.RefreshTokens
-            .Where(t => t.Id == idCu)
+            .Where(t => t.Id == oldId)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.ReplacedBy, row.Id));
 
-        await gd.CommitAsync();
-        return (Cap(user, onboarded, refresh), true);
+        await tx.CommitAsync();
+        return (MakePair(user, onboarded, refresh), true);
     }
 
-    private TokenPair Cap(Users user, bool onboarded, string refresh)
+    private TokenPair MakePair(Users user, bool onboarded, string refresh)
         => new(CreateAccessToken(user, onboarded),
                refresh,
                opt.AccessTokenMinutes * 60);
 
-    /// <summary>Kết quả tra một refreshToken do Frontend nộp lên.</summary>
+    /// <summary>The result of looking up a refreshToken the frontend sent
+    /// in.</summary>
     public enum RefreshOutcome
     {
-        /// <summary>Hợp lệ, còn sống — cấp cặp mới.</summary>
+        /// <summary>Valid and still alive — issue a new pair.</summary>
         Valid,
 
-        /// <summary>Không có trong CSDL, hoặc đã hết hạn.</summary>
+        /// <summary>Not in the database, or already expired.</summary>
         Unknown,
 
         /// <summary>
-        /// Đã bị thu hồi mà vẫn được nộp lại — tín hiệu rò rỉ. Cả họ bị thu
-        /// hồi; xem <see cref="RevokeFamilyAsync"/>.
+        /// Already revoked and sent in again — a leak signal. The whole
+        /// family is revoked; see <see cref="RevokeFamilyAsync"/>.
         /// </summary>
         Reused,
     }
 
-    /// <summary>Tra một refreshToken, không thay đổi gì.</summary>
+    /// <summary>Looks up a refreshToken without changing anything.</summary>
     public async Task<(RefreshOutcome Outcome, RefreshTokens? Row)>
         InspectAsync(string refreshToken)
     {
@@ -246,66 +259,72 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
     }
 
     /// <summary>
-    /// Thu hồi cả chuỗi mà <paramref name="row"/> thuộc về.
+    /// Revokes the whole chain that <paramref name="startId"/> belongs to.
     ///
-    /// <para>Gọi khi một token đã thu hồi được nộp lại. Chỉ có hai khả năng —
-    /// người dùng thật mất mạng đúng giữa lúc xoay vòng nên vẫn giữ token cũ,
-    /// hoặc token đã rò ra ngoài. Máy chủ không phân biệt được, nên xử lý
-    /// theo hướng an toàn: cắt cả chuỗi, buộc đăng nhập lại.</para>
+    /// <para>Called when an already-revoked token is sent in again. There are
+    /// only two possibilities — a genuine user who lost their connection
+    /// mid-rotation and still holds the old token, or a token that has leaked.
+    /// The server cannot tell them apart, so it errs on the safe side: cut the
+    /// whole chain and force a fresh login.</para>
     ///
-    /// <para>Lần xuôi theo <c>replaced_by</c>, có chặn số bước: nếu một bất
-    /// biến bị vi phạm và chuỗi thành vòng, vòng lặp này sẽ không bao giờ
-    /// dừng. Lược đồ không có ràng buộc nào chặn vòng — xem ghi chú
-    /// "bất biến mà lược đồ không bắt buộc" ở DATABASE_DESIGN 3.7.</para>
+    /// <para>It walks forward along <c>replaced_by</c>, with a bound on the
+    /// number of steps: if an invariant were violated and the chain became a
+    /// cycle, this loop would never stop. The schema has no constraint
+    /// preventing a cycle — see the note on "invariants the schema does not
+    /// enforce" in DATABASE_DESIGN 3.7.</para>
     /// </summary>
-    public async Task RevokeFamilyAsync(string idBatDau)
+    public async Task RevokeFamilyAsync(string startId)
     {
         var now = Clock.Now;
         var seen = new HashSet<string>();
-        string? id = idBatDau;
+        string? id = startId;
 
         while (id is not null && seen.Add(id))
         {
-            // ĐỌC MỚI từng mắt, không dùng thực thể đã nạp sẵn.
+            // READ each link AFRESH, rather than using an already-loaded
+            // entity.
             //
-            // Bản trước nhận vào `RefreshTokens row` rồi lần theo
-            // `row.ReplacedBy`. Trong một cuộc đua, `row` là bản mà
-            // `InspectAsync` đã đọc TRƯỚC khi lượt thắng ghi `replaced_by`,
-            // và EF trả lại đúng thực thể đã theo dõi đó — nên `ReplacedBy`
-            // vẫn là `null` và vòng lặp dừng ở mắt đầu, để token mới của
-            // lượt thắng sống nguyên. Phép kiểm 8 luồng trong
-            // `tools/smoke_backend.py` bắt được chuyện này; với 2 luồng thì
-            // nó không hiện ra.
+            // An earlier version took a `RefreshTokens row` and walked along
+            // `row.ReplacedBy`. In a race, `row` is the copy `InspectAsync`
+            // read BEFORE the winner wrote `replaced_by`, and EF hands back
+            // that same tracked entity — so `ReplacedBy` is still `null`, the
+            // loop stops at the first link, and the winner's new token stays
+            // alive. The 8-thread check in `tools/smoke_backend.py` catches
+            // that; with 2 threads it does not show up.
             //
-            // `AsNoTracking` là phần quan trọng: thiếu nó thì EF lại trả bản
-            // đã cache trong cùng phạm vi yêu cầu, và lỗi quay lại y nguyên.
+            // `AsNoTracking` is the important part: without it EF returns the
+            // copy cached in the same request scope, and the bug comes
+            // straight back.
             //
-            // Lượt đọc này thấy được `replaced_by`: khi `ExecuteUpdateAsync`
-            // của lượt thua trả về 0 dòng, nó đã đợi InnoDB nhả khóa dòng,
-            // nghĩa là giao dịch của lượt thắng đã commit cả `replaced_by`.
-            var ke = await db.RefreshTokens
+            // This read does see `replaced_by`: when the loser's
+            // `ExecuteUpdateAsync` returned 0 rows, it had already waited for
+            // InnoDB to release the row lock, which means the winner's
+            // transaction had committed `replaced_by` along with it.
+            var next = await db.RefreshTokens
                 .AsNoTracking()
                 .Where(t => t.Id == id)
                 .Select(t => t.ReplacedBy)
                 .FirstOrDefaultAsync();
 
-            // `revoked_at ?? now` chứ không gán đè: giữ nguyên mốc thu hồi
-            // đầu tiên, vì đó là lúc token thật sự mất hiệu lực.
+            // `revoked_at ?? now` rather than overwriting: keep the first
+            // revocation instant, because that is when the token actually
+            // stopped being valid.
             await db.RefreshTokens
                 .Where(t => t.Id == id)
                 .ExecuteUpdateAsync(s => s.SetProperty(
                     t => t.RevokedAt, t => t.RevokedAt ?? now));
 
-            id = ke;
+            id = next;
         }
     }
 
     /// <summary>
-    /// Thu hồi mọi token còn sống của một người — đặc tả §7.1.7.
+    /// Revokes every live token of one user — specification §7.1.7.
     ///
-    /// <para>Người ta đổi mật khẩu chủ yếu vì nghi có người khác đang truy
-    /// cập. Giữ nguyên các phiên cũ thì phiên của kẻ đó sống thêm 30 ngày và
-    /// việc đổi mật khẩu không giải quyết được gì.</para>
+    /// <para>People change their password mainly because they suspect someone
+    /// else has access. Leaving the old sessions alone would keep that
+    /// person's session alive for another 30 days, and the password change
+    /// would have solved nothing.</para>
     /// </summary>
     public async Task RevokeAllAsync(string userId)
     {
@@ -317,8 +336,9 @@ public sealed class TokenService(AppDbContext db, JwtOptions opt)
 }
 
 /// <summary>
-/// Tên claim viết thẳng, không qua <c>JwtRegisteredClaimNames</c> của thư
-/// viện — để không phụ thuộc vào một hằng số có thể đổi giữa các phiên bản.
+/// The claim name written out directly rather than taken from the library's
+/// <c>JwtRegisteredClaimNames</c> — so as not to depend on a constant that
+/// could change between versions.
 /// </summary>
 internal static class JwtRegisteredClaimNames
 {
