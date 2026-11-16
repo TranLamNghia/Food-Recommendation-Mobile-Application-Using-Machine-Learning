@@ -47,25 +47,26 @@ Food _food({
 );
 
 void main() {
-  group('EvidenceLevel — mức nào dẫn được nguồn', () {
-    test('chỉ `published` dẫn được nguồn', () {
+  group('EvidenceLevel — which levels may be cited', () {
+    test('only `published` may be cited', () {
       expect(EvidenceLevel.published.canCite, isTrue);
       expect(
         EvidenceLevel.derived.canCite,
         isFalse,
-        reason: 'ngưỡng suy ra kèm giả thiết nên không dẫn như khuyến cáo',
+        reason: 'a derived threshold carries an assumption, so it is not '
+            'quoted as a recommendation',
       );
       expect(EvidenceLevel.unsupported.canCite, isFalse);
       expect(
         EvidenceLevel.definitional.canCite,
         isFalse,
-        reason: 'quy tắc nhãn không có ngưỡng nào để dẫn nguồn',
+        reason: 'a tag rule has no threshold to cite',
       );
     });
 
-    test('mã lạ rơi về `derived`, không phải `published`', () {
-      // Trả về `published` khi không nhận ra mã sẽ khiến một giá trị lỗi tự
-      // nhận là có nguồn — đúng kiểu hỏng cần tránh nhất ở đây.
+    test('an unknown code falls back to `derived`, not `published`', () {
+      // Returning `published` for an unrecognised code would let a bad
+      // value claim to have a source — exactly the failure to avoid here.
       expect(EvidenceLevel.fromCode('gi_do_la'), EvidenceLevel.derived);
       expect(EvidenceLevel.fromCode(null), EvidenceLevel.derived);
       expect(EvidenceLevel.fromCode('gi_do_la').canCite, isFalse);
@@ -73,8 +74,8 @@ void main() {
     });
   });
 
-  group('DayLimit — hai cột, và phần còn lại không bị kẹp', () {
-    const natri = DayLimit(
+  group('DayLimit — two columns, and the remainder is not clamped', () {
+    const sodium = DayLimit(
       condition: 'Tăng huyết áp',
       nutrient: 'sodium_mg',
       unit: 'mg',
@@ -85,38 +86,43 @@ void main() {
       evidence: EvidenceLevel.published,
     );
 
-    test('đã dùng = đã ăn + đã lên kế hoạch', () {
-      expect(natri.used, closeTo(1846.65, 1e-9));
-      expect(natri.remaining, closeTo(153.35, 1e-9));
-      expect(natri.exceeded, isFalse);
-      expect(natri.ratio, closeTo(0.923325, 1e-6));
+    test('used = eaten + planned', () {
+      expect(sodium.used, closeTo(1846.65, 1e-9));
+      expect(sodium.remaining, closeTo(153.35, 1e-9));
+      expect(sodium.exceeded, isFalse);
+      expect(sodium.ratio, closeTo(0.923325, 1e-6));
     });
 
-    test('vượt trần thì `remaining` ÂM, không bị kẹp về 0', () {
-      final vuot = natri.copyWith(planned: 2000);
+    test('over the ceiling `remaining` is NEGATIVE, not clamped to 0', () {
+      final vuot = sodium.copyWith(planned: 2000);
       expect(vuot.exceeded, isTrue);
       expect(
         vuot.remaining,
         lessThan(0),
-        reason: 'kẹp về 0 thì câu "vượt 404 mg" không viết được',
+        reason: 'clamped at 0, the sentence "404 mg over" could not be '
+            'written',
       );
       expect(vuot.remaining, closeTo(-403.95, 1e-9));
       expect(vuot.ratio, greaterThan(1.0));
     });
 
-    test('`fits` chặt ở biên', () {
-      expect(natri.fits(153.35), isTrue, reason: 'đúng bằng phần còn lại');
-      expect(natri.fits(153.36), isFalse, reason: 'hơn 0,01 mg là không vừa');
-      expect(natri.fits(14), isTrue);
+    test('`fits` is strict at the boundary', () {
+      expect(sodium.fits(153.35), isTrue, reason: 'exactly the remainder');
+      expect(
+        sodium.fits(153.36),
+        isFalse,
+        reason: '0.01 mg more does not fit',
+      );
+      expect(sodium.fits(14), isTrue);
     });
 
-    test('`dataComplete` sai thì phần còn lại CAO hơn thực tế', () {
-      expect(natri.dataComplete, isTrue);
-      final thieu = natri.copyWith(missingCount: 4);
-      expect(thieu.dataComplete, isFalse);
+    test('when `dataComplete` is false the remainder is TOO HIGH', () {
+      expect(sodium.dataComplete, isTrue);
+      final missing = sodium.copyWith(missingCount: 4);
+      expect(missing.dataComplete, isFalse);
       expect(
-        thieu.remaining,
-        natri.remaining,
+        missing.remaining,
+        sodium.remaining,
         reason:
             'con số không đổi — chính vì thế cờ này là chỗ DUY NHẤT nói ra '
             'rằng nó đang nới hơn thực tế',
@@ -124,8 +130,8 @@ void main() {
     });
   });
 
-  group('DayBudget — cộng phần biết, đếm phần không biết', () {
-    final mon = [
+  group('DayBudget — sum what is known, count what is not', () {
+    final food = [
       _food(id: 'a', name: 'Có purin', sodium: 500, purine: 120),
       _food(id: 'b', name: 'Khuyết purin', sodium: 300),
       _food(id: 'c', name: 'Khuyết purin 2', sodium: 200),
@@ -135,54 +141,56 @@ void main() {
       UserCondition('Gút'),
     ]);
 
-    test('hai bệnh cho hai ngưỡng cứng theo ngày', () {
+    test('two conditions give two hard per-day thresholds', () {
       expect(thresholds.length, 2);
       expect(thresholds.every((t) => t.isHard), isTrue);
     });
 
-    test('natri cộng đủ ba món, purin chỉ cộng món có số liệu', () {
+    test('sodium sums all three dishes, purine only those measured', () {
       final budget = DayBudget.from(
         thresholds: thresholds,
-        eaten: [mon[0]],
-        planned: [mon[1], mon[2]],
+        eaten: [food[0]],
+        planned: [food[1], food[2]],
       );
-      final natri = budget.tightestHardFor('sodium_mg')!;
-      expect(natri.eaten, 500);
-      expect(natri.planned, 500);
-      expect(natri.missingCount, 0);
-      expect(natri.dataComplete, isTrue);
+      final sodium = budget.tightestHardFor('sodium_mg')!;
+      expect(sodium.eaten, 500);
+      expect(sodium.planned, 500);
+      expect(sodium.missingCount, 0);
+      expect(sodium.dataComplete, isTrue);
 
       final purin = budget.tightestHardFor('purine_mg')!;
       expect(purin.eaten, 120);
       expect(
         purin.planned,
         0,
-        reason: 'hai món khuyết purin cộng vào 0 — và đó là lý do phải đếm',
+        reason: 'the two dishes with no purine add 0 — which is exactly '
+            'why they have to be counted',
       );
       expect(purin.missingCount, 2);
       expect(
         purin.dataComplete,
         isFalse,
-        reason: 'tổng 120 mg thấp hơn thực tế, giao diện phải nói ra',
+        reason: 'the 120 mg total is lower than reality, and the '
+            'interface has to say so',
       );
     });
 
-    test('chất không bị hạn chế trả về null', () {
+    test('an unrestricted nutrient returns null', () {
       final budget = DayBudget.from(
         thresholds: thresholds,
-        eaten: mon,
+        eaten: food,
         planned: const [],
       );
       expect(budget.tightestHardFor('calcium_mg'), isNull);
     });
 
-    test('hạn mức mềm KHÔNG nằm trong `hard`', () {
-      final ds = dayThresholdsFor(const [
+    test('a soft allowance is NOT in `hard`', () {
+      final list = dayThresholdsFor(const [
         UserCondition('Tăng huyết áp'),
         UserCondition('Đái tháo đường'),
       ]);
       final budget = DayBudget.from(
-        thresholds: ds,
+        thresholds: list,
         eaten: const [],
         planned: const [],
       );
@@ -191,13 +199,13 @@ void main() {
       expect(
         budget.tightestHardFor('sugar_g'),
         isNull,
-        reason: 'đường là khuyến cáo, không phải lệnh cấm',
+        reason: 'sugar is a recommendation, not a prohibition',
       );
     });
 
-    test('`severity_min` chặn đúng', () {
-      // Luật `Giàu purin` của Gút cần mức vừa.
-      final nhe = tagExclusionsFor(
+    test('`severity_min` gates correctly', () {
+      // Gout's `Giàu purin` rule needs the moderate level.
+      final mild = tagExclusionsFor(
         _food(id: 'x', name: 'Món', tags: const ['Giàu purin']),
         const [UserCondition('Gút', severity: 'mild')],
       );
@@ -205,13 +213,17 @@ void main() {
         _food(id: 'x', name: 'Món', tags: const ['Giàu purin']),
         const [UserCondition('Gút', severity: 'moderate')],
       );
-      expect(nhe, isEmpty, reason: 'mức nhẹ chưa đủ để luật này áp');
+      expect(
+        mild,
+        isEmpty,
+        reason: 'the mild level is not enough for this rule to apply',
+      );
       expect(vua.length, 1);
       expect(vua.first.condition, contains('mức vừa'));
     });
   });
 
-  group('PenaltyOutcome — hệ số nhân, cộng theo nhóm', () {
+  group('PenaltyOutcome — a multiplier, combined per group', () {
     const thaNhe = SoftRule(
       condition: 'Tăng huyết áp',
       nutrient: 'sodium_mg',
@@ -237,7 +249,7 @@ void main() {
       evidence: EvidenceLevel.derived,
     );
 
-    test('hai dải LỒNG NHAU của cùng bệnh → lấy nặng nhất, không nhân đôi', () {
+    test('two NESTED bands of one condition → harshest wins, no double count', () {
       final r = PenaltyOutcome.of(
         _food(id: 'a', name: 'Mặn', sodium: 800, purine: 10),
         const [thaNhe, thaNang, gut],
@@ -245,14 +257,15 @@ void main() {
       expect(
         r.factor,
         closeTo(0.400, 1e-9),
-        reason: 'nhân thẳng sẽ ra 0,240 — đếm đôi một mối lo',
+        reason: 'multiplying straight through gives 0.240 — double '
+            'counting one concern',
       );
       expect(r.violations.length, 1);
       expect(r.violations.first.rule.threshold, 500);
       expect(r.violations.first.over, closeTo(300, 1e-9));
     });
 
-    test('hai bệnh khác nhau thì NHÂN qua nhóm', () {
+    test('two different conditions DO multiply across groups', () {
       final r = PenaltyOutcome.of(
         _food(id: 'b', name: 'Mặn và purin', sodium: 800, purine: 200),
         const [thaNhe, thaNang, gut],
@@ -262,11 +275,11 @@ void main() {
       expect(
         r.violations.first.rule.penalty,
         lessThan(r.violations.last.rule.penalty),
-        reason: 'xếp mức phạt nặng trước',
+        reason: 'the harsher penalty comes first',
       );
     });
 
-    test('không vượt gì thì hệ số 1,0 và không đổi điểm', () {
+    test('exceeding nothing gives a factor of 1.0 and no score change', () {
       final r = PenaltyOutcome.of(
         _food(id: 'c', name: 'Nhạt', sodium: 100, purine: 10),
         const [thaNhe, gut],
@@ -277,7 +290,7 @@ void main() {
       expect(r.applyTo(0.78), closeTo(0.78, 1e-9));
     });
 
-    test('đúng bằng ngưỡng thì không vượt', () {
+    test('exactly at the threshold is not over it', () {
       final r = PenaltyOutcome.of(
         _food(id: 'd', name: 'Biên', sodium: 700, purine: 150),
         const [thaNhe, gut],
@@ -285,9 +298,9 @@ void main() {
       expect(r.factor, 1.0);
     });
 
-    test('thiếu số liệu thì KHÔNG phạt, nhưng được ghi lại', () {
-      // Ràng buộc mềm là quyết định về xếp hạng, nên hạ điểm một món vì danh
-      // mục thiếu số liệu là phạt sai đối tượng.
+    test('missing data is NOT penalised, but it is recorded', () {
+      // A soft constraint is a ranking decision, so lowering a dish's score
+      // because the catalogue is incomplete penalises the wrong party.
       final r = PenaltyOutcome.of(
         _food(id: 'e', name: 'Khuyết purin', sodium: 100),
         const [thaNhe, gut],
@@ -297,7 +310,7 @@ void main() {
       expect(r.violations, isEmpty);
     });
 
-    test('áp hệ số vào điểm', () {
+    test('the factor is applied to the score', () {
       final r = PenaltyOutcome.of(
         _food(id: 'f', name: 'Mặn', sodium: 800, purine: 10),
         const [thaNhe, thaNang, gut],
@@ -306,36 +319,37 @@ void main() {
     });
   });
 
-  group('matchReasons — câu, không phải số', () {
-    final mon = [
+  group('matchReasons — sentences, not numbers', () {
+    final food = [
       _food(id: 'a', name: 'Canh A', category: 'Món canh', protein: 20, carb: 5),
       _food(id: 'b', name: 'Cơm B', category: 'Cơm', protein: 5, carb: 60),
     ];
-    final space = FoodVectorSpace.fromFoods(mon);
+    final space = FoodVectorSpace.fromFoods(food);
 
-    test('mọi chiều đều có mệnh đề', () {
+    test('every dimension has a clause', () {
       expect(
         dimensionsWithoutSentence(space),
         isEmpty,
-        reason: 'chiều mới thêm mà quên câu thì phép kiểm này sai ngay',
+        reason: 'a newly added dimension with a forgotten clause fails '
+            'this check immediately',
       );
     });
 
-    test('hồ sơ rỗng → không lý do nào', () {
+    test('an empty profile → no reasons at all', () {
       final rong = PreferenceProfile.empty(space);
-      expect(matchReasons(rong, mon[0]), isEmpty);
-      expect(matchSentences(rong, mon[0]), isEmpty);
+      expect(matchReasons(rong, food[0]), isEmpty);
+      expect(matchSentences(rong, food[0]), isEmpty);
     });
 
-    test('nêu đúng chiều dương, xếp giảm dần, tỷ lệ theo đỉnh của món', () {
+    test('positive dimensions only, descending, ratio against the peak', () {
       final profile = PreferenceProfile.fromSwipes(
         space: space,
         swipes: [
-          (food: mon[0], action: SwipeAction.like),
-          (food: mon[1], action: SwipeAction.dislike),
+          (food: food[0], action: SwipeAction.like),
+          (food: food[1], action: SwipeAction.dislike),
         ],
       );
-      final rs = matchReasons(profile, mon[0]);
+      final rs = matchReasons(profile, food[0]);
       expect(rs, isNotEmpty);
       expect(rs.every((r) => r.value > 0), isTrue);
       for (var i = 1; i < rs.length; i++) {
@@ -345,54 +359,56 @@ void main() {
       expect(rs.every((r) => r.ratio > 0 && r.ratio <= 1.0), isTrue);
     });
 
-    test('đóng góp dương ⟹ trọng số hồ sơ dương ⟹ câu là "nhiều X"', () {
-      // Mọi chiều vector nằm trong [0, 1], nên dấu của p_u[i]·v[i] là dấu
-      // của p_u[i]. Đây là nền tảng của cách đặt câu: không bao giờ "ít X".
+    test('positive contribution ⟹ positive weight ⟹ the clause is "more X"', () {
+      // Every vector dimension lies in [0, 1], so the sign of p_u[i]·v[i]
+      // is the sign of p_u[i]. That is the basis of the wording: never
+      // "less X".
       final profile = PreferenceProfile.fromSwipes(
         space: space,
         swipes: [
-          (food: mon[0], action: SwipeAction.like),
-          (food: mon[1], action: SwipeAction.dislike),
+          (food: food[0], action: SwipeAction.like),
+          (food: food[1], action: SwipeAction.dislike),
         ],
       );
-      final v = space.encode(mon[0]);
+      final v = space.encode(food[0]);
       expect(v.every((x) => x >= 0 && x <= 1), isTrue);
-      for (final r in matchReasons(profile, mon[0])) {
+      for (final r in matchReasons(profile, food[0])) {
         final i = space.labels.indexOf(r.dimension);
         expect(profile.weights[i], greaterThan(0));
         expect(r.sentence, isNot(contains('ít ')));
       }
     });
 
-    test('câu cho chiều nhóm dựng từ tên nhóm, không cần bảng tra', () {
+    test('a group clause is built from the group name, with no lookup', () {
       expect(sentenceForDimension('Nhóm: Món canh'), 'Bạn thích nhóm Món canh');
       expect(sentenceForDimension('Tỷ lệ đạm'), 'Bạn thường chọn món nhiều đạm');
       expect(
         sentenceForDimension('Chiều chưa đặt tên'),
         isNull,
-        reason: 'giao diện bỏ dòng đó, không hiện nhãn kỹ thuật',
+        reason: 'the interface drops that line rather than showing a '
+            'technical label',
       );
     });
 
-    test('không câu nào lọt số thô ra giao diện', () {
+    test('no clause leaks a raw number into the interface', () {
       final profile = PreferenceProfile.fromSwipes(
         space: space,
-        swipes: [(food: mon[0], action: SwipeAction.like)],
+        swipes: [(food: food[0], action: SwipeAction.like)],
       );
-      for (final c in matchSentences(profile, mon[0])) {
+      for (final c in matchSentences(profile, food[0])) {
         expect(c, isNot(contains('+')));
         expect(c, isNot(contains('0.')));
       }
     });
   });
 
-  group('screenDishes — ba bậc lý do', () {
+  group('screenDishes — the three reason tiers', () {
     final conditions = const [
       UserCondition('Dị ứng hải sản'),
       UserCondition('Tăng huyết áp'),
       UserCondition('Gút'),
     ];
-    final mon = [
+    final food = [
       _food(id: 'ok', name: 'Canh nhạt', sodium: 100, purine: 30),
       _food(
         id: 'tag',
@@ -414,20 +430,21 @@ void main() {
         planned: const [],
       );
       return screenDishes(
-        foods: mon,
+        foods: food,
         conditions: conditions,
         budget: budget,
         softRules: softRulesFor(conditions),
       );
     }
 
-    test('món sạch thì được phép và có hệ số phạt', () {
+    test('a clean dish is allowed and carries a penalty factor', () {
       final r = sang();
       expect(r.allowed.map((f) => f.id), contains('ok'));
       expect(r.penalties['ok']!.factor, 1.0);
     });
 
-    test('nhãn → bậc `dish`, kèm tên nhãn và mức tin cậy định nghĩa', () {
+    test('a tag → the `dish` tier, with the tag name and definitional '
+        'evidence', () {
       final r = sang();
       final ly = r.excluded['tag']!;
       expect(ly.first.tier, ExclusionTier.dish);
@@ -436,7 +453,8 @@ void main() {
       expect(r.byTier[ExclusionTier.dish], contains('tag'));
     });
 
-    test('vượt hạn mức ngày → bậc `dayBudget`, nêu lượng vượt', () {
+    test('over the day allowance → the `dayBudget` tier, stating by how '
+        'much', () {
       final r = sang();
       final ly = r.excluded['man']!;
       expect(ly.first.tier, ExclusionTier.dayBudget);
@@ -445,7 +463,7 @@ void main() {
       expect(r.byTier[ExclusionTier.dayBudget], contains('man'));
     });
 
-    test('thiếu số liệu → bậc riêng, KHÔNG phải "vừa"', () {
+    test('missing data → its own tier, NOT "fits"', () {
       final r = sang();
       final ly = r.excluded['khuyet']!;
       expect(ly.first.tier, ExclusionTier.unknown);
@@ -454,12 +472,12 @@ void main() {
       expect(
         ly.first.over,
         isNull,
-        reason: 'không có số đo thì không bịa ra một lượng vượt',
+        reason: 'with no measurement, no overshoot is invented',
       );
       expect(r.allowed.map((f) => f.id), isNot(contains('khuyet')));
     });
 
-    test('bậc nghiêm nhất thắng khi một món vướng nhiều lý do', () {
+    test('the most serious tier wins when a dish breaches several', () {
       final r = screenDishes(
         foods: [
           _food(
@@ -477,7 +495,7 @@ void main() {
           planned: const [],
         ),
       );
-      expect(r.excluded['ca']!.length, 2, reason: 'nêu đủ cả hai lý do');
+      expect(r.excluded['ca']!.length, 2, reason: 'both reasons listed');
       expect(
         r.byTier[ExclusionTier.dish],
         contains('ca'),
@@ -488,14 +506,16 @@ void main() {
       expect(r.byTier[ExclusionTier.dayBudget], isNot(contains('ca')));
     });
 
-    test('ăn mặn từ sáng làm thêm món bị chặn — hôm khác thì không', () {
+    test('a salty morning blocks one more dish — another day it would '
+        'not', () {
       final rong = sang();
       final day = sang(eatenSodium: 1950);
       expect(rong.allowed.map((f) => f.id), contains('ok'));
       expect(
         day.allowed.map((f) => f.id),
         isNot(contains('ok')),
-        reason: 'cùng một món, khác ngày, khác kết luận — đúng bản chất bậc 2',
+        reason: 'the same dish, a different day, a different conclusion '
+            '— exactly what tier 2 is',
       );
       expect(day.excluded['ok']!.first.tier, ExclusionTier.dayBudget);
     });

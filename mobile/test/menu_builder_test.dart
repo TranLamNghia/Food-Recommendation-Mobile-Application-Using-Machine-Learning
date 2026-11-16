@@ -10,7 +10,8 @@ import 'package:nutrition_app/data/recommender/food_vector.dart';
 import 'package:nutrition_app/data/recommender/menu_builder.dart';
 import 'package:nutrition_app/data/recommender/preference_profile.dart';
 
-/// Hồ sơ mẫu: nam 24 tuổi, 1m72, 68 kg, vận động vừa, mục tiêu giữ cân.
+/// The sample profile: male, 24, 172 cm, 68 kg, moderate activity,
+/// maintaining weight.
 HealthProfile _sampleProfile() => HealthProfile()
   ..gender = Gender.male
   ..birthday = DateTime(DateTime.now().year - 24, 6, 15)
@@ -22,10 +23,11 @@ HealthProfile _sampleProfile() => HealthProfile()
 void main() {
   final space = FoodVectorSpace.fromFoods(MockFoods.surveyDeck);
 
-  group('Vector đặc trưng món ăn', () {
-    test('số chiều và nhãn khớp nhau, và có chiều chất xơ', () {
-      // Giữ hai thứ này đi cùng nhau: thêm một chiều mà quên thêm nhãn thì
-      // phần "vì sao món này được gợi ý" sẽ chú thích lệch cột, không báo lỗi.
+  group('The dish feature vector', () {
+    test('the dimension count and labels match, and fibre is there', () {
+      // These two are kept together: adding a dimension and forgetting its
+      // label would make the "why this dish" section annotate the wrong
+      // column, with no error reported.
       expect(space.labels.length, equals(space.length));
       expect(space.length, equals(8 + space.categories.length));
       expect(space.labels, contains('Chất xơ'));
@@ -34,11 +36,12 @@ void main() {
       expect(v.length, equals(space.length));
     });
 
-    test('chất xơ thật sự đổi được vector — chiều này không phải cột chết', () {
-      // Phép kiểm này tồn tại vì lỗi đã từng xảy ra ở chiều khác: một cột có
-      // mặt trong lược đồ và trong tài liệu nhưng không món nào mang giá trị,
-      // nên nó im lặng không đóng góp gì. Ở đây bắt bằng cách so hai món chỉ
-      // khác nhau đúng lượng chất xơ.
+    test('fibre really does change the vector — not a dead column', () {
+      // This check exists because the bug has happened on another
+      // dimension: a column present in the schema and in the documentation
+      // that no dish carried a value for, so it silently contributed nothing.
+      // It is caught here by comparing two dishes that differ only in their
+      // fibre.
       final base = MockFoods.surveyDeck.first;
       final low = Food(
         id: '9001', name: 'thử xơ thấp', category: base.category,
@@ -65,17 +68,22 @@ void main() {
       final i = spaceWithBoth.labels.indexOf('Chất xơ');
       expect(vHigh[i], greaterThan(vLow[i]));
 
-      // Và khác biệt phải nằm ĐÚNG ở chiều đó, không rò sang chiều khác.
+      // And the difference has to be in EXACTLY that dimension, not leak
+      // into another.
       for (var d = 0; d < spaceWithBoth.length; d++) {
         if (d == i) continue;
-        expect(vHigh[d], equals(vLow[d]), reason: 'lệch ở ${spaceWithBoth.labels[d]}');
+        expect(
+          vHigh[d],
+          equals(vLow[d]),
+          reason: 'differs at ${spaceWithBoth.labels[d]}',
+        );
       }
     });
   });
 
-  group('Mục tiêu dinh dưỡng tự khai', () {
-    /// Hai món giống hệt nhau trừ chất xơ, để tách hiệu ứng của mục tiêu ra
-    /// khỏi mọi đặc trưng khác.
+  group('Self-stated nutrition goals', () {
+    /// Two dishes identical but for their fibre, to separate the goal's
+    /// effect from every other feature.
     (Food low, Food high, FoodVectorSpace space) fiberPair() {
       final base = MockFoods.surveyDeck.first;
       Food make(String id, String name, double fiber) => Food(
@@ -93,7 +101,7 @@ void main() {
       );
     }
 
-    test('khai mục tiêu nhiều xơ thì món nhiều xơ được chấm cao hơn', () {
+    test('stating a high-fibre goal scores high-fibre dishes higher', () {
       final (low, high, sp) = fiberPair();
       final neutral = PreferenceProfile.fromSwipes(
         space: sp,
@@ -102,14 +110,15 @@ void main() {
 
       final withGoal = neutral.withNutrientGoals({'fiber_g': 0.6});
 
-      // Mục tiêu phải LÀM ĐỔI thứ hạng, không chỉ đổi điểm tuyệt đối.
+      // The goal has to CHANGE the ranking, not just the absolute
+      // scores.
       expect(
         withGoal.score(high) - withGoal.score(low),
         greaterThan(neutral.score(high) - neutral.score(low)),
       );
     });
 
-    test('dấu âm nghĩa là muốn ít hơn', () {
+    test('a negative sign means wanting less', () {
       final (low, high, sp) = fiberPair();
       final neutral = PreferenceProfile.fromSwipes(
         space: sp,
@@ -120,10 +129,10 @@ void main() {
       expect(avoid.score(high), lessThan(avoid.score(low)));
     });
 
-    test('khai mục tiêu TRƯỚC khi vuốt lượt nào vẫn xếp hạng được', () {
-      // Trường hợp này trước đây hỏng: `isEmpty` còn xét `signalCount == 0`
-      // nên hồ sơ chỉ-có-mục-tiêu trả về 0,5 cho mọi món, và mục tiêu người
-      // dùng vừa khai bị bỏ qua hoàn toàn.
+    test('a goal stated BEFORE any swipe can still rank', () {
+      // This case used to be broken: `isEmpty` also consulted
+      // `signalCount == 0`, so a goal-only profile returned 0.5 for every
+      // dish and the goal the user had just stated was ignored entirely.
       final (low, high, sp) = fiberPair();
       final coldStart =
           PreferenceProfile.empty(sp).withNutrientGoals({'fiber_g': 0.6});
@@ -133,22 +142,23 @@ void main() {
       expect(coldStart.score(high), greaterThan(coldStart.score(low)));
     });
 
-    test('chất không có chiều riêng thì bỏ qua, không làm hỏng hồ sơ', () {
+    test('a nutrient with no dimension is skipped, not fatal', () {
       final (_, _, sp) = fiberPair();
       final profile = PreferenceProfile.fromSwipes(
         space: sp,
         swipes: [(food: MockFoods.surveyDeck[1], action: SwipeAction.like)],
       );
 
-      // `protein_g` cố ý KHÔNG có chiều riêng — ba chiều macro là tỷ lệ cộng
-      // lại bằng 1, đẩy một cái lên là dìm hai cái kia xuống.
+      // `protein_g` deliberately has NO dimension of its own — the three
+      // macro dimensions are shares adding up to 1, so pushing one up pushes
+      // the other two down.
       final same = profile.withNutrientGoals({'protein_g': 0.9});
       expect(same.weights, equals(profile.weights));
     });
 
-    test('hồ sơ rỗng và phiên toàn neutral vẫn được coi là rỗng', () {
-      // Bảo vệ phần đổi nghĩa của `isEmpty`: nới nó ra không được làm hai
-      // trường hợp cũ đổi hành vi.
+    test('an empty profile and an all-neutral session are still empty', () {
+      // Guards the redefinition of `isEmpty`: loosening it must not change
+      // the behaviour of the two earlier cases.
       final sp = FoodVectorSpace.fromFoods(MockFoods.surveyDeck);
       expect(PreferenceProfile.empty(sp).isEmpty, isTrue);
       expect(
@@ -164,8 +174,8 @@ void main() {
     });
   });
 
-  group('Mô-đun tính nhu cầu dinh dưỡng', () {
-    test('BMI, BMR và TDEE khớp công thức Mifflin-St Jeor', () {
+  group('The nutrition requirement module', () {
+    test('BMI, BMR and TDEE match the Mifflin-St Jeor formula', () {
       final p = _sampleProfile();
 
       // BMI = 68 / 1.72² = 22.98
@@ -178,8 +188,9 @@ void main() {
       expect(p.tdee, closeTo(2542, 2));
     });
 
-    test('hạn mức giảm cân không bao giờ xuống dưới BMR', () {
-      // Người nhỏ con, ít vận động: TDEE − 500 sẽ tụt dưới BMR nếu không chặn.
+    test('a weight-loss target never goes below the BMR', () {
+      // A small, sedentary person: TDEE − 500 would drop below the BMR
+      // without the guard.
       final p = HealthProfile()
         ..gender = Gender.female
         ..birthday = DateTime(DateTime.now().year - 30, 1, 1)
@@ -192,7 +203,7 @@ void main() {
       expect(p.energyTarget, equals(p.bmr));
     });
 
-    test('ba chất sinh năng lượng cộng lại đúng bằng hạn mức', () {
+    test('the three macronutrients add up to exactly the target', () {
       final p = _sampleProfile();
       final m = p.macroTarget!;
       final kcal = m.protein * 4 + m.carb * 4 + m.fat * 9;
@@ -201,8 +212,8 @@ void main() {
     });
   });
 
-  group('Hồ sơ sở thích theo Rocchio', () {
-    test('lượt vuốt "chưa biết" bị loại khỏi tập huấn luyện', () {
+  group('The Rocchio preference profile', () {
+    test('an "unknown" swipe is dropped from the training set', () {
       final deck = MockFoods.surveyDeck;
       final profile = PreferenceProfile.fromSwipes(
         space: space,
@@ -216,10 +227,11 @@ void main() {
       expect(profile.signalCount, equals(1));
     });
 
-    test('món được thích ăn điểm cao hơn món bị ghét', () {
-      // Hai món phải khác nhóm, vì nhóm món là trục one-hot duy nhất trong
-      // vector — chọn hai món cùng nhóm thì chỉ còn dinh dưỡng phân biệt
-      // chúng và phép thử mất ý nghĩa.
+    test('a liked dish scores higher than a disliked one', () {
+      // The two dishes have to be in different groups, because the food
+      // group is the only one-hot axis in the vector — two dishes in the same
+      // group leave only the nutrition to tell them apart and the test loses
+      // its meaning.
       final deck = MockFoods.surveyDeck;
       final liked = deck.first;
       final hated = deck.firstWhere((f) => f.category != liked.category);
@@ -235,7 +247,7 @@ void main() {
       expect(profile.score(liked), greaterThan(profile.score(hated)));
     });
 
-    test('hồ sơ rỗng chấm mọi món bằng nhau', () {
+    test('an empty profile scores every dish equally', () {
       final profile = PreferenceProfile.empty(space);
       final scores = MockFoods.surveyDeck.map(profile.score).toSet();
 
@@ -243,7 +255,7 @@ void main() {
       expect(scores.first, equals(0.5));
     });
 
-    test('vector đã làm nhiễu lệch khỏi vector gốc nhưng vẫn lân cận', () {
+    test('the jittered vector departs from the original but stays near', () {
       final deck = MockFoods.surveyDeck;
       final profile = PreferenceProfile.fromSwipes(
         space: space,
@@ -256,16 +268,17 @@ void main() {
 
       final cos = cosineSimilarity(profile.weights, jittered.weights);
 
-      // Lệch thật — không phải bản sao.
+      // Genuinely different — not a copy.
       expect(cos, lessThan(0.999));
-      // Nhưng vẫn cùng hướng, tức món thăm dò nằm ở vùng lân cận khẩu vị
-      // chứ không rơi ra chỗ vô lý như ε-greedy ngẫu nhiên.
+      // But still in the same direction, meaning an exploration dish lands
+      // in the neighbourhood of the user's taste rather than somewhere absurd
+      // as a random ε-greedy pick would.
       expect(cos, greaterThan(0.5));
     });
   });
 
-  group('Sinh thực đơn — Bước 4', () {
-    /// Dựng thực đơn cho một hồ sơ đã vuốt sẵn.
+  group('Plan generation — Step 4', () {
+    /// Builds a plan for a profile that has already swiped.
     DailyPlan buildPlan({int seed = 7, double exploration = 0.3}) {
       final deck = MockFoods.surveyDeck;
       final profile = PreferenceProfile.fromSwipes(
@@ -300,19 +313,19 @@ void main() {
       );
     }
 
-    test('đủ bốn bữa', () {
+    test('all four meals are present', () {
       final plan = buildPlan();
       expect(plan.slots.map((s) => s.type), equals(MealType.values));
     });
 
-    test('không lặp món trong cùng một ngày', () {
+    test('no dish repeats within one day', () {
       final plan = buildPlan();
       final ids = plan.allItems.map((i) => i.food.id).toList();
 
       expect(ids.toSet().length, equals(ids.length));
     });
 
-    test('mỗi bữa có đủ vai trò món bắt buộc', () {
+    test('each meal has all its required dish roles', () {
       final plan = buildPlan();
 
       Set<String> rolesOf(MealType type) => plan.slots
@@ -327,9 +340,9 @@ void main() {
       expect(rolesOf(MealType.snack), contains('Món phụ'));
     });
 
-    test('không có hai món cùng vai trò trong một bữa', () {
-      // Ràng buộc "không hai món cùng nhóm thực phẩm trong S" của Bước 4 —
-      // tránh bữa trưa gồm hai món mặn và không có gì khác.
+    test('no two dishes share a role within one meal', () {
+      // Step 4's "no two dishes of the same food group in S" constraint —
+      // it avoids a lunch of two savoury dishes and nothing else.
       final plan = buildPlan();
 
       for (final slot in plan.slots) {
@@ -337,14 +350,14 @@ void main() {
         expect(
           roles.toSet().length,
           equals(roles.length),
-          reason: '${slot.type.label} có vai trò món lặp: $roles',
+          reason: '${slot.type.label} has a repeated dish role: $roles',
         );
       }
     });
 
-    test('độ lệch năng lượng không vượt 10 phần trăm', () {
-      // Chạy nhiều hạt giống khác nhau: cam kết trong đề cương là với mọi
-      // người dùng, không phải may mắn ở một lần chạy.
+    test('the energy deviation does not exceed 10 per cent', () {
+      // Run over several different seeds: the thesis proposal's commitment
+      // is for every user, not luck on one run.
       for (var seed = 0; seed < 10; seed++) {
         final plan = buildPlan(seed: seed);
         expect(
@@ -357,19 +370,20 @@ void main() {
       }
     });
 
-    test('tỷ lệ thăm dò bị chặn cứng ở 50 phần trăm', () {
+    test('the exploration ratio is hard-capped at 50 per cent', () {
       final plan = buildPlan(exploration: 0.9);
       expect(plan.explorationRatio, lessThanOrEqualTo(0.5));
     });
 
-    test('tắt thăm dò thì không suất nào là thăm dò', () {
+    test('with exploration off, no serving is an exploration one', () {
       final plan = buildPlan(exploration: 0);
       expect(plan.allItems.any((i) => i.isExploration), isFalse);
     });
 
-    test('bật thăm dò thì thực đơn đa dạng hơn khi tắt', () {
-      // Đây chính là phép đo bong bóng lọc: chạy song song hai cấu hình rồi
-      // đếm số món khác nhau xuất hiện qua nhiều ngày.
+    test('with exploration on, the plan is more varied than with it off', () {
+      // This is the filter-bubble measurement: run the two configurations
+      // side by side and count the distinct dishes appearing across several
+      // days.
       Set<String> idsOver(int days, double exploration) {
         final ids = <String>{};
         for (var d = 0; d < days; d++) {

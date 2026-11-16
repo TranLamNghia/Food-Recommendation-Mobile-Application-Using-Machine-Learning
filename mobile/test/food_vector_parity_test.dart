@@ -6,28 +6,31 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nutrition_app/data/models/food.dart';
 import 'package:nutrition_app/data/recommender/food_vector.dart';
 
-/// Kiểm chứng chéo: bản Dart và bản Python phải cho ra **cùng một vector**.
+/// A cross-check: the Dart and the Python implementation have to produce
+/// **the same vector**.
 ///
-/// Mô hình học máy được huấn luyện bằng `ml/features.py` ở phía máy chủ,
-/// nhưng khi chạy thật thì điểm số được tính bằng `FoodVectorSpace` ở đây.
-/// Hai bản lệch nhau dù chỉ một chiều là mô hình học trên một không gian và
-/// suy luận trên một không gian khác — và **không có gì báo lỗi**: mô hình
-/// vẫn chạy, vẫn trả về số, chỉ là số sai. Nên phép đối chiếu này phải là
-/// một bài kiểm, không phải một lần xem mắt.
+/// The machine learning model is trained with `ml/features.py` on the server,
+/// but at serving time the score is computed by `FoodVectorSpace` here. The
+/// two differing by even one dimension means the model learns in one space
+/// and infers in another — and **nothing reports an error**: the model still
+/// runs, still returns numbers, they are simply wrong. So this comparison has
+/// to be a test, not a look by eye.
 ///
-/// Tệp mẫu do `python tools/check_feature_parity.py` sinh ra từ CSDL thật:
-/// nó chứa cả đầu vào (món ăn) lẫn đầu ra mong đợi (vector bản Python).
-/// Nhờ vậy bài kiểm này chạy được mà không cần CSDL.
+/// The fixture is generated from the real database by
+/// `python tools/check_feature_parity.py`: it holds both the input (the
+/// dishes) and the expected output (the Python vectors). That lets this test
+/// run with no database at all.
 ///
-/// Sai số cho phép là 1e-12 chứ không phải so sánh bằng tuyệt đối: hai bản
-/// làm **cùng một dãy phép tính** nên về nguyên tắc ra đúng từng bit, nhưng
-/// giá trị đi qua một vòng JSON nên để một khe hở nhỏ cho phép làm tròn ở
-/// tầng văn bản. Khe hở này nhỏ hơn mọi sai lệch thuật toán có thể có.
-const double _saiSoChoPhep = 1e-12;
+/// The tolerance is 1e-12 rather than exact equality: the two sides run **the
+/// same sequence of operations** so in principle they agree bit for bit, but
+/// the values pass through a JSON round trip, so a small gap is left for
+/// rounding at the text layer. That gap is smaller than any algorithmic
+/// divergence could be.
+const double _tolerance = 1e-12;
 
-const _mauXam = [Color(0xFFCCCCCC), Color(0xFF888888)];
+const _grey = [Color(0xFFCCCCCC), Color(0xFF888888)];
 
-Food _monTuMau(Map<String, dynamic> j) => Food(
+Food _foodFromFixture(Map<String, dynamic> j) => Food(
   id: j['id'] as String,
   name: j['name'] as String,
   category: j['category'] as String,
@@ -41,127 +44,136 @@ Food _monTuMau(Map<String, dynamic> j) => Food(
   sodium: (j['sodium'] as num).toDouble(),
   fiber: (j['fiber'] as num).toDouble(),
   servingSizeG: (j['servingSizeG'] as num).toDouble(),
-  // Hai trường chỉ dùng cho giao diện, không vào vector.
+  // Two fields used only by the interface; they do not enter the
+  // vector.
   emoji: '🍚',
-  gradient: _mauXam,
+  gradient: _grey,
 );
 
 void main() {
-  final tep = File('test/fixtures/food_vector_parity.json');
+  final file = File('test/fixtures/food_vector_parity.json');
 
-  group('Trích chọn đặc trưng — bản Dart khớp bản Python', () {
+  group('Feature extraction — the Dart side matches the Python side', () {
     setUpAll(() {
       expect(
-        tep.existsSync(),
+        file.existsSync(),
         isTrue,
         reason:
-            'Chưa có tệp mẫu ${tep.path}. '
-            'Sinh bằng: python tools/check_feature_parity.py --fixture-only',
+            'The fixture ${file.path} is missing. '
+            'Generate it with: '
+            'python tools/check_feature_parity.py --fixture-only',
       );
     });
 
-    final mau =
-        jsonDecode(tep.readAsStringSync()) as Map<String, dynamic>;
-    final mon = (mau['foods'] as List)
-        .map((j) => _monTuMau(j as Map<String, dynamic>))
+    final fixture =
+        jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    final foods = (fixture['foods'] as List)
+        .map((j) => _foodFromFixture(j as Map<String, dynamic>))
         .toList();
-    final vectorMongDoi = (mau['vectors'] as List)
+    final expectedVectors = (fixture['vectors'] as List)
         .map((v) => (v as List).map((x) => (x as num).toDouble()).toList())
         .toList();
-    final scaler = mau['scaler'] as Map<String, dynamic>;
+    final scaler = fixture['scaler'] as Map<String, dynamic>;
 
-    final khongGian = FoodVectorSpace.fromFoods(mon);
+    final space = FoodVectorSpace.fromFoods(foods);
 
-    test('tập món mẫu không rỗng', () {
-      expect(mon, isNotEmpty);
-      expect(vectorMongDoi.length, mon.length);
+    test('the sample dish set is not empty', () {
+      expect(foods, isNotEmpty);
+      expect(expectedVectors.length, foods.length);
     });
 
-    test('danh sách nhóm món và số chiều trùng nhau', () {
+    test('the food group list and the dimension count match', () {
       expect(
-        khongGian.categories,
+        space.categories,
         (scaler['categories'] as List).cast<String>(),
-        reason: 'Thứ tự nhóm món quyết định thứ tự chiều one-hot. '
-            'Lệch thứ tự là lệch toàn bộ phần đuôi của vector.',
+        reason: 'The food group order decides the one-hot dimension '
+            'order. '
+            'A different order means the whole tail of the vector '
+            'differs.',
       );
-      expect(khongGian.length, mau['length'] as int);
-      expect(khongGian.labels.length, khongGian.length);
+      expect(space.length, fixture['length'] as int);
+      expect(space.labels.length, space.length);
     });
 
-    test('tám tham số min–max của phép chuẩn hóa trùng nhau', () {
-      // Đây là trạng thái của không gian, không phải của món. Hai bản tự
-      // tính độc lập từ cùng tập món, nên lệch ở đây nghĩa là một bên đã
-      // lọc hoặc suy giá trị khác bên kia.
-      expect(khongGian.minKcal, closeTo(
-          (scaler['min_kcal'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.maxKcal, closeTo(
-          (scaler['max_kcal'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.minSugar, closeTo(
-          (scaler['min_sugar'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.maxSugar, closeTo(
-          (scaler['max_sugar'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.minSodium, closeTo(
-          (scaler['min_sodium'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.maxSodium, closeTo(
-          (scaler['max_sodium'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.minFiber, closeTo(
-          (scaler['min_fiber'] as num).toDouble(), _saiSoChoPhep));
-      expect(khongGian.maxFiber, closeTo(
-          (scaler['max_fiber'] as num).toDouble(), _saiSoChoPhep));
+    test('the eight min-max normalisation parameters match', () {
+      // This is the space's state, not a dish's. The two sides compute it
+      // independently from the same dish set, so a difference here means one
+      // of them filtered or imputed differently from the other.
+      expect(space.minKcal, closeTo(
+          (scaler['min_kcal'] as num).toDouble(), _tolerance));
+      expect(space.maxKcal, closeTo(
+          (scaler['max_kcal'] as num).toDouble(), _tolerance));
+      expect(space.minSugar, closeTo(
+          (scaler['min_sugar'] as num).toDouble(), _tolerance));
+      expect(space.maxSugar, closeTo(
+          (scaler['max_sugar'] as num).toDouble(), _tolerance));
+      expect(space.minSodium, closeTo(
+          (scaler['min_sodium'] as num).toDouble(), _tolerance));
+      expect(space.maxSodium, closeTo(
+          (scaler['max_sodium'] as num).toDouble(), _tolerance));
+      expect(space.minFiber, closeTo(
+          (scaler['min_fiber'] as num).toDouble(), _tolerance));
+      expect(space.maxFiber, closeTo(
+          (scaler['max_fiber'] as num).toDouble(), _tolerance));
     });
 
-    test('từng chiều của từng món trùng nhau', () {
-      var lechLonNhat = 0.0;
-      String? choLech;
+    test('every dimension of every dish matches', () {
+      var worstDelta = 0.0;
+      String? worstAt;
 
-      for (var i = 0; i < mon.length; i++) {
-        final thucTe = khongGian.encode(mon[i]);
-        final mongDoi = vectorMongDoi[i];
+      for (var i = 0; i < foods.length; i++) {
+        final actual = space.encode(foods[i]);
+        final expected = expectedVectors[i];
 
         expect(
-          thucTe.length,
-          mongDoi.length,
-          reason: 'Số chiều lệch ở món ${mon[i].name}',
+          actual.length,
+          expected.length,
+          reason: 'Dimension count differs for dish ${foods[i].name}',
         );
 
-        for (var d = 0; d < thucTe.length; d++) {
-          final lech = (thucTe[d] - mongDoi[d]).abs();
-          if (lech > lechLonNhat) {
-            lechLonNhat = lech;
-            choLech = '${mon[i].name} · chiều $d (${khongGian.labels[d]})';
+        for (var d = 0; d < actual.length; d++) {
+          final delta = (actual[d] - expected[d]).abs();
+          if (delta > worstDelta) {
+            worstDelta = delta;
+            worstAt =
+                '${foods[i].name} · dimension $d (${space.labels[d]})';
           }
         }
       }
 
       expect(
-        lechLonNhat,
-        lessThan(_saiSoChoPhep),
-        reason: 'Lệch lớn nhất $lechLonNhat tại $choLech',
+        worstDelta,
+        lessThan(_tolerance),
+        reason: 'Largest difference $worstDelta at $worstAt',
       );
     });
 
-    test('mỗi món bật đúng một chiều one-hot nhóm', () {
-      // Nếu một món thuộc nhóm không có trong không gian thì toàn bộ khối
-      // one-hot bằng 0 và món đó mất thông tin nhóm một cách im lặng.
-      final batDau = khongGian.length - khongGian.categories.length;
-      for (final m in mon) {
-        final v = khongGian.encode(m);
-        final tongOneHot = v.skip(batDau).fold<double>(0, (a, b) => a + b);
+    test('each dish sets exactly one group one-hot dimension', () {
+      // If a dish belongs to a group the space does not hold, the whole
+      // one-hot block is 0 and that dish silently loses its group
+      // information.
+      final firstOneHot = space.length - space.categories.length;
+      for (final m in foods) {
+        final v = space.encode(m);
+        final oneHotSum =
+            v.skip(firstOneHot).fold<double>(0, (a, b) => a + b);
         expect(
-          tongOneHot,
-          closeTo(1.0, _saiSoChoPhep),
-          reason: 'Món ${m.name} (nhóm ${m.category}) không bật chiều nào',
+          oneHotSum,
+          closeTo(1.0, _tolerance),
+          reason:
+              'Dish ${m.name} (group ${m.category}) sets no dimension',
         );
       }
     });
 
-    test('mọi chiều nằm trong đoạn [0, 1]', () {
-      for (final m in mon) {
-        for (final (d, x) in khongGian.encode(m).indexed) {
+    test('every dimension lies in [0, 1]', () {
+      for (final m in foods) {
+        for (final (d, x) in space.encode(m).indexed) {
           expect(
             x,
             inInclusiveRange(0.0, 1.0),
-            reason: 'Món ${m.name}, chiều $d (${khongGian.labels[d]}) = $x',
+            reason:
+                'Dish ${m.name}, dimension $d (${space.labels[d]}) = $x',
           );
         }
       }

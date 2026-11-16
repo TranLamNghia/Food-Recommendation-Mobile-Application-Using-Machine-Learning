@@ -10,7 +10,8 @@ import 'package:nutrition_app/data/models/swipe_action.dart';
 import 'package:nutrition_app/data/session.dart';
 import 'package:nutrition_app/features/home/home_shell.dart';
 
-/// Phiên đã đi qua khai báo hồ sơ và phiên vuốt, sẵn sàng hiển thị thực đơn.
+/// A session that has already been through the profile and the swipe
+/// session, ready to show a plan.
 AppSession _readySession() {
   final session = AppSession(rng: math.Random(7));
   session.profile
@@ -37,18 +38,19 @@ AppSession _readySession() {
   return session;
 }
 
-/// Khung test mặc định chỉ 800×600 nên phần dưới màn hình không được dựng và
-/// các `find` sẽ trượt. Đặt khung cao hơn hẳn để toàn bộ thực đơn nằm trong
-/// vùng vẽ, thay vì phải cuộn thủ công qua ba màn hình chồng nhau trong
-/// [IndexedStack].
-/// Khung nhìn cao giả lập, để cả màn dựng xong trong một lần `pump` mà
-/// không phải cuộn.
+/// The default test frame is only 800×600, so the lower part of the screen
+/// is never built and the `find` calls miss. A much taller frame keeps the
+/// whole plan inside the painted area, instead of having to scroll by hand
+/// through three screens stacked in an [IndexedStack].
 ///
-/// Chiều cao từng là 2600 px. Màn thực đơn cao thêm khoảng 600 px khi có
-/// thẻ hạn mức theo ngày, đường dẫn sang màn món bị bỏ qua, và một hàng lý
-/// do dưới mỗi suất — nên con số này phải tăng theo, nếu không phép kiểm
-/// "hiện đủ bốn bữa" sẽ sai vì bữa phụ nằm ngoài vùng được dựng chứ không
-/// vì màn hình thiếu nó.
+/// A tall simulated viewport, so a whole screen finishes building in one
+/// `pump` with no scrolling.
+///
+/// The height used to be 2600 px. The plan screen grew by about 600 px once
+/// it gained the day-allowance card, the link to the excluded-dishes screen
+/// and a reason row under each serving — so this number has to grow with it,
+/// or the "shows all four meals" check would fail because the snack sits
+/// outside the built area rather than because the screen is missing it.
 void _useTallViewport(WidgetTester tester) {
   tester.view.physicalSize = const Size(412 * 3, 3400 * 3);
   tester.view.devicePixelRatio = 3.0;
@@ -61,7 +63,9 @@ Widget _app(AppSession session) => SessionScope(
 );
 
 void main() {
-  testWidgets('màn hình thực đơn dựng được và hiện đủ bốn bữa', (tester) async {
+  testWidgets('the plan screen builds and shows all four meals', (
+    tester,
+  ) async {
     _useTallViewport(tester);
     final session = _readySession();
     await tester.pumpWidget(_app(session));
@@ -73,7 +77,7 @@ void main() {
     }
   });
 
-  testWidgets('chuyển được sang tab nhật ký và tiến trình', (tester) async {
+  testWidgets('the diary and progress tabs can be reached', (tester) async {
     _useTallViewport(tester);
     await tester.pumpWidget(_app(_readySession()));
     await tester.pumpAndSettle();
@@ -88,7 +92,7 @@ void main() {
     expect(find.text('Gu ăn của bạn'), findsOneWidget);
   });
 
-  testWidgets('đánh dấu đã ăn thì món chảy sang nhật ký', (tester) async {
+  testWidgets('marking a dish eaten moves it into the diary', (tester) async {
     _useTallViewport(tester);
     final session = _readySession();
     await tester.pumpWidget(_app(session));
@@ -96,7 +100,7 @@ void main() {
 
     expect(session.diary, isEmpty);
 
-    // Nút "đánh dấu đã ăn" của suất đầu tiên trong thực đơn.
+    // The "mark as eaten" button of the first serving in the plan.
     await tester.tap(find.byTooltip('Đánh dấu đã ăn').first);
     await tester.pumpAndSettle();
 
@@ -107,7 +111,9 @@ void main() {
     );
   });
 
-  testWidgets('đổi món mở bảng chọn và thay được suất', (tester) async {
+  testWidgets('swapping opens the sheet and replaces the serving', (
+    tester,
+  ) async {
     _useTallViewport(tester);
     final session = _readySession();
     await tester.pumpWidget(_app(session));
@@ -118,17 +124,20 @@ void main() {
     await tester.tap(find.byTooltip('Đổi món khác').first);
     await tester.pumpAndSettle();
 
-    // Bảng chọn chỉ hiện món cùng vai trò với suất đang thay.
+    // The sheet only shows dishes in the same role as the serving being
+    // replaced.
     expect(
       find.textContaining('Đổi ${before.name.toLowerCase()}'),
       findsOneWidget,
     );
   });
 
-  testWidgets('tiến trình phân loại BMI theo ngưỡng châu Á', (tester) async {
+  testWidgets('progress classifies the BMI by the Asian thresholds', (
+    tester,
+  ) async {
     _useTallViewport(tester);
     final session = _readySession();
-    // BMI 68 / 1.72² = 22,99 — dưới 23 nên vẫn là bình thường.
+    // BMI 68 / 1.72² = 22.99 — under 23, so still normal.
     await tester.pumpWidget(_app(session));
     await tester.pumpAndSettle();
 
@@ -136,8 +145,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bình thường'), findsOneWidget);
 
-    // Tăng 2 kg đẩy BMI lên 23,66 — theo ngưỡng WHO chung (25) vẫn là bình
-    // thường, nhưng theo ngưỡng châu Á đã là thừa cân.
+    // Adding 2 kg pushes the BMI to 23.66 — still normal by the general WHO
+    // threshold (25), but already overweight by the Asian one.
     session.profile.weightKg = 70;
     session.regeneratePlan();
     await tester.pumpAndSettle();
