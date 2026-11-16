@@ -1,17 +1,18 @@
 import 'food.dart';
 import 'meal_plan.dart';
 
-/// Một dòng nhật ký ăn uống — bảng `food_diary`.
+/// One row of the food diary — the `food_diary` table.
 ///
-/// Nhật ký ghi lại món người dùng **thật sự đã ăn**, không phải món hệ thống
-/// gợi ý. Hai thứ này lệch nhau chính là dữ liệu quý nhất: khoảng cách giữa
-/// thực đơn đề xuất và bữa ăn thực tế cho biết gợi ý sát hay chưa sát.
+/// The diary records what the user **actually ate**, not what the system
+/// recommended. The gap between the two is the most valuable data there is:
+/// the distance between the suggested plan and the real meal tells you
+/// whether the recommendations are close or not.
 ///
-/// Bảng này **không** giữ khóa ngoại trỏ tới `meal_plan_items`. Người dùng
-/// có thể ăn một món hoàn toàn ngoài thực đơn, và món trong thực đơn có thể
-/// bị ăn ở bữa khác với bữa được xếp. Tỷ lệ tuân thủ thực đơn vì vậy tính
-/// bằng cách ghép theo khóa tự nhiên (ngày, bữa, món) chứ không theo khóa
-/// ngoại — xem `DATABASE_DESIGN.md` mục 6.2.
+/// This table holds **no** foreign key to `meal_plan_items`. A user can eat
+/// something entirely outside the plan, and a dish from the plan can be eaten
+/// at a different meal from the one it was scheduled for. Plan adherence is
+/// therefore computed by joining on the natural key (date, meal, dish) rather
+/// than on a foreign key — see `DATABASE_DESIGN.md` §6.2.
 class DiaryEntry {
   DiaryEntry({
     required this.food,
@@ -25,14 +26,15 @@ class DiaryEntry {
   final MealType meal;
   final DateTime ateAt;
 
-  /// Số suất đã ăn. 1,0 là một khẩu phần chuẩn; 0,5 là ăn nửa suất.
+  /// How many servings were eaten. 1.0 is one standard portion; 0.5 is half.
   final double portion;
 
-  /// Điểm đánh giá sau khi ăn, từ 1 đến 5 sao. `null` là chưa đánh giá.
+  /// The rating given after eating, from 1 to 5 stars. `null` means not rated
+  /// yet.
   ///
-  /// Đây là nguồn tín hiệu **mạnh nhất** trong bảng quy đổi nhãn, trọng số
-  /// mẫu 1,0 — vì người dùng đã thật sự ăn rồi mới chấm, khác hẳn lượt vuốt
-  /// chỉ nhìn ảnh mà đoán.
+  /// This is the **strongest** signal source in the label mapping table, with
+  /// a sample weight of 1.0 — because the user actually ate the dish before
+  /// scoring it, quite unlike a swipe that only guesses from a photo.
   int? rating;
 
   double get kcal => food.kcal * portion;
@@ -40,13 +42,14 @@ class DiaryEntry {
   double get carb => food.carb * portion;
   double get fat => food.fat * portion;
 
-  /// Nhãn ưa thích quy về đoạn [0, 1] để đưa vào tập huấn luyện.
+  /// The preference label mapped onto [0, 1] for the training set.
   ///
-  /// Có đánh giá sao thì quy tuyến tính từ 1–5 sao về 0,00–1,00. Chưa đánh
-  /// giá thì bản thân việc đã ăn đã là tín hiệu dương, nhận nhãn 0,8 — thấp
-  /// hơn 5 sao nhưng cao hơn mức trung tính.
+  /// With a star rating, 1–5 stars map linearly onto 0.00–1.00. Without one,
+  /// the very fact of having eaten the dish is already a positive signal and
+  /// takes the label 0.8 — below 5 stars but above neutral.
   double get trainingLabel => rating == null ? 0.8 : (rating! - 1) / 4;
 
-  /// Trọng số mẫu tương ứng — đánh giá sao đáng tin hơn suy luận từ hành vi.
+  /// The matching sample weight — a star rating is more trustworthy than an
+  /// inference drawn from behaviour.
   double get sampleWeight => rating == null ? 0.9 : 1.0;
 }
