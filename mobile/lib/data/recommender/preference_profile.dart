@@ -4,26 +4,28 @@ import '../models/food.dart';
 import '../models/swipe_action.dart';
 import 'food_vector.dart';
 
-/// Hồ sơ sở thích của người dùng — vector trọng số tổng hợp từ lịch sử vuốt.
+/// The user's preference profile — a weight vector built up from their swipe
+/// history.
 ///
-/// Đây là Giai đoạn 1 của chiến lược khởi đầu nguội. Sau phiên khảo sát khẩu
-/// vị, hệ thống chưa có đủ dữ liệu để huấn luyện một mô hình học máy riêng —
-/// khoảng 30 mẫu trên vài chục chiều đặc trưng thì mô hình sẽ học thuộc đúng
-/// 30 món đó thay vì học ra quy luật. Thay vào đó, sở thích được tóm lại
-/// thành **một vector duy nhất**:
+/// This is Stage 1 of the cold-start strategy. Right after the taste survey
+/// the system has nowhere near enough data to train a machine learning model
+/// of its own — around 30 samples over a few dozen feature dimensions means
+/// the model memorises those exact 30 dishes instead of learning a rule.
+/// Instead, the preference is summarised into **one single vector**:
 ///
 /// ```text
 ///          Σ w(aᵢ) · vᵢ
 ///   p_u = ──────────────       w(like) = +1 , w(neutral) = 0 , w(dislike) = −1
-///          Σ | w(aᵢ) |         aᵢ = unknown → loại khỏi tổng
+///          Σ | w(aᵢ) |         aᵢ = unknown → dropped from the sums
 /// ```
 ///
-/// Công thức này là thuật toán **Rocchio** trong mô hình không gian vector
-/// (Manning và cộng sự, *Introduction to Information Retrieval*, chương 9),
-/// còn gọi là bộ phân lớp trọng tâm gần nhất. Bản chất nó vẫn là một mô hình
-/// tuyến tính học từ chính 30 mẫu ấy, chỉ khác ở chỗ nghiệm tính bằng công
-/// thức đóng thay vì tối ưu lặp — nhờ vậy ổn định khi dữ liệu ít, cho kết quả
-/// tức thì, và giải thích được với người dùng.
+/// This formula is the **Rocchio** algorithm in the vector space model
+/// (Manning et al., *Introduction to Information Retrieval*, chapter 9), also
+/// known as the nearest centroid classifier. At bottom it is still a linear
+/// model learned from those same 30 samples; the difference is that the
+/// solution is a closed form rather than an iterative optimisation — which
+/// makes it stable on little data, instant to compute, and explainable to the
+/// user.
 class PreferenceProfile {
   const PreferenceProfile({
     required this.space,
@@ -31,10 +33,11 @@ class PreferenceProfile {
     required this.signalCount,
   });
 
-  /// Dựng hồ sơ từ kết quả một phiên vuốt.
+  /// Builds the profile from the result of one swipe session.
   ///
-  /// Lượt vuốt `unknown` bị loại hoàn toàn: người dùng nói *chưa từng ăn*,
-  /// đó không phải tín hiệu về khẩu vị nên đưa vào sẽ làm nhiễu vector.
+  /// `unknown` swipes are dropped entirely: the user is saying *I have never
+  /// eaten this*, which is not a signal about taste, so including it would
+  /// only add noise to the vector.
   factory PreferenceProfile.fromSwipes({
     required FoodVectorSpace space,
     required List<({Food food, SwipeAction action})> swipes,
@@ -56,9 +59,10 @@ class PreferenceProfile {
       }
     }
 
-    // Vuốt `neutral` có trọng số 0 nên đóng góp vào mẫu số bằng 0. Nếu cả
-    // phiên chỉ toàn `neutral` thì mẫu số bằng 0 — khi đó giữ vector rỗng,
-    // mọi món sẽ nhận cùng một điểm và thứ tự do các tiêu chí khác quyết định.
+    // A `neutral` swipe has weight 0, so it contributes 0 to the denominator.
+    // If a whole session were nothing but `neutral`, the denominator would be
+    // 0 — in which case the vector is left empty, every dish gets the same
+    // score, and the ordering is decided by the other criteria.
     if (totalAbsWeight > 0) {
       for (var i = 0; i < sum.length; i++) {
         sum[i] /= totalAbsWeight;
@@ -70,74 +74,78 @@ class PreferenceProfile {
 
   final FoodVectorSpace space;
 
-  /// Vector sở thích `p_u`. Chiều dương nghĩa là người dùng thiên về đặc
-  /// trưng đó, chiều âm nghĩa là né tránh.
+  /// The preference vector `p_u`. A positive dimension means the user leans
+  /// towards that feature, a negative one means they avoid it.
   final List<double> weights;
 
-  /// Số tín hiệu đã dùng để dựng hồ sơ — không tính lượt `unknown`.
+  /// How many signals went into the profile — `unknown` swipes excluded.
   final int signalCount;
 
-  /// Hồ sơ rỗng, dùng cho người dùng chưa vuốt lượt nào (Giai đoạn 0).
+  /// An empty profile, for a user who has not swiped at all (Stage 0).
   factory PreferenceProfile.empty(FoodVectorSpace space) => PreferenceProfile(
     space: space,
     weights: List<double>.filled(space.length, 0),
     signalCount: 0,
   );
 
-  /// Rỗng khi **mọi trọng số bằng 0**, không phải khi chưa có lượt vuốt nào.
+  /// Empty when **every weight is 0**, not when there has been no swipe.
   ///
-  /// Phân biệt này quan trọng: người dùng có thể **khai mục tiêu trước khi
-  /// vuốt lượt đầu tiên**. Hồ sơ khi đó có `signalCount == 0` nhưng trọng số
-  /// khác 0, và vẫn phải xếp hạng được. Nếu còn xét `signalCount == 0` thì
-  /// `score` trả về 0,5 cho mọi món và mục tiêu vừa khai bị bỏ qua hoàn toàn.
+  /// The distinction matters: a user can **state a goal before their first
+  /// swipe**. The profile then has `signalCount == 0` but non-zero weights,
+  /// and it still has to be able to rank. Were `signalCount == 0` still
+  /// consulted, `score` would return 0.5 for every dish and the goal just
+  /// stated would be ignored completely.
   ///
-  /// Không đổi hành vi của các trường hợp cũ: hồ sơ `empty` và phiên vuốt
-  /// toàn `neutral` đều cho vector toàn 0 nên vẫn rỗng như trước.
+  /// It does not change the behaviour of the earlier cases: an `empty`
+  /// profile and an all-`neutral` session both give an all-zero vector, so
+  /// they are still empty as before.
   bool get isEmpty => weights.every((w) => w == 0);
 
-  /// Chấm điểm mức độ ưa thích của một món, đưa về đoạn [0, 1].
+  /// Scores how much the user is likely to prefer a dish, mapped into [0, 1].
   ///
-  /// Độ tương đồng cosin nhận giá trị trong [-1, 1]; phép `(1 + cos) / 2`
-  /// đưa nó về [0, 1] để dùng chung thang với điểm của mô hình học máy ở
-  /// Giai đoạn 2, nhờ vậy công thức trộn dần giữa hai giai đoạn không phải
-  /// quy đổi thang đo.
+  /// The cosine similarity takes values in [-1, 1]; `(1 + cos) / 2` brings it
+  /// into [0, 1] so it shares a scale with the machine learning model's score
+  /// at Stage 2, which means the formula blending the two stages does not
+  /// have to convert between scales.
   double score(Food food) {
     if (isEmpty) return 0.5;
     final cos = cosineSimilarity(weights, space.encode(food));
     return (1 + cos) / 2;
   }
 
-  /// Bản sao của hồ sơ có **mục tiêu dinh dưỡng người dùng tự khai** nhúng
-  /// thẳng vào vector.
+  /// A copy of the profile with **nutrition goals the user states
+  /// themselves** embedded straight into the vector.
   ///
-  /// [goals] ánh xạ tên cột dinh dưỡng sang lượng đẩy **có dấu**: dương là
-  /// "muốn nhiều hơn" (`'fiber_g': 0.6`), âm là "muốn ít hơn"
-  /// (`'sodium_mg': -0.6`). Chất không có chiều riêng thì bị bỏ qua — xem
-  /// `FoodVectorSpace.dimensionOfNutrient`.
+  /// [goals] maps a nutrition column name onto a **signed** nudge: positive
+  /// is "I want more" (`'fiber_g': 0.6`), negative is "I want less"
+  /// (`'sodium_mg': -0.6`). A nutrient with no dimension of its own is
+  /// ignored — see `FoodVectorSpace.dimensionOfNutrient`.
   ///
-  /// **Vì sao nhúng được vào đây mà không phải chỉ xử lý ở Bước 4.** `p_u`
-  /// chỉ là một vector; Rocchio trong tìm tin vốn cho phép khởi tạo vector
-  /// truy vấn từ ý định rõ ràng chứ không bắt buộc học hết từ phản hồi. Đo
-  /// trên 305 món, mục tiêu 25 g xơ/ngày, 12 hồ sơ khẩu vị không liên quan
-  /// tới xơ:
+  /// **Why this can be embedded here instead of being handled only at Step
+  /// 4.** `p_u` is just a vector; Rocchio in information retrieval has always
+  /// allowed the query vector to be seeded from an explicit intent rather
+  /// than learned entirely from feedback. Measured over 305 dishes, with a
+  /// goal of 25 g of fibre a day and 12 taste profiles unrelated to fibre:
   ///
-  /// | Mục tiêu đưa vào đâu | Xơ/ngày | Đạt | Bước 4 phải sửa | Điểm hợp vị |
+  /// | Where the goal goes | Fibre/day | Met | Repairs Step 4 must make | Taste score |
   /// |---|---|---|---|---|
-  /// | không đâu | 18,7 g | 0/12 | 0 | 0,7452 |
-  /// | chỉ `p_u` | 23,7 g | 0/12 | 0 | 0,7410 |
-  /// | chỉ Bước 4 | 28,4 g | 12/12 | 3,5 | 0,6924 |
-  /// | cả hai | 25,5 g | 12/12 | **1,7** | **0,7294** |
+  /// | nowhere | 18.7 g | 0/12 | 0 | 0.7452 |
+  /// | `p_u` only | 23.7 g | 0/12 | 0 | 0.7410 |
+  /// | Step 4 only | 28.4 g | 12/12 | 3.5 | 0.6924 |
+  /// | both | 25.5 g | 12/12 | **1.7** | **0.7294** |
   ///
-  /// Nhúng vào `p_u` lấp 79 % khoảng cách gần như không tốn gì về khẩu vị,
-  /// nhưng **không bảo đảm** đạt mục tiêu (0/12) — phần bảo đảm vẫn phải do
-  /// Bước 4 làm. Để tất cả cho Bước 4 thì nó phải đổi gấp đôi số món và điểm
-  /// hợp khẩu vị rơi 7,1 % thay vì 2,1 %.
+  /// Embedding it in `p_u` closes 79 % of the gap at almost no cost in taste,
+  /// but it **does not guarantee** the goal is met (0/12) — the guarantee
+  /// still has to come from Step 4. Leaving it all to Step 4 means twice as
+  /// many dishes swapped and a 7.1 % drop in the taste score instead of
+  /// 2.1 %.
   ///
-  /// **Đây là NGHIÊNG chứ không LOẠI.** Lọc cứng theo ngưỡng xơ ≥ 2 g sẽ xóa
-  /// sạch vai trò `side_protein` (71 → 0 món) vì thịt cá vốn không có xơ, và
-  /// Bước 4 không dựng nổi bữa ăn — đúng thất bại của ngưỡng natri 600 mg
-  /// mỗi suất trước đây. Lọc cứng dành cho bệnh lý và dị ứng, không dành cho
-  /// mục tiêu.
+  /// **This is a NUDGE, not an EXCLUSION.** Hard filtering on a fibre
+  /// threshold of ≥ 2 g wipes out the `side_protein` role entirely (71 → 0
+  /// dishes) because meat and fish have no fibre, and Step 4 cannot build a
+  /// meal — exactly the failure of the earlier 600 mg per-serving sodium
+  /// threshold. Hard filtering is for conditions and allergies, not for
+  /// goals.
   PreferenceProfile withNutrientGoals(Map<String, double> goals) {
     if (goals.isEmpty) return this;
 
@@ -158,25 +166,29 @@ class PreferenceProfile {
     );
   }
 
-  /// Bản sao của hồ sơ sau khi xoay nhẹ theo một hướng ngẫu nhiên.
+  /// A copy of the profile rotated slightly in a random direction.
   ///
-  /// Dùng cho nhóm **thăm dò** trong cơ chế 70-30: thay vì chèn món ngẫu
-  /// nhiên như ε-greedy, hệ thống xếp hạng theo chính vector sở thích đã làm
-  /// nhiễu, nên món thăm dò rơi vào *vùng lân cận* khẩu vị chứ không rơi ra
-  /// chỗ vô lý. Người dùng vì vậy dễ chấp nhận hơn, và khi họ từ chối thì
-  /// thông tin thu được cũng nhiều hơn — biết ranh giới khẩu vị nằm ở đâu.
+  /// Used for the **exploration** group in the 70-30 mechanism: instead of
+  /// inserting a random dish the way ε-greedy would, the system ranks by the
+  /// preference vector itself after adding noise, so an exploration dish
+  /// lands in the *neighbourhood* of the user's taste rather than somewhere
+  /// absurd. That makes it easier for the user to accept, and when they do
+  /// reject it the information gained is greater — it shows where the
+  /// boundary of their taste lies.
   ///
-  /// [delta] là biên độ nhiễu δ. Quá nhỏ thì món "mới" gần như trùng món cũ;
-  /// quá lớn thì suy biến thành chọn ngẫu nhiên, mất hết ưu điểm.
+  /// [delta] is the noise amplitude δ. Too small and the "new" dish is
+  /// practically the old one; too large and it degenerates into random
+  /// selection, losing every advantage.
   PreferenceProfile jittered({
     required double delta,
     required math.Random rng,
   }) {
     if (isEmpty) return this;
 
-    // Nhiễu lấy từ phân phối chuẩn rồi chuẩn hóa về vector đơn vị, để hướng
-    // xoay rải đều mọi phía thay vì thiên về các góc của khối lập phương —
-    // điều sẽ xảy ra nếu lấy nhiễu đều trên từng chiều.
+    // The noise is drawn from a normal distribution and then normalised to a
+    // unit vector, so the rotation direction is spread evenly in all
+    // directions rather than biased towards the corners of the cube — which
+    // is what would happen with noise drawn uniformly per dimension.
     final noise = List<double>.generate(weights.length, (_) => _gaussian(rng));
     var norm = 0.0;
     for (final n in noise) {
@@ -197,11 +209,11 @@ class PreferenceProfile {
     );
   }
 
-  /// Các đặc trưng người dùng thiên về nhất, xếp giảm dần theo trọng số.
+  /// The features the user leans towards most, in descending weight order.
   ///
-  /// Đây là phần **giải thích được** của mô hình nội dung: có thể nói thẳng
-  /// với người dùng *"gợi ý món này vì bạn thích đồ nướng và món nhiều đạm"*
-  /// thay vì để họ đoán.
+  /// This is the **explainable** part of the content model: the system can
+  /// tell the user outright *"this dish is suggested because you like grilled
+  /// food and high-protein dishes"* instead of leaving them to guess.
   List<({String label, double weight})> topTraits({int limit = 4}) {
     final labels = space.labels;
     final entries = <({String label, double weight})>[];
@@ -216,11 +228,12 @@ class PreferenceProfile {
   }
 }
 
-/// Trọng số Rocchio theo hành động vuốt. `null` nghĩa là loại khỏi tổng.
+/// The Rocchio weight for a swipe action. `null` means drop it from the sums.
 ///
-/// Khác với [SwipeAction.label] — vốn là nhãn ưa thích trong đoạn [0, 1] dùng
-/// làm đích cho mô hình học máy ở Giai đoạn 2 — trọng số ở đây nhận cả giá
-/// trị âm, vì Rocchio cần kéo vector **ra xa** nhóm món bị ghét.
+/// Unlike [SwipeAction.label] — which is the preference label in [0, 1] used
+/// as the target for the Stage 2 machine learning model — the weight here
+/// takes negative values too, because Rocchio needs to pull the vector
+/// **away** from the group of disliked dishes.
 double? _rocchioWeight(SwipeAction action) => switch (action) {
   SwipeAction.like => 1.0,
   SwipeAction.neutral => 0.0,
@@ -228,10 +241,12 @@ double? _rocchioWeight(SwipeAction action) => switch (action) {
   SwipeAction.unknown => null,
 };
 
-/// Một mẫu từ phân phối chuẩn chuẩn tắc theo phép biến đổi Box-Muller.
+/// One sample from the standard normal distribution, by the Box-Muller
+/// transform.
 double _gaussian(math.Random rng) {
-  // `nextDouble` trả về [0, 1) nên có thể ra đúng 0, mà log(0) là vô cực.
-  // Đẩy cận dưới lên một lượng rất nhỏ để phép lấy log luôn hợp lệ.
+  // `nextDouble` returns [0, 1) so it can come out as exactly 0, and log(0)
+  // is infinite. Lift the lower bound by a tiny amount so the logarithm is
+  // always valid.
   final u1 = math.max(rng.nextDouble(), 1e-12);
   final u2 = rng.nextDouble();
   return math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2);
