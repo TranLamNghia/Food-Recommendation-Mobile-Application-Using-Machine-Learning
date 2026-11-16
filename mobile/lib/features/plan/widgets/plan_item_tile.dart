@@ -13,112 +13,176 @@ class PlanItemTile extends StatelessWidget {
     required this.item,
     required this.onReplace,
     required this.onEat,
+    this.onOpen,
+    this.onSkip,
+    this.onRestore,
   });
 
   final MealPlanItem item;
   final VoidCallback onReplace;
-  final VoidCallback onEat;
+
+  /// `null` hides the button — a day that has not come yet cannot be eaten.
+  final VoidCallback? onEat;
+
+  /// Tapping the tile body opens the dish.
+  final VoidCallback? onOpen;
+
+  /// Skip this serving (eating out, not hungry).
+  final VoidCallback? onSkip;
+
+  /// Put a skipped serving back.
+  final VoidCallback? onRestore;
 
   @override
   Widget build(BuildContext context) {
     final food = item.food;
     final eaten = item.status == MealItemStatus.eaten;
+    final skipped = item.status == MealItemStatus.skipped;
 
     return Opacity(
-      opacity: eaten ? 0.6 : 1,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: eaten
-                ? AppColors.like.withValues(alpha: 0.4)
-                : AppColors.border,
+      opacity: eaten || skipped ? 0.6 : 1,
+      child: GestureDetector(
+        onTap: onOpen,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: eaten
+                  ? AppColors.like.withValues(alpha: 0.4)
+                  : AppColors.border,
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Thumbnail(item: item),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            food.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15.5,
-                              height: 1.25,
-                              color: AppColors.textPrimary,
-                              fontVariations: [FontVariation('wght', 700)],
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Thumbnail(item: item),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              food.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15.5,
+                                height: 1.25,
+                                color: AppColors.textPrimary,
+                                fontVariations: [FontVariation('wght', 700)],
+                              ),
                             ),
                           ),
-                        ),
-                        if (eaten)
-                          const Icon(
-                            Icons.check_circle_rounded,
-                            size: 18,
-                            color: AppColors.like,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${food.kcal} kcal · ${food.dishRole} · ${food.category}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textSecondary,
-                        fontVariations: [FontVariation('wght', 500)],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // Nhãn nằm trong [Wrap] có thể co lại: tên món dài
-                        // hoặc màn hình hẹp thì chúng xuống dòng, thay vì đẩy
-                        // hai nút hành động tràn ra khỏi thẻ.
-                        Expanded(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              _ScoreChip(score: item.score),
-                              if (item.isExploration) const _ExplorationChip(),
-                            ],
-                          ),
-                        ),
-                        if (!eaten) ...[
-                          const SizedBox(width: 8),
-                          _MiniButton(
-                            icon: Icons.swap_horiz_rounded,
-                            tooltip: 'Đổi món khác',
-                            onTap: onReplace,
-                          ),
-                          const SizedBox(width: 6),
-                          _MiniButton(
-                            icon: Icons.restaurant_rounded,
-                            tooltip: 'Đánh dấu đã ăn',
-                            onTap: onEat,
-                            filled: true,
-                          ),
+                          if (eaten)
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              size: 18,
+                              color: AppColors.like,
+                            ),
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${food.kcal} kcal · ${food.dishRole} · ${food.category}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textSecondary,
+                          fontVariations: [FontVariation('wght', 500)],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          // Nhãn nằm trong [Wrap] có thể co lại: tên món dài
+                          // hoặc màn hình hẹp thì chúng xuống dòng, thay vì đẩy
+                          // hai nút hành động tràn ra khỏi thẻ.
+                          Expanded(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (skipped)
+                                  const _SkippedChip()
+                                else
+                                  _ScoreChip(score: item.score),
+                                if (item.isExploration && !skipped)
+                                  const _ExplorationChip(),
+                              ],
+                            ),
+                          ),
+                          if (skipped && onRestore != null) ...[
+                            const SizedBox(width: 8),
+                            _MiniButton(
+                              icon: Icons.undo_rounded,
+                              tooltip: 'Ăn lại suất này',
+                              onTap: onRestore!,
+                            ),
+                          ],
+                          if (!eaten && !skipped) ...[
+                            if (onSkip != null) ...[
+                              const SizedBox(width: 8),
+                              _MiniButton(
+                                icon: Icons.not_interested_rounded,
+                                tooltip: 'Bỏ qua suất này',
+                                onTap: onSkip!,
+                              ),
+                            ],
+                            const SizedBox(width: 6),
+                            _MiniButton(
+                              icon: Icons.swap_horiz_rounded,
+                              tooltip: 'Đổi món khác',
+                              onTap: onReplace,
+                            ),
+                            if (onEat != null) ...[
+                              const SizedBox(width: 6),
+                              _MiniButton(
+                                icon: Icons.restaurant_rounded,
+                                tooltip: 'Đánh dấu đã ăn',
+                                onTap: onEat!,
+                                filled: true,
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkippedChip extends StatelessWidget {
+  const _SkippedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: const Text(
+        'Đã bỏ qua',
+        style: TextStyle(
+          fontSize: 11.5,
+          color: AppColors.textSecondary,
+          fontVariations: [FontVariation('wght', 700)],
         ),
       ),
     );
