@@ -5,13 +5,14 @@ import '../../core/theme/app_colors.dart';
 import '../../data/models/health_profile.dart';
 import '../../data/session.dart';
 
-/// Tiến trình sức khỏe và mức độ hệ thống đã hiểu người dùng.
+/// Health progress, and how well the system has come to understand the
+/// user.
 ///
-/// Màn hình này trả lời hai câu hỏi khác nhau. Câu thứ nhất thuộc về người
-/// dùng: *thể trạng của tôi đang ở đâu*. Câu thứ hai thuộc về hệ thống:
-/// *mô hình đã học được bao nhiêu về tôi rồi*. Câu thứ hai hiếm khi được
-/// hiển thị trong các ứng dụng dinh dưỡng, nhưng ở đây nó là phần cốt lõi —
-/// nó cho người dùng thấy dữ liệu họ đóng góp đang đi về đâu.
+/// This screen answers two different questions. The first belongs to the
+/// user: *where does my body stand*. The second belongs to the system: *how
+/// much has the model learned about me*. The second is rarely displayed in
+/// nutrition apps, but here it is the core of the thing — it shows the user
+/// where the data they contribute is going.
 class ProgressScreen extends StatelessWidget {
   const ProgressScreen({super.key});
 
@@ -44,19 +45,21 @@ class ProgressScreen extends StatelessWidget {
   }
 }
 
-/// Chỉ số thể trạng: BMI kèm phân loại theo ngưỡng châu Á.
+/// The body figures: BMI with its classification by the Asian
+/// thresholds.
 class _BodyCard extends StatelessWidget {
   const _BodyCard({required this.profile});
 
   final HealthProfile profile;
 
-  /// Phân loại BMI theo ngưỡng dành riêng cho người châu Á.
+  /// Classifies the BMI by the thresholds specific to Asian populations.
   ///
-  /// Khác ngưỡng WHO chung (thừa cân từ 25, béo phì từ 30). Người châu Á
-  /// tích mỡ nội tạng và có nguy cơ chuyển hóa ở mức BMI thấp hơn, nên
-  /// WHO Expert Consultation (2004) khuyến nghị hạ ngưỡng xuống 23 và 25.
-  /// Dùng ngưỡng quốc tế sẽ xếp nhầm nhiều người Việt đã thừa cân vào nhóm
-  /// bình thường, kéo theo hệ thống gợi ý sai mục tiêu.
+  /// Different from the general WHO thresholds (overweight from 25, obese
+  /// from 30). Asian populations accumulate visceral fat and carry metabolic
+  /// risk at a lower BMI, so the WHO Expert Consultation (2004) recommends
+  /// lowering the thresholds to 23 and 25. Using the international ones would
+  /// misclassify many already-overweight Vietnamese users as normal, and the
+  /// system would then recommend towards the wrong goal.
   static ({String label, Color color}) _classify(double bmi) {
     if (bmi < 18.5) return (label: 'Thiếu cân', color: AppColors.unknown);
     if (bmi < 23) return (label: 'Bình thường', color: AppColors.like);
@@ -161,7 +164,7 @@ class _BodyCard extends StatelessWidget {
   }
 }
 
-/// Mức độ trưởng thành dữ liệu — hệ thống đang ở giai đoạn nào.
+/// Data maturity — which stage the system is in.
 class _LearningCard extends StatelessWidget {
   const _LearningCard({required this.session});
 
@@ -243,7 +246,8 @@ class _LearningCard extends StatelessWidget {
   }
 }
 
-/// Những đặc trưng người dùng thiên về, đọc thẳng từ vector sở thích.
+/// The features the user leans towards, read straight from the
+/// preference vector.
 class _TasteCard extends StatelessWidget {
   const _TasteCard({required this.session});
 

@@ -8,11 +8,12 @@ import '../plan/daily_plan_screen.dart';
 import '../progress/progress_screen.dart';
 import '../shopping/shopping_screen.dart';
 
-/// Khung chính sau khi hoàn tất khai báo hồ sơ và phiên khảo sát khẩu vị.
+/// The main shell, once the profile and the taste survey are done.
 ///
-/// Ba tab đầu-giữa phản ánh đúng vòng lặp phản hồi của hệ thống: nhận **thực
-/// đơn**, ghi lại những gì đã ăn vào **nhật ký**, rồi xem **tiến trình** thay
-/// đổi theo thời gian. Dữ liệu từ hai tab sau quay lại nuôi tab đầu.
+/// The first three tabs mirror the system's feedback loop exactly: receive
+/// the **plan**, record what was eaten in the **diary**, then watch the
+/// **progress** change over time. The data from the latter two flows back to
+/// feed the first.
 ///
 /// Two more sit around that loop: **Đi chợ** turns the plan into what to buy,
 /// and **Tôi** holds the answers the plan is built from.
@@ -56,11 +57,11 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-/// Thanh điều hướng đáy.
+/// The bottom navigation bar.
 ///
-/// Tự vẽ thay vì dùng [NavigationBar] của Material 3 vì thanh mặc định cao
-/// 80 và chèn một viên nền bo tròn sau biểu tượng đang chọn — cả hai đều
-/// lệch khỏi ngôn ngữ thiết kế trắng–đen–lơ của ứng dụng.
+/// Drawn by hand rather than using Material 3's [NavigationBar], because the
+/// default bar is 80 tall and puts a rounded pill behind the selected icon —
+/// both of which depart from the app's white–black–cyan design language.
 class _BottomBar extends StatelessWidget {
   const _BottomBar({
     required this.index,

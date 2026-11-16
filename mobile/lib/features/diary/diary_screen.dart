@@ -7,12 +7,12 @@ import '../../data/models/food.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/session.dart';
 
-/// Nhật ký ăn uống — bảng `food_diary`.
+/// The food diary — the `food_diary` table.
 ///
-/// Màn hình này ghi lại những gì người dùng **thật sự ăn**, không phải những
-/// gì hệ thống gợi ý. Khoảng cách giữa hai thứ đó chính là tín hiệu quan
-/// trọng nhất sau phiên khảo sát: món trong thực đơn bị bỏ qua, món ngoài
-/// thực đơn được ăn thêm, và điểm đánh giá sau khi ăn.
+/// This screen records what the user **actually ate**, not what the system
+/// recommended. The gap between the two is the most important signal there is
+/// after the survey: dishes in the plan that were skipped, dishes outside it
+/// that were eaten, and the rating given after eating.
 class DiaryScreen extends StatelessWidget {
   const DiaryScreen({super.key});
 
@@ -92,11 +92,12 @@ class DiaryScreen extends StatelessWidget {
   }
 }
 
-/// Năng lượng đã nạp so với hạn mức.
+/// The energy taken in, against the target.
 ///
-/// Khác với thẻ trên màn hình thực đơn: ở đó là **dự kiến** theo thực đơn,
-/// ở đây là **thực tế** theo nhật ký. Hai con số lệch nhau là chuyện bình
-/// thường và chính nó cho biết thực đơn có được tuân thủ hay không.
+/// Different from the card on the plan screen: there it is the **projection**
+/// from the plan, here it is the **reality** from the diary. The two numbers
+/// differing is entirely normal, and it is precisely what shows whether the
+/// plan is being followed.
 class _ConsumedCard extends StatelessWidget {
   const _ConsumedCard({required this.session, required this.entries});
 
@@ -193,8 +194,9 @@ class _Stat extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            // Ba ô thống kê chia đều bề ngang nên mỗi ô rất hẹp; con số bốn
-            // chữ số kèm đơn vị phải co lại được thay vì tràn sang ô bên.
+            // The three statistics cells split the width evenly, so each
+            // is very narrow; a four-digit number plus its unit has to be
+            // able to shrink rather than spill into the next cell.
             Flexible(
               child: Text(
                 value,
@@ -391,12 +393,12 @@ class _EmptyDiary extends StatelessWidget {
   }
 }
 
-/// Bảng chọn món để ghi vào nhật ký.
+/// The dish picker for adding a diary entry.
 ///
-/// Cho phép ghi **món ngoài thực đơn** là điều bắt buộc: người dùng ăn ngoài
-/// hàng quán, ăn cùng gia đình, hoặc đơn giản là đổi ý. Nếu chỉ ghi được món
-/// trong thực đơn thì nhật ký sẽ luôn khớp thực đơn một cách giả tạo, và tỷ
-/// lệ tuân thủ mất hết ý nghĩa.
+/// Allowing a **dish from outside the plan** is mandatory: people eat out,
+/// eat with family, or simply change their mind. If only dishes from the plan
+/// could be recorded, the diary would always match the plan artificially and
+/// the adherence rate would lose all meaning.
 class _AddEntrySheet extends StatefulWidget {
   const _AddEntrySheet({required this.candidates});
 

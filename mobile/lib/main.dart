@@ -18,8 +18,8 @@ class NutritionApp extends StatefulWidget {
 }
 
 class _NutritionAppState extends State<NutritionApp> {
-  /// Một phiên duy nhất cho cả vòng đời ứng dụng. Giữ ở đây thay vì trong
-  /// `main()` để `dispose` được gọi đúng lúc.
+  /// One single session for the app's whole lifetime. Held here rather
+  /// than in `main()` so that `dispose` is called at the right moment.
   final _session = AppSession();
 
   @override
@@ -37,8 +37,8 @@ class _NutritionAppState extends State<NutritionApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         scrollBehavior: const AppScrollBehavior(),
-        // Bọc ở `builder` chứ không bọc `home`, để mọi màn hình đẩy vào
-        // Navigator sau này đều nằm trong khung.
+        // Wrapped at `builder` rather than around `home`, so every
+        // screen pushed onto the Navigator later is inside the frame too.
         builder: (context, child) => DeviceFrame(child: child!),
         home: const WelcomeScreen(),
       ),
