@@ -3,15 +3,15 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 
-/// Bánh xe chọn một con số.
+/// A wheel for picking one number.
 ///
-/// Dùng cho chiều cao, cân nặng và năm sinh. So với ô nhập bàn phím, bánh xe
-/// có ba cái lợi ở đúng ngữ cảnh này: không bật bàn phím che nửa màn hình,
-/// không nhập được giá trị vô lý, và cuộn nhanh hơn gõ khi giá trị mặc định
-/// đã gần đúng.
+/// Used for height, weight and year of birth. Against a keyboard field, a
+/// wheel has three advantages in exactly this context: it does not raise a
+/// keyboard over half the screen, an absurd value cannot be entered, and it
+/// is quicker to spin than to type when the default is already close.
 ///
-/// Mỗi nấc cuộn qua đều rung nhẹ — người dùng đếm được số nấc mà không cần
-/// nhìn, giống cảm giác vặn núm cơ khí.
+/// Every notch scrolled past gives a light haptic tick — the user can count
+/// the notches without looking, like turning a mechanical knob.
 class ValueWheel extends StatefulWidget {
   const ValueWheel({
     super.key,
@@ -29,7 +29,7 @@ class ValueWheel extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChanged;
 
-  /// Đơn vị hiện cạnh con số, ví dụ `kg` hoặc `cm`.
+  /// The unit shown next to the number, such as `kg` or `cm`.
   final String unit;
 
   final int fractionDigits;
@@ -79,7 +79,8 @@ class _ValueWheelState extends State<ValueWheel> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Ô sáng đánh dấu giá trị đang chọn, đứng yên trong khi số chạy qua.
+          // The highlight marking the selected value; it stays still
+          // while the numbers scroll past.
           Container(
             height: _itemExtent,
             margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -92,7 +93,8 @@ class _ValueWheelState extends State<ValueWheel> {
             controller: _controller,
             itemExtent: _itemExtent,
             physics: const FixedExtentScrollPhysics(),
-            // Nghiêng nhẹ theo hình trụ, đủ để thấy chiều sâu mà chữ chưa méo.
+            // A gentle cylindrical tilt, enough to read as depth
+            // without distorting the text.
             diameterRatio: 2.2,
             perspective: 0.003,
             onSelectedItemChanged: _onSelected,

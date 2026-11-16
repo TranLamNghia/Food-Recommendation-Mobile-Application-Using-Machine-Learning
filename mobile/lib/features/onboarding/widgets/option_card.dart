@@ -4,11 +4,12 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 
-/// Thẻ lựa chọn trong luồng khai báo hồ sơ.
+/// An option card in the profile flow.
 ///
-/// Trạng thái chưa chọn là mặt thẻ trắng trên nền xám nhạt; đã chọn thì đảo
-/// hẳn sang khối đen chữ trắng. Đảo màu mạnh như vậy để nhìn lướt qua là biết
-/// mình đã chọn gì, kể cả khi danh sách dài và chọn được nhiều mục.
+/// Unselected is a white card face on a pale grey background; selected
+/// inverts completely to a black block with white text. The inversion is
+/// that strong so a glance is enough to see what has been chosen, even when
+/// the list is long and several items can be selected.
 class OptionCard extends StatefulWidget {
   const OptionCard({
     super.key,
@@ -22,13 +23,14 @@ class OptionCard extends StatefulWidget {
 
   final String label;
 
-  /// Dòng phụ nhỏ bên dưới nhãn.
+  /// The small secondary line under the label.
   final String? hint;
 
-  /// Biểu tượng đầu thẻ, thường là emoji.
+  /// The icon at the head of the card, usually an emoji.
   final String? leading;
 
-  /// Giá trị hiện ở cuối thẻ, ví dụ mức tăng cân dự kiến.
+  /// The value shown at the end of the card, such as the matching
+  /// energy level.
   final String? trailing;
 
   final bool selected;
@@ -86,9 +88,10 @@ class _OptionCardState extends State<OptionCard> {
               ],
               Expanded(
                 child: Column(
-                  // Chỉ căn giữa khi thẻ trống trơn hai bên. Có biểu tượng ở
-                  // đầu mà chữ vẫn căn giữa thì nhìn lệch hẳn, vì mắt lấy
-                  // biểu tượng làm mốc lề trái.
+                  // Centre only when the card is bare on both sides. With
+                  // an icon at the head, centred text looks plainly
+                  // misaligned, because the eye takes the icon as the left
+                  // margin.
                   crossAxisAlignment:
                       widget.leading == null && widget.hint == null
                       ? CrossAxisAlignment.center
@@ -142,7 +145,7 @@ class _OptionCardState extends State<OptionCard> {
   }
 }
 
-/// Danh sách thẻ lựa chọn, xuất hiện lệch pha nhau từ dưới lên.
+/// A list of option cards, appearing from below one after another.
 class OptionList extends StatelessWidget {
   const OptionList({super.key, required this.children});
 
@@ -151,7 +154,8 @@ class OptionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      // Danh sách chỉ cao bằng đúng số thẻ trong nó, không chiếm chỗ thừa.
+      // The list is exactly as tall as the cards in it, taking no spare
+      // room.
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < children.length; i++)
@@ -181,8 +185,8 @@ class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: AppMotion.page);
-    // Mỗi thẻ vào chậm hơn thẻ trên một nhịp, tạo cảm giác danh sách trải ra
-    // thay vì bật lên cùng lúc.
+    // Each card enters one beat later than the one above, so the list
+    // feels like it unrolls rather than popping up all at once.
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _ctrl.forward();
     });

@@ -4,11 +4,11 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/option_card.dart';
 
-/// Bước 1 — giới tính.
+/// Step 1 — sex.
 ///
-/// Hỏi đầu tiên vì đây là biến bắt buộc của công thức Mifflin-St Jeor, và là
-/// câu dễ trả lời nhất: mở màn bằng một câu không phải suy nghĩ giúp người
-/// dùng bước vào luồng thay vì thoát ngay.
+/// Asked first because it is a mandatory variable of the Mifflin-St Jeor
+/// formula, and it is the easiest question to answer: opening with something
+/// that needs no thought gets the user into the flow instead of out of it.
 class GenderStep extends StatelessWidget {
   const GenderStep({
     super.key,

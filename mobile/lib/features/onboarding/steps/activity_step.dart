@@ -5,13 +5,13 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/option_card.dart';
 
-/// Bước 7 — mức vận động.
+/// Step 7 — the activity level.
 ///
-/// Cuối mỗi thẻ là **mức năng lượng tiêu hao tương ứng của chính người dùng**,
-/// không phải hệ số nhân. Hệ số `×1,200` là biến nội bộ của công thức TDEE —
-/// nó đúng về mặt thuật toán nhưng chẳng nói lên điều gì với người đang chọn.
-/// Còn "1.620 kcal" thì trả lời thẳng câu hỏi họ đang nghĩ: chọn mức này thì
-/// mỗi ngày tôi được ăn bao nhiêu.
+/// The end of each card shows **that user's own matching energy
+/// expenditure**, not the multiplier. The factor `×1.200` is an internal
+/// variable of the TDEE formula — algorithmically correct, but it tells the
+/// person choosing nothing at all. "1,620 kcal" answers the question they are
+/// actually asking: if I pick this level, how much do I get to eat each day.
 class ActivityStep extends StatelessWidget {
   const ActivityStep({
     super.key,

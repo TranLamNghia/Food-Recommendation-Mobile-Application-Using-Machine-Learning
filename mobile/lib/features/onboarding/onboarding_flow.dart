@@ -14,7 +14,7 @@ import 'steps/motivation_step.dart';
 import 'steps/target_weight_step.dart';
 import 'steps/weight_step.dart';
 
-/// Các bước khai báo hồ sơ, theo đúng thứ tự người dùng gặp.
+/// The profile steps, in the order the user meets them.
 enum OnboardingStep {
   gender,
   birthYear,
@@ -28,12 +28,12 @@ enum OnboardingStep {
   motivation,
 }
 
-/// Luồng khai báo hồ sơ sức khỏe, chạy trước phiên khảo sát khẩu vị.
+/// The health profile flow, which runs before the taste survey session.
 ///
-/// Toàn bộ dữ liệu giữ trong một đối tượng [HealthProfile] duy nhất và chỉ
-/// gửi lên máy chủ ở cuối luồng, giống cách phiên vuốt gửi trọn gói kết quả.
-/// Nhờ vậy người dùng lùi lại sửa bao nhiêu lần cũng được mà không sinh ra
-/// hàng chục lượt gọi mạng dở dang.
+/// All the data is held in one single [HealthProfile] object and only sent to
+/// the server at the end of the flow, the same way the swipe session sends
+/// its result as one package. That lets the user go back and edit as often as
+/// they like without producing dozens of half-finished network calls.
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({super.key});
 
@@ -42,17 +42,20 @@ class OnboardingFlow extends StatefulWidget {
 }
 
 class _OnboardingFlowState extends State<OnboardingFlow> {
-  /// Hồ sơ nằm ở [AppSession] chứ không ở riêng luồng này, vì màn hình thực
-  /// đơn và màn hình tiến trình phía sau đều cần đọc lại nó.
+  /// The profile lives in [AppSession] rather than in this flow alone,
+  /// because the plan screen and the progress screen behind it both need to
+  /// read it back.
   HealthProfile get _profile => SessionScope.of(context).profile;
 
   int _index = 0;
 
-  /// Hướng di chuyển gần nhất, dùng để màn hình mới trượt vào đúng phía.
+  /// The most recent direction of travel, so a new screen slides in from
+  /// the right side.
   bool _forward = true;
 
-  /// Bước `targetWeight` chỉ xuất hiện khi mục tiêu là tăng hoặc giảm cân,
-  /// nên danh sách bước được tính lại mỗi lần dựng, không cố định.
+  /// The `targetWeight` step only appears when the goal is to gain or lose
+  /// weight, so the step list is recomputed on every build rather than being
+  /// fixed.
   List<OnboardingStep> get _steps => [
     for (final step in OnboardingStep.values)
       if (step != OnboardingStep.targetWeight ||
@@ -91,8 +94,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  /// Gọi khi một bước tự đổi dữ liệu có thể làm danh sách bước dài ra hoặc
-  /// ngắn đi — cụ thể là khi người dùng đổi mục tiêu.
+  /// Called when a step changes data that can make the step list longer or
+  /// shorter — specifically, when the user changes their goal.
   void _onChanged() => setState(() {});
 
   @override
@@ -100,11 +103,13 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     final steps = _steps;
     final step = steps[_index.clamp(0, steps.length - 1)];
 
-    // Tiến độ tính theo vị trí cố định của bước trong enum, không theo danh
-    // sách đã lọc. Nếu lấy mẫu số là số bước thực tế, thì đúng lúc người dùng
-    // chọn "tăng cân" — thao tác vừa thêm một bước vào luồng — mẫu số nhảy từ
-    // 9 lên 10 và thanh tiến độ tụt lại ngay trước mắt họ. Cách này khiến
-    // thanh chỉ đứng yên hoặc tiến, và bước bị bỏ qua thì nó nhảy hai nấc.
+    // The progress is computed from the step's fixed position in the enum,
+    // not from the filtered list. Were the denominator the actual number of
+    // steps, then the moment the user chose "gain weight" — the very action
+    // that adds a step to the flow — the denominator would jump from 9 to 10
+    // and the progress bar would slide backwards in front of them. This way
+    // the bar only holds still or advances, and a skipped step makes it jump
+    // two notches.
     final progress =
         (OnboardingStep.values.indexOf(step) + 1) /
         OnboardingStep.values.length;
@@ -185,9 +190,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       duration: AppMotion.page,
       switchInCurve: AppMotion.emphasized,
       switchOutCurve: Curves.easeIn,
-      // Màn hình mới trượt vào từ phía người dùng đang đi tới, màn cũ lùi về
-      // phía ngược lại — cảm giác như đang đi dọc một hành lang, không phải
-      // nhảy giữa các trang rời rạc.
+      // The new screen slides in from the direction the user is heading and
+      // the old one retreats the other way — it feels like walking down a
+      // corridor rather than jumping between disconnected pages.
       transitionBuilder: (child, animation) {
         final incoming = child.key == ValueKey(step);
         final dx = _forward ? 1.0 : -1.0;
