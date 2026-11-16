@@ -108,8 +108,7 @@ class Food {
   ///
   /// Trả về nồng độ **thô**; phép chuẩn hóa min-max do `FoodVectorSpace` làm,
   /// cùng cách với natri và chất xơ.
-  double get sugarConcentration =>
-      servingSizeG <= 0 ? 0 : sugar / servingSizeG;
+  double get sugarConcentration => servingSizeG <= 0 ? 0 : sugar / servingSizeG;
 
   /// Tỷ lệ năng lượng đến từ mỗi chất, dùng để vẽ thanh macro trên thẻ.
   ({double protein, double carb, double fat}) get macroShare {

@@ -212,104 +212,104 @@ class _AlternativeTile extends StatelessWidget {
         // biết món mình muốn vẫn chọn được vào hôm khác.
         opacity: mo ? 0.55 : 1,
         child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(11),
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: food.gradient,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(food.emoji, style: const TextStyle(fontSize: 21)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    food.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: AppColors.textPrimary,
-                      fontVariations: [FontVariation('wght', 700)],
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: food.gradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    // Chênh lệch năng lượng so với món đang thay là thứ quyết
-                    // định thực đơn có còn khớp hạn mức sau khi đổi hay không.
-                    '${food.kcal} kcal · '
-                    '${deltaKcal >= 0 ? '+' : '−'}${deltaKcal.abs()} so với món cũ',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  if (chan != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        '${nutrientLabel(chan.nutrient)} '
-                        '${formatNumber(DayBudget.valueOf(food, chan.nutrient) ?? 0)} '
-                        '${chan.unit}, vượt phần còn lại '
-                        '${formatNumber((DayBudget.valueOf(food, chan.nutrient) ?? 0) - chan.remaining)} '
-                        '${chan.unit} — hôm khác chọn được',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          height: 1.4,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.neutral,
-                        ),
-                      ),
-                    )
-                  else if (_missing.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        'Chưa có số liệu '
-                        '${_missing.map((n) => nutrientLabel(n).toLowerCase()).join(', ')}'
-                        ' — không đối chiếu được hạn mức',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          height: 1.4,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.unknown,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            if (mo)
-              const Icon(
-                Icons.schedule_rounded,
-                size: 17,
-                color: AppColors.neutral,
-              )
-            else
-              Text(
-                '${(score * 100).round()}%',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.primaryDark,
-                  fontVariations: [FontVariation('wght', 700)],
+                  alignment: Alignment.center,
+                  child: Text(food.emoji, style: const TextStyle(fontSize: 21)),
                 ),
               ),
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      food.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: AppColors.textPrimary,
+                        fontVariations: [FontVariation('wght', 700)],
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      // Chênh lệch năng lượng so với món đang thay là thứ quyết
+                      // định thực đơn có còn khớp hạn mức sau khi đổi hay không.
+                      '${food.kcal} kcal · '
+                      '${deltaKcal >= 0 ? '+' : '−'}${deltaKcal.abs()} so với món cũ',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    if (chan != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          '${nutrientLabel(chan.nutrient)} '
+                          '${formatNumber(DayBudget.valueOf(food, chan.nutrient) ?? 0)} '
+                          '${chan.unit}, vượt phần còn lại '
+                          '${formatNumber((DayBudget.valueOf(food, chan.nutrient) ?? 0) - chan.remaining)} '
+                          '${chan.unit} — hôm khác chọn được',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.neutral,
+                          ),
+                        ),
+                      )
+                    else if (_missing.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          'Chưa có số liệu '
+                          '${_missing.map((n) => nutrientLabel(n).toLowerCase()).join(', ')}'
+                          ' — không đối chiếu được hạn mức',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.unknown,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              if (mo)
+                const Icon(
+                  Icons.schedule_rounded,
+                  size: 17,
+                  color: AppColors.neutral,
+                )
+              else
+                Text(
+                  '${(score * 100).round()}%',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.primaryDark,
+                    fontVariations: [FontVariation('wght', 700)],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -64,8 +64,9 @@ abstract final class MockFoods {
       fat: 18,
       sugar: 3.5,
       sodium: 1150.0,
-      fiber: 1.0,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 287,  // trung vị nhóm 'Món nước': món này chưa có trong danh mục
+      fiber: 1.0, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG:
+          287, // trung vị nhóm 'Món nước': món này chưa có trong danh mục
       // purin: danh mục không công bố cho món này
       emoji: '🍢',
       imageAsset: 'assets/images/placeholder/card2.png',
@@ -84,8 +85,8 @@ abstract final class MockFoods {
       fat: 22,
       sugar: 4.7,
       sodium: 620.0,
-      fiber: 2.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200,  // trung vị nhóm 'Cơm': món này chưa có trong danh mục
+      fiber: 2.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG: 200, // trung vị nhóm 'Cơm': món này chưa có trong danh mục
       // purin: danh mục không công bố cho món này
       emoji: '🍚',
       imageAsset: 'assets/images/placeholder/card3.png',
@@ -284,8 +285,8 @@ abstract final class MockFoods {
       fat: 16,
       sugar: 4.2,
       sodium: 620.0,
-      fiber: 2.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200,  // trung vị nhóm 'Cơm': món này chưa có trong danh mục
+      fiber: 2.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG: 200, // trung vị nhóm 'Cơm': món này chưa có trong danh mục
       // purin: danh mục không công bố cho món này
       emoji: '🍗',
       imageAsset: 'assets/images/placeholder/card1.png',
@@ -404,8 +405,8 @@ abstract final class MockFoods {
       fat: 15,
       sugar: 4.6,
       sodium: 620.0,
-      fiber: 2.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200,  // trung vị nhóm 'Cơm': món này chưa có trong danh mục
+      fiber: 2.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG: 200, // trung vị nhóm 'Cơm': món này chưa có trong danh mục
       // purin: danh mục không công bố cho món này
       emoji: '🍙',
       imageAsset: 'assets/images/placeholder/card3.png',
@@ -464,8 +465,9 @@ abstract final class MockFoods {
       fat: 18,
       sugar: 1.2,
       sodium: 1150.0,
-      fiber: 1.0,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200,  // không có nhóm 'Lẩu' trong danh mục; dùng mặc định 200 g
+      fiber: 1.0, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG:
+          200, // không có nhóm 'Lẩu' trong danh mục; dùng mặc định 200 g
       // purin: danh mục không công bố cho món này
       emoji: '🦑',
       imageAsset: 'assets/images/placeholder/card2.png',
@@ -564,8 +566,9 @@ abstract final class MockFoods {
       fat: 5,
       sugar: 22.0,
       sodium: 180.0,
-      fiber: 1.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 180,  // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
+      fiber: 1.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG:
+          180, // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
       // purin: danh mục không công bố cho món này
       emoji: '🍧',
       imageAsset: 'assets/images/placeholder/card3.png',
@@ -584,8 +587,9 @@ abstract final class MockFoods {
       fat: 4,
       sugar: 28.6,
       sodium: 180.0,
-      fiber: 1.8,  // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 180,  // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
+      fiber: 1.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      servingSizeG:
+          180, // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
       // purin: danh mục không công bố cho món này
       emoji: '🍮',
       imageAsset: 'assets/images/placeholder/card4.png',
