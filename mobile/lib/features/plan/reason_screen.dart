@@ -207,7 +207,10 @@ class _MatchBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _BlockHeading(color: AppColors.accentInk, text: 'ĐIỀU GÌ KHỚP NHẤT'),
+        const _BlockHeading(
+          color: AppColors.accentInk,
+          text: 'ĐIỀU GÌ KHỚP NHẤT',
+        ),
         const SizedBox(height: 12),
         for (final r in reasons)
           if (r.sentence != null)
@@ -304,7 +307,10 @@ class _TodayBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _BlockHeading(color: AppColors.neutral, text: 'ẢNH HƯỞNG HÔM NAY'),
+        const _BlockHeading(
+          color: AppColors.neutral,
+          text: 'ẢNH HƯỞNG HÔM NAY',
+        ),
         const SizedBox(height: 10),
         for (final limit in hard)
           Padding(
@@ -421,9 +427,7 @@ class _CaveatBlock extends StatelessWidget {
                   color: AppColors.textPrimary,
                 ),
                 children: [
-                  TextSpan(
-                    text: nutrientLabel(v.rule.nutrient),
-                  ),
+                  TextSpan(text: nutrientLabel(v.rule.nutrient)),
                   TextSpan(
                     text: ' ${formatNumber(v.measured)} ${v.rule.unit}',
                     style: const TextStyle(fontWeight: FontWeight.w700),
@@ -439,7 +443,8 @@ class _CaveatBlock extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   const TextSpan(
-                    text: ' nên xếp sau, nhưng vẫn chọn được — đây là '
+                    text:
+                        ' nên xếp sau, nhưng vẫn chọn được — đây là '
                         'khuyến cáo, không phải chống chỉ định.',
                   ),
                 ],

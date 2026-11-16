@@ -60,8 +60,8 @@ abstract final class AppColors {
   static const burstDown = Color(0xFFFFFA5C);
 
   // ── Vùng chân màn hình khảo sát ──────────────────────────────────
-  /// Đáy của gradient `Footer_Backgound` (2:15). Gradient chạy từ trắng
-  /// xuống màu này — vùng chân màn hình **không** trong suốt.
+  /// Đáy của gradient `Footer_Backgound` (2:15). Gradient chạy từ trong suốt
+  /// ở mép trên xuống màu này ở đáy.
   static const footerBottom = Color(0xFF4F4E4E);
 
   // ── Ba chất sinh năng lượng ──────────────────────────────────────

@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
+import '../account/account_screen.dart';
 import '../diary/diary_screen.dart';
 import '../plan/daily_plan_screen.dart';
 import '../progress/progress_screen.dart';
+import '../shopping/shopping_screen.dart';
 
 /// Khung chính sau khi hoàn tất khai báo hồ sơ và phiên khảo sát khẩu vị.
 ///
-/// Ba tab phản ánh đúng vòng lặp phản hồi của hệ thống: nhận **thực đơn**,
-/// ghi lại những gì đã ăn vào **nhật ký**, rồi xem **tiến trình** thay đổi
-/// theo thời gian. Dữ liệu từ hai tab sau quay lại nuôi tab đầu.
+/// Ba tab đầu-giữa phản ánh đúng vòng lặp phản hồi của hệ thống: nhận **thực
+/// đơn**, ghi lại những gì đã ăn vào **nhật ký**, rồi xem **tiến trình** thay
+/// đổi theo thời gian. Dữ liệu từ hai tab sau quay lại nuôi tab đầu.
+///
+/// Two more sit around that loop: **Đi chợ** turns the plan into what to buy,
+/// and **Tôi** holds the answers the plan is built from.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -23,8 +28,10 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _tabs = [
     (icon: Icons.restaurant_menu_rounded, label: 'Thực đơn'),
+    (icon: Icons.shopping_basket_outlined, label: 'Đi chợ'),
     (icon: Icons.menu_book_rounded, label: 'Nhật ký'),
     (icon: Icons.insights_rounded, label: 'Tiến trình'),
+    (icon: Icons.person_outline_rounded, label: 'Tôi'),
   ];
 
   @override
@@ -32,7 +39,13 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: const [DailyPlanScreen(), DiaryScreen(), ProgressScreen()],
+        children: const [
+          DailyPlanScreen(),
+          ShoppingScreen(),
+          DiaryScreen(),
+          ProgressScreen(),
+          AccountScreen(),
+        ],
       ),
       bottomNavigationBar: _BottomBar(
         index: _index,

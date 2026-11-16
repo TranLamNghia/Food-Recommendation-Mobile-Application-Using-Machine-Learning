@@ -3,6 +3,21 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 
+/// Marks the steps below it as being re-opened from the account tab to change
+/// one answer, instead of running inside the first-time flow.
+///
+/// [OnboardingScaffold] reads it to drop the progress bar and relabel the
+/// action, so the nine step widgets are reused untouched.
+class OnboardingEditScope extends InheritedWidget {
+  const OnboardingEditScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<OnboardingEditScope>() != null;
+
+  @override
+  bool updateShouldNotify(OnboardingEditScope oldWidget) => false;
+}
+
 /// Khung chung cho mọi bước khai báo hồ sơ.
 ///
 /// Bố cục cố định giúp người dùng không phải học lại mỗi màn: nút lùi và
@@ -49,6 +64,7 @@ class OnboardingScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final editing = OnboardingEditScope.of(context);
 
     final header = Column(
       children: [
@@ -64,7 +80,7 @@ class OnboardingScaffold extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(progress: progress, onBack: onBack),
+            _TopBar(progress: editing ? null : progress, onBack: onBack),
             Expanded(
               child: scrollable
                   ? SingleChildScrollView(
@@ -93,7 +109,7 @@ class OnboardingScaffold extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
               child: FilledButton(
                 onPressed: onAction,
-                child: Text(actionLabel),
+                child: Text(editing ? 'Lưu thay đổi' : actionLabel),
               ),
             ),
           ],
@@ -110,11 +126,15 @@ class OnboardingScaffold extends StatelessWidget {
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.progress, required this.onBack});
 
-  final double progress;
+  /// `null` hides the bar: a single answer being edited has no flow to be
+  /// part-way through.
+  final double? progress;
   final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
+    final progress = this.progress;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 24, 12),
       child: Row(
@@ -133,22 +153,25 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
-                duration: AppMotion.page,
-                curve: AppMotion.emphasized,
-                builder: (context, value, _) => LinearProgressIndicator(
-                  value: value,
-                  minHeight: 6,
-                  backgroundColor: AppColors.surfaceMuted,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.ink),
+          if (progress == null)
+            const Spacer()
+          else
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
+                  duration: AppMotion.page,
+                  curve: AppMotion.emphasized,
+                  builder: (context, value, _) => LinearProgressIndicator(
+                    value: value,
+                    minHeight: 6,
+                    backgroundColor: AppColors.surfaceMuted,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.ink),
+                  ),
                 ),
               ),
             ),
-          ),
           // Chừa khoảng đối xứng với nút lùi để thanh tiến độ nằm giữa.
           const SizedBox(width: 24),
         ],

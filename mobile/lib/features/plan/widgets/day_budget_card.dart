@@ -11,9 +11,13 @@ import '../../../data/rules/day_budget.dart';
 /// ngờ: nếu người dùng chỉ thấy "món này bị loại" sau khi đã ăn mặn cả buổi
 /// sáng, họ không có cách nào hiểu vì sao.
 class DayBudgetCard extends StatelessWidget {
-  const DayBudgetCard({super.key, required this.budget});
+  const DayBudgetCard({super.key, required this.budget, this.isToday = true});
 
   final DayBudget budget;
+
+  /// `false` when the plan on screen is for another day of the week, so the
+  /// headings stop saying "hôm nay".
+  final bool isToday;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +48,11 @@ class DayBudgetCard extends StatelessWidget {
               Text(
                 // Tiêu đề theo nội dung thật: chỉ có ngưỡng mềm thì không
                 // có "hạn mức còn lại" nào, chỉ có khuyến cáo.
-                hard.isEmpty ? 'Khuyến cáo hôm nay' : 'Hạn mức còn lại hôm nay',
+                hard.isEmpty
+                    ? (isToday ? 'Khuyến cáo hôm nay' : 'Khuyến cáo trong ngày')
+                    : (isToday
+                          ? 'Hạn mức còn lại hôm nay'
+                          : 'Hạn mức còn lại trong ngày'),
                 style: const TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,

@@ -11,9 +11,13 @@ import '../../../data/models/meal_plan.dart';
 /// cam kết thực đơn sinh ra lệch không quá 10 %, nên chỉ số đó phải nhìn
 /// thấy được ngay chứ không giấu trong phần thống kê.
 class EnergySummaryCard extends StatelessWidget {
-  const EnergySummaryCard({super.key, required this.plan});
+  const EnergySummaryCard({super.key, required this.plan, this.isToday = true});
 
   final DailyPlan plan;
+
+  /// `false` when the plan on screen is for another day of the week, so the
+  /// headings stop saying "hôm nay".
+  final bool isToday;
 
   @override
   Widget build(BuildContext context) {
@@ -41,9 +45,9 @@ class EnergySummaryCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Năng lượng hôm nay',
-                      style: TextStyle(
+                    Text(
+                      isToday ? 'Năng lượng hôm nay' : 'Năng lượng trong ngày',
+                      style: const TextStyle(
                         fontSize: 13.5,
                         color: AppColors.textSecondary,
                         fontVariations: [FontVariation('wght', 600)],

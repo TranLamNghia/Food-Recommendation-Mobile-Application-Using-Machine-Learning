@@ -7,12 +7,14 @@ import '../../data/mock/mock_rules.dart';
 import '../../data/recommender/match_reason.dart';
 import '../../data/rules/condition_rule.dart';
 import '../../data/session.dart';
+import '../food/food_detail_screen.dart';
 import 'excluded_screen.dart';
 import 'reason_screen.dart';
 import 'widgets/day_budget_card.dart';
 import 'widgets/energy_summary_card.dart';
 import 'widgets/plan_item_tile.dart';
 import 'widgets/replace_sheet.dart';
+import 'widgets/week_strip.dart';
 
 /// Thực đơn hằng ngày — sản phẩm chính của hệ thống.
 ///
@@ -57,14 +59,27 @@ class _PlanBody extends StatelessWidget {
         ),
         SliverToBoxAdapter(
           child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: WeekStrip(
+              selected: session.selectedDay,
+              onSelected: session.selectDay,
+              hasPlan: (day) => session.planOn(day) != null,
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-            child: EnergySummaryCard(plan: plan),
+            child: EnergySummaryCard(plan: plan, isToday: session.viewingToday),
           ),
         ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-            child: DayBudgetCard(budget: session.dayBudget),
+            child: DayBudgetCard(
+              budget: session.dayBudget,
+              isToday: session.viewingToday,
+            ),
           ),
         ),
         SliverToBoxAdapter(
@@ -120,7 +135,9 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Thực đơn hôm nay',
+                session.viewingToday
+                    ? 'Thực đơn hôm nay'
+                    : 'Thực đơn ${_weekdays[d.weekday - 1].toLowerCase()}',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 4),
@@ -222,8 +239,14 @@ class _MealSection extends StatelessWidget {
           for (final item in slot.items) ...[
             PlanItemTile(
               item: item,
+              onOpen: () => FoodDetailScreen.open(context, item.food),
               onReplace: () => _replace(context, item),
-              onEat: () => _eat(context, item),
+              // Only today can be eaten: logging a meal stamps it with the
+              // current time, so "eating" tomorrow's dinner would land in
+              // today's diary.
+              onEat: session.viewingToday ? () => _eat(context, item) : null,
+              onSkip: () => session.setSkipped(item, true),
+              onRestore: () => session.setSkipped(item, false),
             ),
             _WhyRow(item: item, session: session),
           ],

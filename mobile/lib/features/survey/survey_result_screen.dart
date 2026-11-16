@@ -62,10 +62,7 @@ class _SurveyResultScreenState extends State<SurveyResultScreen>
     final entries = byCategory.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return entries
-        .take(3)
-        .map((e) => (label: e.key, count: e.value))
-        .toList();
+    return entries.take(3).map((e) => (label: e.key, count: e.value)).toList();
   }
 
   @override

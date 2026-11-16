@@ -57,8 +57,7 @@ class NutrientTarget {
   bool isSatisfiedBy(double actual) => violation(actual) == 0;
 
   @override
-  String toString() =>
-      '$nutrient ${isFloor ? '≥' : '≤'} $amount';
+  String toString() => '$nutrient ${isFloor ? '≥' : '≤'} $amount';
 
   /// Giá trị của một chất trong một món, hoặc `null` nếu [Food] không mang
   /// chất đó.
