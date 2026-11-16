@@ -42,7 +42,7 @@ python tools/gen_entities.py        thực thể + ENUM C# ↔ db/schema.sql
 
 Ba lớp này bắt ba loại lỗi khác nhau, và không lớp nào thay được lớp khác.
 
-**`check_be_parity.py` — số học.** Bước 1 được hiện thực **ba lần**: `Api/Nutrition/NutritionTargets.cs`, `mobile/lib/data/models/health_profile.dart`, và bản tham chiếu trong `tools/gen_buoc1_cases.py`. Ba bản chạy ở ba tầng và không bao giờ gặp nhau, nên khi chúng lệch thì không gì báo ra: ứng dụng hiện một hạn mức năng lượng, máy chủ sinh thực đơn theo một hạn mức khác, và cả hai con số đều trông hợp lý.
+**`check_be_parity.py` — số học.** Bước 1 được hiện thực **ba lần**: `Api/Nutrition/NutritionTargets.cs`, `mobile/lib/data/models/health_profile.dart`, và bản tham chiếu trong `tools/gen_step1_cases.py`. Ba bản chạy ở ba tầng và không bao giờ gặp nhau, nên khi chúng lệch thì không gì báo ra: ứng dụng hiện một hạn mức năng lượng, máy chủ sinh thực đơn theo một hạn mức khác, và cả hai con số đều trông hợp lý.
 
 Bộ kiểm này bắt được ba chỗ lệch có thật ngay lần chạy đầu — macro 17/60/23 ở Dart đối lại 15/60/25 trong CSDL và đặc tả; `mealDistribution` 25/40/27/8 trong đặc tả đối lại điểm giữa 27.5/37.5/27.5/7.5 ở `meal_plan.dart`; và `bmiCategory: "normal"` cho BMI 23.15, sai theo chính ngưỡng châu Á 23/25 mà hệ thống dùng. Không chỗ nào trong ba chỗ đó trông sai khi đọc.
 

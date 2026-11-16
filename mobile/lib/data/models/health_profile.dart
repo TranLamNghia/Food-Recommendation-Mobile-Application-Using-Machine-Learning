@@ -88,7 +88,7 @@ class HealthProfile {
   /// It exists so this can be checked at all. The age depends on the day the
   /// code runs, so a fixed set of cases with fixed dates of birth **cannot**
   /// check this implementation if it always reads the system clock:
-  /// `test/buoc1_parity_test.dart` would have to skip every case whose age
+  /// `test/step1_parity_test.dart` would have to skip every case whose age
   /// computed today differs from the age in the fixture — that is, skip
   /// nearly all of them, for nearly the whole year, while still reporting
   /// "All tests passed".

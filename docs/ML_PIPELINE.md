@@ -1058,7 +1058,7 @@ Suy ra `healthy_eating` thì là bịa một ý định không ai phát biểu.
 Phép quy đổi tuổi **tự kiểm**: `tuoi(ngay_sinh, ngay_nap) == round(Age)` được
 `assert` cho cả 50 dòng. Không có nó thì một lỗi lệch-một đi thẳng vào BMR của
 cả 50 người và không gì báo ra. Bước 1 (BMR, TDEE, hạn mức) lấy từ
-`tools/gen_buoc1_cases.py` — bản tham chiếu Python đã được `check_be_parity`
+`tools/gen_step1_cases.py` — bản tham chiếu Python đã được `check_be_parity`
 đối chiếu với C# và Dart — chứ không viết lại, vì viết lại là tạo bản thứ tư
 của cùng một công thức.
 
