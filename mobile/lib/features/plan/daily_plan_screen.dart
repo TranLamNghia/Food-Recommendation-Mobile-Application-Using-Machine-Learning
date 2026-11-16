@@ -16,11 +16,11 @@ import 'widgets/plan_item_tile.dart';
 import 'widgets/replace_sheet.dart';
 import 'widgets/week_strip.dart';
 
-/// Thực đơn hằng ngày — sản phẩm chính của hệ thống.
+/// The daily meal plan — the system's main product.
 ///
-/// Mọi thứ trước màn hình này (khai báo hồ sơ, phiên vuốt khảo sát) đều chỉ
-/// là bước chuẩn bị dữ liệu. Đây là nơi bốn bước của thuật toán khuyến nghị
-/// cho ra kết quả nhìn thấy được.
+/// Everything before this screen (the profile, the survey swipes) is only
+/// preparing data. This is where the four steps of the recommendation
+/// algorithm produce a visible result.
 class DailyPlanScreen extends StatelessWidget {
   const DailyPlanScreen({super.key});
 
@@ -167,7 +167,7 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Một bữa trong ngày, kèm hạn mức riêng và danh sách suất.
+/// One meal of the day, with its own target and its list of servings.
 class _MealSection extends StatelessWidget {
   const _MealSection({required this.slot, required this.session});
 
@@ -180,8 +180,8 @@ class _MealSection extends StatelessWidget {
       item: item,
       alternatives: session.alternativesFor(item),
       scoreOf: session.preference.score,
-      // Hạn mức phải trừ món đang thay ra: dư địa cho món mới gồm cả phần
-      // món cũ đang chiếm.
+      // The allowance has to have the dish being replaced subtracted:
+      // the room for the new dish includes what the old one takes up.
       budgetAfterRemoval: session.dayBudget.withoutPlanned(item.food),
     );
     if (choice == null) return;
@@ -275,11 +275,12 @@ class _EmptySlot extends StatelessWidget {
   }
 }
 
-/// Giải thích cơ chế 70-30 ngay trên màn hình.
+/// Explains the 70-30 mechanism right on the screen.
 ///
-/// Người dùng thấy một món lệch gu sẽ nghĩ hệ thống đoán sai. Nói rõ đó là
-/// món cố ý đưa vào để thăm dò sẽ đổi cách họ hiểu tình huống — và đó cũng
-/// chính là nội dung cần minh họa cho phần chống bong bóng lọc trong báo cáo.
+/// A user who sees a dish off their taste will think the system guessed
+/// wrong. Saying plainly that it was put there deliberately to explore
+/// changes how they read the situation — and that is exactly what the
+/// filter-bubble section of the report needs to illustrate.
 class _ExplorationNote extends StatelessWidget {
   const _ExplorationNote({required this.plan});
 
@@ -339,7 +340,8 @@ class _ExplorationNote extends StatelessWidget {
   }
 }
 
-/// Hiện khi chưa đủ dữ liệu hồ sơ để tính hạn mức.
+/// Shown when the profile does not hold enough data to compute the
+/// targets.
 class _MissingProfile extends StatelessWidget {
   const _MissingProfile();
 
@@ -376,10 +378,11 @@ class _MissingProfile extends StatelessWidget {
   }
 }
 
-/// Đường dẫn tới màn món bị bỏ qua.
+/// The link to the excluded-dishes screen.
 ///
-/// Đặt ngay dưới thẻ hạn mức, vì hai thứ này giải thích lẫn cho nhau: người
-/// dùng thấy natri gần cạn rồi mới hiểu vì sao hôm nay nhiều món vắng mặt.
+/// Placed directly under the allowance card, because the two explain each
+/// other: seeing that the sodium is nearly used up is what makes it clear why
+/// so many dishes are missing today.
 class _ExcludedLink extends StatelessWidget {
   const _ExcludedLink({required this.session});
 
@@ -454,10 +457,12 @@ class _ExcludedLink extends StatelessWidget {
   }
 }
 
-/// Chip lý do khớp khẩu vị, kèm đường dẫn sang màn giải thích đầy đủ.
+/// The taste-match reason chips, with a link to the full explanation
+/// screen.
 ///
-/// Chip hiện **câu**, không hiện số: `+0.182` là một số hạng trong tử số của
-/// phép cosin, vô nghĩa với người dùng. Thứ tự mới là thông tin.
+/// A chip shows a **sentence**, not a number: `+0.182` is one term in the
+/// numerator of the cosine and means nothing to a user. The ordering is the
+/// information.
 class _WhyRow extends StatelessWidget {
   const _WhyRow({required this.item, required this.session});
 
@@ -477,10 +482,11 @@ class _WhyRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Một hàng duy nhất: chip lý do cộng đường dẫn. Trước đây khối này
-          // chiếm ba dòng dưới MỖI suất, tức mười hai dòng cho một ngày bốn
-          // bữa — nhiều hơn cả phần thực đơn. Bản thiết kế chỉ đặt đường dẫn
-          // ở một suất, và đó là tỷ lệ đúng.
+          // One single row: the reason chips plus the link. This block
+          // used to take three lines under EVERY serving, that is twelve
+          // lines for a four-meal day — more than the plan itself. The
+          // design puts the link on one serving only, and that is the right
+          // proportion.
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -516,9 +522,10 @@ class _WhyRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                // "Chỉ bị xếp sau" là cụm bắt buộc: vượt một khuyến cáo KHÁC
-                // vi phạm một chống chỉ định, và người dùng phải phân biệt
-                // được hai thứ.
+                // "Chỉ bị xếp sau" is a mandatory phrase: exceeding a
+                // recommendation is NOT the same as breaching a
+                // contraindication, and the user has to be able to tell them
+                // apart.
                 '${nutrientLabel(penalty.violations.first.rule.nutrient)} '
                 'cao hơn khuyến cáo — chỉ bị xếp sau, không bị loại',
                 style: const TextStyle(
@@ -534,11 +541,13 @@ class _WhyRow extends StatelessWidget {
     );
   }
 
-  /// Tỷ lệ món trong danh mục có điểm khớp THẤP hơn món này.
+  /// The share of the catalogue whose match score is LOWER than this
+  /// dish's.
   ///
-  /// Điểm cosin thô không nói được nhiều: 0,78 là cao hay thấp chỉ có nghĩa
-  /// khi so với các món khác. Hồ sơ rỗng thì mọi món cùng điểm nên tỷ lệ này
-  /// vô nghĩa — trả `null` để giao diện bỏ dòng đó đi.
+  /// A raw cosine score says little on its own: whether 0.78 is high or low
+  /// only means something against the other dishes. With an empty profile
+  /// every dish scores the same, so this share is meaningless — it returns
+  /// `null` so the interface drops that line.
   double? _betterThanShare() {
     if (session.preference.isEmpty) return null;
     final diem = session.preference.score(item.food);

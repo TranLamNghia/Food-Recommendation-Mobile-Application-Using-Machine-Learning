@@ -5,11 +5,12 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../data/models/meal_plan.dart';
 
-/// Thẻ tổng quan năng lượng và ba chất sinh năng lượng của cả ngày.
+/// The overview card for the day's energy and three macronutrients.
 ///
-/// Con số quan trọng nhất trên thẻ là **độ lệch so với hạn mức**. Đề cương
-/// cam kết thực đơn sinh ra lệch không quá 10 %, nên chỉ số đó phải nhìn
-/// thấy được ngay chứ không giấu trong phần thống kê.
+/// The most important number on the card is the **deviation from the
+/// target**. The thesis proposal commits to generated plans deviating by no
+/// more than 10 %, so that figure has to be immediately visible rather than
+/// buried in the statistics.
 class EnergySummaryCard extends StatelessWidget {
   const EnergySummaryCard({super.key, required this.plan, this.isToday = true});
 
@@ -68,8 +69,9 @@ class EnergySummaryCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        // Co lại được: hạn mức bốn chữ số cộng với con số lớn
-                        // bên trái có thể vượt bề ngang trên máy hẹp.
+                        // Allowed to shrink: a four-digit target plus the
+                        // large number to its left can overflow the width on
+                        // a narrow device.
                         Flexible(
                           child: Text(
                             '/ ${formatNumber(plan.targetKcal)} kcal',
@@ -98,7 +100,8 @@ class EnergySummaryCard extends StatelessWidget {
   }
 }
 
-/// Huy hiệu độ lệch. Xanh khi nằm trong ngưỡng 10 %, vàng khi vượt.
+/// The deviation badge. Green within the 10 % threshold, amber past
+/// it.
 class _DeviationBadge extends StatelessWidget {
   const _DeviationBadge({required this.plan});
 
@@ -139,7 +142,8 @@ class _DeviationBadge extends StatelessWidget {
   }
 }
 
-/// Ba thanh tỷ lệ cho đạm, bột đường và béo — thực tế so với mục tiêu.
+/// Three proportion bars for protein, carbohydrate and fat — actual
+/// against target.
 class _MacroBars extends StatelessWidget {
   const _MacroBars({required this.plan});
 
@@ -195,8 +199,9 @@ class _MacroBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Thanh có thể vượt 100 %, nhưng phần vẽ cắt ở 1,0 để không tràn ra
-    // ngoài khung. Con số bên dưới mới là thứ nói đúng mức vượt.
+    // A bar can exceed 100 %, but the drawing is clipped at 1.0 so it does
+    // not spill outside its frame. The number below it is what states the
+    // real overshoot.
     final ratio = target <= 0 ? 0.0 : (actual / target).clamp(0.0, 1.0);
 
     return Column(

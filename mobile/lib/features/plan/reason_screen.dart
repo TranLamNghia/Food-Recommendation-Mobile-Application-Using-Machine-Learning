@@ -9,12 +9,13 @@ import '../../data/rules/condition_rule.dart';
 import '../../data/rules/day_budget.dart';
 import 'widgets/day_budget_card.dart' show nutrientLabel;
 
-/// Vì sao món này được gợi ý.
+/// Why this dish was recommended.
 ///
-/// Ba khối, theo thứ tự quan trọng với người đọc: khớp khẩu vị đến đâu, nó
-/// giúp gì cho hôm nay, và điều gì cần lưu ý. Khối thứ ba không phải phần
-/// thêm cho đẹp — một màn giải thích chỉ nêu điểm tốt thì là quảng cáo, và
-/// người dùng sẽ thôi tin nó ngay lần đầu tự phát hiện một điểm trừ.
+/// Three blocks, in the order that matters to the reader: how well it matches
+/// their taste, what it does for today, and what to watch out for. The third
+/// block is not decoration — an explanation screen that lists only the good
+/// points is advertising, and the user will stop believing it the first time
+/// they spot a drawback themselves.
 class ReasonScreen extends StatelessWidget {
   const ReasonScreen({
     super.key,
@@ -30,10 +31,11 @@ class ReasonScreen extends StatelessWidget {
   final DayBudget budget;
   final PenaltyOutcome penalty;
 
-  /// Tỷ lệ món trong danh mục có điểm khớp **thấp hơn** món này.
+  /// The share of the catalogue whose match score is **lower** than this
+  /// dish's.
   ///
-  /// Cần nó vì điểm cosin thô không nói được nhiều: 0,78 là cao hay thấp thì
-  /// chỉ có nghĩa khi so với các món khác.
+  /// It is needed because a raw cosine score says little on its own: whether
+  /// 0.78 is high or low only means something against the other dishes.
   final double? betterThanShare;
 
   static Future<void> open(
@@ -118,13 +120,14 @@ class ReasonScreen extends StatelessWidget {
   }
 }
 
-/// Điểm khớp **tổng**, đặt trước mấy thanh so sánh.
+/// The **overall** match score, placed before the comparison bars.
 ///
-/// Thứ tự này là bắt buộc, không phải thẩm mỹ. [MatchReason.ratio] chuẩn hóa
-/// theo đỉnh của chính món đó, nên một món khớp rất yếu vẫn cho ba thanh gần
-/// đầy — đo được: một món đã bị vuốt `dislike` ra 100 % / 91 % / 88 % trong
-/// khi đóng góp tuyệt đối chỉ quanh +0,009. Vẽ riêng mấy thanh đó là nói với
-/// người dùng rằng mọi món đều khớp mạnh như nhau.
+/// That order is mandatory, not aesthetic. [MatchReason.ratio] normalises
+/// against the dish's own peak, so even a very weak match gives three nearly
+/// full bars — measured: a dish that was swiped `dislike` came out at
+/// 100 % / 91 % / 88 % while the absolute contributions sat around +0.009.
+/// Drawing those bars on their own tells the user that every dish matches
+/// equally strongly.
 class _ScoreBanner extends StatelessWidget {
   const _ScoreBanner({required this.score, this.betterThanShare});
 
@@ -269,8 +272,9 @@ class _NoProfileYet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Hồ sơ rỗng thì KHÔNG có cơ sở nào để nói người này thích gì. Hiện một
-    // khối trống kèm lời giải thích thật thà, chứ không bịa ra ba lý do.
+    // With an empty profile there is NO basis for saying what this person
+    // likes. Show an empty block with an honest explanation rather than
+    // inventing three reasons.
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
       decoration: BoxDecoration(
@@ -292,7 +296,7 @@ class _NoProfileYet extends StatelessWidget {
   }
 }
 
-/// Món này ảnh hưởng thế nào đến hạn mức của hôm nay.
+/// How this dish affects today's allowances.
 class _TodayBlock extends StatelessWidget {
   const _TodayBlock({required this.food, required this.budget});
 
@@ -333,7 +337,8 @@ class _TodayRow extends StatelessWidget {
     final value = DayBudget.valueOf(food, limit.nutrient);
     final ten = nutrientLabel(limit.nutrient);
 
-    // `null` là KHÔNG BIẾT, không phải 0 — và hai thứ đó phải hiện khác nhau.
+    // `null` means UNKNOWN, not 0 — and the two have to be displayed
+    // differently.
     final khuyet = value == null;
     final vua = !khuyet && limit.fits(value);
 
@@ -402,7 +407,7 @@ class _TodayRow extends StatelessWidget {
   }
 }
 
-/// Điểm cần lưu ý — phần món này **không** tốt.
+/// The points to watch — where this dish is **not** good.
 class _CaveatBlock extends StatelessWidget {
   const _CaveatBlock({required this.penalty});
 

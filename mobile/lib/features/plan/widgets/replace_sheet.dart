@@ -7,11 +7,12 @@ import '../../../data/models/meal_plan.dart';
 import '../../../data/rules/day_budget.dart';
 import 'day_budget_card.dart' show nutrientLabel;
 
-/// Bảng chọn món thay thế, mở từ nút đổi món trên một suất.
+/// The replacement sheet, opened from the swap button on a serving.
 ///
-/// Danh sách xếp theo điểm ưa thích giảm dần và chỉ gồm món **cùng vai trò**
-/// với suất đang thay — đổi món canh phải ra món canh, nếu không cấu trúc
-/// bữa ăn sẽ vỡ ngay sau một thao tác của người dùng.
+/// The list is ordered by descending preference score and holds only dishes
+/// in the **same role** as the serving being replaced — a soup has to be
+/// swapped for a soup, or the meal's structure breaks after a single user
+/// action.
 class ReplaceSheet extends StatelessWidget {
   const ReplaceSheet({
     super.key,
@@ -25,15 +26,16 @@ class ReplaceSheet extends StatelessWidget {
   final List<Food> alternatives;
   final double Function(Food) scoreOf;
 
-  /// Hạn mức còn lại **sau khi bỏ món đang thay ra**.
+  /// The allowance left **after the dish being replaced is taken out**.
   ///
-  /// Phải là hạn mức đã trừ món cũ, không phải hạn mức hiện tại: dư địa cho
-  /// món thay thế gồm cả phần món cũ đang chiếm. Dùng hạn mức chưa trừ thì
-  /// bảng này chặn cả những món đáng ra chọn được — kể cả chính món đang
-  /// nằm trong thực đơn.
+  /// It has to be the allowance with the old dish subtracted, not the current
+  /// one: the room for a replacement includes what the old dish takes up.
+  /// With the unsubtracted allowance this sheet blocks dishes that ought to
+  /// be selectable — including the very dish sitting in the plan.
   final DayBudget budgetAfterRemoval;
 
-  /// Mở bảng và trả về món người dùng chọn, `null` nếu họ đóng bảng.
+  /// Opens the sheet and returns the dish the user chose, or `null` if
+  /// they dismissed it.
   static Future<Food?> show(
     BuildContext context, {
     required MealPlanItem item,
@@ -54,12 +56,14 @@ class ReplaceSheet extends StatelessWidget {
     );
   }
 
-  /// Hạn mức CỨNG đầu tiên mà [food] không vừa, `null` nếu vừa hết.
+  /// The first HARD allowance [food] does not fit, or `null` if it fits
+  /// them all.
   ///
-  /// Món thiếu số liệu ở một chất bị hạn chế trả về `null` — nó không bị
-  /// chặn, nhưng [_AlternativeTile] hiện ghi chú riêng. Chặn một món vì danh
-  /// mục thiếu số liệu là phạt sai đối tượng; im lặng cho qua thì lại nới
-  /// hạn mức. Nên: cho qua, và nói ra.
+  /// A dish with no measurement for a restricted nutrient returns `null` — it
+  /// is not blocked, but [_AlternativeTile] shows a note of its own. Blocking
+  /// a dish because the catalogue is incomplete penalises the wrong party;
+  /// letting it through in silence loosens the allowance. So: let it through,
+  /// and say so.
   DayLimit? _blockingLimit(Food food) {
     for (final l in budgetAfterRemoval.hard) {
       final value = DayBudget.valueOf(food, l.nutrient);
@@ -69,7 +73,8 @@ class ReplaceSheet extends StatelessWidget {
     return null;
   }
 
-  /// Ứng viên vừa hạn mức xếp trước, trong mỗi nhóm giữ thứ tự điểm đã có.
+  /// Candidates that fit come first; within each group the existing
+  /// score order is kept.
   List<Food> get _ordered {
     final vua = <Food>[];
     final khong = <Food>[];
@@ -154,9 +159,10 @@ class ReplaceSheet extends StatelessWidget {
                       deltaKcal: food.kcal - item.food.kcal,
                       blocking: chan,
                       budget: budgetAfterRemoval,
-                      // Món không vừa hạn mức thì KHÔNG bấm được, nhưng vẫn
-                      // hiện kèm lý do: ẩn nó đi thì người dùng không bao giờ
-                      // biết món mình muốn vẫn chọn được vào hôm khác.
+                      // A dish that does not fit is NOT tappable, but it
+                      // is still shown with its reason: hidden, the user
+                      // would never learn that the dish they wanted is
+                      // selectable on another day.
                       onTap: chan == null
                           ? () => Navigator.of(context).pop(food)
                           : null,
@@ -185,15 +191,16 @@ class _AlternativeTile extends StatelessWidget {
   final double score;
   final int deltaKcal;
 
-  /// Hạn mức khiến món này không chọn được hôm nay, `null` nếu chọn được.
+  /// The allowance that makes this dish unselectable today, or `null`
+  /// if it is selectable.
   final DayLimit? blocking;
 
   final DayBudget budget;
 
-  /// `null` nghĩa là không bấm được.
+  /// `null` means not tappable.
   final VoidCallback? onTap;
 
-  /// Chất bị hạn chế mà món này không có số liệu.
+  /// The restricted nutrients this dish has no measurement for.
   List<String> get _missing => [
     for (final l in budget.hard)
       if (DayBudget.valueOf(food, l.nutrient) == null) l.nutrient,
@@ -208,8 +215,8 @@ class _AlternativeTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Opacity(
-        // Mờ đi chứ không ẩn: ẩn món không vừa thì người dùng không bao giờ
-        // biết món mình muốn vẫn chọn được vào hôm khác.
+        // Dimmed rather than hidden: hiding a dish that does not fit means
+        // the user never learns it is selectable on another day.
         opacity: mo ? 0.55 : 1,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
@@ -248,8 +255,9 @@ class _AlternativeTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      // Chênh lệch năng lượng so với món đang thay là thứ quyết
-                      // định thực đơn có còn khớp hạn mức sau khi đổi hay không.
+                      // The energy difference against the dish being
+                      // replaced is what decides whether the plan still
+                      // meets its target after the swap.
                       '${food.kcal} kcal · '
                       '${deltaKcal >= 0 ? '+' : '−'}${deltaKcal.abs()} so với món cũ',
                       style: const TextStyle(
@@ -316,12 +324,13 @@ class _AlternativeTile extends StatelessWidget {
   }
 }
 
-/// Dải hạn mức còn lại cho món thay thế.
+/// The strip of remaining allowances for a replacement dish.
 ///
-/// Hiện **mọi** hạn mức cứng cạnh nhau, không chỉ cái chặt nhất: một món có
-/// thể rất tốt ở chất đang thiếu mà vẫn bị chặn bởi chất khác. Đậu phụ hấp
-/// có natri 14 mg — thấp nhất danh mục — nhưng purin 136 mg thì vượt phần
-/// purin còn lại của người gút. Xếp hạng theo một chất rồi kết luận là sai.
+/// It shows **every** hard allowance side by side, not just the tightest one:
+/// a dish can be excellent on the nutrient that is short and still be blocked
+/// by another. Steamed tofu has 14 mg of sodium — the lowest in the catalogue
+/// — but its 136 mg of purine exceeds what a gout patient has left. Ranking
+/// by one nutrient and concluding from that is wrong.
 class _BudgetStrip extends StatelessWidget {
   const _BudgetStrip({required this.budget});
 
@@ -347,9 +356,10 @@ class _BudgetStrip extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          // `Wrap` chứ không `Row`: hai cột "1.200 mg / natri · Tăng huyết
-          // áp" tràn 24 px ở bề ngang 412. Bản mockup HTML không lộ ra lỗi
-          // này vì nó được vẽ ở đúng một bề ngang.
+          // `Wrap` rather than `Row`: the two columns "1.200 mg / natri ·
+          // Tăng huyết áp" overflow by 24 px at a width of 412. The HTML
+          // mock-up never exposed this, because it was only ever drawn at one
+          // single width.
           Wrap(
             spacing: 18,
             runSpacing: 8,

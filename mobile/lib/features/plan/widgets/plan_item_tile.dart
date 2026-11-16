@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/meal_plan.dart';
 
-/// Một suất món trong thực đơn.
+/// One dish serving in the plan.
 ///
-/// Thẻ hiển thị ba thứ người dùng cần để quyết định giữ hay đổi: món là gì,
-/// nó tốn bao nhiêu năng lượng, và vì sao hệ thống nghĩ họ sẽ thích nó.
+/// The tile shows the three things a user needs in order to decide whether to
+/// keep it or swap it: what the dish is, how much energy it costs, and why
+/// the system thinks they will like it.
 class PlanItemTile extends StatelessWidget {
   const PlanItemTile({
     super.key,
@@ -101,9 +102,10 @@ class PlanItemTile extends StatelessWidget {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          // Nhãn nằm trong [Wrap] có thể co lại: tên món dài
-                          // hoặc màn hình hẹp thì chúng xuống dòng, thay vì đẩy
-                          // hai nút hành động tràn ra khỏi thẻ.
+                          // The labels sit in a [Wrap] so they can give
+                          // way: with a long dish name or a narrow screen
+                          // they move onto another line instead of pushing
+                          // the two action buttons out of the tile.
                           Expanded(
                             child: Wrap(
                               spacing: 6,
@@ -218,8 +220,9 @@ class _Thumbnail extends StatelessWidget {
               : Image.asset(
                   food.imageAsset!,
                   fit: BoxFit.cover,
-                  // Ảnh tạm dùng chung cho nhiều món nên phủ một lớp gradient
-                  // mờ để thẻ vẫn phân biệt được bằng màu.
+                  // The placeholder image is shared across several
+                  // dishes, so a translucent gradient is laid over it to keep
+                  // the tiles distinguishable by colour.
                   color: food.gradient.last.withValues(alpha: 0.25),
                   colorBlendMode: BlendMode.overlay,
                 ),
@@ -229,11 +232,11 @@ class _Thumbnail extends StatelessWidget {
   }
 }
 
-/// Điểm mức độ phù hợp do bước chấm điểm sinh ra.
+/// The suitability score produced by the scoring step.
 ///
-/// Hiển thị thẳng con số thay vì giấu đi: đây là phần giải thích được của
-/// mô hình, và cũng là thứ cần đối chiếu khi so sánh với phương án chỉ dùng
-/// quy tắc dinh dưỡng ở chương thực nghiệm.
+/// The number is shown outright rather than hidden: this is the explainable
+/// part of the model, and it is also what has to be compared against the
+/// nutrition-rules-only variant in the experiment chapter.
 class _ScoreChip extends StatelessWidget {
   const _ScoreChip({required this.score});
 
@@ -259,11 +262,12 @@ class _ScoreChip extends StatelessWidget {
   }
 }
 
-/// Nhãn cho suất thăm dò của cơ chế 70-30.
+/// The label for an exploration serving of the 70-30 mechanism.
 ///
-/// Nói thẳng với người dùng rằng đây là món hệ thống muốn thử, để họ hiểu
-/// vì sao thực đơn có một món hơi lệch gu — và để khi họ đổi nó đi thì đó
-/// là phản hồi có ý thức chứ không phải bực bội.
+/// It tells the user plainly that this is a dish the system wants to try, so
+/// they understand why the plan holds something slightly off their taste —
+/// and so that swapping it away is considered feedback rather than
+/// irritation.
 class _ExplorationChip extends StatelessWidget {
   const _ExplorationChip();
 
