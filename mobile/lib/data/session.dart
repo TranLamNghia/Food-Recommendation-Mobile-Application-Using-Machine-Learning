@@ -44,8 +44,71 @@ class AppSession extends ChangeNotifier {
   PreferenceProfile get preference =>
       _preference ?? PreferenceProfile.empty(_space);
 
-  DailyPlan? _plan;
-  DailyPlan? get plan => _plan;
+  /// One plan per calendar day, keyed by [_dayKey]. Days are generated the
+  /// first time they are opened, so the week strip costs nothing up front.
+  final Map<int, DailyPlan> _plans = {};
+
+  DateTime _selectedDay = _dateOnly(DateTime.now());
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+  static int _dayKey(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
+
+  /// The day the plan screen is showing. Defaults to today.
+  DateTime get selectedDay => _selectedDay;
+
+  bool get viewingToday => _dayKey(_selectedDay) == _dayKey(DateTime.now());
+
+  /// Plan of [selectedDay].
+  DailyPlan? get plan => _plans[_dayKey(_selectedDay)];
+
+  /// Plan of the real current day, whatever day is on screen.
+  DailyPlan? get todayPlan => _plans[_dayKey(DateTime.now())];
+
+  DailyPlan? planOn(DateTime day) => _plans[_dayKey(day)];
+
+  /// Switches the plan screen to [day], building that day's plan on first
+  /// visit.
+  void selectDay(DateTime day) {
+    _selectedDay = _dateOnly(day);
+    if (plan == null) _build(_selectedDay);
+    notifyListeners();
+  }
+
+  /// Plans for [days] consecutive days starting today, building the missing
+  /// ones. Used by the shopping list, which must cover days nobody opened yet.
+  ///
+  /// Does not notify: it is called while building, and the plans it adds do
+  /// not change anything already on screen.
+  List<DailyPlan> plansForNext(int days) {
+    final today = _dateOnly(DateTime.now());
+    return [
+      for (var i = 0; i < days; i++)
+        ?_buildIfAbsent(today.add(Duration(days: i))),
+    ];
+  }
+
+  DailyPlan? _buildIfAbsent(DateTime day) =>
+      _plans[_dayKey(day)] ?? _build(day);
+
+  DailyPlan? _build(DateTime day) {
+    final energy = profile.energyTarget;
+    final macro = profile.macroTarget;
+    if (energy == null || macro == null) return null;
+
+    // Keep yesterday's dishes out so consecutive days differ. Without this
+    // the builder, fed the same profile and targets, returns the same
+    // top-scoring menu for every day of the week.
+    final previous = planOn(day.subtract(const Duration(days: 1)));
+    final avoid = {...?previous?.allItems.map((i) => i.food.id)};
+
+    return _plans[_dayKey(day)] = _builder(avoid: avoid).build(
+      date: day,
+      targetKcal: energy,
+      targetProtein: macro.protein,
+      targetCarb: macro.carb,
+      targetFat: macro.fat,
+    );
+  }
 
   final List<DiaryEntry> diary = [];
 
@@ -75,6 +138,132 @@ class AppSession extends ChangeNotifier {
   /// `DailyPlan.unenforceableTargets` thay vì bị lặng lẽ coi là đã thỏa.
   List<NutrientTarget> nutrientTargets = const [];
 
+  // ── Account ──────────────────────────────────────────────────────
+
+  String? _accountEmail;
+  String? _displayName;
+
+  /// `null` while the user is anonymous: the profile then lives on this
+  /// device only.
+  String? get accountEmail => _accountEmail;
+  String? get displayName => _displayName;
+  bool get isSignedIn => _accountEmail != null;
+
+  /// Mock of `POST /auth/login` and `POST /auth/register`: accepts anything
+  /// the form already validated.
+  void signIn({required String email, String? displayName}) {
+    _accountEmail = email.trim();
+    _displayName = displayName?.trim();
+    notifyListeners();
+  }
+
+  void signOut() {
+    _accountEmail = null;
+    _displayName = null;
+    notifyListeners();
+  }
+
+  // ── Saved dishes ─────────────────────────────────────────────────
+
+  /// Dishes the user hearted.
+  final Set<String> lovedIds = {};
+
+  /// Dishes the user never wants suggested again. Removed from the candidate
+  /// pool before a plan is built, so no score can bring them back.
+  final Set<String> neverAgainIds = {};
+
+  void toggleLoved(Food food) {
+    if (!lovedIds.remove(food.id)) {
+      lovedIds.add(food.id);
+      neverAgainIds.remove(food.id);
+    }
+    notifyListeners();
+  }
+
+  void setNeverAgain(Food food, bool value) {
+    if (value) {
+      neverAgainIds.add(food.id);
+      lovedIds.remove(food.id);
+    } else {
+      neverAgainIds.remove(food.id);
+    }
+    notifyListeners();
+  }
+
+  // ── Shopping list ────────────────────────────────────────────────
+
+  /// Names of the shopping rows already in the basket.
+  final Set<String> shoppingTicked = {};
+
+  /// Rows the user typed in, outside any dish.
+  final List<String> shoppingExtras = [];
+
+  void toggleShoppingTick(String name) {
+    if (!shoppingTicked.remove(name)) shoppingTicked.add(name);
+    notifyListeners();
+  }
+
+  void addShoppingExtra(String name) {
+    final clean = name.trim();
+    if (clean.isEmpty || shoppingExtras.contains(clean)) return;
+    shoppingExtras.add(clean);
+    notifyListeners();
+  }
+
+  void removeShoppingExtra(String name) {
+    shoppingExtras.remove(name);
+    shoppingTicked.remove(name);
+    notifyListeners();
+  }
+
+  void clearShoppingTicks() {
+    shoppingTicked.clear();
+    notifyListeners();
+  }
+
+  // ── Settings ─────────────────────────────────────────────────────
+
+  bool _mealReminders = true;
+  bool _weeklySummary = false;
+
+  bool get mealReminders => _mealReminders;
+  bool get weeklySummary => _weeklySummary;
+
+  set mealReminders(bool value) {
+    _mealReminders = value;
+    notifyListeners();
+  }
+
+  set weeklySummary(bool value) {
+    _weeklySummary = value;
+    notifyListeners();
+  }
+
+  /// Wipes everything back to a fresh install, account included.
+  void reset() {
+    profile
+      ..gender = null
+      ..birthday = null
+      ..heightCm = null
+      ..weightKg = null
+      ..targetWeightKg = null
+      ..goal = null
+      ..activity = null
+      ..conditions.clear()
+      ..allergies.clear();
+    _preference = null;
+    _plans.clear();
+    _selectedDay = _dateOnly(DateTime.now());
+    diary.clear();
+    lovedIds.clear();
+    neverAgainIds.clear();
+    shoppingTicked.clear();
+    shoppingExtras.clear();
+    _accountEmail = null;
+    _displayName = null;
+    notifyListeners();
+  }
+
   // ── Khởi đầu nguội ───────────────────────────────────────────────
 
   /// Nhận kết quả phiên vuốt, dựng hồ sơ sở thích rồi sinh thực đơn đầu tiên.
@@ -85,28 +274,48 @@ class AppSession extends ChangeNotifier {
 
   // ── Thực đơn ─────────────────────────────────────────────────────
 
-  /// Sinh lại thực đơn cho hôm nay.
+  /// Sinh lại thực đơn cho [date], mặc định là ngày đang xem.
   ///
   /// Trả về `false` khi hồ sơ sức khỏe chưa đủ dữ liệu để tính hạn mức —
   /// thiếu giới tính, ngày sinh, chiều cao, cân nặng hoặc mức vận động.
   bool regeneratePlan({DateTime? date}) {
-    final energy = profile.energyTarget;
-    final macro = profile.macroTarget;
-    if (energy == null || macro == null) return false;
-
-    _plan = _builder().build(
-      date: date ?? DateTime.now(),
-      targetKcal: energy,
-      targetProtein: macro.protein,
-      targetCarb: macro.carb,
-      targetFat: macro.fat,
-    );
+    if (_build(_dateOnly(date ?? _selectedDay)) == null) return false;
     notifyListeners();
     return true;
   }
 
-  MenuBuilder _builder() => MenuBuilder(
-    candidates: candidates,
+  /// Drops the plans that were sized to the old profile and rebuilds the one
+  /// on screen. Today is kept once something on it has been eaten: that day
+  /// has started, so it stays as built.
+  void rebuildUpcomingPlans() {
+    final todayKey = _dayKey(DateTime.now());
+    final todayStarted =
+        todayPlan?.allItems.any((i) => i.status == MealItemStatus.eaten) ??
+        false;
+    _plans.removeWhere((key, _) => key != todayKey || !todayStarted);
+    if (plan == null) _build(_selectedDay);
+    notifyListeners();
+  }
+
+  /// [avoid] is a soft exclusion for variety: it is dropped when honouring
+  /// it would leave too few dishes to fill a day.
+  MenuBuilder _builder({Set<String> avoid = const {}}) {
+    final allowed = [
+      for (final f in candidates)
+        if (!neverAgainIds.contains(f.id)) f,
+    ];
+    final varied = [
+      for (final f in allowed)
+        if (!avoid.contains(f.id)) f,
+    ];
+
+    return _builderFor(varied.length >= _minPoolForVariety ? varied : allowed);
+  }
+
+  static const _minPoolForVariety = 16;
+
+  MenuBuilder _builderFor(List<Food> pool) => MenuBuilder(
+    candidates: pool,
     profile: preference,
     explorationRatio: explorationRatio,
     nutrientTargets: nutrientTargets,
@@ -115,7 +324,7 @@ class AppSession extends ChangeNotifier {
 
   /// Danh sách món thay thế cho một suất, xếp theo điểm giảm dần.
   List<Food> alternativesFor(MealPlanItem item) {
-    final plan = _plan;
+    final plan = this.plan;
     final exclude = plan == null
         ? <String>{}
         : plan.allItems.map((i) => i.food.id).toSet();
@@ -129,7 +338,7 @@ class AppSession extends ChangeNotifier {
   /// nhận nhãn `plan_replaced` (0,15), món được chọn nhận nhãn `plan_kept`
   /// (0,70). Đây là nguồn dữ liệu chính sau khi phiên vuốt kết thúc.
   void replaceItem(MealPlanItem item, Food replacement) {
-    final plan = _plan;
+    final plan = this.plan;
     if (plan == null) return;
 
     for (final slot in plan.slots) {
@@ -152,6 +361,23 @@ class AppSession extends ChangeNotifier {
     }
   }
 
+  /// Marks a planned item as skipped (eating out, not hungry…), or puts a
+  /// skipped one back. A weak training signal: the reason may have nothing to
+  /// do with taste.
+  void setSkipped(MealPlanItem item, bool skipped) {
+    final from = skipped ? MealItemStatus.planned : MealItemStatus.skipped;
+    final to = skipped ? MealItemStatus.skipped : MealItemStatus.planned;
+    if (item.status != from) return;
+
+    for (final slot in plan?.slots ?? const <MealSlot>[]) {
+      final index = slot.items.indexOf(item);
+      if (index < 0) continue;
+      slot.items[index] = item.copyWith(status: to);
+      notifyListeners();
+      return;
+    }
+  }
+
   // ── Hạn mức theo ngày và sàng món ────────────────────────────────
 
   /// Bệnh lý người dùng đã khai, ở dạng bộ quy tắc hiểu được.
@@ -164,7 +390,8 @@ class AppSession extends ChangeNotifier {
   /// KHÔNG được cộng thêm: [logMeal] ghi cả hai nơi cùng lúc, nên cộng cả
   /// hai là đếm hai lần cùng một suất.
   List<Food> get eatenToday {
-    final homNay = DateTime.now();
+    // The day on screen, which is today unless the week strip moved it.
+    final homNay = _selectedDay;
     return [
       for (final e in diary)
         if (e.ateAt.year == homNay.year &&
@@ -180,7 +407,7 @@ class AppSession extends ChangeNotifier {
   /// người dùng đang chọn giữa *bỏ món đã lên kế hoạch* và *chịu vượt*. Một
   /// tổng duy nhất làm họ tưởng cả hai phần đều đã cố định.
   List<Food> get plannedToday => [
-    for (final item in _plan?.allItems ?? const <MealPlanItem>[])
+    for (final item in plan?.allItems ?? const <MealPlanItem>[])
       if (item.status == MealItemStatus.planned) item.food,
   ];
 
@@ -212,21 +439,18 @@ class AppSession extends ChangeNotifier {
     double portion = 1.0,
     DateTime? at,
   }) {
+    final ateAt = at ?? DateTime.now();
     diary.add(
-      DiaryEntry(
-        food: food,
-        meal: meal,
-        ateAt: at ?? DateTime.now(),
-        portion: portion,
-      ),
+      DiaryEntry(food: food, meal: meal, ateAt: ateAt, portion: portion),
     );
 
     // Đánh dấu suất tương ứng trong thực đơn là đã ăn, nếu có. Ghép theo
     // khóa tự nhiên (bữa, món) chứ không theo khóa ngoại.
-    final slot = _plan?.slots.where((s) => s.type == meal).firstOrNull;
+    final slot = planOn(ateAt)?.slots.where((s) => s.type == meal).firstOrNull;
     if (slot != null) {
       for (var i = 0; i < slot.items.length; i++) {
-        if (slot.items[i].food.id == food.id) {
+        if (slot.items[i].food.id == food.id &&
+            slot.items[i].status == MealItemStatus.planned) {
           slot.items[i] = slot.items[i].copyWith(status: MealItemStatus.eaten);
           break;
         }
@@ -267,7 +491,7 @@ class AppSession extends ChangeNotifier {
   /// Đây là chỉ số nghiệm thu quan trọng của đề tài — gợi ý hay đến đâu mà
   /// người dùng không ăn thì cũng vô nghĩa.
   double get adherenceRate {
-    final plan = _plan;
+    final plan = todayPlan;
     if (plan == null || plan.allItems.isEmpty) return 0;
 
     final eaten = plan.allItems
