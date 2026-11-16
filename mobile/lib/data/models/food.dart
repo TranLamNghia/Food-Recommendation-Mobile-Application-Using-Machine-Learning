@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// Món ăn — phản chiếu các cột chính của bảng `foods` + `food_nutrition`.
+/// A dish — mirrors the main columns of the `foods` + `food_nutrition`
+/// tables.
 ///
-/// Ở giai đoạn dựng giao diện, ảnh món được thay bằng cặp màu gradient và
-/// một biểu tượng, để chạy được hoàn toàn ngoại tuyến. Khi có ảnh thật chỉ
-/// cần thêm trường `imageUrl` và đổi phần nền của thẻ.
+/// While the interface is being built, a dish photo is stood in for by a pair
+/// of gradient colours and an icon, so the app runs entirely offline. Once
+/// there are real photos, all it takes is an `imageUrl` field and a change to
+/// the card's background.
 class Food {
   const Food({
     required this.id,
@@ -30,13 +32,13 @@ class Food {
   final String id;
   final String name;
 
-  /// Nhóm thực phẩm — bảng `food_categories`.
+  /// The food group — the `food_categories` table.
   final String category;
 
-  /// Vai trò trong bữa — cột `foods.dish_role`.
+  /// The role in a meal — the `foods.dish_role` column.
   final String dishRole;
 
-  /// Mức cay 0–3 — cột `foods.spice_level`.
+  /// Spice level 0–3 — the `foods.spice_level` column.
   final int spiceLevel;
 
   final int kcal;
@@ -44,73 +46,82 @@ class Food {
   final double carb;
   final double fat;
 
-  /// Đường tính bằng gam trong một suất. Nguồn: `food_nutrition.sugar_g`.
+  /// Sugar in grams per serving. Source: `food_nutrition.sugar_g`.
   final double sugar;
 
-  /// Natri tính bằng miligam trong một suất. Nguồn: `food_nutrition.sodium_mg`.
+  /// Sodium in milligrams per serving. Source: `food_nutrition.sodium_mg`.
   final double sodium;
 
-  /// Chất xơ tính bằng gam trong một suất. Nguồn: `food_nutrition.fiber_g`.
+  /// Fibre in grams per serving. Source: `food_nutrition.fiber_g`.
   ///
-  /// Có mặt ở đây vì **khẩu vị không phải thứ duy nhất quyết định chất lượng
-  /// gợi ý**. Người dùng có thể muốn ăn nhiều chất xơ, và nếu chất xơ không
-  /// nằm trong vector đặc trưng thì sở thích đó không biểu diễn được: bộ gợi
-  /// ý chỉ bắt được nó gián tiếp qua nhóm món.
+  /// It is here because **taste is not the only thing that decides the
+  /// quality of a recommendation**. A user may want to eat more fibre, and if
+  /// fibre is not in the feature vector then that preference cannot be
+  /// represented: the recommender would only catch it indirectly, through the
+  /// food group.
   ///
-  /// Đo trên 305 món thật: với người thích món giàu xơ, vector không có
-  /// chiều này thu hẹp được 41,7 % khoảng cách tới tập 20 món giàu xơ nhất;
-  /// thêm chiều này thì lên 59,7 %.
+  /// Measured over 305 real dishes: for someone who likes high-fibre dishes,
+  /// a vector without this dimension closes 41.7 % of the distance to the 20
+  /// highest-fibre dishes; adding the dimension takes that to 59.7 %.
   final double fiber;
 
-  /// Purin tính bằng miligam trong một suất, **có thể khuyết**.
+  /// Purine in milligrams per serving, **possibly absent**.
   ///
-  /// Kiểu `double?` là cố ý, và `null` KHÔNG phải 0. Bảng thành phần thực
-  /// phẩm chỉ công bố purin cho 70 trong 318 món, nên với 248 món còn lại
-  /// câu trả lời đúng là "không biết", không phải "không có purin".
+  /// The `double?` type is deliberate, and `null` is NOT 0. The food
+  /// composition table only publishes purine for 70 of 318 dishes, so for the
+  /// other 248 the right answer is "unknown", not "contains no purine".
   ///
-  /// Trước đây trường này bị bỏ hẳn, với lý do ghi trong
-  /// `NutrientTarget.valueOf`: thêm vào mà coi khuyết là 0 sẽ làm một thực
-  /// đơn chưa từng được kiểm purin hiện ra như đã đạt ngưỡng gút — kiểu sai
-  /// tệ hơn cả báo vi phạm. Nay nó có mặt được vì [DayBudget] **đếm số món
-  /// khuyết số liệu** và nói ra, thay vì cộng chúng thành 0 rồi im lặng.
+  /// This field used to be left out altogether, for the reason recorded in
+  /// `NutrientTarget.valueOf`: adding it while treating absence as 0 would
+  /// make a plan whose purine was never checked appear to meet a gout limit —
+  /// a worse kind of wrong than reporting a violation. It can be here now
+  /// because [DayBudget] **counts the dishes with missing data** and says so,
+  /// instead of adding them up as 0 and staying quiet.
   final double? purine;
 
-  /// Khối lượng một suất, tính bằng gam. Nguồn: `food_nutrition.serving_size_g`.
+  /// The mass of one serving, in grams. Source:
+  /// `food_nutrition.serving_size_g`.
   ///
-  /// Mọi số dinh dưỡng ở trên là **của cả suất**, không phải trên 100 g. Nên
-  /// trường này là mẫu số bắt buộc khi cần một đại lượng **nồng độ** — xem
-  /// [sugarConcentration].
+  /// Every nutrition figure above is **per serving**, not per 100 g. So this
+  /// field is the mandatory denominator whenever a **concentration** is
+  /// needed — see [sugarConcentration].
   final double servingSizeG;
 
   final String emoji;
   final List<Color> gradient;
 
-  /// Ảnh món. `null` thì thẻ lùi về nền gradient kèm biểu tượng.
+  /// The dish photo. When `null`, the card falls back to the gradient
+  /// background with an icon.
   final String? imageAsset;
   final List<String> tags;
 
-  /// Đường trên mỗi gam món ăn — đại lượng **đo được** cho vị ngọt.
+  /// Sugar per gram of dish — a **measurable** quantity for sweetness.
   ///
-  /// Dùng **nồng độ** chứ không dùng số gam thuần, cùng lý do như
-  /// `macroShare`: khẩu vị là về *cấu trúc* món ăn, không về khối lượng. Một
-  /// suất 400 g chứa 20 g đường không ngọt bằng một suất 100 g chứa 15 g.
+  /// A **concentration** rather than a plain gram figure, for the same reason
+  /// as `macroShare`: taste is about the *composition* of a dish, not about
+  /// its mass. A 400 g serving holding 20 g of sugar is not as sweet as a
+  /// 100 g serving holding 15 g.
   ///
-  /// **Vì sao mẫu số là [servingSizeG], không phải [carb].** Bản trước dùng
-  /// `sugar / carb`, và nó vỡ ở món ít bột đường: tỷ lệ nổ khi mẫu số nhỏ.
-  /// Đo trên 318 món thật, **46 món bị kẹp về đúng 1,0** — 14 % danh mục đọc
-  /// ra "ngọt tối đa" — trong đó *trứng luộc* (0,6 g bột đường) và *canh hẹ
-  /// đậu phụ* (2,2 g) đứng ngang *chuối sứ* và *nước ép lựu*. Hai món đó
-  /// không phân biệt được trên chiều này thì Rocchio **không học được sở
-  /// thích ngọt**: đó là một chiều đầy nhiễu, không phải một chiều đặc trưng.
+  /// **Why the denominator is [servingSizeG] and not [carb].** An earlier
+  /// version used `sugar / carb`, and it broke on low-carbohydrate dishes:
+  /// the ratio explodes when the denominator is small. Measured over 318 real
+  /// dishes, **46 of them were clamped to exactly 1.0** — 14 % of the
+  /// catalogue reading as "maximally sweet" — among them *boiled egg* (0.6 g
+  /// of carbohydrate) and *chive and tofu soup* (2.2 g) sitting level with
+  /// *sugar banana* and *pomegranate juice*. If those cannot be told apart on
+  /// this dimension then Rocchio **cannot learn a preference for sweetness**:
+  /// it is a dimension full of noise, not a feature.
   ///
-  /// Sau khi đổi mẫu số: 1/318 món ở mức tối đa, trứng luộc 0,048, canh hẹ
-  /// 0,099, dưa hấu 0,374, chuối sứ 0,564, nước ép lựu 1,000.
+  /// After changing the denominator: 1 of 318 dishes at the maximum, boiled
+  /// egg 0.048, chive soup 0.099, watermelon 0.374, sugar banana 0.564,
+  /// pomegranate juice 1.000.
   ///
-  /// Trả về nồng độ **thô**; phép chuẩn hóa min-max do `FoodVectorSpace` làm,
-  /// cùng cách với natri và chất xơ.
+  /// Returns the **raw** concentration; the min-max normalisation is done by
+  /// `FoodVectorSpace`, the same way as for sodium and fibre.
   double get sugarConcentration => servingSizeG <= 0 ? 0 : sugar / servingSizeG;
 
-  /// Tỷ lệ năng lượng đến từ mỗi chất, dùng để vẽ thanh macro trên thẻ.
+  /// The share of the energy coming from each macronutrient, used to draw the
+  /// macro bar on a card.
   ({double protein, double carb, double fat}) get macroShare {
     final total = protein * 4 + carb * 4 + fat * 9;
     if (total <= 0) return (protein: 0, carb: 0, fat: 0);

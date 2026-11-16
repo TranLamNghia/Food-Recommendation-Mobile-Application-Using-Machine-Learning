@@ -4,11 +4,11 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/option_card.dart';
 
-/// Bước 5 — mục tiêu sức khỏe.
+/// Step 5 — the health goal.
 ///
-/// Đây là bước quyết định nhất của cả luồng: nó vừa đặt hạn mức năng lượng
-/// (cộng hay trừ 500 kcal so với mức tiêu hao), vừa quyết định luồng có hỏi
-/// thêm cân nặng mục tiêu hay không.
+/// This is the most consequential step of the whole flow: it both sets the
+/// energy target (plus or minus 500 kcal against the expenditure) and decides
+/// whether the flow goes on to ask for a target weight.
 class GoalStep extends StatelessWidget {
   const GoalStep({
     super.key,
@@ -48,7 +48,8 @@ class GoalStep extends StatelessWidget {
               selected: profile.goal == g,
               onTap: () {
                 profile.goal = g;
-                // Đổi mục tiêu thì cân nặng mục tiêu cũ không còn nghĩa.
+                // Changing the goal makes the old target weight
+                // meaningless.
                 if (!g.needsTargetWeight) profile.targetWeightKg = null;
                 onChanged();
               },

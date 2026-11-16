@@ -3,40 +3,48 @@ import '../rules/condition_rule.dart';
 import '../rules/day_budget.dart';
 import '../rules/evidence_level.dart';
 
-/// Bộ quy tắc bệnh lý dùng khi chạy ngoại tuyến — phản chiếu
-/// `condition_rules` trong CSDL.
+/// The condition rule set used when running offline — a mirror of
+/// `condition_rules` in the database.
 ///
-/// Mọi ngưỡng, hệ số phạt và mức tin cậy ở đây **lấy nguyên** từ 20 dòng
-/// thật trong `nutrition_rec`, kể cả phần `note` ghi xuất xứ. Không có con
-/// số nào tự đặt: nếu giao diện hiện "WHO: dưới 2 000 mg natri/ngày" thì câu
-/// đó phải truy được về một dòng dữ liệu, không phải một chuỗi viết tay
-/// trong widget.
+/// Every threshold, penalty factor and evidence level here is **taken
+/// verbatim** from the 20 real rows in `nutrition_rec`, the `note` recording
+/// the provenance included. No number is made up: if the interface shows
+/// "WHO: under 2,000 mg of sodium a day", that sentence has to be traceable
+/// to a row of data, not to a string typed into a widget.
 ///
-/// Khi có máy chủ thật, tệp này được thay bằng lời gọi
-/// `GET /conditions/rules` và các kiểu dữ liệu ở `lib/data/rules/` giữ
-/// nguyên.
+/// Once there is a real server this file is replaced by a
+/// `GET /conditions/rules` call, and the types in `lib/data/rules/` stay as
+/// they are.
+///
+/// Note on language: every condition name, tag name and `note` below is data
+/// — the condition names key against `conditions.name_vi`, the tag names
+/// against `tags.name_vi`, and the notes are the verbatim text of
+/// `condition_rules.note`. The severity suffixes and the exclusion notes are
+/// shown to the user. All of them stay in Vietnamese.
 
-/// Một bệnh lý người dùng khai, kèm mức độ.
+/// One condition the user declared, with its severity.
 class UserCondition {
   const UserCondition(this.name, {this.severity = 'moderate'});
 
   final String name;
 
-  /// `mild` · `moderate` · `severe` — cột `user_conditions.severity`.
+  /// `mild` · `moderate` · `severe` — the `user_conditions.severity`
+  /// column.
   final String severity;
 
-  /// Mức của người dùng đạt tối thiểu [min] hay chưa.
+  /// Whether the user's severity reaches at least [min].
   ///
-  /// Quy tắc chỉ áp khi đạt `severity_min`. Bỏ qua cột này thì một người
-  /// tăng huyết áp mức nhẹ bị cắt đúng bằng một người mức nặng.
+  /// A rule only applies once `severity_min` is reached. Ignoring this column
+  /// would cut someone with mild hypertension exactly as much as someone with
+  /// the severe form.
   bool atLeast(String min) {
-    const thuTu = ['mild', 'moderate', 'severe'];
-    return thuTu.indexOf(severity) >= thuTu.indexOf(min);
+    const order = ['mild', 'moderate', 'severe'];
+    return order.indexOf(severity) >= order.indexOf(min);
   }
 }
 
-/// Ngưỡng **cứng theo ngày** của từng bệnh. Chỉ `amount`; phần đã dùng do
-/// [DayBudget.from] cộng.
+/// Each condition's **hard per-day** threshold. `amount` only; the used part
+/// is summed by [DayBudget.from].
 const List<({String condition, DayLimit limit, String severityMin})>
 _dayThresholds = [
   (
@@ -106,7 +114,8 @@ _dayThresholds = [
   ),
 ];
 
-/// Ràng buộc **mềm theo suất**. Vượt thì trừ điểm, không loại món.
+/// The **soft per-serving** constraints. Exceeding one costs score; it does
+/// not drop the dish.
 const List<({SoftRule rule, String severityMin})> _softRules = [
   (
     severityMin: 'mild',
@@ -166,10 +175,11 @@ const List<({SoftRule rule, String severityMin})> _softRules = [
   ),
 ];
 
-/// Quy tắc **nhãn**: loại mọi món mang nhãn này.
+/// The **tag** rules: drop every dish carrying this tag.
 ///
-/// Mức tin cậy luôn là [EvidenceLevel.definitional] — "dị ứng hải sản thì
-/// loại món có hải sản" không cần tổ chức nào công bố.
+/// The evidence level is always [EvidenceLevel.definitional] — "if you are
+/// allergic to seafood, drop dishes containing seafood" needs no organisation
+/// to publish it.
 const List<({String condition, String tag, String severityMin})> _tagRules = [
   (condition: 'Dị ứng hải sản', tag: 'Có hải sản', severityMin: 'mild'),
   (condition: 'Dị ứng đậu phộng', tag: 'Có đậu phộng', severityMin: 'mild'),
@@ -177,24 +187,25 @@ const List<({String condition, String tag, String severityMin})> _tagRules = [
   (condition: 'Gút', tag: 'Giàu purin', severityMin: 'moderate'),
 ];
 
-/// Ngưỡng cứng **và mềm** theo ngày đang áp cho người này.
+/// The per-day thresholds, hard **and** soft, that apply to this person.
 ///
-/// Trả về cả hai loại, phân biệt bằng [DayLimit.isHard]: gộp chúng lại sẽ
-/// biến một khuyến cáo thành một lệnh cấm.
+/// Both kinds are returned, told apart by [DayLimit.isHard]: merging them
+/// would turn a recommendation into a prohibition.
 List<DayLimit> dayThresholdsFor(List<UserCondition> conditions) => [
   for (final t in _dayThresholds)
     for (final c in conditions)
       if (c.name == t.condition && c.atLeast(t.severityMin)) t.limit,
 ];
 
-/// Ràng buộc mềm theo suất đang áp cho người này.
+/// The per-serving soft constraints that apply to this person.
 List<SoftRule> softRulesFor(List<UserCondition> conditions) => [
   for (final s in _softRules)
     for (final c in conditions)
       if (c.name == s.rule.condition && c.atLeast(s.severityMin)) s.rule,
 ];
 
-/// Lý do món bị loại vì **nhãn** — bậc [ExclusionTier.dish].
+/// The reason a dish is dropped over a **tag** — the [ExclusionTier.dish]
+/// tier.
 List<ExclusionReason> tagExclusionsFor(
   Food food,
   List<UserCondition> conditions,
@@ -218,11 +229,14 @@ String _severitySuffix(String severity) => switch (severity) {
   _ => '',
 };
 
-/// Mã bệnh lý trong [HealthProfile.conditions] → tên trong `conditions`.
+/// A condition code in [HealthProfile.conditions] → its name in
+/// `conditions`.
 ///
-/// Hai cách gọi cùng tồn tại: bước khai hồ sơ dùng mã không dấu, còn bộ quy
-/// tắc khóa theo `conditions.name_vi` vì đó là thứ hiện cho người dùng. Ánh
-/// xạ ở đúng một chỗ, và mã lạ bị bỏ qua chứ không dựng ra một bệnh rỗng.
+/// Two naming schemes coexist: the profile step uses unaccented codes, while
+/// the rule set is keyed on `conditions.name_vi` because that is what gets
+/// shown to the user. The mapping lives in exactly one place, and an
+/// unrecognised code is skipped rather than conjuring up an empty
+/// condition.
 const Map<String, String> conditionNameByCode = {
   'diabetes': 'Đái tháo đường',
   'hypertension': 'Tăng huyết áp',
@@ -238,13 +252,15 @@ const Map<String, String> conditionNameByCode = {
   'vegan': 'Ăn thuần chay',
 };
 
-/// Dựng danh sách bệnh lý từ các mã người dùng đã khai.
+/// Builds the condition list from the codes the user declared.
 ///
-/// Mức độ mặc định là `moderate` vì bước khai hồ sơ hiện **chưa hỏi mức**.
-/// Đây là giả định có hậu quả đo được: với Gút, mức `mild` không kích hoạt
-/// luật `Giàu purin` còn `moderate` thì loại 91 món. Chọn `moderate` là
-/// chọn phía an toàn hơn, và đó là lựa chọn phải nêu ra chứ không được để
-/// ngầm — khi bước khai hồ sơ có câu hỏi mức độ thì bỏ tham số này đi.
+/// The severity defaults to `moderate` because the profile step **does not
+/// ask for a severity yet**. This is an assumption with a measurable
+/// consequence: for gout, `mild` does not trigger the `Giàu purin` rule while
+/// `moderate` drops 91 dishes. Choosing `moderate` is choosing the safer
+/// side, and that is a choice that has to be stated rather than left
+/// implicit — once the profile step asks for a severity, drop this
+/// parameter.
 List<UserCondition> conditionsFromCodes(
   Iterable<String> codes, {
   String severity = 'moderate',

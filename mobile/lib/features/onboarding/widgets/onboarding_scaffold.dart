@@ -18,11 +18,12 @@ class OnboardingEditScope extends InheritedWidget {
   bool updateShouldNotify(OnboardingEditScope oldWidget) => false;
 }
 
-/// Khung chung cho mọi bước khai báo hồ sơ.
+/// The shared frame for every profile step.
 ///
-/// Bố cục cố định giúp người dùng không phải học lại mỗi màn: nút lùi và
-/// thanh tiến độ ở trên, câu hỏi lớn, dòng giải thích, phần nhập liệu ở giữa,
-/// và một nút hành động chiếm trọn bề ngang ở đáy. Chỉ phần giữa thay đổi.
+/// A fixed layout means the user does not have to learn each screen anew: the
+/// back button and the progress bar on top, the big question, the explanatory
+/// line, the input in the middle, and one full-width action button at the
+/// bottom. Only the middle changes.
 class OnboardingScaffold extends StatelessWidget {
   const OnboardingScaffold({
     super.key,
@@ -37,28 +38,29 @@ class OnboardingScaffold extends StatelessWidget {
     this.center = false,
   });
 
-  /// Tiến độ toàn luồng trong đoạn [0, 1].
+  /// Progress through the whole flow, in [0, 1].
   final double progress;
 
   final String title;
   final String? subtitle;
   final Widget child;
 
-  /// `null` thì nút lùi bị ẩn — dùng cho bước đầu tiên.
+  /// `null` hides the back button — used for the first step.
   final VoidCallback? onBack;
 
   final String actionLabel;
 
-  /// `null` thì nút hành động chuyển sang trạng thái mờ và không bấm được.
-  /// Dùng để chặn đi tiếp khi người dùng chưa chọn gì.
+  /// `null` puts the action button into its dimmed, untappable state. Used
+  /// to block going on while the user has chosen nothing.
   final VoidCallback? onAction;
 
-  /// Bật khi phần giữa cao hơn màn hình, ví dụ danh sách bệnh lý.
+  /// Switched on when the middle is taller than the screen, as with the
+  /// condition list.
   final bool scrollable;
 
-  /// Căn phần giữa vào chính giữa khoảng trống thay vì dán ngay dưới câu hỏi.
-  /// Bật cho bánh xe chọn số, tắt cho danh sách lựa chọn — danh sách đọc tự
-  /// nhiên hơn khi nằm sát câu hỏi.
+  /// Centres the middle in the free space instead of butting it up under
+  /// the question. On for the number wheel, off for an option list — a list
+  /// reads more naturally when it sits close to the question.
   final bool center;
 
   @override
@@ -84,8 +86,9 @@ class OnboardingScaffold extends StatelessWidget {
             Expanded(
               child: scrollable
                   ? SingleChildScrollView(
-                      // Chừa đáy rộng hơn để thẻ cuối cuộn lên khỏi nút hành
-                      // động, thay vì dừng đúng mép nút và trông như bị cắt.
+                      // A wider bottom inset so the last card scrolls
+                      // clear of the action button, rather than stopping at
+                      // its edge and looking cut off.
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                       child: Column(
                         children: [header, const SizedBox(height: 28), child],
@@ -119,10 +122,11 @@ class OnboardingScaffold extends StatelessWidget {
   }
 }
 
-/// Nút lùi và thanh tiến độ.
+/// The back button and the progress bar.
 ///
-/// Thanh chạy mượt giữa hai bước thay vì nhảy — người dùng thấy được mình vừa
-/// tiến bao nhiêu và còn bao xa, đó là thứ giữ họ đi hết một luồng dài.
+/// The bar animates smoothly between steps rather than jumping — the user can
+/// see how far they just advanced and how far is left, and that is what keeps
+/// them walking through a long flow.
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.progress, required this.onBack});
 
@@ -172,7 +176,8 @@ class _TopBar extends StatelessWidget {
                 ),
               ),
             ),
-          // Chừa khoảng đối xứng với nút lùi để thanh tiến độ nằm giữa.
+          // A gap symmetric with the back button, so the progress bar
+          // sits centred.
           const SizedBox(width: 24),
         ],
       ),

@@ -1,6 +1,10 @@
 import 'dart:math' as math;
 
-/// Giới tính — enum `gender` trong đặc tả API mục 5.1.
+/// Gender — the `gender` enum of API specification §5.1.
+///
+/// Note on language: the `label` of every enum in this file is text shown on
+/// screen, so it stays in Vietnamese; `code` is the value sent to the server
+/// and matched against the database ENUM, so it stays as it is too.
 enum Gender {
   male('male', 'Nam'),
   female('female', 'Nữ');
@@ -10,9 +14,9 @@ enum Gender {
   final String label;
 }
 
-/// Mức vận động và hệ số nhân TDEE tương ứng.
+/// The activity levels and their TDEE multipliers.
 ///
-/// Hệ số lấy từ `SYSTEM_ARCHITECTURE.md` mục 3.1.
+/// The factors come from `SYSTEM_ARCHITECTURE.md` §3.1.
 enum ActivityLevel {
   sedentary('sedentary', 'Ít vận động', 'Ngồi nhiều, hầu như không tập', 1.200),
   light('light', 'Vận động nhẹ', 'Tập 1–3 buổi mỗi tuần', 1.375),
@@ -32,7 +36,7 @@ enum ActivityLevel {
   final double factor;
 }
 
-/// Mục tiêu sức khỏe — quyết định cách điều chỉnh hạn mức năng lượng.
+/// The health goal — it decides how the energy target is adjusted.
 enum HealthGoal {
   loseWeight('lose_weight', 'Giảm cân', 'Ăn ít hơn mức tiêu hao'),
   maintain('maintain', 'Giữ cân', 'Cân bằng năng lượng vào và ra'),
@@ -48,15 +52,15 @@ enum HealthGoal {
   final String label;
   final String hint;
 
-  /// Chỉ hai mục tiêu này mới cần hỏi cân nặng mục tiêu.
+  /// Only these two goals need a target weight to be asked for.
   bool get needsTargetWeight =>
       this == HealthGoal.loseWeight || this == HealthGoal.gainWeight;
 }
 
-/// Hồ sơ sức khỏe người dùng khai báo trong luồng mở đầu.
+/// The health profile the user fills in during the onboarding flow.
 ///
-/// Các trường đều cho phép `null` vì hồ sơ được điền dần qua từng bước. Khi
-/// đi hết luồng thì mọi trường bắt buộc đã có giá trị.
+/// Every field is nullable because the profile is filled in step by step. By
+/// the end of the flow, all the required fields have a value.
 class HealthProfile {
   Gender? gender;
   DateTime? birthday;
@@ -66,30 +70,31 @@ class HealthProfile {
   HealthGoal? goal;
   ActivityLevel? activity;
 
-  /// Mã bệnh lý đã chọn, tra theo bảng `conditions`.
+  /// The selected condition codes, looked up in the `conditions` table.
   final Set<String> conditions = {};
 
-  /// Mã dị ứng và chế độ ăn bắt buộc.
+  /// The allergy codes and the mandatory diets.
   final Set<String> allergies = {};
 
-  /// Ngày coi là "hôm nay" khi tính tuổi. `null` nghĩa là lấy
+  /// The date treated as "today" when computing the age. `null` means use
   /// [DateTime.now].
   ///
-  /// Máy chủ tính cùng phép này theo múi giờ **Asia/Ho_Chi_Minh**
-  /// (`backend/Api/Time/DongHo.cs`), nên với người dùng ở Việt Nam thì
-  /// [DateTime.now] ở đây cho đúng cùng một ngày. Người dùng đang ở múi giờ
-  /// khác thì hai bên có thể lệch một ngày, và con số của máy chủ là con số
-  /// đúng — nó là thứ được ghi vào `health_profiles` và dùng để sinh thực
-  /// đơn.
+  /// The server computes the same thing in the **Asia/Ho_Chi_Minh** time zone
+  /// (`backend/Api/Time/Clock.cs`), so for a user in Vietnam [DateTime.now]
+  /// here gives the same day. For a user in another time zone the two can be
+  /// a day apart, and the server's number is the correct one — it is what
+  /// gets written into `health_profiles` and used to generate the meal plan.
   ///
-  /// Tồn tại để kiểm được. Tuổi phụ thuộc ngày chạy, nên một bộ ca thử cố
-  /// định ngày sinh **không** kiểm được bản này nếu nó luôn đọc đồng hồ hệ
-  /// thống: `test/buoc1_parity_test.dart` sẽ phải bỏ qua mọi ca mà tuổi tính
-  /// ra hôm nay khác tuổi trong tệp mẫu — tức là bỏ qua gần hết, gần như cả
-  /// năm, mà vẫn báo "All tests passed".
+  /// It exists so this can be checked at all. The age depends on the day the
+  /// code runs, so a fixed set of cases with fixed dates of birth **cannot**
+  /// check this implementation if it always reads the system clock:
+  /// `test/step1_parity_test.dart` would have to skip every case whose age
+  /// computed today differs from the age in the fixture — that is, skip
+  /// nearly all of them, for nearly the whole year, while still reporting
+  /// "All tests passed".
   ///
-  /// Đó đúng là kiểu hỏng mà bộ kiểm parity sinh ra để chặn: một phép so
-  /// ngừng so mà không ai thấy.
+  /// That is exactly the kind of failure the parity suite exists to stop: a
+  /// comparison that stops comparing without anyone noticing.
   DateTime? today;
 
   int? get age {
@@ -103,7 +108,7 @@ class HealthProfile {
     return years;
   }
 
-  /// Chỉ số khối cơ thể.
+  /// The body mass index.
   double? get bmi {
     final h = heightCm;
     final w = weightKg;
@@ -112,7 +117,7 @@ class HealthProfile {
     return w / (m * m);
   }
 
-  /// Chuyển hóa cơ bản theo công thức Mifflin-St Jeor.
+  /// The basal metabolic rate, by the Mifflin-St Jeor formula.
   double? get bmr {
     final h = heightCm;
     final w = weightKg;
@@ -123,7 +128,7 @@ class HealthProfile {
     return g == Gender.male ? base + 5 : base - 161;
   }
 
-  /// Tổng năng lượng tiêu hao trong ngày.
+  /// The total daily energy expenditure.
   double? get tdee {
     final b = bmr;
     final act = activity;
@@ -131,10 +136,10 @@ class HealthProfile {
     return b * act.factor;
   }
 
-  /// Hạn mức năng lượng theo mục tiêu.
+  /// The energy target for the goal.
   ///
-  /// Giảm cân trừ 500 kcal nhưng **không bao giờ xuống dưới BMR** — đây là
-  /// ràng buộc an toàn nêu trong `SYSTEM_ARCHITECTURE.md` mục 3.1.
+  /// Losing weight subtracts 500 kcal but **never goes below the BMR** — the
+  /// safety constraint stated in `SYSTEM_ARCHITECTURE.md` §3.1.
   double? get energyTarget {
     final t = tdee;
     final b = bmr;
@@ -147,29 +152,34 @@ class HealthProfile {
     };
   }
 
-  /// Phần trăm năng lượng của ba chất sinh năng lượng.
+  /// The percentage of the energy taken by each of the three energy-bearing
+  /// macronutrients.
   ///
-  /// Mặc định 15 / 60 / 25 — đúng bằng `DEFAULT` của ba cột
-  /// `health_profiles.target_protein_pct`, `target_carbs_pct`,
-  /// `target_fat_pct`. Cả ba đều nằm trong khoảng khuyến nghị của Viện Dinh
-  /// dưỡng Quốc gia (`SYSTEM_ARCHITECTURE.md` §3.1: đạm 13–20, bột đường
-  /// 55–65, béo 20–25) và cộng đúng 100.
+  /// The default is 15 / 60 / 25 — exactly the `DEFAULT` of the three columns
+  /// `health_profiles.target_protein_pct`, `target_carbs_pct` and
+  /// `target_fat_pct`. All three sit inside the National Institute of
+  /// Nutrition's recommended ranges (`SYSTEM_ARCHITECTURE.md` §3.1: protein
+  /// 13–20, carbohydrate 55–65, fat 20–25) and add up to exactly 100.
   ///
-  /// Bản trước cứng hóa 17 / 60 / 23 — cũng hợp lệ, và còn có lý do tốt hơn
-  /// (đó là điểm giữa ba khoảng). Nhưng ba cột trong CSDL là dữ liệu **của
-  /// từng người**: Backend đọc chúng ra và trả về trong
-  /// `GET /profile/nutrition-targets`, nên một bộ ba cứng hóa khác ở đây làm
-  /// ứng dụng tính ra hạn mức khác với hạn mức mà máy chủ vừa gửi — và không
-  /// có gì báo ra. Sửa một dòng trong CSDL cũng sẽ không có tác dụng gì.
+  /// An earlier version hard-coded 17 / 60 / 23 — also valid, and with a
+  /// better rationale even (those are the midpoints of the three ranges). But
+  /// the three columns in the database are **per-user** data: the backend
+  /// reads them out and returns them from
+  /// `GET /profile/nutrition-targets`, so a different hard-coded triple here
+  /// makes the app compute a different target from the one the server just
+  /// sent — with nothing to report it. Editing a row in the database would
+  /// also have no effect at all.
   ///
-  /// Ba trường này cho phép ghi đè khi đã đồng bộ hồ sơ từ máy chủ.
+  /// These three fields can be overwritten once the profile has been synced
+  /// from the server.
   int proteinPct = 15;
   int carbsPct = 60;
   int fatPct = 25;
 
-  /// Phân bổ ba chất sinh năng lượng theo gram.
+  /// The three energy-bearing macronutrients split into grams.
   ///
-  /// 4 kcal/g cho đạm và bột đường, 9 kcal/g cho béo — hệ số Atwater.
+  /// 4 kcal/g for protein and carbohydrate, 9 kcal/g for fat — the Atwater
+  /// factors.
   ({double protein, double carb, double fat})? get macroTarget {
     final e = energyTarget;
     if (e == null) return null;
@@ -180,7 +190,7 @@ class HealthProfile {
     );
   }
 
-  /// Chênh lệch giữa cân nặng hiện tại và cân nặng mục tiêu.
+  /// The gap between the current weight and the target weight.
   double? get weightDelta {
     final w = weightKg;
     final t = targetWeightKg;

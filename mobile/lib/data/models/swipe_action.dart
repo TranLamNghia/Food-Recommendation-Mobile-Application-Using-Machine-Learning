@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 
-/// Bốn hành động vuốt trong phiên khảo sát khẩu vị.
+/// The four swipe actions of the taste survey session.
 ///
-/// Giá trị `label` là nhãn ưa thích quy về đoạn [0, 1] dùng cho huấn luyện.
-/// Riêng [unknown] không có nhãn — mẫu này bị loại khỏi tập huấn luyện.
+/// The `label` value is the preference label mapped onto [0, 1] for training.
+/// [unknown] alone has no label — that sample is dropped from the training
+/// set.
+///
+/// Note on language: `title` and `hint` are text shown on screen, so they
+/// stay in Vietnamese; `code` is the value sent to the server, so it stays
+/// too.
 enum SwipeAction {
   like(
     code: 'like',
@@ -54,20 +59,23 @@ enum SwipeAction {
     required this.label,
   });
 
-  /// Mã gửi lên máy chủ — trùng với enum trong đặc tả API mục 5.3.
+  /// The code sent to the server — matches the enum in API specification
+  /// §5.3.
   final String code;
   final String title;
   final String hint;
   final IconData icon;
 
-  /// Màu dùng cho chữ và nút — đã chỉnh cho đọc được trên nền sáng.
+  /// The colour used for text and buttons — adjusted to stay readable on a
+  /// light background.
   final Color color;
 
-  /// Màu nguyên bản của vùng hướng trong Figma, dùng cho hạt bay và dải sáng
-  /// ở rìa. Mấy màu này rất tươi nên chỉ hợp làm hiệu ứng, không hợp làm chữ.
+  /// The original colour of the direction area in Figma, used for the flying
+  /// particles and the edge glow. These are very vivid, so they suit effects
+  /// only, not text.
   final Color burst;
 
-  /// Nhãn ưa thích trong đoạn [0, 1]; `null` nghĩa là loại khỏi tập huấn luyện.
+  /// The preference label in [0, 1]; `null` means drop from the training set.
   final double? label;
 
   bool get isHorizontal =>

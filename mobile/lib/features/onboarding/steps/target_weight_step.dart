@@ -4,10 +4,11 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/value_wheel.dart';
 
-/// Bước 6 — cân nặng mục tiêu.
+/// Step 6 — the target weight.
 ///
-/// Chỉ hiện khi mục tiêu là tăng hoặc giảm cân. Người chọn "giữ cân" hay "ăn
-/// uống lành mạnh" không có con số này, hỏi thêm chỉ tổ làm luồng dài ra.
+/// Shown only when the goal is to gain or lose weight. Someone who chose
+/// "maintain" or "healthy eating" has no such figure, and asking anyway only
+/// makes the flow longer.
 class TargetWeightStep extends StatefulWidget {
   const TargetWeightStep({
     super.key,

@@ -2,32 +2,39 @@ import 'dart:math' as math;
 
 import '../models/food.dart';
 
-/// Biểu diễn món ăn thành vector đặc trưng số.
+/// Turns a dish into a numeric feature vector.
 ///
-/// Đây là bước **trích chọn đặc trưng** nêu trong đề cương. Mỗi món được quy
-/// về một điểm trong không gian nhiều chiều, để hai món "giống nhau" nằm gần
-/// nhau và độ tương đồng giữa chúng đo được bằng góc.
+/// This is the **feature extraction** step described in the thesis proposal.
+/// Each dish is reduced to a point in a many-dimensional space, so that two
+/// "similar" dishes sit close together and the similarity between them can be
+/// measured as an angle.
 ///
-/// Vector gồm bốn khối, ghép nối tiếp:
+/// The vector is four blocks concatenated:
 ///
-/// | Khối | Số chiều | Nội dung |
+/// | Block | Dimensions | Content |
 /// |---|---|---|
-/// | Dinh dưỡng | 4 | tỷ lệ đạm – bột đường – béo, và năng lượng chuẩn hóa |
-/// | Vị ngọt | 1 | `sugarConcentration` — đường trên gam món, **đo được** |
-/// | Vị mặn | 1 | natri chuẩn hóa min–max, **đo được** |
-/// | Chất xơ | 1 | xơ chuẩn hóa min–max, **đo được** |
-/// | Mức cay | 1 | `spiceLevel / 3` — **người nhập đánh giá** |
-/// | Nhóm thực phẩm | n | mã hóa one-hot |
+/// | Nutrition | 4 | the protein – carbohydrate – fat shares, and normalised energy |
+/// | Sweetness | 1 | `sugarConcentration` — sugar per gram of dish, **measured** |
+/// | Saltiness | 1 | min–max normalised sodium, **measured** |
+/// | Fibre | 1 | min–max normalised fibre, **measured** |
+/// | Spice level | 1 | `spiceLevel / 3` — **rated by whoever entered it** |
+/// | Food group | n | one-hot encoded |
 ///
-/// Khối nhóm thực phẩm **gánh luôn phương pháp chế biến** mà đề cương nêu:
-/// phần lớn nhóm món của hệ thống chính là cách chế biến — `mon_chien` là
-/// chiên, `mon_nuong` là nướng, `mon_xao` là xào. Nên không có khối one-hot
-/// riêng cho cách chế biến; xem chú thích ở `length`.
+/// The food-group block **also carries the cooking method** the proposal
+/// mentions: most of the system's food groups ARE a cooking method —
+/// `mon_chien` is fried, `mon_nuong` is grilled, `mon_xao` is stir-fried. So
+/// there is no separate one-hot block for the cooking method; see the note on
+/// `length`.
 ///
-/// Ba chiều macro đã tự nằm trong đoạn [0, 1] và cộng lại bằng 1 nên không
-/// cần chuẩn hóa thêm. Riêng năng lượng có đơn vị kcal với khoảng giá trị
-/// hàng trăm, nếu để nguyên nó sẽ át toàn bộ các chiều còn lại khi tính
-/// khoảng cách — nên phải đưa về [0, 1] bằng min-max trên chính tập món.
+/// The three macro dimensions already lie in [0, 1] and add up to 1, so they
+/// need no further normalisation. Energy, though, is in kcal with a range in
+/// the hundreds; left as it is, it would swamp every other dimension in a
+/// distance calculation — so it has to be brought into [0, 1] by min-max over
+/// the dish set itself.
+///
+/// Note on language: the strings in [labels] are data shared with
+/// `ml/features.py`'s `FIXED_LABELS`, and `food_vector_parity_test.dart`
+/// compares them dimension by dimension, so they stay in Vietnamese.
 class FoodVectorSpace {
   FoodVectorSpace._({
     required this.categories,
@@ -41,13 +48,13 @@ class FoodVectorSpace {
     required this.maxFiber,
   });
 
-  /// Dựng không gian đặc trưng từ một tập món.
+  /// Builds the feature space from a set of dishes.
   ///
-  /// Danh mục và phương pháp chế biến được **suy ra từ dữ liệu** chứ không
-  /// liệt kê cứng, để khi tập món mở rộng thì vector tự dài ra theo. Cả hai
-  /// đều sắp xếp lại để thứ tự chiều ổn định giữa các lần chạy — nếu thứ tự
-  /// đổi theo thứ tự duyệt, vector lưu ở lần trước sẽ không còn so được với
-  /// vector dựng ở lần sau.
+  /// The catalogue and the cooking methods are **inferred from the data**
+  /// rather than listed by hand, so the vector grows by itself as the dish
+  /// set grows. Both are sorted so the dimension order is stable between
+  /// runs — if the order followed iteration order, a vector stored on one run
+  /// could no longer be compared with a vector built on the next.
   factory FoodVectorSpace.fromFoods(List<Food> foods) {
     final categories = foods.map((f) => f.category).toSet().toList()..sort();
 
@@ -89,7 +96,8 @@ class FoodVectorSpace {
   final double minKcal;
   final double maxKcal;
 
-  /// Biên nồng độ đường (g đường trên g món) — xem `Food.sugarConcentration`.
+  /// The sugar-concentration bounds (g of sugar per g of dish) — see
+  /// `Food.sugarConcentration`.
   final double minSugar;
   final double maxSugar;
   final double minSodium;
@@ -97,42 +105,51 @@ class FoodVectorSpace {
   final double minFiber;
   final double maxFiber;
 
-  /// Số chiều: 4 dinh dưỡng + 1 ngọt + 1 mặn + 1 xơ + 1 cay + one-hot nhóm.
+  /// The dimension count: 4 nutrition + 1 sweet + 1 salty + 1 fibre + 1 spice
+  /// + the group one-hot.
   ///
-  /// Vị ngọt và vị mặn lấy từ `sugar_g` và `sodium_mg` — hai đại lượng **có
-  /// trong bảng thành phần thực phẩm**, khác với mức cay là đánh giá chủ quan
-  /// của người nhập. Không có chiều cho vị chua và vị đắng vì không nguồn nào
-  /// công bố chúng; thêm cột số cho chúng là tạo ra độ chính xác giả.
+  /// Sweetness and saltiness come from `sugar_g` and `sodium_mg` — two
+  /// quantities that are **in the food composition table**, unlike the spice
+  /// level, which is a subjective rating by whoever entered the data. There
+  /// is no dimension for sourness or bitterness because no source publishes
+  /// them; adding a numeric column for them would manufacture false
+  /// precision.
   ///
-  /// Không có khối one-hot riêng cho cách chế biến, nhưng **tín hiệu đó
-  /// không mất** — nhóm món đã mang nó (nhóm `Món chiên` thì cách chế biến
-  /// là chiên), nên hai khối one-hot gần như trùng nhau.
+  /// There is no separate one-hot block for the cooking method, but **that
+  /// signal is not lost** — the food group already carries it (a dish in the
+  /// `Món chiên` group is fried), so the two one-hot blocks would be almost
+  /// identical.
   ///
-  /// Quan trọng hơn, hai trục độc lập cho phép dữ liệu tự mâu thuẫn: mì tôm
-  /// nấu nước và mì tôm xào khô là hai món khác nhau với dinh dưỡng khác
-  /// nhau, không phải một món với hai cách chế biến. Tách rời thì không gì
-  /// ngăn một món thuộc nhóm `Món nước` lại mang cách chế biến `xao`.
-  /// Vì sao có chiều chất xơ. Khẩu vị không phải thứ duy nhất quyết định
-  /// chất lượng gợi ý: người dùng có thể **muốn ăn nhiều chất xơ**. Không có
-  /// chiều này thì sở thích đó không biểu diễn được trong vector ưa thích
-  /// Rocchio, và bộ gợi ý chỉ bắt được nó gián tiếp qua nhóm món.
+  /// More importantly, two independent axes would let the data contradict
+  /// itself: instant noodles in broth and dry stir-fried instant noodles are
+  /// two different dishes with different nutrition, not one dish with two
+  /// cooking methods. Kept apart, nothing would stop a dish in the `Món nước`
+  /// group from carrying the cooking method `xao`.
   ///
-  /// Đo trên 305 món thật, mô phỏng người dùng thích 10 món giàu xơ nhất rồi
-  /// chấm điểm cosin cho phần còn lại:
+  /// Why there is a fibre dimension. Taste is not the only thing that decides
+  /// the quality of a recommendation: a user may **want to eat more fibre**.
+  /// Without this dimension that preference cannot be represented in the
+  /// Rocchio preference vector, and the recommender would only catch it
+  /// indirectly through the food group.
   ///
-  /// | Vector | Chất xơ trung bình của top-20 |
+  /// Measured over 305 real dishes, simulating a user who likes the 10
+  /// highest-fibre dishes and then scoring the rest by cosine:
+  ///
+  /// | Vector | Mean fibre of the top 20 |
   /// |---|---|
-  /// | Cả danh mục | 1,75 g |
-  /// | Không có chiều xơ | 2,97 g — thu hẹp 41,7 % |
-  /// | Có chiều xơ | 3,50 g — thu hẹp 59,7 % |
-  /// | Mốc lý tưởng (20 món xơ nhất) | 4,67 g |
+  /// | The whole catalogue | 1.75 g |
+  /// | Without the fibre dimension | 2.97 g — 41.7 % of the gap closed |
+  /// | With the fibre dimension | 3.50 g — 59.7 % closed |
+  /// | The ideal reference (the 20 highest-fibre dishes) | 4.67 g |
   ///
-  /// Lưu ý phạm vi: chiều này phục vụ sở thích **suy ra từ hành vi**. Một
-  /// mục tiêu do người dùng tự khai — "tôi cần 25 g xơ mỗi ngày" — là đại
-  /// lượng **theo ngày**, thuộc về Bước 4 chứ không phải phép đo góc ở đây.
+  /// A note on scope: this dimension serves a preference **inferred from
+  /// behaviour**. A goal the user states themselves — "I need 25 g of fibre a
+  /// day" — is a **per-day** quantity and belongs to Step 4, not to the angle
+  /// measurement here.
   int get length => 8 + categories.length;
 
-  /// Nhãn của từng chiều, dùng khi cần giải thích vì sao một món được gợi ý.
+  /// Each dimension's label, used when the recommendation has to be
+  /// explained.
   List<String> get labels => [
     'Tỷ lệ đạm',
     'Tỷ lệ bột đường',
@@ -145,20 +162,24 @@ class FoodVectorSpace {
     ...categories.map((c) => 'Nhóm: $c'),
   ];
 
-  /// Chiều ứng với một chất dinh dưỡng đơn lẻ, hoặc `null` nếu chất đó không
-  /// có chiều riêng.
+  /// The dimension matching a single nutrient, or `null` when that nutrient
+  /// has no dimension of its own.
   ///
-  /// Dùng khi người dùng **tự khai một mục tiêu** — "tôi muốn ăn nhiều chất
-  /// xơ" — để nhúng mục tiêu đó thẳng vào vector ưa thích, xem
+  /// Used when the user **states a goal** — "I want to eat more fibre" — to
+  /// embed that goal straight into the preference vector; see
   /// `PreferenceProfile.withNutrientGoals`.
   ///
-  /// Tra theo **nhãn** chứ không trả về chỉ số cứng: nhãn và chiều luôn đi
-  /// cùng nhau, nên chèn thêm một chiều ở giữa sẽ không làm hàm này trỏ sai.
+  /// It looks up by **label** rather than returning a hard-coded index: the
+  /// label and the dimension always travel together, so inserting another
+  /// dimension in the middle cannot make this function point at the wrong
+  /// one.
   ///
-  /// Chỉ ba chất có mặt ở đây. Ba chiều macro **cố tình không** có, vì chúng
-  /// là **tỷ lệ cộng lại bằng 1**: đẩy tỷ lệ đạm lên đồng nghĩa với dìm tỷ lệ
-  /// bột đường và béo xuống, không phải cùng một ý với "tôi muốn ăn nhiều
-  /// đạm hơn". Một mục tiêu về lượng đạm thuộc về hạn mức theo ngày ở Bước 4.
+  /// Only three nutrients are here. The three macro dimensions are
+  /// **deliberately** absent, because they are **shares that add up to 1**:
+  /// pushing the protein share up necessarily pushes the carbohydrate and fat
+  /// shares down, which is not the same thing as "I want to eat more
+  /// protein". A goal about the amount of protein belongs to the per-day
+  /// allowance at Step 4.
   int? dimensionOfNutrient(String nutrient) {
     const labelOf = {
       'sugar_g': 'Vị ngọt',
@@ -190,45 +211,47 @@ class FoodVectorSpace {
     return v;
   }
 
-  /// Chuẩn hóa min-max. Khi cả tập chỉ có một mức năng lượng thì mẫu số bằng
-  /// 0, lúc đó trả về 0,5 để chiều này không đóng góp lệch về bên nào.
+  /// Min-max normalisation. When the whole set has only one energy value the
+  /// denominator is 0, and 0.5 is returned so this dimension does not lean
+  /// either way.
   double _normalizeKcal(double kcal) {
     final range = maxKcal - minKcal;
     if (range <= 0) return 0.5;
     return ((kcal - minKcal) / range).clamp(0.0, 1.0);
   }
 
-  /// Chuẩn hóa nồng độ đường về `[0,1]` theo min–max của tập món, cùng cách
-  /// với natri: "ngọt" cũng là khái niệm tương đối trong phạm vi tập món.
+  /// Normalises the sugar concentration into `[0,1]` by the dish set's
+  /// min–max, the same way as sodium: "sweet" is also a relative notion
+  /// within the dish set.
   double _normalizeSugar(double conc) {
     if (maxSugar <= minSugar) return 0.5;
     return ((conc - minSugar) / (maxSugar - minSugar)).clamp(0.0, 1.0);
   }
 
-  /// Chuẩn hóa natri về `[0,1]` theo min–max của tập món.
+  /// Normalises sodium into `[0,1]` by the dish set's min–max.
   ///
-  /// Dùng cùng cách với năng lượng thay vì một ngưỡng cố định, vì "mặn" là
-  /// khái niệm tương đối trong phạm vi tập món đang có.
+  /// The same approach as for energy rather than a fixed threshold, because
+  /// "salty" is a relative notion within the dish set at hand.
   double _normalizeSodium(double sodium) {
     if (maxSodium <= minSodium) return 0.5;
     return ((sodium - minSodium) / (maxSodium - minSodium)).clamp(0.0, 1.0);
   }
 
-  /// Chuẩn hóa chất xơ về `[0,1]` theo min–max của tập món, cùng cách với
-  /// natri: "nhiều xơ" cũng là khái niệm tương đối trong phạm vi tập món.
+  /// Normalises fibre into `[0,1]` by the dish set's min–max, the same way as
+  /// sodium: "high fibre" is also a relative notion within the dish set.
   double _normalizeFiber(double fiber) {
     if (maxFiber <= minFiber) return 0.5;
     return ((fiber - minFiber) / (maxFiber - minFiber)).clamp(0.0, 1.0);
   }
 }
 
-/// Độ tương đồng cosin giữa hai vector cùng số chiều.
+/// The cosine similarity between two vectors of the same length.
 ///
-/// Trả về giá trị trong đoạn [-1, 1]. Khi một trong hai vector có độ dài 0
-/// thì góc không xác định — trả về 0 để món đó nhận điểm trung tính thay vì
-/// làm hỏng phép chia.
+/// Returns a value in [-1, 1]. When either vector has length 0 the angle is
+/// undefined — 0 is returned so that dish gets a neutral score rather than
+/// breaking the division.
 double cosineSimilarity(List<double> a, List<double> b) {
-  assert(a.length == b.length, 'Hai vector phải cùng số chiều');
+  assert(a.length == b.length, 'The two vectors must have the same length');
 
   var dot = 0.0;
   var normA = 0.0;

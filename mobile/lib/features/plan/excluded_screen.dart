@@ -7,13 +7,16 @@ import '../../data/rules/condition_rule.dart';
 import '../../data/rules/dish_screening.dart';
 import 'widgets/day_budget_card.dart' show nutrientLabel;
 
-/// Những món bị bỏ khỏi gợi ý, **nhóm theo ba bậc lý do**.
+/// The dishes dropped from the recommendations, **grouped by the three
+/// reason tiers**.
 ///
-/// Bậc giữa là chỗ dễ nói sai nhất, và cũng là lý do màn này tồn tại. Nếu
-/// hiện "Phở sốt vang bị loại" giống kiểu "Tôm rang me bị loại", người dùng
-/// sẽ tin phở là món cấm với mình — trong khi lý do thật chỉ là sáng nay họ
-/// đã ăn mặn. Một món bị chặn vì hạn mức thì **hôm khác vẫn chọn được**, và
-/// câu đó phải nằm trên màn hình chứ không nằm trong đầu người viết mã.
+/// The middle tier is the easiest one to describe wrongly, and it is why this
+/// screen exists. Showing "Phở sốt vang was dropped" the same way as "Tôm
+/// rang me was dropped" leaves the user believing phở is forbidden for them —
+/// when the real reason is only that they ate something salty this morning. A
+/// dish blocked by an allowance **is selectable on another day**, and that
+/// sentence has to be on the screen rather than in the head of whoever wrote
+/// the code.
 class ExcludedScreen extends StatelessWidget {
   const ExcludedScreen({
     super.key,
@@ -23,7 +26,7 @@ class ExcludedScreen extends StatelessWidget {
 
   final ScreeningResult screening;
 
-  /// Danh mục để tra tên món theo `id`.
+  /// The catalogue, for looking up a dish name by `id`.
   final List<Food> foods;
 
   static Future<void> open(
@@ -89,11 +92,12 @@ class ExcludedScreen extends StatelessWidget {
   }
 }
 
-/// Màu và chữ dẫn của mỗi bậc.
+/// Each tier's colour and leading text.
 ///
-/// Ba bậc phân biệt bằng **ba kênh** cùng lúc: màu viền, hình biểu tượng, và
-/// câu dẫn. Chỉ dùng màu thì người mù màu mất hẳn thông tin, mà đây là thông
-/// tin về sức khỏe.
+/// The three tiers are distinguished through **three channels** at once: the
+/// border colour, the icon shape and the leading sentence. Colour alone would
+/// lose the information entirely for a colour-blind reader, and this is
+/// health information.
 ({Color color, IconData icon, String lead}) _tierStyle(ExclusionTier tier) =>
     switch (tier) {
       ExclusionTier.dish => (
@@ -242,8 +246,9 @@ class _ExcludedRow extends StatelessWidget {
                 ),
             ],
           ),
-          // Mọi lý do đều nêu, không chỉ lý do đầu: sửa được một luật chưa
-          // chắc món đó hợp, nên nêu một cái là để người dùng hiểu sai.
+          // Every reason is listed, not just the first: fixing one rule
+          // does not make the dish acceptable, so listing only one would
+          // leave the user with the wrong impression.
           for (final r in reasons) ...[
             const SizedBox(height: 5),
             _ReasonLine(reason: r),
@@ -321,8 +326,9 @@ class _ReasonLine extends StatelessWidget {
 
     final ten = nutrientLabel(r.nutrient ?? '').toLowerCase();
 
-    // Thiếu số liệu KHÁC vượt ngưỡng. Nói "món này vượt ngưỡng" khi thật ra
-    // là "chúng tôi không biết" là sai sự thật.
+    // Missing data is NOT the same as exceeding a threshold. Saying "this
+    // dish exceeds a limit" when the truth is "we do not know" is a false
+    // statement.
     if (r.missingData) {
       return [
         const TextSpan(text: 'Không có số liệu '),

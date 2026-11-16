@@ -4,12 +4,12 @@ import '../../../core/format.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/rules/day_budget.dart';
 
-/// Hạn mức còn lại của hôm nay.
+/// What is left of today's allowances.
 ///
-/// Đặt trên màn thực đơn, **trước** khi nó chặn món nào. Một ràng buộc phụ
-/// thuộc trạng thái mà chỉ xuất hiện lúc báo lỗi thì luôn làm người ta bất
-/// ngờ: nếu người dùng chỉ thấy "món này bị loại" sau khi đã ăn mặn cả buổi
-/// sáng, họ không có cách nào hiểu vì sao.
+/// Placed on the plan screen **before** it blocks anything. A state-dependent
+/// constraint that only appears at the moment it rejects something always
+/// takes people by surprise: a user who only sees "this dish was dropped"
+/// after a salty morning has no way of understanding why.
 class DayBudgetCard extends StatelessWidget {
   const DayBudgetCard({super.key, required this.budget, this.isToday = true});
 
@@ -46,8 +46,9 @@ class DayBudgetCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                // Tiêu đề theo nội dung thật: chỉ có ngưỡng mềm thì không
-                // có "hạn mức còn lại" nào, chỉ có khuyến cáo.
+                // The heading follows the real content: with only soft
+                // thresholds there is no "allowance left" at all, only a
+                // recommendation.
                 hard.isEmpty
                     ? (isToday ? 'Khuyến cáo hôm nay' : 'Khuyến cáo trong ngày')
                     : (isToday
@@ -146,12 +147,12 @@ class _LimitBar extends StatelessWidget {
   }
 }
 
-/// Xuất xứ của ngưỡng, kèm dấu phân biệt mức tin cậy.
+/// The threshold's provenance, with a marker for its evidence level.
 ///
-/// Một ứng dụng sức khỏe dẫn khuyến cáo của WHO và một con số chưa ai tra
-/// bằng cùng một giọng là không trung thực, nên mức tin cậy phải nhìn thấy
-/// được — và không chỉ bằng màu: mỗi mức có **chữ** riêng, vì màu một mình
-/// thì người mù màu không đọc được.
+/// A health app quoting a WHO recommendation and a number nobody has checked
+/// in the same voice is not honest, so the evidence level has to be visible —
+/// and not through colour alone: each level has its own **wording**, because
+/// colour by itself is unreadable to a colour-blind user.
 class _EvidenceLine extends StatelessWidget {
   const _EvidenceLine({required this.limit});
 
@@ -192,12 +193,12 @@ class _EvidenceLine extends StatelessWidget {
   }
 }
 
-/// Cảnh báo rằng con số phía trên **nới hơn thực tế**.
+/// Warns that the number above is **more permissive than reality**.
 ///
-/// Bảng thành phần chỉ công bố purin cho 70 trong 318 món. Cộng những món
-/// khuyết thành 0 rồi hiện một con số trông bình thường sẽ làm trần purin
-/// của người gút gần như không bao giờ chạm tới — một tầng an toàn thất bại
-/// theo hướng **mở** mà không báo gì.
+/// The composition table only publishes purine for 70 of 318 dishes. Adding
+/// the ones with no data up as 0 and showing a normal-looking number would
+/// mean a gout patient's purine ceiling is almost never reached — a safety
+/// layer failing **open** with no warning.
 class _IncompleteDataLine extends StatelessWidget {
   const _IncompleteDataLine({required this.limit});
 
@@ -240,7 +241,8 @@ class _IncompleteDataLine extends StatelessWidget {
   }
 }
 
-/// Hạn mức **mềm** đã bị vượt — "vượt khuyến cáo", không phải "bị loại".
+/// A **soft** allowance already exceeded — "over the recommendation",
+/// not "excluded".
 class _SoftOverRow extends StatelessWidget {
   const _SoftOverRow({required this.limit});
 
@@ -290,7 +292,7 @@ class _SoftOverRow extends StatelessWidget {
   }
 }
 
-/// Tên chất để hiện ra, từ tên cột trong CSDL.
+/// The nutrient's display name, from its column name in the database.
 String nutrientLabel(String nutrient) => switch (nutrient) {
   'calories_kcal' => 'Năng lượng',
   'protein_g' => 'Đạm',

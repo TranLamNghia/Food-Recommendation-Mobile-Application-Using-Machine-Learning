@@ -4,20 +4,21 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/swipe_action.dart';
 
-/// Lớp phủ hiện lên trên thẻ trong lúc vuốt.
+/// The overlay that appears over the card while it is being swiped.
 ///
-/// Ba thứ chạy cùng lúc, tất cả đều bám theo [progress] chứ không phải chạy
-/// theo thời gian — nhờ vậy người dùng thấy thẻ phản hồi tức thì theo ngón
-/// tay, và biết chính xác khi nào cú vuốt đã đủ ngưỡng:
-/// 1. một lớp màu mỏng phủ toàn thẻ,
-/// 2. viền sáng dày dần,
-/// 3. con dấu (icon + chữ) phóng to và xoay nhẹ vào vị trí.
+/// Three things run at once, all driven by [progress] rather than by time —
+/// which is what makes the card respond instantly to the finger and shows
+/// exactly when the swipe has reached its threshold:
+/// 1. a thin colour wash over the whole card,
+/// 2. a glowing border that thickens,
+/// 3. the stamp (icon + text) scaling up and rotating gently into place.
 class SwipeOverlay extends StatelessWidget {
   const SwipeOverlay({super.key, required this.action, required this.progress});
 
   final SwipeAction? action;
 
-  /// Mức độ hoàn thành cú vuốt trong đoạn [0, 1]; 1 nghĩa là đã đủ ngưỡng.
+  /// How complete the swipe is, in [0, 1]; 1 means the threshold is
+  /// reached.
   final double progress;
 
   @override
@@ -26,16 +27,19 @@ class SwipeOverlay extends StatelessWidget {
     if (act == null || progress <= 0.01) return const SizedBox.shrink();
 
     final t = progress.clamp(0.0, 1.0);
-    // Con dấu xuất hiện muộn hơn lớp màu một chút để không che thẻ quá sớm.
+    // The stamp appears a little later than the colour wash, so it does
+    // not cover the card too early.
     final stampT = ((t - 0.12) / 0.55).clamp(0.0, 1.0);
 
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Bo góc bám theo thẻ: 12 trên khổ gốc rộng 198 của bản thiết kế.
+          // The corner radius tracks the card: 12 on the design's
+          // original 198 width.
           final radius = constraints.maxWidth / 198 * 12;
-          // Con dấu cũng co giãn theo thẻ, nếu không nó sẽ tràn ra ngoài
-          // khi thẻ chỉ rộng bằng nửa màn hình như trong bản thiết kế.
+          // The stamp scales with the card too; otherwise it would spill
+          // over the edge when the card is only half the screen wide, as in
+          // the design.
           final scale = constraints.maxWidth / 198;
 
           return Stack(
@@ -78,15 +82,17 @@ class SwipeOverlay extends StatelessWidget {
     );
   }
 
-  /// Con dấu luôn đặt ở phần thẻ **ngược hướng vuốt**, vì đó là phần còn nằm
-  /// trong khung nhìn khi thẻ đã trôi đi: vuốt phải thì mép trái còn thấy,
-  /// vuốt lên thì mép dưới còn thấy. Đặt cùng hướng vuốt sẽ bị vùng cắt của
-  /// chồng thẻ che mất đúng lúc người dùng cần đọc nó nhất.
+  /// The stamp always sits on the side of the card **opposite the swipe**,
+  /// because that is the part still in view once the card has travelled:
+  /// swipe right and the left edge is still visible, swipe up and the bottom
+  /// edge is. Placed on the swipe side, the deck's clip would hide it exactly
+  /// when the user most needs to read it.
   Alignment _stampAlignment(SwipeAction action) => switch (action) {
     SwipeAction.like => Alignment.topLeft,
     SwipeAction.dislike => Alignment.topRight,
-    // Đặt cao hơn đáy thẻ một chút: khối tên món chiếm 29 % dưới cùng, dán
-    // con dấu sát đáy sẽ che mất tên món đúng lúc người dùng đang cân nhắc.
+    // Sits a little above the card's bottom: the dish-name block takes the
+    // lowest 29 %, and pinning the stamp to the bottom would hide the name
+    // exactly while the user is weighing it up.
     SwipeAction.neutral => const Alignment(0, 0.28),
     SwipeAction.unknown => Alignment.topCenter,
   };
@@ -108,11 +114,11 @@ class _Stamp extends StatelessWidget {
 
   final SwipeAction action;
 
-  /// Hệ số co giãn so với khổ thẻ gốc rộng 198 trong Figma.
+  /// The scale factor against the card's original 198 width in Figma.
   final double scale;
 
-  /// Khi cú vuốt đã vượt ngưỡng, con dấu chuyển sang nền đặc — tín hiệu
-  /// thị giác cho biết thả tay ra là ăn chắc.
+  /// Once the swipe is past the threshold the stamp switches to a solid
+  /// background — the visual signal that letting go will register.
   final bool filled;
 
   @override

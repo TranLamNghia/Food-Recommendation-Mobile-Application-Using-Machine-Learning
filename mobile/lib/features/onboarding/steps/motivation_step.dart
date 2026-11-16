@@ -6,11 +6,11 @@ import '../../../core/theme/app_motion.dart';
 import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 
-/// Bước cuối — màn xác nhận mục tiêu.
+/// The last step — the goal confirmation screen.
 ///
-/// Không hỏi thêm gì, chỉ đọc lại cho người dùng nghe điều họ vừa chọn, dưới
-/// dạng một con số lớn. Đây là chỗ luồng dài chín bước được đền đáp: người
-/// dùng thấy đích của mình thành hình trước khi bước tiếp.
+/// It asks nothing further; it just reads back what the user chose, as one
+/// large number. This is where the nine-step flow pays off: the user sees
+/// their own target take shape before moving on.
 class MotivationStep extends StatelessWidget {
   const MotivationStep({
     super.key,
@@ -25,11 +25,11 @@ class MotivationStep extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback onNext;
 
-  /// Con số nổi bật và phần chữ hai bên nó.
+  /// The headline number and the words either side of it.
   ///
-  /// Mục tiêu tăng hoặc giảm cân thì con số là số cân chênh lệch. Hai mục
-  /// tiêu còn lại không có con số cân nặng nào có nghĩa, nên lấy hạn mức năng
-  /// lượng hằng ngày thay thế.
+  /// For a gain or lose goal the number is the weight difference. The other
+  /// two goals have no meaningful weight figure, so the daily energy target
+  /// stands in for it.
   ({String before, double value, String unit, String after}) get _headline {
     final goal = profile.goal;
     final delta = profile.weightDelta;

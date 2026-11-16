@@ -4,22 +4,27 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/option_card.dart';
 
-/// Hai bước khai báo ràng buộc sức khỏe dùng chung một màn hình.
+/// The two health-constraint steps share one screen.
 enum ConditionKind { disease, allergy }
 
-/// Một mục trong danh sách, gắn với mã trong bảng `conditions`.
+/// One item of the list, tied to a code in the `conditions` table.
 typedef _Item = ({String code, String label, String emoji});
 
-/// Bước 8 và 9 — bệnh lý, rồi dị ứng và chế độ ăn.
+/// Steps 8 and 9 — the conditions, then the allergies and diets.
 ///
-/// Đây là dữ liệu **quan trọng nhất về mặt an toàn** trong cả luồng: nó nuôi
-/// Bộ lọc F1, tầng loại bỏ món trước khi mô hình học máy được chấm điểm. Món
-/// bị loại ở đây thì dù người dùng có thích tới đâu cũng không bao giờ được
-/// gợi ý.
+/// This is the **safety-critical** data of the whole flow: it feeds the F1
+/// filter, the layer that drops dishes before the machine learning model
+/// scores anything. A dish dropped here is never recommended, however much
+/// the user likes it.
 ///
-/// Vì cho chọn nhiều mục, danh sách có thêm một lựa chọn "Không có mục nào ở
-/// trên". Chọn nó sẽ xoá mọi lựa chọn khác, và ngược lại — tránh trạng thái
-/// mâu thuẫn kiểu vừa khai bệnh tiểu đường vừa khai không có bệnh gì.
+/// Because several items can be selected, the list carries an extra "none of
+/// the above" option. Choosing it clears every other selection, and vice
+/// versa — which rules out the contradictory state of having declared both
+/// diabetes and no condition at all.
+///
+/// Note on language: each item's `code` is the value in the `conditions`
+/// table and its `label` is text shown on screen, so both stay in
+/// Vietnamese.
 class ConditionsStep extends StatelessWidget {
   const ConditionsStep({
     super.key,
@@ -56,8 +61,9 @@ class ConditionsStep extends StatelessWidget {
     (code: 'vegan', label: 'Ăn thuần chay', emoji: '🌱'),
   ];
 
-  /// Mã giả cho lựa chọn "không có gì". Không tồn tại trong bảng `conditions`
-  /// và bị loại trước khi gửi lên máy chủ.
+  /// The pseudo-code for the "nothing" option. It does not exist in the
+  /// `conditions` table and is stripped before anything is sent to the
+  /// server.
   static const _noneCode = '__none__';
 
   List<_Item> get _items =>

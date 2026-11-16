@@ -106,7 +106,7 @@ from ml.db import use_utf8, connect  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.rocchio import alpha, build_profile, stage  # noqa: E402
 
-from tools.gen_buoc1_cases import (  # noqa: E402
+from tools.gen_step1_cases import (  # noqa: E402
     age,
     bmr,
     calorie_limit,
@@ -274,7 +274,7 @@ def convert_profile(
     goal = LABEL_TO_GOAL[row["NObeyesdad"]]
     birth = birth_date_for_age(age_years, index, today)
 
-    # Step 1 comes from `gen_buoc1_cases` — the Python reference that
+    # Step 1 comes from `gen_step1_cases` — the Python reference that
     # `check_be_parity.py` has already compared against the C# and the Dart.
     # Rewriting it here would be a fourth copy of one formula, that is, a
     # fourth place to drift.

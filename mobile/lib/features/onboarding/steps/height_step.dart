@@ -4,7 +4,7 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/value_wheel.dart';
 
-/// Bước 3 — chiều cao.
+/// Step 3 — height.
 class HeightStep extends StatefulWidget {
   const HeightStep({
     super.key,

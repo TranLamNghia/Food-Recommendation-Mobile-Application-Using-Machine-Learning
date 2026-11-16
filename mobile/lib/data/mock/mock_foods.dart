@@ -2,27 +2,34 @@ import 'package:flutter/material.dart';
 
 import '../models/food.dart';
 
-/// Gói món khảo sát mẫu — 30 món.
+/// The sample survey deck — 30 dishes.
 ///
-/// **Cảnh báo khi nối API thật:** trường `tags` ở đây là chữ hiển thị trên
-/// chip giao diện, KHÔNG phải từ vựng nhãn của CSDL. Mock dùng 27 chuỗi tự
-/// đặt (`Thanh đạm`, `Nướng`, `Nhiều xơ`, `Chay`…), trong khi bảng `tags`
-/// chỉ có **13 nhãn** và viết khác (`Món chay` chứ không phải `Chay`; nhóm
-/// `taste` như `Thanh đạm` đã bị bỏ hẳn). Khi thay mock bằng dữ liệu thật
-/// thì phải đổi sang đúng từ vựng của `tags`, nếu không mọi phép lọc theo
-/// nhãn sẽ **im lặng không khớp gì** thay vì báo lỗi.
+/// **A warning for when the real API is wired in:** the `tags` field here is
+/// the text displayed on an interface chip, NOT the database's tag
+/// vocabulary. The mock uses 27 strings of its own invention (`Thanh đạm`,
+/// `Nướng`, `Nhiều xơ`, `Chay`…), while the `tags` table holds only **13
+/// tags** and spells them differently (`Món chay`, not `Chay`; the `taste`
+/// group such as `Thanh đạm` was dropped entirely). When the mock is replaced
+/// by real data these have to be changed to the actual `tags` vocabulary, or
+/// every tag filter will **silently match nothing** rather than report an
+/// error.
 ///
-/// Riêng `fiber` thì đã lấy số thật: 23/30 món khớp tên với danh mục 305 món
-/// nên dùng đúng `fiber_g` của nó; 7 món còn lại chưa có trong danh mục nên
-/// dùng trung vị của nhóm và được đánh dấu bằng chú thích ngay tại dòng.
+/// `fiber` alone carries real figures: 23 of the 30 dishes match a name in
+/// the 305-dish catalogue, so they use its own `fiber_g`; the other 7 are not
+/// in the catalogue yet, so they use the group median and are marked with a
+/// comment on the line itself.
 ///
-/// Danh sách này mô phỏng kết quả của `GET /onboarding/survey`. Món được
-/// chọn theo nguyên tắc **cực đại hóa độ đa dạng**: phủ đều nhóm thực phẩm,
-/// phương pháp chế biến và mức cay, để mỗi lượt vuốt mang lại nhiều thông
-/// tin nhất. Không chọn ngẫu nhiên.
+/// This list simulates the result of `GET /onboarding/survey`. The dishes are
+/// chosen on the principle of **maximising diversity**: spread evenly across
+/// food groups, cooking methods and spice levels, so that each swipe carries
+/// as much information as possible. They are not chosen at random.
+///
+/// Note on language: every `name`, `category`, `dishRole` and `tags` value
+/// below is data, so it stays in Vietnamese.
 abstract final class MockFoods {
-  /// Ảnh tạm lấy từ bản thiết kế Figma, gán luân phiên cho 30 món.
-  /// Thay bằng ảnh món thật khi có bộ ảnh — chỉ cần đổi `imageAsset`.
+  /// Placeholder images taken from the Figma design, assigned round-robin to
+  /// the 30 dishes. Replace them with real dish photos once there is a photo
+  /// set — only `imageAsset` has to change.
   static const _warm = [Color(0xFFFFB884), Color(0xFFE87A3C)];
   static const _fresh = [Color(0xFF93DCA9), Color(0xFF3FA76F)];
   static const _broth = [Color(0xFFFFD68F), Color(0xFFE0A03E)];
@@ -46,7 +53,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 0.9,
       servingSizeG: 307,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍜',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _broth,
@@ -64,10 +71,10 @@ abstract final class MockFoods {
       fat: 18,
       sugar: 3.5,
       sodium: 1150.0,
-      fiber: 1.0, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      fiber: 1.0, // estimate: group median; dish not in the catalogue
       servingSizeG:
-          287, // trung vị nhóm 'Món nước': món này chưa có trong danh mục
-      // purin: danh mục không công bố cho món này
+          287, // median of group 'Món nước'; dish not in the catalogue
+      // purine: not published for this dish
       emoji: '🍢',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _warm,
@@ -85,9 +92,9 @@ abstract final class MockFoods {
       fat: 22,
       sugar: 4.7,
       sodium: 620.0,
-      fiber: 2.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200, // trung vị nhóm 'Cơm': món này chưa có trong danh mục
-      // purin: danh mục không công bố cho món này
+      fiber: 2.8, // estimate: group median; dish not in the catalogue
+      servingSizeG: 200, // median of group 'Cơm'; dish not in the catalogue
+      // purine: not published for this dish
       emoji: '🍚',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _warm,
@@ -127,7 +134,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.3,
       servingSizeG: 190,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍲',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _fresh,
@@ -147,7 +154,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 172,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🥘',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _warm,
@@ -187,7 +194,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 142,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🐟',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _warm,
@@ -247,7 +254,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.7,
       servingSizeG: 350,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🌶️',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _spicy,
@@ -267,7 +274,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 0.1,
       servingSizeG: 322,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍜',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _broth,
@@ -285,9 +292,9 @@ abstract final class MockFoods {
       fat: 16,
       sugar: 4.2,
       sodium: 620.0,
-      fiber: 2.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200, // trung vị nhóm 'Cơm': món này chưa có trong danh mục
-      // purin: danh mục không công bố cho món này
+      fiber: 2.8, // estimate: group median; dish not in the catalogue
+      servingSizeG: 200, // median of group 'Cơm'; dish not in the catalogue
+      // purine: not published for this dish
       emoji: '🍗',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _grain,
@@ -347,7 +354,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.8,
       servingSizeG: 228,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🥒',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _fresh,
@@ -367,7 +374,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 0.0,
       servingSizeG: 128,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍡',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _warm,
@@ -405,9 +412,9 @@ abstract final class MockFoods {
       fat: 15,
       sugar: 4.6,
       sodium: 620.0,
-      fiber: 2.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
-      servingSizeG: 200, // trung vị nhóm 'Cơm': món này chưa có trong danh mục
-      // purin: danh mục không công bố cho món này
+      fiber: 2.8, // estimate: group median; dish not in the catalogue
+      servingSizeG: 200, // median of group 'Cơm'; dish not in the catalogue
+      // purine: not published for this dish
       emoji: '🍙',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _grain,
@@ -427,7 +434,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 0.3,
       servingSizeG: 185,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🥣',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _broth,
@@ -447,7 +454,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 1.2,
       servingSizeG: 354,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍲',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _spicy,
@@ -465,10 +472,10 @@ abstract final class MockFoods {
       fat: 18,
       sugar: 1.2,
       sodium: 1150.0,
-      fiber: 1.0, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      fiber: 1.0, // estimate: group median; dish not in the catalogue
       servingSizeG:
-          200, // không có nhóm 'Lẩu' trong danh mục; dùng mặc định 200 g
-      // purin: danh mục không công bố cho món này
+          200, // no 'Lẩu' group in the catalogue; default 200 g
+      // purine: not published for this dish
       emoji: '🦑',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _spicy,
@@ -508,7 +515,7 @@ abstract final class MockFoods {
       sodium: 980.0,
       fiber: 0.0,
       servingSizeG: 138,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍗',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _warm,
@@ -548,7 +555,7 @@ abstract final class MockFoods {
       sodium: 620.0,
       fiber: 0.1,
       servingSizeG: 135,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🍳',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _grain,
@@ -566,10 +573,10 @@ abstract final class MockFoods {
       fat: 5,
       sugar: 22.0,
       sodium: 180.0,
-      fiber: 1.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      fiber: 1.8, // estimate: group median; dish not in the catalogue
       servingSizeG:
-          180, // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
-      // purin: danh mục không công bố cho món này
+          180, // median of group 'Tráng miệng'; dish not in the catalogue
+      // purine: not published for this dish
       emoji: '🍧',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _sweet,
@@ -587,10 +594,10 @@ abstract final class MockFoods {
       fat: 4,
       sugar: 28.6,
       sodium: 180.0,
-      fiber: 1.8, // ước lượng: trung vị nhóm, món chưa có trong danh mục
+      fiber: 1.8, // estimate: group median; dish not in the catalogue
       servingSizeG:
-          180, // trung vị nhóm 'Tráng miệng': món này chưa có trong danh mục
-      // purin: danh mục không công bố cho món này
+          180, // median of group 'Tráng miệng'; dish not in the catalogue
+      // purine: not published for this dish
       emoji: '🍮',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _sweet,
@@ -630,7 +637,7 @@ abstract final class MockFoods {
       sodium: 1150.0,
       fiber: 3.8,
       servingSizeG: 198,
-      // purin: danh mục không công bố cho món này
+      // purine: not published for this dish
       emoji: '🥬',
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _fresh,

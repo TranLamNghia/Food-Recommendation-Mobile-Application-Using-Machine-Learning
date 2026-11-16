@@ -5,27 +5,30 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/swipe_action.dart';
 
-/// Trạng thái cú vuốt mà chồng thẻ phát ra cho các lớp hiệu ứng nghe.
+/// The swipe state the deck publishes for the effect layers to listen
+/// to.
 class SwipeSignal {
   const SwipeSignal({this.action, this.progress = 0});
 
-  /// Hướng đang được nhắm tới, `null` khi thẻ đang đứng yên.
+  /// The direction being aimed at; `null` while the card is still.
   final SwipeAction? action;
 
-  /// Mức độ hoàn thành cú vuốt trong đoạn [0, 1].
+  /// How complete the swipe is, in [0, 1].
   final double progress;
 }
 
-/// Bốn vùng hạt bay ở rìa màn hình.
+/// The four particle zones at the screen edges.
 ///
-/// Bản Figma thể hiện bốn vùng này bằng bốn hình chữ nhật đặc (`Left`,
-/// `Right`, `Up`, `Down` trong `Area_Pick`) vì Figma không diễn tả được hạt
-/// chuyển động. Ở đây chúng được dựng lại đúng vị trí và màu đó, nhưng thay
-/// mảng đặc bằng **hạt bắn ra ngoài**: vuốt về hướng nào thì vùng hướng đó
-/// nở rộng ra, hạt dày lên, bay xa hơn và sáng hơn.
+/// The Figma file represents these four zones as four solid rectangles
+/// (`Left`, `Right`, `Up`, `Down` inside `Area_Pick`), because Figma cannot
+/// express moving particles. Here they are rebuilt at exactly those positions
+/// and colours, but the solid block is replaced by **particles shooting
+/// outwards**: whichever direction is swiped, that zone widens, its particles
+/// thicken, fly further and glow brighter.
 ///
-/// Cả bốn vùng luôn hiện ở mức rất mờ ngay cả khi chưa vuốt — đó là cách
-/// người dùng biết thẻ này vuốt được bốn hướng mà không cần đọc chú thích.
+/// All four zones are always faintly present even before any swipe — that is
+/// how the user knows the card takes four directions without reading an
+/// instruction.
 class SwipeBurst extends StatefulWidget {
   const SwipeBurst({super.key, required this.signal, this.bottomOverflow = 0});
 
@@ -46,7 +49,8 @@ class SwipeBurst extends StatefulWidget {
 
 class _SwipeBurstState extends State<SwipeBurst>
     with SingleTickerProviderStateMixin {
-  /// Một vòng đời trọn vẹn của hạt: sinh ra ở mép trong, bay ra, tắt dần.
+  /// One complete particle lifetime: born at the inner edge, flies out,
+  /// fades away.
   static const _cycle = Duration(milliseconds: 2600);
 
   late final AnimationController _time;
@@ -57,8 +61,9 @@ class _SwipeBurstState extends State<SwipeBurst>
     super.initState();
     _time = AnimationController(vsync: this, duration: _cycle)..repeat();
 
-    // Hạt được sinh một lần rồi tái sử dụng mãi. Nếu sinh ngẫu nhiên lại mỗi
-    // khung hình thì hạt sẽ nhấp nháy loạn thay vì bay thành dòng.
+    // The particles are generated once and then reused forever. Randomising
+    // them again every frame would make them flicker chaotically instead of
+    // flowing as a stream.
     final rng = math.Random(20260909);
     _emitters = [
       for (final action in SwipeAction.values) _Emitter(action, rng),
@@ -89,18 +94,20 @@ class _SwipeBurstState extends State<SwipeBurst>
   }
 }
 
-/// Một vùng hạt, gắn với một hướng vuốt.
+/// One particle zone, tied to one swipe direction.
 class _Emitter {
   _Emitter(this.action, math.Random rng)
     : particles = List.generate(_poolSize, (_) => _Particle(rng));
 
-  /// Số hạt dựng sẵn cho mỗi vùng. Lúc chưa vuốt chỉ một phần nhỏ được vẽ.
+  /// How many particles are pre-built per zone. Before any swipe only a
+  /// small fraction is drawn.
   static const _poolSize = 44;
 
   final SwipeAction action;
   final List<_Particle> particles;
 
-  /// Vùng phát hạt, lấy đúng toạ độ trong khung thiết kế 390 × 581 của Figma.
+  /// The emitting area, at exactly its coordinates in Figma's 390 × 581
+  /// design frame.
   Rect get designBand => switch (action) {
     SwipeAction.dislike => const Rect.fromLTWH(0, 98, 48, 385), // Left
     SwipeAction.like => const Rect.fromLTWH(342, 98, 48, 385), // Right
@@ -108,7 +115,7 @@ class _Emitter {
     SwipeAction.unknown => const Rect.fromLTWH(55, 538, 280, 43), // Down
   };
 
-  /// Hướng hạt bay ra khỏi màn hình.
+  /// The direction the particles fly off screen.
   Offset get outward => switch (action) {
     SwipeAction.dislike => const Offset(-1, 0),
     SwipeAction.like => const Offset(1, 0),
@@ -127,15 +134,15 @@ class _Particle {
       phase = rng.nextDouble(),
       speed = 0.7 + rng.nextDouble() * 0.6;
 
-  /// Vị trí dọc theo cạnh dài của vùng, trong đoạn [0, 1].
+  /// The position along the zone's long edge, in [0, 1].
   final double along;
 
-  /// Độ lệch ngang so với đường bay thẳng, trong đoạn [0, 1].
+  /// The sideways offset from a straight flight path, in [0, 1].
   final double spread;
 
   final double size;
 
-  /// Lệch pha để các hạt không cùng sinh ra một lúc.
+  /// A phase offset so the particles are not all born at once.
   final double phase;
 
   final double speed;
@@ -149,10 +156,11 @@ class _BurstPainter extends CustomPainter {
     required this.bottomOverflow,
   }) : super(repaint: Listenable.merge([time, signal]));
 
-  /// Mức sáng nền của một vùng khi người dùng chưa vuốt về phía nó.
+  /// A zone's resting brightness while nothing is being swiped towards
+  /// it.
   static const _idle = 0.13;
 
-  /// Khung thiết kế gốc trong Figma.
+  /// The original design frame in Figma.
   static const _designSize = Size(390, 581);
 
   final List<_Emitter> emitters;
@@ -177,7 +185,8 @@ class _BurstPainter extends CustomPainter {
     }
   }
 
-  /// Dải sáng mờ ở sát mép, dày lên theo cường độ — phần "vùng nở rộng ra".
+  /// The faint glow strip along the edge, thickening with the intensity
+  /// — the "zone widening" part.
   void _paintGlow(
     Canvas canvas,
     _Emitter emitter,
@@ -218,7 +227,8 @@ class _BurstPainter extends CustomPainter {
       ),
     };
 
-    // Đậm ở mép ngoài, tan dần vào giữa màn hình.
+    // Strong at the outer edge, dissolving towards the centre of the
+    // screen.
     final begin = switch (emitter.action) {
       SwipeAction.dislike => Alignment.centerLeft,
       SwipeAction.like => Alignment.centerRight,
@@ -226,9 +236,9 @@ class _BurstPainter extends CustomPainter {
       SwipeAction.unknown => Alignment.bottomCenter,
     };
 
-    // Làm nhoè toàn bộ mép. Nếu vẽ hình chữ nhật sắc cạnh thì hai cạnh bên
-    // hiện rõ thành một khối chữ nhật mờ đè lên màn hình, trông như lỗi dựng
-    // chứ không ra quầng sáng.
+    // Blur the whole edge. Drawn as a sharp-edged rectangle, its two sides
+    // would read as a translucent box laid over the screen, looking like a
+    // rendering bug rather than a glow.
     final blur = 14 + 26 * intensity;
 
     final paint = Paint()
@@ -259,7 +269,7 @@ class _BurstPainter extends CustomPainter {
     final thickness = emitter.isHorizontal ? band.width : band.height;
     final reach = thickness * (1.1 + 2.6 * intensity);
 
-    // Cường độ càng cao thì càng nhiều hạt trong bể được đưa ra vẽ.
+    // The higher the intensity, the more of the pool is drawn.
     final visible = (emitter.particles.length * (0.2 + 0.8 * intensity))
         .round();
 
@@ -269,10 +279,10 @@ class _BurstPainter extends CustomPainter {
       final p = emitter.particles[i];
       final t = (time.value * p.speed + p.phase) % 1.0;
 
-      // Hạt sinh ra ở sâu bên trong màn hình rồi bay dần ra mép và biến mất
-      // ở đó. Nếu làm ngược lại — sinh ở mép rồi bay tiếp ra ngoài — thì
-      // phần lớn quãng đời của hạt nằm ngoài khung nhìn, vùng trông thưa hẳn
-      // dù số hạt vẫn nhiều.
+      // A particle is born well inside the screen, flies out towards the
+      // edge and vanishes there. The other way round — born at the edge and
+      // flying further out — would spend most of its life outside the
+      // viewport, leaving the zone looking sparse despite the same count.
       final inward = reach * (1 - t);
       final wobble =
           math.sin((t * 2 + p.phase) * math.pi * 2) *
@@ -293,7 +303,8 @@ class _BurstPainter extends CustomPainter {
             : Offset(x, _designSize.height - inward);
       }
 
-      // Hiện dần rồi tắt dần trong một vòng đời, để hạt không bật tắt đột ngột.
+      // Fade in and then out across one lifetime, so a particle never
+      // blinks on and off.
       final fade = math.sin(t * math.pi);
       paint.color = emitter.action.burst.withValues(
         alpha: (0.22 + 0.78 * intensity) * fade,

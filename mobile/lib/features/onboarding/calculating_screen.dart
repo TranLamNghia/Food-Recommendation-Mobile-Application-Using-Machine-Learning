@@ -5,13 +5,13 @@ import '../../core/theme/app_motion.dart';
 import '../../data/models/health_profile.dart';
 import '../survey/survey_intro_screen.dart';
 
-/// Màn hình tính hạn mức, chạy sau khi khai báo xong hồ sơ.
+/// The target-calculation screen, shown once the profile is complete.
 ///
-/// Các phép tính ở đây — BMI, BMR, TDEE — chỉ mất vài micro giây, nên về mặt
-/// kỹ thuật màn hình này hoàn toàn không cần thiết. Nó tồn tại vì lý do khác:
-/// người dùng vừa bỏ ra chín bước khai báo, và cần thấy số liệu của mình được
-/// dùng vào việc gì. Từng dòng chạy qua là từng bước có thật của Bước 1 trong
-/// thuật toán, không phải chữ trang trí.
+/// The arithmetic here — BMI, BMR, TDEE — takes a few microseconds, so
+/// technically this screen is entirely unnecessary. It exists for a different
+/// reason: the user has just spent nine steps filling things in, and needs to
+/// see what their figures are being used for. Each line that scrolls past is
+/// a real step of Step 1 of the algorithm, not decorative text.
 class CalculatingScreen extends StatefulWidget {
   const CalculatingScreen({super.key, required this.profile});
 
@@ -97,8 +97,9 @@ class _CalculatingScreenState extends State<CalculatingScreen>
               ),
             ),
             const SizedBox(height: 48),
-            // Cửa sổ ba dòng: dòng vừa xong mờ phía trên, dòng đang chạy đậm
-            // ở giữa, dòng sắp tới mờ phía dưới.
+            // A three-line window: the line just finished faint at the
+            // top, the running line bold in the middle, the coming one faint
+            // below.
             SizedBox(
               height: 140,
               child: Column(

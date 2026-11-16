@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../data/models/food.dart';
 import 'dish_icon.dart';
 
-/// Thẻ món ăn — dựng theo node `Card` (5:32) trong Figma.
+/// The dish card — built from the `Card` node (5:32) in Figma.
 ///
-/// Mọi số đo trong lớp này lấy trực tiếp từ bản thiết kế ở khổ gốc
-/// **198 × 280**, rồi nhân với hệ số [_Metrics.scale] theo bề rộng thực tế
-/// của thẻ. Giữ nguyên số gốc để đối chiếu lại với Figma khi thiết kế đổi,
-/// thay vì quy đổi sẵn thành số đã nhân.
+/// Every measurement in this class is taken straight from the design at its
+/// original **198 × 280** size, then multiplied by [_Metrics.scale] for the
+/// card's actual width. The original numbers are kept so they can be checked
+/// back against Figma when the design changes, rather than being pre-scaled.
 class FoodCard extends StatelessWidget {
   const FoodCard({
     super.key,
@@ -17,14 +17,15 @@ class FoodCard extends StatelessWidget {
     this.elevated = true,
   });
 
-  /// Khổ gốc của thẻ trong Figma. Tỷ lệ này được giữ nguyên khi phóng to.
+  /// The card's original size in Figma. This ratio is preserved when
+  /// scaled up.
   static const designSize = Size(198, 280);
   static const aspectRatio = 198 / 280;
 
   final Food food;
 
-  /// Quãng kéo đã chuẩn hóa (mỗi trục trong đoạn [-1, 1]) — ảnh dịch ngược
-  /// chiều thẻ một chút để tạo chiều sâu.
+  /// The normalised drag distance (each axis in [-1, 1]) — the image
+  /// shifts slightly against the card to create depth.
   final Offset parallax;
 
   final bool elevated;
@@ -63,7 +64,7 @@ class FoodCard extends StatelessWidget {
   }
 }
 
-/// Quy đổi số đo thiết kế sang số đo thực tế trên máy.
+/// Converts design measurements into the real on-device ones.
 class _Metrics {
   _Metrics(double width) : scale = width / FoodCard.designSize.width;
 
@@ -84,16 +85,16 @@ class _Image extends StatelessWidget {
   Widget build(BuildContext context) {
     final asset = food.imageAsset;
 
-    // Ảnh được phóng nhẹ rồi dịch theo cú vuốt. Phải phóng trước, nếu không
-    // mép ảnh sẽ hở ra khi dịch.
+    // The image is scaled up slightly and then shifted with the swipe. The
+    // scaling has to come first, or its edge would show as it moves.
     Widget withParallax(Widget child) => Transform.scale(
       scale: 1.06,
       child: Transform.translate(offset: parallax * -10, child: child),
     );
 
     if (asset == null) {
-      // Chưa có ảnh món: lùi về nền gradient kèm biểu tượng, để thẻ vẫn đọc
-      // được thay vì hiện ô trống.
+      // No dish photo yet: fall back to the gradient background with an
+      // icon, so the card still reads rather than showing an empty box.
       return withParallax(
         DecoratedBox(
           decoration: BoxDecoration(
@@ -114,7 +115,8 @@ class _Image extends StatelessWidget {
       Image.asset(
         asset,
         fit: BoxFit.cover,
-        // Nền xanh của layer `Image` trong Figma, lộ ra trong lúc ảnh đang tải.
+        // The blue background of the `Image` layer in Figma, visible
+        // while the photo loads.
         errorBuilder: (context, error, stack) =>
             const ColoredBox(color: Color(0xFF006EFF)),
       ),
@@ -122,10 +124,11 @@ class _Image extends StatelessWidget {
   }
 }
 
-/// Lớp chuyển sắc ở đáy thẻ — layer `Gradient` (5:7).
+/// The gradient layer at the bottom of the card — the `Gradient` layer
+/// (5:7).
 ///
-/// Bắt đầu ở 60.53 % chiều cao, chạy từ trong suốt xuống `#121212`. Đây là
-/// thứ giữ cho chữ trắng đọc được trên mọi tấm ảnh.
+/// It starts at 60.53 % of the height and runs from transparent down to
+/// `#121212`. This is what keeps the white text readable over any photo.
 class _BottomGradient extends StatelessWidget {
   const _BottomGradient();
 
@@ -143,7 +146,8 @@ class _BottomGradient extends StatelessWidget {
   }
 }
 
-/// Khối chữ ở đáy thẻ — layer `Content` (5:9), khổ gốc 179 × 58.
+/// The text block at the bottom of the card — the `Content` layer
+/// (5:9), originally 179 × 58.
 class _Content extends StatelessWidget {
   const _Content({required this.food, required this.m});
 
@@ -163,10 +167,11 @@ class _Content extends StatelessWidget {
             left: 0,
             top: 0,
             right: m.s(5),
-            // Thẻ chỉ rộng bằng nửa màn hình nên tên món dài như "Cơm tấm
-            // sườn nướng" không vừa ở cỡ 24. Cho chữ tự co lại thay vì cắt
-            // bằng dấu ba chấm — tên món là thứ duy nhất người dùng dựa vào
-            // để quyết định, không được phép mất chữ.
+            // The card is only half the screen wide, so a long dish name
+            // like "Cơm tấm sườn nướng" does not fit at size 24. The text is
+            // allowed to shrink itself rather than being cut with an
+            // ellipsis — the dish name is the only thing the user has to
+            // decide on, so no part of it may be lost.
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,

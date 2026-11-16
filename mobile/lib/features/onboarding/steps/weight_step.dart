@@ -4,7 +4,7 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/value_wheel.dart';
 
-/// Bước 4 — cân nặng hiện tại.
+/// Step 4 — current weight.
 class WeightStep extends StatefulWidget {
   const WeightStep({
     super.key,

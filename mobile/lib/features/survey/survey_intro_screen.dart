@@ -8,10 +8,11 @@ import '../../data/mock/mock_foods.dart';
 import '../../data/models/swipe_action.dart';
 import 'survey_screen.dart';
 
-/// Màn hình mở đầu phiên khảo sát — dạy cử chỉ trước khi bắt đầu.
+/// The survey's opening screen — it teaches the gesture before starting.
 ///
-/// Thay vì mô tả bằng chữ, màn hình chạy một thẻ mẫu tự vuốt lần lượt theo
-/// bốn hướng. Người dùng nhìn một vòng là hiểu, không cần đọc.
+/// Rather than describing it in words, the screen runs a sample card that
+/// swipes itself in each of the four directions in turn. One cycle is enough
+/// to understand it, with nothing to read.
 class SurveyIntroScreen extends StatelessWidget {
   const SurveyIntroScreen({super.key});
 
@@ -86,7 +87,8 @@ class SurveyIntroScreen extends StatelessWidget {
   }
 }
 
-/// Thẻ mẫu tự vuốt vòng lặp qua bốn hướng.
+/// The sample card, swiping itself through the four directions on a
+/// loop.
 class _GestureDemo extends StatefulWidget {
   const _GestureDemo();
 
@@ -108,7 +110,8 @@ class _GestureDemoState extends State<_GestureDemo>
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: _cycle)
       ..addStatusListener((status) {
-        // Hết một vòng thì đổi sang hướng kế tiếp rồi chạy lại.
+        // At the end of a cycle, move to the next direction and run
+        // again.
         if (status == AnimationStatus.completed) {
           setState(() => _index = (_index + 1) % SwipeAction.values.length);
           _ctrl.forward(from: 0);
@@ -130,7 +133,8 @@ class _GestureDemoState extends State<_GestureDemo>
       builder: (context, _) {
         final t = _ctrl.value;
 
-        // Ba chặng trong một vòng: giữ yên → vuốt ra → thẻ mới hiện lên.
+        // Three legs to a cycle: hold still → swipe out → the new card
+        // appears.
         final push = const Interval(
           0.18,
           0.58,
@@ -161,7 +165,8 @@ class _GestureDemoState extends State<_GestureDemo>
             alignment: Alignment.center,
             clipBehavior: Clip.none,
             children: [
-              // Thẻ nền, luôn đứng yên — cho thấy chồng thẻ còn tiếp.
+              // The backing card, always still — it shows the deck
+              // continues.
               Transform.scale(
                 scale: 0.9,
                 child: Transform.translate(

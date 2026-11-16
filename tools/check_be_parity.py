@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Step 1 must produce the same numbers in all three implementations.
 
-    tools/gen_buoc1_cases.py                    Python — the reference
+    tools/gen_step1_cases.py                    Python — the reference
     backend/Api/Nutrition/NutritionTargets.cs   C#     — the server
     mobile/lib/data/models/health_profile.dart  Dart   — the app
 
@@ -24,9 +24,9 @@ That happened three times, and this checker caught all three on its first run:
     the system uses the Asian thresholds 23/25 — where 23.15 is `overweight`.
 
 THE THREE CHECKS
-    1. regenerate `data/buoc1_cases.json` from the Python reference
+    1. regenerate `data/step1_cases.json` from the Python reference
     2. `dotnet test` — 44 C# assertions, no database needed
-    3. `flutter test test/buoc1_parity_test.dart` — 32 Dart assertions
+    3. `flutter test test/step1_parity_test.dart` — 32 Dart assertions
 
 Run:
     python tools/check_be_parity.py
@@ -45,12 +45,12 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
-import gen_buoc1_cases  # noqa: E402
+import gen_step1_cases  # noqa: E402
 
-CASES = ROOT / "data" / "buoc1_cases.json"
+CASES = ROOT / "data" / "step1_cases.json"
 BACKEND = ROOT / "backend"
 MOBILE = ROOT / "mobile"
-DART_TEST = "test/buoc1_parity_test.dart"
+DART_TEST = "test/step1_parity_test.dart"
 
 
 def _use_utf8() -> None:
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # -- 1. Generate the cases --------------------------------------------
     print("\n1. The Python reference")
-    if gen_buoc1_cases.main([]) != 0:
+    if gen_step1_cases.main([]) != 0:
         return 1
     if args.cases_only:
         return 0
@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.append("dotnet test failed")
 
     # -- 3. Dart ---------------------------------------------------------
-    print("\n3. Dart — mobile/test/buoc1_parity_test.dart")
+    print("\n3. Dart — mobile/test/step1_parity_test.dart")
     result = run(["flutter", "test", DART_TEST], MOBILE)
     if result is None:
         print("   !  `flutter` is not on PATH — skipping the Dart part")
@@ -133,11 +133,16 @@ def main(argv: list[str] | None = None) -> int:
     # Skipped cases must be STATED, never folded into the "passed" figure:
     # Dart's `Gender` has no `other`, so the three third-gender cases cannot
     # be checked on the Dart side. Staying silent about them makes a real gap
-    # look covered. The matched strings are the Dart test's own Vietnamese
-    # output, so they stay as they are.
+    # look covered.
+    #
+    # These two strings are matched against the Dart test's OWN OUTPUT, so
+    # they are a contract with `mobile/test/step1_parity_test.dart`: editing
+    # the `markTestSkipped` reason there without editing this line makes the
+    # grep return nothing, and the real coverage gap silently stops being
+    # reported while the audit still says all three implementations agree.
     skipped = [
         line.strip() for line in output.splitlines()
-        if "không có 'other'" in line or "DateTime.now()" in line
+        if "has no 'other'" in line or "DateTime.now()" in line
     ]
     if skipped:
         print(f"   {len(skipped)} cases skipped on the Dart side:")

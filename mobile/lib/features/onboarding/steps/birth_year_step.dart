@@ -4,12 +4,12 @@ import '../../../data/models/health_profile.dart';
 import '../widgets/onboarding_scaffold.dart';
 import '../widgets/value_wheel.dart';
 
-/// Bước 2 — năm sinh.
+/// Step 2 — year of birth.
 ///
-/// Hỏi năm sinh thay vì tuổi để lưu đúng kiểu `DATE` của cột
-/// `health_profiles.birth_date`. Ngày và tháng mặc định là 1/1: sai lệch tối
-/// đa một năm tuổi, tương đương 5 kcal trong BMR, không đáng để bắt người
-/// dùng chọn thêm hai bánh xe nữa.
+/// The year is asked rather than the age, so it can be stored in the `DATE`
+/// type of the `health_profiles.birth_date` column. The day and month default
+/// to 1 January: at most one year of age off, which is 5 kcal in the BMR —
+/// not worth making the user spin two more wheels for.
 class BirthYearStep extends StatefulWidget {
   const BirthYearStep({
     super.key,

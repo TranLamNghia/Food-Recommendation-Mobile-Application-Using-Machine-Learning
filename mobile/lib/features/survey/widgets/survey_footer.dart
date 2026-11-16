@@ -3,21 +3,22 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import 'survey_progress.dart';
 
-/// Vùng chân màn hình — layer `Footer_Backgound` (2:15) trong Figma.
+/// The screen footer — the `Footer_Backgound` layer (2:15) in Figma.
 ///
-/// Nền là một dải chuyển sắc dọc cao 264 trên khung 844: **trong suốt ở mép
-/// trên**, đặc dần xuống `#4F4E4E` ở đáy. Phần trên trong suốt để hạt của
-/// vùng "Chưa biết" (xem `SwipeBurst.bottomOverflow`) trôi xuống bên dưới và
-/// chìm dần vào màu xám, thay vì bị cắt cụt ở mép trên. Bên trong là khối `Introduce`
-/// (1:4) đặt ở toạ độ 48, 68 với khổ 310 × 100 — chỗ đặt thanh tiến độ và
-/// dòng nhắn nhờ người dùng phân loại món.
+/// The background is a vertical gradient 264 tall on an 844 frame:
+/// **transparent at the top edge**, thickening down to `#4F4E4E` at the
+/// bottom. The transparent top lets the particles of the "Chưa biết" zone
+/// (see `SwipeBurst.bottomOverflow`) drift underneath and sink into the grey,
+/// rather than being cut off at the top edge. Inside sits the `Introduce`
+/// block (1:4) at coordinates 48, 68 and 310 × 100 in size — where the
+/// progress bar and the line asking the user to sort the dishes go.
 class SurveyFooter extends StatelessWidget {
   const SurveyFooter({super.key, required this.done, required this.total});
 
-  /// Tỷ lệ chiều cao của vùng chân trên toàn khung thiết kế.
+  /// The footer's share of the design frame's height.
   static const heightRatio = 264 / 844;
 
-  /// Khổ gốc của vùng chân trong Figma.
+  /// The footer's original size in Figma.
   static const _designSize = Size(390, 264);
 
   final int done;
@@ -57,8 +58,9 @@ class SurveyFooter extends StatelessWidget {
                   child: _Introduce(done: done, total: total),
                 ),
               ),
-              // Phần dưới khối `Introduce` để trống, đúng như bản thiết kế.
-              // Màn hình này thuần cử chỉ: mọi thao tác đều bằng vuốt thẻ.
+              // The area below the `Introduce` block is left empty, as in
+              // the design. This screen is purely gestural: every action is
+              // a card swipe.
               Expanded(child: SizedBox(height: bottomInset)),
             ],
           );
@@ -68,17 +70,19 @@ class SurveyFooter extends StatelessWidget {
   }
 }
 
-/// Khối `Introduce` (1:4) — 310 × 100.
+/// The `Introduce` block (1:4) — 310 × 100.
 ///
-/// Dòng nhắn đặt phía trên, thanh tiến độ phía dưới. Thứ tự này không tuỳ
-/// tiện: nền chuyển sắc sáng ở trên và tối dần xuống dưới, nên chữ — thứ cần
-/// độ tương phản nhất — phải nằm ở nửa sáng, còn thanh tiến độ thì đọc được
-/// ở cả hai vùng nhờ cặp rãnh tối / phần chạy trắng.
+/// The message line goes on top, the progress bar below. That order is not
+/// arbitrary: the gradient background is light at the top and darkens
+/// downwards, so the text — which needs the most contrast — has to sit in the
+/// light half, while the progress bar reads in either region thanks to its
+/// dark track and white fill.
 class _Introduce extends StatelessWidget {
   const _Introduce({required this.done, required this.total});
 
-  /// Câu nhắn. Cố ý viết giọng đời thường, vì đây là lúc phải xin người dùng
-  /// bỏ ra hai phút làm một việc chưa thấy ngay lợi ích.
+  /// The message. Deliberately written in an everyday voice, because this
+  /// is the moment of asking the user to spend two minutes on something
+  /// whose benefit is not yet visible.
   static const _note =
       'Quẹo trái quẹo phải giúp tụi mình phân loại món nha — '
       'app học gu bạn từ đây đó 🤙';

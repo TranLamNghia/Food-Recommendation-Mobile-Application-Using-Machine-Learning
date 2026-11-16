@@ -16,11 +16,13 @@ import 'package:nutrition_app/features/plan/reason_screen.dart';
 import 'package:nutrition_app/features/plan/widgets/day_budget_card.dart';
 import 'package:nutrition_app/features/plan/widgets/replace_sheet.dart';
 
-/// Bốn màn giải thích — kiểm những điều mà chú thích trong mã chỉ *hứa*.
+/// The four explanation screens — checking what the comments in the code
+/// only *promise*.
 ///
-/// Mỗi phép kiểm ở đây tương ứng một cách nói sai cụ thể mà màn hình phải
-/// tránh, không phải "widget dựng được không". Một màn giải thích dựng xong
-/// nhưng nói sai thì tệ hơn không có màn nào.
+/// Each check here corresponds to one specific way of misstating something
+/// that the screen has to avoid; none of them is "does the widget build". An
+/// explanation screen that builds but says the wrong thing is worse than no
+/// screen at all.
 
 const _grey = [Color(0xFFCCCCCC), Color(0xFF888888)];
 
@@ -77,8 +79,10 @@ DayBudget _budget({
 );
 
 void main() {
-  group('DayBudgetCard — hạn mức hiện TRƯỚC khi nó chặn món', () {
-    testWidgets('nêu phần còn lại, tên bệnh và xuất xứ ngưỡng', (tester) async {
+  group('DayBudgetCard — the allowance shows BEFORE it blocks a dish', () {
+    testWidgets('states what is left, the condition and the source', (
+      tester,
+    ) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(
@@ -95,12 +99,12 @@ void main() {
       expect(find.textContaining('800 / 2.000 mg'), findsOneWidget);
       expect(find.textContaining('Còn 1.200 mg'), findsOneWidget);
       expect(find.textContaining('Tăng huyết áp'), findsWidgets);
-      // Xuất xứ phải ở trên màn hình, không chỉ trong CSDL.
+      // The provenance has to be on the screen, not only in the database.
       expect(find.textContaining('có nguồn công bố'), findsWidgets);
       expect(find.textContaining('WHO'), findsWidgets);
     });
 
-    testWidgets('vượt trần thì nói vượt BAO NHIÊU', (tester) async {
+    testWidgets('over the ceiling, it says BY HOW MUCH', (tester) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(
@@ -111,11 +115,12 @@ void main() {
           ),
         ),
       );
-      // Kẹp phần còn lại về 0 thì câu này không viết được.
+      // Clamping the remainder at 0 would make this sentence
+      // unwritable.
       expect(find.textContaining('Đã vượt 500 mg'), findsOneWidget);
     });
 
-    testWidgets('món khuyết số liệu thì nói con số đang NỚI hơn thực tế', (
+    testWidgets('with missing data it says the number is TOO PERMISSIVE', (
       tester,
     ) async {
       _tall(tester);
@@ -129,14 +134,14 @@ void main() {
           ),
         ),
       );
-      // Đây là phép kiểm quan trọng nhất của thẻ này: cộng món khuyết thành
-      // 0 rồi hiện một con số trông bình thường là để tầng an toàn thất bại
-      // theo hướng MỞ mà không báo gì.
+      // This is the most important check on this card: adding the missing
+      // dishes up as 0 and showing a normal-looking number is letting the
+      // safety layer fail OPEN with no warning.
       expect(find.textContaining('2 món không có số liệu purin'), findsOneWidget);
       expect(find.textContaining('thấp hơn thực tế'), findsOneWidget);
     });
 
-    testWidgets('hạn mức MỀM nói "vượt khuyến cáo", không nói "bị loại"', (
+    testWidgets('a SOFT allowance says "over the recommendation", not "excluded"', (
       tester,
     ) async {
       _tall(tester);
@@ -172,7 +177,7 @@ void main() {
     });
   });
 
-  group('ExcludedScreen — ba bậc, và bậc giữa nói rõ "hôm khác vẫn hợp"', () {
+  group('ExcludedScreen — three tiers, the middle one saying "fine another day"', () {
     final foods = [
       _food(id: 'ok', name: 'Canh nhạt', sodium: 100, purine: 30),
       _food(
@@ -196,7 +201,9 @@ void main() {
       softRules: softRulesFor(_conditions),
     );
 
-    testWidgets('ba tiêu đề bậc, mỗi bậc có câu dẫn riêng', (tester) async {
+    testWidgets('three tier headings, each with its own leading line', (
+      tester,
+    ) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(ExcludedScreen(screening: result(), foods: foods)),
@@ -206,17 +213,17 @@ void main() {
       expect(find.text('Hôm nay hết hạn mức'), findsOneWidget);
       expect(find.text('Chưa xét được'), findsOneWidget);
 
-      // Câu quyết định của cả màn. Thiếu nó thì người dùng tin món bị chặn
-      // vì hạn mức là món cấm với mình.
+      // The decisive sentence of the whole screen. Without it the user
+      // believes a dish blocked by an allowance is forbidden to them.
       expect(
         find.textContaining('hôm khác những món này vẫn hợp'),
         findsOneWidget,
       );
-      // Và bậc chưa xét được KHÔNG được trình bày như an toàn.
+      // And the undecidable tier must NOT be presented as safe.
       expect(find.textContaining('không phải "an toàn"'), findsOneWidget);
     });
 
-    testWidgets('lý do nhãn nêu tên nhãn, không nêu con số', (tester) async {
+    testWidgets('a tag reason names the tag, not a number', (tester) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(ExcludedScreen(screening: result(), foods: foods)),
@@ -227,7 +234,7 @@ void main() {
       expect(find.textContaining('quy tắc định nghĩa'), findsWidgets);
     });
 
-    testWidgets('thiếu số liệu nói "không có số liệu", KHÔNG nói "vượt"', (
+    testWidgets('missing data says "no measurement", NOT "over"', (
       tester,
     ) async {
       _tall(tester);
@@ -236,15 +243,15 @@ void main() {
       );
       expect(find.text('Món chưa đo purin'), findsOneWidget);
       expect(find.textContaining('Không có số liệu purin'), findsWidgets);
-      // Nói "vượt ngưỡng" khi thật ra là "chúng tôi không biết" là sai sự
-      // thật, nên câu đó không được xuất hiện cho món này.
+      // Saying "over the limit" when the truth is "we do not know" is a
+      // false statement, so that wording must not appear for this dish.
       expect(
         find.textContaining('Không có số liệu purin nên không đối chiếu'),
         findsWidgets,
       );
     });
 
-    testWidgets('món sạch KHÔNG nằm trong danh sách bị bỏ', (tester) async {
+    testWidgets('a clean dish is NOT in the dropped list', (tester) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(ExcludedScreen(screening: result(), foods: foods)),
@@ -253,8 +260,8 @@ void main() {
     });
   });
 
-  group('ReasonScreen — điểm tổng đứng TRƯỚC thanh so sánh', () {
-    final mon = [
+  group('ReasonScreen — the overall score comes BEFORE the bars', () {
+    final food = [
       _food(id: 'a', name: 'Canh A', sodium: 100, purine: 30),
       _food(
         id: 'b',
@@ -262,29 +269,29 @@ void main() {
         sodium: 200,
         purine: 40,
         kcal: 400,
-        // Khác nhóm là bắt buộc: hai món cùng nhóm thì chiều one-hot bị
-        // một lượt `like` và một lượt `dislike` triệt tiêu về 0, và câu
-        // "Bạn thích nhóm …" không bao giờ xuất hiện.
+        // Different groups are mandatory: for two dishes in the same
+        // group, one `like` and one `dislike` cancel the one-hot dimension
+        // to 0, and the sentence "Bạn thích nhóm …" never appears.
         category: 'Cơm',
       ),
     ];
-    final space = FoodVectorSpace.fromFoods(mon);
+    final space = FoodVectorSpace.fromFoods(food);
 
-    testWidgets('hiện điểm khớp tổng và câu cảnh báo về thanh so sánh', (
+    testWidgets('shows the overall score and the caveat about the bars', (
       tester,
     ) async {
       _tall(tester);
       final profile = PreferenceProfile.fromSwipes(
         space: space,
-        swipes: [(food: mon[0], action: SwipeAction.like)],
+        swipes: [(food: food[0], action: SwipeAction.like)],
       );
       await tester.pumpWidget(
         _host(
           ReasonScreen(
-            food: mon[0],
+            food: food[0],
             profile: profile,
             budget: _budget(),
-            penalty: PenaltyOutcome.of(mon[0], softRulesFor(_conditions)),
+            penalty: PenaltyOutcome.of(food[0], softRulesFor(_conditions)),
             betterThanShare: 0.71,
           ),
         ),
@@ -292,28 +299,31 @@ void main() {
 
       expect(find.text('khớp khẩu vị của bạn'), findsOneWidget);
       expect(find.textContaining('Cao hơn 71 %'), findsOneWidget);
-      // Câu này là điều kiện để mấy thanh kia không nói sai: ratio chuẩn hóa
-      // theo đỉnh của chính món, nên một món khớp yếu vẫn ra ba thanh gần đầy.
+      // This sentence is what stops the bars from misleading: the ratio is
+      // normalised against the dish's own peak, so a weak match still gives
+      // three nearly full bars.
       expect(find.textContaining('không đo mức khớp'), findsOneWidget);
       expect(find.text('ĐIỀU GÌ KHỚP NHẤT'), findsOneWidget);
     });
 
-    testWidgets('câu giải thích là CÂU, không lọt số thô', (tester) async {
+    testWidgets('an explanation is a SENTENCE, with no raw number', (
+      tester,
+    ) async {
       _tall(tester);
       final profile = PreferenceProfile.fromSwipes(
         space: space,
         swipes: [
-          (food: mon[0], action: SwipeAction.like),
-          (food: mon[1], action: SwipeAction.dislike),
+          (food: food[0], action: SwipeAction.like),
+          (food: food[1], action: SwipeAction.dislike),
         ],
       );
       await tester.pumpWidget(
         _host(
           ReasonScreen(
-            food: mon[0],
+            food: food[0],
             profile: profile,
             budget: _budget(),
-            penalty: PenaltyOutcome.of(mon[0], softRulesFor(_conditions)),
+            penalty: PenaltyOutcome.of(food[0], softRulesFor(_conditions)),
           ),
         ),
       );
@@ -322,15 +332,17 @@ void main() {
       expect(find.textContaining('Tỷ lệ đạm ('), findsNothing);
     });
 
-    testWidgets('hồ sơ rỗng thì nói thật, không bịa ba lý do', (tester) async {
+    testWidgets('an empty profile is honest, it invents no three reasons', (
+      tester,
+    ) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(
           ReasonScreen(
-            food: mon[0],
+            food: food[0],
             profile: PreferenceProfile.empty(space),
             budget: _budget(),
-            penalty: PenaltyOutcome.of(mon[0], softRulesFor(_conditions)),
+            penalty: PenaltyOutcome.of(food[0], softRulesFor(_conditions)),
           ),
         ),
       );
@@ -338,7 +350,7 @@ void main() {
       expect(find.text('ĐIỀU GÌ KHỚP NHẤT'), findsNothing);
     });
 
-    testWidgets('món khuyết purin: nói không đối chiếu được, không nói đạt', (
+    testWidgets('a dish with no purine: says it cannot be checked, not met', (
       tester,
     ) async {
       _tall(tester);
@@ -360,7 +372,7 @@ void main() {
       expect(find.text('ẢNH HƯỞNG HÔM NAY'), findsOneWidget);
     });
 
-    testWidgets('điểm cần lưu ý nêu hệ số nhân và chữ "vẫn chọn được"', (
+    testWidgets('the caveats name the multiplier and "vẫn chọn được"', (
       tester,
     ) async {
       _tall(tester);
@@ -382,20 +394,20 @@ void main() {
     });
   });
 
-  group('ReplaceSheet — hai hạn mức song song, món không vừa vẫn hiện', () {
-    final cu = MealPlanItem(
+  group('ReplaceSheet — two allowances side by side, misfits still shown', () {
+    final old = MealPlanItem(
       food: _food(id: 'cu', name: 'Món cũ', sodium: 400, purine: 50),
       score: 0.6,
     );
 
-    testWidgets('dải hạn mức nêu CẢ HAI chất, kèm câu "vừa cả hai"', (
+    testWidgets('the strip names BOTH nutrients, with a "fits both" line', (
       tester,
     ) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(
           ReplaceSheet(
-            item: cu,
+            item: old,
             alternatives: [_food(id: 'a', name: 'Món A', purine: 20)],
             scoreOf: (_) => 0.7,
             budgetAfterRemoval: _budget(
@@ -407,19 +419,20 @@ void main() {
       expect(find.textContaining('Bỏ món cũ ra'), findsOneWidget);
       expect(find.textContaining('natri'), findsWidgets);
       expect(find.textContaining('purin'), findsWidgets);
-      // Một món có thể rất tốt ở chất đang thiếu mà vẫn bị chặn bởi chất
-      // khác, nên xếp hạng theo một chất rồi kết luận là sai.
+      // A dish can be excellent on the nutrient that is short and still be
+      // blocked by another, so ranking by one nutrient and concluding from
+      // that is wrong.
       expect(find.textContaining('vừa cả hai'), findsOneWidget);
     });
 
-    testWidgets('món không vừa vẫn HIỆN, kèm lý do và "hôm khác chọn được"', (
+    testWidgets('a misfit is still SHOWN, with its reason and "another day"', (
       tester,
     ) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(
           ReplaceSheet(
-            item: cu,
+            item: old,
             alternatives: [
               _food(id: 'man', name: 'Món quá mặn', sodium: 5000, purine: 20),
               _food(id: 'ok', name: 'Món vừa', sodium: 50, purine: 20),
@@ -429,24 +442,24 @@ void main() {
           ),
         ),
       );
-      // Ẩn món không vừa thì người dùng không bao giờ biết món mình muốn vẫn
-      // chọn được vào hôm khác.
+      // Hiding a misfit means the user never learns the dish they wanted is
+      // selectable on another day.
       expect(find.text('Món quá mặn'), findsOneWidget);
       expect(find.textContaining('hôm khác chọn được'), findsOneWidget);
       expect(find.text('Món vừa'), findsOneWidget);
     });
 
-    testWidgets('bấm món không vừa thì KHÔNG đóng bảng', (tester) async {
+    testWidgets('tapping a misfit does NOT close the sheet', (tester) async {
       _tall(tester);
-      Food? chon;
+      Food? picked;
       await tester.pumpWidget(
         _host(
           Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {
-                chon = await ReplaceSheet.show(
+                picked = await ReplaceSheet.show(
                   context,
-                  item: cu,
+                  item: old,
                   alternatives: [
                     _food(id: 'man', name: 'Món quá mặn', sodium: 5000, purine: 20),
                   ],
@@ -468,34 +481,36 @@ void main() {
       expect(
         find.text('Món quá mặn'),
         findsOneWidget,
-        reason: 'bảng vẫn mở vì món đó không chọn được hôm nay',
+        reason: 'the sheet stays open because that dish is unselectable '
+            'today',
       );
-      expect(chon, isNull);
+      expect(picked, isNull);
     });
 
-    testWidgets('món khuyết số liệu KHÔNG bị chặn, nhưng được nói ra', (
+    testWidgets('a dish with missing data is NOT blocked, but is flagged', (
       tester,
     ) async {
       _tall(tester);
       await tester.pumpWidget(
         _host(
           ReplaceSheet(
-            item: cu,
+            item: old,
             alternatives: [_food(id: 'la', name: 'Chưa đo purin', sodium: 50)],
             scoreOf: (_) => 0.7,
             budgetAfterRemoval: _budget(),
           ),
         ),
       );
-      // Chặn vì danh mục thiếu số liệu là phạt sai đối tượng; im lặng cho qua
-      // thì lại nới hạn mức. Nên: cho qua, và nói ra.
+      // Blocking because the catalogue is incomplete penalises the wrong
+      // party; letting it through in silence loosens the allowance. So: let
+      // it through, and say so.
       expect(find.text('Chưa đo purin'), findsOneWidget);
       expect(find.textContaining('Chưa có số liệu purin'), findsOneWidget);
     });
   });
 
-  group('EvidenceLevel trên giao diện', () {
-    testWidgets('mức không dẫn được nguồn hiện chữ riêng, không chỉ màu', (
+  group('EvidenceLevel in the interface', () {
+    testWidgets('an uncitable level has its own wording, not just colour', (
       tester,
     ) async {
       _tall(tester);
@@ -513,8 +528,8 @@ void main() {
       await tester.pumpWidget(
         _host(const DayBudgetCard(budget: DayBudget(limits: [suyRa]))),
       );
-      // Màu một mình thì người mù màu không đọc được, mà đây là thông tin
-      // về sức khỏe.
+      // Colour by itself is unreadable to a colour-blind user, and this is
+      // health information.
       expect(find.textContaining('suy ra kèm giả thiết'), findsOneWidget);
       expect(find.textContaining('cho người 60 kg'), findsOneWidget);
     });

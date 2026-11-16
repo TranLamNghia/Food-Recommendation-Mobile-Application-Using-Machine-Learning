@@ -9,16 +9,16 @@ import 'widgets/survey_footer.dart';
 import 'widgets/swipe_burst.dart';
 import 'widgets/swipe_deck.dart';
 
-/// Một lượt vuốt đã ghi nhận.
+/// One recorded swipe.
 typedef SwipeResult = ({Food food, SwipeAction action});
 
-/// Màn hình khảo sát khẩu vị — chạy đúng một lần, ngay sau khi người dùng
-/// khai báo hồ sơ sức khỏe.
+/// The taste survey screen — it runs exactly once, right after the user
+/// fills in their health profile.
 ///
-/// Toàn bộ kết quả được giữ trong bộ nhớ và chỉ gửi lên máy chủ **một lần
-/// duy nhất** khi vuốt xong (đặc tả API mục 7.4). Vì vậy màn hình này tự
-/// đếm tiến độ, không hỏi máy chủ sau mỗi lượt vuốt, và vuốt được cả khi
-/// mất mạng.
+/// The whole result is held in memory and sent to the server **once only**,
+/// when the swiping is done (API specification §7.4). So this screen counts
+/// its own progress, never asks the server after each swipe, and keeps
+/// working with no connection at all.
 class SurveyScreen extends StatefulWidget {
   const SurveyScreen({super.key, required this.foods});
 
@@ -34,7 +34,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   int _cursor = 0;
 
-  /// Vùng chồng thẻ chiếm 581 trên 844 chiều cao khung thiết kế.
+  /// The deck area takes 581 of the design frame's 844 height.
   static const _deckRatio = 581 / 844;
 
   /// Share of the footer's height the bottom particle zone reaches under.
@@ -60,12 +60,13 @@ class _SurveyScreenState extends State<SurveyScreen> {
   }
 
   void _finish() {
-    // Nộp trọn gói kết quả một lần, đúng như thiết kế phiên vuốt: ứng dụng
-    // giữ toàn bộ lượt vuốt trong bộ nhớ rồi gửi một lượt duy nhất.
+    // Submit the whole result as one package, exactly as the swipe session
+    // is designed: the app holds every swipe in memory and then sends one
+    // single request.
     SessionScope.of(context).completeSurvey(_results);
 
-    // Chờ thẻ cuối bay hết ra ngoài rồi mới chuyển màn, tránh cắt ngang
-    // chuyển động đang chạy.
+    // Wait for the last card to fly fully off screen before changing
+    // screens, so no motion is cut short.
     Future.delayed(AppMotion.quick, () {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -99,10 +100,11 @@ class _SurveyScreenState extends State<SurveyScreen> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // Hạt bay: cùng khung với vùng chồng thẻ nhưng **không bị cắt**, và
-          // nằm dưới cả thẻ lẫn vùng chân. Vùng hạt phía dưới được đẩy xuống
-          // gần nửa chiều cao vùng chân, nên hạt trôi qua phần trong suốt ở
-          // trên của vùng chân rồi chìm vào phần xám đặc bên dưới.
+          // The particles: the same frame as the deck area but **not
+          // clipped**, and sitting under both the cards and the footer. The
+          // bottom particle zone is pushed down by nearly half the footer's
+          // height, so its particles drift through the footer's transparent
+          // top and then sink into the solid grey below.
           Positioned(
             top: 0,
             left: 0,
@@ -113,14 +115,16 @@ class _SurveyScreenState extends State<SurveyScreen> {
               bottomOverflow: footerHeight * _burstUnderFooter,
             ),
           ),
-          // Vùng chồng thẻ — khung `Card` (5:32) chiếm 581 trên 844 chiều cao.
+          // The deck area — the `Card` frame (5:32) takes 581 of the
+          // 844 height.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             height: height * _deckRatio,
-            // Cắt theo vùng này để thẻ đang bay ra biến mất ở mép vùng chân
-            // màn hình thay vì hiện xuyên qua phần trong suốt của nó.
+            // Clipped to this area so a card flying out disappears at the
+            // footer's edge instead of showing through its transparent
+            // part.
             child: ClipRect(
               child: Stack(
                 children: [
