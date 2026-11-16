@@ -5,18 +5,22 @@ import '../models/meal_plan.dart';
 import 'nutrient_target.dart';
 import 'preference_profile.dart';
 
-/// Hình dạng của một bữa ăn: những vai trò món bắt buộc và những vai trò có
-/// thể thêm vào nếu bữa còn thiếu năng lượng.
+/// The shape of a meal: the dish roles it must have, and the roles that can
+/// be added if the meal is still short of energy.
 ///
-/// Ràng buộc vai trò tồn tại vì lấy top-K món điểm cao nhất **không** tạo ra
-/// một bữa hợp lý — cả ba món có thể cùng là món mặn, hoặc cùng là tráng
-/// miệng nếu người dùng thích đồ ngọt. Vai trò ép bữa ăn có hình dạng đúng
-/// trước khi tính đến khẩu vị.
+/// The role constraint exists because taking the top-K highest-scoring dishes
+/// does **not** produce a sensible meal — all three could be savoury dishes,
+/// or all three desserts if the user has a sweet tooth. The roles force the
+/// meal into the right shape before taste is considered at all.
 ///
-/// Phần [optional] tồn tại vì một món không phủ nổi hạn mức của cả bữa: bữa
-/// sáng của người cần 2.500 kcal được chia 27,5 %, tức khoảng 690 kcal, trong
-/// khi món nặng nhất trong kho chỉ hơn 600. Không có suất tùy chọn thì thực
-/// đơn luôn hụt hạn mức bất kể thuật toán chọn khéo đến đâu.
+/// [optional] exists because one dish cannot cover a whole meal's allowance:
+/// breakfast for someone needing 2,500 kcal gets 27.5 %, around 690 kcal,
+/// while the heaviest dish in the catalogue is just over 600. Without
+/// optional servings the plan always falls short of the target, no matter how
+/// cleverly the algorithm picks.
+///
+/// Note on language: the role strings in [_mealStructure] are data — they
+/// match the `Food.dishRole` values exactly — so they stay in Vietnamese.
 class _MealShape {
   const _MealShape({required this.required, this.optional = const []});
 
@@ -40,23 +44,24 @@ const _mealStructure = <MealType, _MealShape>{
   MealType.snack: _MealShape(required: ['Món phụ']),
 };
 
-/// Một suất cần điền, xác định bởi bữa và vai trò món.
+/// One serving to fill, identified by its meal and its dish role.
 typedef _Slot = ({MealType meal, String role, bool explore});
 
-/// Sinh thực đơn hằng ngày từ hồ sơ sở thích và hạn mức dinh dưỡng.
+/// Generates the daily meal plan from the preference profile and the
+/// nutrition targets.
 ///
-/// Cài đặt Bước 3 và Bước 4 của thuật toán khuyến nghị:
+/// Implements Step 3 and Step 4 of the recommendation algorithm:
 ///
-/// 1. Chấm điểm từng món bằng độ tương đồng cosin với hồ sơ sở thích.
-/// 2. Chia suất theo cơ chế 70-30 — phần lớn xếp theo vector sở thích, phần
-///    còn lại xếp theo chính vector đó đã làm nhiễu.
-/// 3. Chọn tổ hợp bằng **tham lam theo mật độ điểm**, bù thêm suất tùy chọn
-///    cho tới khi chạm hạn mức, rồi cải thiện bằng **tìm kiếm cục bộ** trên
-///    hàm mục tiêu có phạt.
+/// 1. Score every dish by its cosine similarity to the preference profile.
+/// 2. Split the servings by the 70-30 mechanism — most are ranked by the
+///    preference vector, the rest by that same vector after adding noise.
+/// 3. Choose the combination by **greedy score density**, top up with
+///    optional servings until the target is reached, then improve it with a
+///    **local search** on a penalised objective function.
 ///
-/// Bộ lọc F1 (dị ứng, bệnh lý, chế độ ăn) nằm ngoài lớp này: nó phải chạy
-/// **trước** và truyền vào [candidates] tập món đã an toàn. Thăm dò chỉ nới
-/// lỏng về khẩu vị, không bao giờ nới lỏng về an toàn.
+/// The F1 filter (allergies, conditions, diets) sits outside this class: it
+/// has to run **first** and pass in an already-safe dish set as
+/// [candidates]. Exploration only loosens things on taste, never on safety.
 class MenuBuilder {
   MenuBuilder({
     required this.candidates,
@@ -72,48 +77,54 @@ class MenuBuilder {
     math.Random? rng,
   }) : _rng = rng ?? math.Random();
 
-  /// Tập món đã qua Bộ lọc F1.
+  /// The dish set that has already passed the F1 filter.
   final List<Food> candidates;
 
   final PreferenceProfile profile;
 
-  /// Tỷ lệ suất dành cho thăm dò. Trần cứng 50 % — xem `chk_expl_ratio`.
+  /// The share of servings given to exploration. Hard-capped at 50 % — see
+  /// `chk_expl_ratio`.
   final double explorationRatio;
 
-  /// Biên độ nhiễu δ dùng khi xoay vector sở thích cho nhóm thăm dò.
+  /// The noise amplitude δ used when rotating the preference vector for the
+  /// exploration group.
   final double explorationDelta;
 
-  /// Hệ số phạt λ cho sai lệch năng lượng trong hàm mục tiêu.
+  /// The penalty coefficient λ for the energy deviation in the objective
+  /// function.
   final double energyPenalty;
 
-  /// Hệ số phạt μ cho sai lệch từng chất sinh năng lượng.
+  /// The penalty coefficient μ for each macronutrient's deviation.
   final double macroPenalty;
 
-  /// Số vòng lặp tối đa của pha tìm kiếm cục bộ.
+  /// The maximum number of rounds in the local search phase.
   final int localSearchRounds;
 
-  /// Ràng buộc vi chất ở cấp **ngày** — ngưỡng cứng `per_day` của
-  /// `condition_rules`, cộng mục tiêu người dùng tự khai.
+  /// The micronutrient constraints at the **day** level — the `per_day` hard
+  /// thresholds of `condition_rules`, plus the goals the user stated.
   final List<NutrientTarget> nutrientTargets;
 
-  /// Số phép đổi tối đa mà pha 5 được làm. Chặn trên để pha sửa không chạy
-  /// mãi khi danh mục không đủ món để thỏa ràng buộc.
+  /// The maximum number of swaps phase 5 may make. An upper bound, so the
+  /// repair phase does not run forever when the catalogue holds no dishes
+  /// that would satisfy the constraint.
   final int nutrientRepairRounds;
 
-  /// Trần độ lệch năng lượng mà pha 5 được phép đẩy thực đơn tới.
+  /// The ceiling on the energy deviation phase 5 is allowed to push the plan
+  /// to.
   ///
-  /// 10 % là cam kết trong đề cương. Pha 5 **không bao giờ** đẩy độ lệch vượt
-  /// mốc này để đổi lấy việc thỏa một ràng buộc vi chất: làm vậy là chữa một
-  /// vi phạm bằng cách tạo ra một vi phạm khác.
+  /// 10 % is the commitment made in the thesis proposal. Phase 5 **never**
+  /// pushes the deviation past that mark in exchange for satisfying a
+  /// micronutrient constraint: doing so would cure one violation by creating
+  /// another.
   final double maxEnergyDeviation;
 
   final math.Random _rng;
 
-  /// Sinh thực đơn cho một ngày.
+  /// Generates the plan for one day.
   ///
-  /// [targetKcal] là hạn mức năng lượng cả ngày đã tính từ hồ sơ sức khỏe
-  /// (TDEE điều chỉnh theo mục tiêu). Hạn mức từng bữa suy ra theo
-  /// [MealType.energyShare].
+  /// [targetKcal] is the whole day's energy target, already computed from the
+  /// health profile (the TDEE adjusted for the goal). Each meal's target
+  /// follows from [MealType.energyShare].
   DailyPlan build({
     required DateTime date,
     required double targetKcal,
@@ -130,15 +141,16 @@ class MenuBuilder {
     };
     final usedIds = <String>{};
 
-    // ── Pha 1 — tham lam trên các suất bắt buộc ──────────────────────
+    // ── Phase 1 — greedy over the required servings ──────────────────
     for (final slot in slots) {
       final activeProfile = slot.explore ? exploreProfile : profile;
       final pool = candidates
           .where((f) => f.dishRole == slot.role && !usedIds.contains(f.id))
           .toList();
 
-      // Không còn món đúng vai trò thì bỏ suất, thay vì chèn bừa một món sai
-      // vai trò — bữa thiếu món canh vẫn hợp lý hơn bữa có hai món chính.
+      // With no dish left in the right role, skip the serving rather than
+      // forcing in a dish of the wrong role — a meal missing its soup is
+      // still more sensible than a meal with two main dishes.
       if (pool.isEmpty) continue;
 
       final mealTarget = targetKcal * slot.meal.energyShare;
@@ -164,10 +176,10 @@ class MenuBuilder {
       );
     }
 
-    // ── Pha 2 — bù suất tùy chọn ở cấp ngày ──────────────────────────
+    // ── Phase 2 — top up with optional servings, at the day level ────
     _topUp(picks: picks, usedIds: usedIds, targetKcal: targetKcal);
 
-    // ── Pha 3 — tìm kiếm cục bộ trên từng bữa ────────────────────────
+    // ── Phase 3 — local search within each meal ──────────────────────
     for (final type in MealType.values) {
       final before = picks[type]!.map((i) => i.food.id).toSet();
 
@@ -180,12 +192,13 @@ class MenuBuilder {
         targetFat: targetFat * type.energyShare,
       );
 
-      // Cập nhật `usedIds` theo kết quả hoán đổi trước khi sang bữa sau.
+      // Update `usedIds` from the swap result before moving to the next meal.
       //
-      // Thiếu bước này thì món vừa được đổi VÀO bữa sáng không nằm trong
-      // `usedIds`, nên bữa trưa vẫn thấy nó còn trống và lấy luôn — cùng một
-      // món xuất hiện hai lần trong ngày. Ngược lại, món bị đổi RA phải được
-      // trả lại tập ứng viên, vì nó không còn trong thực đơn nữa.
+      // Without this step, a dish just swapped INTO breakfast is not in
+      // `usedIds`, so lunch still sees it as free and takes it too — the same
+      // dish appears twice in one day. Conversely, a dish swapped OUT has to
+      // be returned to the candidate set, because it is no longer in the
+      // plan.
       final after = refined.map((i) => i.food.id).toSet();
       usedIds
         ..removeAll(before.difference(after))
@@ -194,26 +207,29 @@ class MenuBuilder {
       picks[type] = refined;
     }
 
-    // ── Pha 4 — bù lại ở cấp ngày ────────────────────────────────────
+    // ── Phase 4 — top up again at the day level ──────────────────────
     //
-    // Pha 3 tối ưu từng bữa **riêng lẻ**, nên nó có thể kéo tổng năng lượng
-    // của cả ngày xa hạn mức dù mỗi bữa đều khá hơn: đổi một món chính nhẹ
-    // hơn vào bữa trưa làm bữa đó khớp macro hơn, nhưng cả ngày hụt thêm.
+    // Phase 3 optimises each meal **separately**, so it can pull the whole
+    // day's energy away from the target even while every single meal
+    // improves: swapping a lighter main dish into lunch makes that meal match
+    // its macros better, but leaves the day shorter still.
     //
-    // Gọi lại `_topUp` sau pha 3 để sửa. Phép này chỉ thêm món khi món đó
-    // làm khoảng lệch cấp ngày **nhỏ lại**, nên nó không bao giờ làm xấu đi
-    // — chạy thêm một lượt là an toàn.
+    // Calling `_topUp` again after phase 3 fixes that. It only adds a dish
+    // when that dish makes the day-level gap **smaller**, so it can never
+    // make things worse — running one more pass is safe.
     _topUp(picks: picks, usedIds: usedIds, targetKcal: targetKcal);
 
-    // -- Pha 5 - thi hanh rang buoc vi chat o cap ngay --
+    // ── Phase 5 — enforce the day-level micronutrient constraints ────
     //
-    // Phải ở cấp ngày và phải ở cuối: ngưỡng "natri dưới 2000 mg/ngày" là
-    // phát biểu về **tổng cả ngày**, nên không kiểm được ở pha 1 (chọn từng
-    // suất) cũng không ở pha 3 (tối ưu từng bữa).
+    // It has to be at the day level and it has to be last: the threshold
+    // "sodium under 2000 mg/day" is a statement about the **whole day's
+    // total**, so it cannot be checked in phase 1 (which picks one serving at
+    // a time) nor in phase 3 (which optimises one meal at a time).
     //
-    // Đây là phần trước đây thiếu hẳn. `condition_rules` lưu sáu ngưỡng cứng
-    // `per_day`, tài liệu nói Bước 4 kiểm chúng, nhưng Bước 4 chỉ bám `kcal`
-    // và ba macro — tức các ngưỡng đó không được thi hành ở đâu cả.
+    // This is the part that used to be missing entirely. `condition_rules`
+    // stores six hard `per_day` thresholds, the documentation said Step 4
+    // checked them, but Step 4 only tracked `kcal` and the three macros —
+    // meaning those thresholds were enforced nowhere at all.
     _repairNutrients(picks: picks, usedIds: usedIds, targetKcal: targetKcal);
 
     final result = [
@@ -237,7 +253,7 @@ class MenuBuilder {
     );
   }
 
-  /// Tổng từng chất của cả ngày.
+  /// The whole day's total of each nutrient.
   Map<String, double> _dayTotals(Map<MealType, List<MealPlanItem>> picks) {
     final totals = <String, double>{};
     for (final nutrient in NutrientTarget.supported) {
@@ -252,26 +268,31 @@ class MenuBuilder {
     return totals;
   }
 
-  /// Pha 5 — sửa thực đơn cho thỏa các ràng buộc vi chất cấp ngày.
+  /// Phase 5 — repair the plan so it satisfies the day-level micronutrient
+  /// constraints.
   ///
-  /// Cách làm là **hoán đổi một món cùng vai trò**, không thêm và không bớt
-  /// món: thêm món sẽ phá hạn mức năng lượng, bớt món sẽ phá cấu trúc bữa.
+  /// It works by **swapping one dish for another in the same role**, adding
+  /// nothing and removing nothing: adding a dish would break the energy
+  /// target, removing one would break the meal's structure.
   ///
-  /// Mỗi vòng xử lý **vi phạm nặng nhất** trước, đo theo tỷ lệ trên ngưỡng để
-  /// so được giữa các chất khác đơn vị. Một phép đổi chỉ được nhận khi:
+  /// Each round handles the **worst violation** first, measured as a fraction
+  /// of the threshold so that nutrients in different units can be compared. A
+  /// swap is only accepted when:
   ///
-  ///   1. nó làm vi phạm đang xét **nhỏ lại**;
-  ///   2. nó không tạo ra vi phạm mới ở ràng buộc nào khác đang thỏa;
-  ///   3. độ lệch năng lượng sau khi đổi vẫn trong [maxEnergyDeviation], hoặc
-  ///      không tệ hơn mức đang có.
+  ///   1. it makes the violation under consideration **smaller**;
+  ///   2. it creates no new violation in any other constraint that is
+  ///      currently satisfied;
+  ///   3. the energy deviation after the swap is still within
+  ///      [maxEnergyDeviation], or at least no worse than it already is.
   ///
-  /// Điều kiện 2 là chỗ dễ sai nhất. Không có nó thì pha này sẽ sửa thiếu
-  /// chất xơ bằng cách nhồi món nhiều natri, và người tăng huyết áp nhận một
-  /// thực đơn đạt xơ nhưng vi phạm đúng ngưỡng quan trọng với họ.
+  /// Condition 2 is the easiest one to get wrong. Without it this phase would
+  /// fix a fibre shortfall by stuffing in high-sodium dishes, and someone
+  /// with hypertension would get a plan that meets its fibre goal while
+  /// breaching the very threshold that matters to them.
   ///
-  /// Khi nhiều phép đổi cùng mức cải thiện, chọn phép **giữ khẩu vị tốt
-  /// nhất**: đo được rằng bỏ mặc tiêu chí này làm điểm hợp khẩu vị rơi 7,1 %
-  /// thay vì 2,1 %.
+  /// When several swaps improve things equally, the one that **preserves
+  /// taste best** is chosen: ignoring that criterion was measured to drop the
+  /// taste-match score by 7.1 % instead of 2.1 %.
   void _repairNutrients({
     required Map<MealType, List<MealPlanItem>> picks,
     required Set<String> usedIds,
@@ -360,9 +381,10 @@ class MenuBuilder {
         }
       }
 
-      // Không còn phép đổi nào cải thiện được: danh mục không đủ món để thỏa
-      // ràng buộc này. Dừng và để `DailyPlan.nutrientViolations` báo ra, thay
-      // vì tiếp tục đổi món vô ích hay trả về một thực đơn rỗng.
+      // No swap improves anything any more: the catalogue holds no dishes
+      // that would satisfy this constraint. Stop and let
+      // `DailyPlan.nutrientViolations` report it, rather than swapping dishes
+      // pointlessly or returning an empty plan.
       if (bestMeal == null || bestFood == null) return;
       if (bestViolation >= worstViolation) return;
 
@@ -378,15 +400,16 @@ class MenuBuilder {
     }
   }
 
-  /// Quyết định suất nào là thăm dò, tính trên **toàn thực đơn**.
+  /// Decides which servings are exploration, counted over the **whole plan**.
   ///
-  /// Tỷ lệ 70-30 là thuộc tính của cả thực đơn chứ không của từng bữa — đúng
-  /// như cột `exploration_ratio` nằm ở bảng `meal_plans`. Nếu chia theo từng
-  /// bữa rồi làm tròn xuống, bữa một món luôn nhận 0 suất thăm dò và bữa ba
-  /// món cũng vậy, kết quả là cơ chế thăm dò không bao giờ chạy.
+  /// The 70-30 ratio is a property of the plan rather than of a single meal —
+  /// exactly as the `exploration_ratio` column sits on the `meal_plans`
+  /// table. Were it split per meal and rounded down, a one-dish meal would
+  /// always get 0 exploration servings and so would a three-dish one, with
+  /// the result that the exploration mechanism never ran at all.
   ///
-  /// Suất thăm dò được ưu tiên đặt vào bữa có nhiều món, để không có bữa nào
-  /// bị biến thành toàn món thử nghiệm.
+  /// Exploration servings are placed preferentially in the meals with more
+  /// dishes, so that no single meal turns into nothing but trial dishes.
   List<_Slot> _assignExplorationSlots(double ratio) {
     final base = <({MealType meal, String role})>[
       for (final type in MealType.values)
@@ -401,8 +424,9 @@ class MenuBuilder {
       ];
     }
 
-    // Xếp ứng viên theo số món của bữa, giảm dần; xáo trộn trước để các bữa
-    // cùng cỡ không phải lúc nào cũng theo đúng một thứ tự.
+    // Order the candidates by the meal's dish count, descending; shuffle
+    // first so that meals of the same size do not always come out in the same
+    // order.
     final order = [for (var i = 0; i < base.length; i++) i]..shuffle(_rng);
     order.sort((a, b) {
       final sizeA = _mealStructure[base[a].meal]!.required.length;
@@ -417,12 +441,13 @@ class MenuBuilder {
     ];
   }
 
-  /// Thêm dần suất tùy chọn chừng nào nó còn kéo tổng năng lượng lại gần hạn
-  /// mức của cả ngày.
+  /// Adds optional servings one at a time for as long as each one pulls the
+  /// day's total energy closer to the target.
   ///
-  /// Chạy ở cấp ngày chứ không cấp bữa vì cam kết trong đề cương là độ lệch
-  /// của **thực đơn** không quá 10 %. Một bữa lệch nhiều có thể được bữa khác
-  /// bù lại, và đó là hành vi đúng: người ta ăn sáng nhẹ rồi ăn trưa nhiều.
+  /// It runs at the day level rather than per meal because the commitment in
+  /// the thesis proposal is that the **plan's** deviation stays under 10 %.
+  /// One meal being far off can be compensated by another, and that is the
+  /// right behaviour: people eat a light breakfast and then a large lunch.
   void _topUp({
     required Map<MealType, List<MealPlanItem>> picks,
     required Set<String> usedIds,
@@ -437,7 +462,7 @@ class MenuBuilder {
 
       for (final type in MealType.values) {
         for (final role in _mealStructure[type]!.optional) {
-          // Không thêm hai món cùng vai trò vào một bữa.
+          // Never add two dishes of the same role to one meal.
           if (picks[type]!.any((i) => i.food.dishRole == role)) continue;
 
           for (final food in candidates) {
@@ -462,16 +487,18 @@ class MenuBuilder {
     }
   }
 
-  /// Tham lam theo **mật độ điểm**.
+  /// Greedy by **score density**.
   ///
-  /// Sắp xếp theo `score / kcal` chứ không theo `score` thuần là điểm mấu
-  /// chốt, và là chiến lược kinh điển của bài toán cái túi: ưu tiên món mang
-  /// lại nhiều điểm ưa thích nhất **trên mỗi đơn vị năng lượng tiêu tốn**.
-  /// Nếu xếp theo điểm thuần, một món 650 kcal điểm 0,9 sẽ luôn thắng món
-  /// 300 kcal điểm 0,8, và bữa ăn cạn hạn mức chỉ sau một món.
+  /// Sorting by `score / kcal` rather than by `score` alone is the crux, and
+  /// it is the classic strategy for the knapsack problem: prefer the dish
+  /// that delivers the most preference score **per unit of energy spent**.
+  /// Sorted by score alone, a 650 kcal dish scoring 0.9 would always beat a
+  /// 300 kcal dish scoring 0.8, and the meal would exhaust its allowance
+  /// after a single dish.
   ///
-  /// Mật độ được cân thêm bởi độ khớp với hạn mức của suất, nếu không thì
-  /// món nhẹ nhất luôn thắng vì mẫu số nhỏ.
+  /// The density is additionally weighted by how well the dish fits the
+  /// serving's target; without that, the lightest dish always wins because
+  /// its denominator is smallest.
   Food _greedyPick({
     required List<Food> pool,
     required PreferenceProfile profile,
@@ -503,12 +530,13 @@ class MenuBuilder {
     return best ?? pool.first;
   }
 
-  /// Tìm kiếm cục bộ bằng phép hoán đổi từng món.
+  /// Local search by swapping one dish at a time.
   ///
-  /// Lời giải tham lam chỉ nhìn được một suất tại một thời điểm, nên tổng của
-  /// cả bữa có thể lệch hạn mức dù từng suất đều hợp lý. Pha này thử thay
-  /// từng món đang chọn bằng một món khác cùng vai trò, giữ lại phép thay nào
-  /// làm hàm mục tiêu tăng, và dừng khi không còn cải thiện được.
+  /// The greedy solution can only see one serving at a time, so a meal's
+  /// total can miss its target even when every individual serving is
+  /// sensible. This phase tries replacing each selected dish with another in
+  /// the same role, keeps whichever replacement raises the objective
+  /// function, and stops when nothing improves any more.
   List<MealPlanItem> _localSearch({
     required List<MealPlanItem> selected,
     required Set<String> usedIds,
@@ -570,7 +598,7 @@ class MenuBuilder {
     return current;
   }
 
-  /// Hàm mục tiêu có phạt.
+  /// The penalised objective function.
   ///
   /// ```text
   ///                        | kcal(S) − E |            | macroₖ(S) − Tₖ |
@@ -578,10 +606,11 @@ class MenuBuilder {
   ///                               E              k         Tₖ
   /// ```
   ///
-  /// Ràng buộc dinh dưỡng được đưa vào hàm mục tiêu dưới dạng thành phần
-  /// phạt thay vì loại thẳng lời giải vi phạm. Nhờ vậy thuật toán đi qua
-  /// được các lời giải tạm thời lệch nhẹ để tới lời giải tốt hơn, thay vì
-  /// kẹt sớm ở một lời giải kém nhưng hợp lệ.
+  /// The nutrition constraints enter the objective function as penalty terms
+  /// rather than disqualifying a violating solution outright. That lets the
+  /// algorithm pass through solutions that are temporarily slightly off on
+  /// its way to a better one, instead of getting stuck early on a poor but
+  /// valid solution.
   double _objective(
     List<MealPlanItem> items, {
     required double targetKcal,
@@ -614,11 +643,12 @@ class MenuBuilder {
   double _kcalOf(List<MealPlanItem> items) =>
       items.fold(0, (sum, i) => sum + i.food.kcal.toDouble());
 
-  /// Gợi ý món thay thế cho một suất, xếp theo điểm giảm dần.
+  /// Suggests replacements for one serving, in descending score order.
   ///
-  /// Dùng khi người dùng bấm đổi món. Thao tác đổi sinh ra hai tín hiệu huấn
-  /// luyện cùng lúc: món bị bỏ nhận nhãn thấp, món được chọn nhận nhãn cao —
-  /// xem bảng quy đổi nhãn `plan_replaced` và `plan_kept`.
+  /// Used when the user taps to swap a dish. The swap produces two training
+  /// signals at once: the dropped dish takes a low label, the chosen dish a
+  /// high one — see the `plan_replaced` and `plan_kept` rows of the label
+  /// mapping table.
   List<Food> alternativesFor(
     MealPlanItem item, {
     required Set<String> excludeIds,
@@ -633,7 +663,8 @@ class MenuBuilder {
     pool.sort((a, b) {
       final byScore = profile.score(b).compareTo(profile.score(a));
       if (byScore != 0) return byScore;
-      // Cùng điểm thì ưu tiên món gần hạn mức của suất đang thay hơn.
+      // On an equal score, prefer the dish closer to the target of the
+      // serving being replaced.
       final da = (a.kcal - item.food.kcal).abs();
       final db = (b.kcal - item.food.kcal).abs();
       return da.compareTo(db);
