@@ -46,13 +46,13 @@ Ba lớp này bắt ba loại lỗi khác nhau, và không lớp nào thay đư�
 
 Bộ kiểm này bắt được ba chỗ lệch có thật ngay lần chạy đầu — macro 17/60/23 ở Dart đối lại 15/60/25 trong CSDL và đặc tả; `mealDistribution` 25/40/27/8 trong đặc tả đối lại điểm giữa 27.5/37.5/27.5/7.5 ở `meal_plan.dart`; và `bmiCategory: "normal"` cho BMI 23.15, sai theo chính ngưỡng châu Á 23/25 mà hệ thống dùng. Không chỗ nào trong ba chỗ đó trông sai khi đọc.
 
-`tools/thu_be_parity.py` thử phủ định chính bộ kiểm ấy: tiêm 14 lỗi vào tệp ca thử rồi đòi cả hai bộ phải thất bại. Nó chỉ sửa tệp **sinh ra**, không bao giờ chạm mã nguồn — bản đầu sửa thẳng hằng số trong `NutritionTargets.cs` rồi khôi phục trong `finally`, và khi phiên làm việc bị cắt giữa chừng, `finally` không chạy: lỗi tiêm nằm lại trong mã thật.
+`tools/test_be_parity.py` thử phủ định chính bộ kiểm ấy: tiêm 14 lỗi vào tệp ca thử rồi đòi cả hai bộ phải thất bại. Nó chỉ sửa tệp **sinh ra**, không bao giờ chạm mã nguồn — bản đầu sửa thẳng hằng số trong `NutritionTargets.cs` rồi khôi phục trong `finally`, và khi phiên làm việc bị cắt giữa chừng, `finally` không chạy: lỗi tiêm nằm lại trong mã thật.
 
 **`smoke_backend.py` — những gì chỉ sai khi có CSDL và có mạng.** Ánh xạ tên cột, kiểu dữ liệu, giao dịch, vỏ lỗi, claim trong JWT. Nó tạo một tài khoản với email ngẫu nhiên rồi xóa ở cuối; `ON DELETE CASCADE` dọn phần còn lại.
 
 Nó đã bắt bốn lỗi mà trình biên dịch không thấy: `food_tags` thiếu khóa chính (khai ở cấp bảng, và thiếu nó thì **mọi** endpoint trả 500, không chỉ endpoint chạm vào bảng đó); `CHAR(36)` đọc ra `System.Guid` thay vì `string`; khóa ngoại tự trỏ `replaced_by` vỡ vì EF xếp `UPDATE` trước `INSERT`; và một phép kiểm trong chính tệp thử gán cứng ngày sinh nên đổi kết quả vào đúng một ngày trong năm.
 
-**`gen_entities.py` — 24 lớp thực thể sinh từ `db/schema.sql`.** 225 cột; gõ tay thì một cột sai tên hoặc sai tính cho phép `NULL` không gây lỗi biên dịch nào — nó gây một `MySqlException` lúc chạy, ở một endpoint có thể không ai gọi tới trong nhiều tuần. Chạy không có cờ thì nó **soát** mã đang có; `--ghi` thì sinh lại.
+**`gen_entities.py` — 24 lớp thực thể sinh từ `db/schema.sql`.** 225 cột; gõ tay thì một cột sai tên hoặc sai tính cho phép `NULL` không gây lỗi biên dịch nào — nó gây một `MySqlException` lúc chạy, ở một endpoint có thể không ai gọi tới trong nhiều tuần. Chạy không có cờ thì nó **soát** mã đang có; `--write` thì sinh lại.
 
 Phép kiểm 5 của nó đối chiếu bốn mảng trong `Api/Profile/ProfileDtos.cs` — `Enums.Gender`, `.ActivityLevel`, `.Goal`, `.Severity` — với tập giá trị ENUM của `health_profiles` và `user_conditions`, **giữ cả thứ tự** vì MySQL lưu ENUM theo thứ số. Bốn mảng đó là tầng duy nhất trả `400 VALIDATION_FAILED` kèm tên trường, nên khi chúng lệch khỏi lược đồ thì API từ chối đúng thứ CSDL cho phép, và cả hai bên vẫn tự nhất quán nên không có gì báo ra. Phép kiểm soát **hai chiều**: thêm một mảng vào `Enums` mà không khai trong `ENUM_CS` cũng là lệch — nó trông như được soát mà thật ra không.
 
@@ -62,7 +62,7 @@ Phép kiểm 5 của nó đối chiếu bốn mảng trong `Api/Profile/ProfileD
 
 ### Một múi giờ duy nhất: Asia/Ho_Chi_Minh
 
-`Api/Time/DongHo.cs` là chỗ duy nhất đọc đồng hồ. Mọi cột `DATETIME` lấy `DongHo.BayGio`, mọi cột `DATE` và mọi phép tính theo ngày lịch lấy `DongHo.HomNay`.
+`Api/Time/Clock.cs` là chỗ duy nhất đọc đồng hồ. Mọi cột `DATETIME` lấy `Clock.Now`, mọi cột `DATE` và mọi phép tính theo ngày lịch lấy `Clock.Today`.
 
 Trước đó ba tầng đọc ba đồng hồ: CSDL dùng `CURRENT_TIMESTAMP` ở 27 cột và `NOW()` trong mọi `tools/*.py`, cả hai trả theo `@@session.time_zone` mặc định là `SYSTEM` tức giờ Việt Nam; app Flutter dùng `DateTime.now()`, giờ địa phương; còn Backend dùng `DateTime.UtcNow`, **lệch 7 giờ so với cả hai**. Hậu quả im lặng: `users.created_at` do Backend ghi lùi 7 giờ so với dòng do `check_ml_e2e.py` ghi, nên sắp theo `created_at` là trộn hai đồng hồ. Và "hôm nay" tính bằng UTC lùi một **ngày** trong khoảng 00:00–07:00, nên đúng ngày sinh nhật app hiện 23 tuổi còn `GET /profile` trả `age: 22`.
 
@@ -72,7 +72,7 @@ Chọn giờ Việt Nam chứ không chọn UTC vì đó là thứ CSDL **đang*
 
 ### Chặn tài khoản bị khóa bằng bộ lọc toàn cục, không bằng phép kiểm từng chỗ
 
-`TaiKhoanConHoatDongFilter` đăng ký trong `MvcOptions.Filters`, nên endpoint mới được bảo vệ **mặc định**; bỏ bảo vệ phải tường minh bằng `[AllowAnonymous]`. Trước đó `is_active` được kiểm ở `/auth/login`, `/auth/refresh` và `/auth/me` nhưng **không** ở bất cứ endpoint nào của `/profile`, nên tài khoản bị khóa vẫn đọc ghi hồ sơ được tới một giờ. Còn 38 endpoint chưa làm, và một phép kiểm phải nhớ gõ lại ở từng chỗ là một phép kiểm sẽ bị quên.
+`ActiveAccountFilter` đăng ký trong `MvcOptions.Filters`, nên endpoint mới được bảo vệ **mặc định**; bỏ bảo vệ phải tường minh bằng `[AllowAnonymous]`. Trước đó `is_active` được kiểm ở `/auth/login`, `/auth/refresh` và `/auth/me` nhưng **không** ở bất cứ endpoint nào của `/profile`, nên tài khoản bị khóa vẫn đọc ghi hồ sơ được tới một giờ. Còn 38 endpoint chưa làm, và một phép kiểm phải nhớ gõ lại ở từng chỗ là một phép kiểm sẽ bị quên.
 
 `/auth/login` và `/auth/refresh` giữ phép kiểm riêng, và đó không phải trùng lặp: chúng `[AllowAnonymous]` và xác thực bằng mật khẩu hoặc refreshToken, nên không có claim `sub` để bộ lọc tra.
 
@@ -87,7 +87,7 @@ Chọn giờ Việt Nam chứ không chọn UTC vì đó là thứ CSDL **đang*
 python tools/run_sql.py db/migrations/00N_ten.sql --database nutrition_rec
 # 2. gộp vào db/schema.sql, cập nhật con số ở đầu tệp
 # 3. sinh lại thực thể
-python tools/gen_entities.py --ghi
+python tools/gen_entities.py --write
 ```
 
 Thêm một bảng còn lan ra bốn tài liệu nữa — `DATABASE_DESIGN.md`, `database_erd.html`, `ERD_REVIEW.md`, và con số mong đợi trong `tools/test_schema_build.py`. `python tools/check_docs_sync.py` liệt kê đúng từng chỗ.
@@ -109,12 +109,12 @@ Api/
 ├── Entities/               24 lớp           ← SINH TỰ ĐỘNG
 ├── Http/
 │   ├── ApiError.cs         vỏ lỗi + danh mục 21 mã lỗi của §4
-│   └── TaiKhoanConHoatDong.cs   chặn tài khoản bị khóa ở MỌI endpoint
-├── Time/DongHo.cs          một múi giờ duy nhất: Asia/Ho_Chi_Minh
+│   └── ActiveAccount.cs         chặn tài khoản bị khóa ở MỌI endpoint
+├── Time/Clock.cs           một múi giờ duy nhất: Asia/Ho_Chi_Minh
 ├── Nutrition/              Bước 1: BMI, BMR, TDEE, macro, phân bổ bữa
 ├── Auth/                   7.1.1 – 7.1.4
 └── Profile/                7.2.1 – 7.2.5
 Api.Tests/                  44 phép kiểm, không cần CSDL
 ```
 
-Hai thư mục đánh dấu **SINH TỰ ĐỘNG** không sửa tay — sửa `db/schema.sql` rồi chạy lại `tools/gen_entities.py --ghi`.
+Hai thư mục đánh dấu **SINH TỰ ĐỘNG** không sửa tay — sửa `db/schema.sql` rồi chạy lại `tools/gen_entities.py --write`.

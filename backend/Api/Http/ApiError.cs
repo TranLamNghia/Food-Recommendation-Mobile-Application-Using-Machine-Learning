@@ -4,13 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 namespace Api.Http;
 
 /// <summary>
-/// Vỏ lỗi duy nhất của toàn bộ API — đặc tả §2.5.
+/// The one error envelope for the whole API — specification §2.5.
 ///
-/// <para>Một cấu trúc cho mọi lỗi, không phải mỗi endpoint một kiểu. Frontend
-/// bóc <c>error.code</c> ra để quyết định làm gì (đặc tả §4 nói rõ từng mã
-/// Frontend nên làm gì), nên <c>code</c> phải là chuỗi ổn định, không phải
-/// câu tiếng Việt — câu tiếng Việt là <c>message</c>, và sửa nó không được
-/// làm hỏng Frontend.</para>
+/// <para>One structure for every error, rather than a type per endpoint. The
+/// frontend reads <c>error.code</c> to decide what to do (specification §4
+/// states what the frontend should do for each code), so <c>code</c> has to be
+/// a stable string, not a Vietnamese sentence — the Vietnamese sentence is
+/// <c>message</c>, and editing it must not break the frontend.</para>
 /// </summary>
 public sealed class ApiError
 {
@@ -23,7 +23,8 @@ public sealed class ApiError
         public string Message { get; init; } = string.Empty;
 
         /// <summary>
-        /// Chỉ có ở <c>VALIDATION_FAILED</c>; các lỗi khác bỏ trống.
+        /// Present only on <c>VALIDATION_FAILED</c>; omitted for every other
+        /// error.
         /// </summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<FieldError>? Details { get; init; }
@@ -39,13 +40,14 @@ public sealed class ApiError
 }
 
 /// <summary>
-/// Danh mục mã lỗi — đặc tả §4.
+/// The error code catalogue — specification §4.
 ///
-/// <para>Hằng số chứ không phải chuỗi rải khắp controller. Năm mã lỗi bịa
-/// từng lọt vào sơ đồ luồng của đề tài này (<c>EMAIL_EXISTS</c> trong khi
-/// danh mục ghi <c>EMAIL_ALREADY_EXISTS</c>, và bốn mã nữa) và không mã nào
-/// gây lỗi gì — chúng chỉ mô tả một hệ thống không tồn tại. Gõ chuỗi tay ở
-/// controller thì khoảng sai đó mở lại.</para>
+/// <para>Constants rather than strings scattered across the controllers. Five
+/// invented error codes once made it into this project's flow diagrams
+/// (<c>EMAIL_EXISTS</c> where the catalogue says <c>EMAIL_ALREADY_EXISTS</c>,
+/// plus four more) and none of them broke anything — they merely described a
+/// system that did not exist. Typing the strings by hand in a controller
+/// reopens that gap.</para>
 /// </summary>
 public static class ErrorCode
 {
@@ -73,7 +75,7 @@ public static class ErrorCode
     public const string InternalError = "INTERNAL_ERROR";
 }
 
-/// <summary>Dựng phản hồi lỗi theo đúng vỏ ở §2.5.</summary>
+/// <summary>Builds an error response in exactly the §2.5 envelope.</summary>
 public static class ApiProblem
 {
     public static ObjectResult Make(

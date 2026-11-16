@@ -1,32 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Kiểm đầu-cuối phần học máy — tự dựng CSDL riêng, tự xóa khi xong.
+"""End-to-end checks for the machine-learning layer — builds its own database
+and drops it when done.
 
-`tools/check_ml.py` kiểm các hàm thuần mà không cần CSDL. Tệp này kiểm phần
-còn lại: bốn script đọc ghi CSDL, chạy nối tiếp nhau đúng như khi làm thật.
+`tools/check_ml.py` checks the pure functions with no database. This file
+checks the rest: the four scripts that read and write the database, running one
+after another exactly as they do for real.
 
-    build_dataset  →  train  →  evaluate  →  serve
+    build_dataset  ->  train  ->  evaluate  ->  serve
 
-Vì sao phải tự dựng CSDL. Bảy nguồn tín hiệu trong `nutrition_rec` đều **đang
-trống** — chưa có người dùng thật nào. Nên không có cách nào kiểm bốn script
-này trên CSDL thật, và viết tín hiệu giả vào CSDL thật thì làm bẩn đúng cái
-mình phải giữ sạch. Tệp này tạo một CSDL riêng, sao **dữ liệu món thật** sang
-(để vector đặc trưng vẫn là vector thật), dựng người dùng giả ở đó, chạy hết
-rồi xóa CSDL đi.
+Why it builds its own database. All seven signal sources in `nutrition_rec` are
+**empty** — there is no real user yet. So there is no way to check these four
+scripts against the real database, and writing fake signals into the real one
+would dirty the very thing that has to stay clean. This file creates a separate
+database, copies the **real food data** across (so the feature vectors are
+still the real ones), builds fake users there, runs everything, then drops the
+database.
 
-**Nhãn được gắn ngẫu nhiên, và đó là chủ ý.** Không phải vì tiện, mà vì nó
-tạo ra một **chốt canh rò rỉ dữ liệu**: nếu đường ống không rò rỉ thì mô hình
-buộc phải cho kết quả quanh mức tình cờ. Một con số đẹp ở đây là bằng chứng
-có rò rỉ, không phải tin tốt. Sinh hồ sơ giả với khẩu vị đã biết rồi cho
-chúng "vuốt" theo khẩu vị đó thì mô hình sẽ học lại đúng quy luật mình vừa
-bịa ra, và chốt canh này mất tác dụng.
+**The labels are assigned at random, and that is deliberate.** Not for
+convenience, but because it creates a **data-leakage tripwire**: if the pipeline
+does not leak, the model is forced to score around chance. A good number here
+is evidence of leakage, not good news. Generating fake profiles with a known
+taste and having them "swipe" according to that taste would make the model
+relearn the rule just invented, and the tripwire would stop working.
 
-Mọi con số in ra đây **không phải kết quả thực nghiệm** và không được đưa vào
-báo cáo. Chúng chỉ chứng minh đường ống chạy đúng.
+Every number printed here is **not an experimental result** and must not go
+into the report. They only prove the pipeline runs correctly.
 
-Chạy:
+Run:
     python tools/check_ml_e2e.py
-    python tools/check_ml_e2e.py --giu     # giữ CSDL lại để xem bằng tay
+    python tools/check_ml_e2e.py --keep    # keep the database for inspection
+
+Note on language: the survey form's field keys and the `lua_chon` values are
+the contract with `tools/import_swipes.py`; the condition names, tag names,
+food names and the strings matched against `condition_rules.note` all come from
+the database. Those stay as they are.
 """
 
 from __future__ import annotations
@@ -46,61 +54,71 @@ sys.path.insert(0, str(ROOT))
 
 import pymysql  # noqa: E402
 
-from ml.build_dataset import main as chay_dung_tap  # noqa: E402
-from ml.db import ket_noi, in_utf8  # noqa: E402
-from ml.evaluate import main as chay_danh_gia  # noqa: E402
+from ml.build_dataset import main as run_build_dataset  # noqa: E402
+from ml.db import connect, use_utf8  # noqa: E402
+from ml.evaluate import main as run_evaluate  # noqa: E402
 from ml.f1_filter import (  # noqa: E402
-    dieu_kien_cua_nguoi_dung,
-    dieu_kien_theo_ten,
-    doi_chieu_loc_f1,
-    loc_f1,
-    luat_chua_thi_hanh,
-    luat_mem,
-    luat_mem_theo_pham_vi,
-    ly_do_loai,
+    conditions_for_user,
+    conditions_by_name,
+    cross_check_f1,
+    allowed_foods,
+    unenforced_rules,
+    soft_rules,
+    soft_rules_by_scope,
+    exclusion_reasons,
 )
-from ml.scoring import hinh_phat  # noqa: E402
-from ml.han_muc import (  # noqa: E402
-    da_an,
-    da_len_ke_hoach,
-    kiem_dem_doi,
-    mon_khong_vua,
-    trang_thai,
+from ml.scoring import penalty  # noqa: E402
+from ml.daily_limits import (  # noqa: E402
+    eaten_totals,
+    planned_totals,
+    check_double_counting,
+    classify_foods,
+    status,
 )
-from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
-from ml.rocchio import alpha, dung_ho_so, giai_doan  # noqa: E402
-from ml.serve import goi_y, nap_mo_hinh_hoat_dong  # noqa: E402
-from ml.train import main as chay_huan_luyen  # noqa: E402
-from tools.make_survey_deck import chon_bo_mon  # noqa: E402
-from tools.update_popularity import main as _cap_nhat_pho_bien  # noqa: E402
+from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
+from ml.rocchio import alpha, build_profile, stage  # noqa: E402
+from ml.serve import recommend, load_active_model  # noqa: E402
+from ml.train import main as run_train  # noqa: E402
+from tools.make_survey_deck import pick_deck  # noqa: E402
+from tools.update_popularity import main as _update_popularity  # noqa: E402
 
 
-def chay_nhap_phieu(argv: list[str]) -> int:
-    """`import_swipes.main` đọc `sys.argv`, nên phải thay tạm."""
-    from tools.import_swipes import main as _nhap
+def run_import_swipes(argv: list[str]) -> int:
+    """`import_swipes.main` reads `sys.argv`, so it has to be swapped out."""
+    from tools.import_swipes import main as _import
 
-    cu = sys.argv
+    saved = sys.argv
     sys.argv = ["import_swipes.py", *argv]
     try:
-        return _nhap()
+        return _import()
     finally:
-        sys.argv = cu
+        sys.argv = saved
 
 
-def chay_cap_nhat_pho_bien(argv: list[str]) -> int:
-    """`update_popularity.main` đọc `sys.argv`, nên phải thay tạm."""
-    cu = sys.argv
+def run_update_popularity(argv: list[str]) -> int:
+    """`update_popularity.main` reads `sys.argv`, so it has to be swapped out."""
+    saved = sys.argv
     sys.argv = ["update_popularity.py", *argv]
     try:
-        return _cap_nhat_pho_bien()
+        return _update_popularity()
     finally:
-        sys.argv = cu
+        sys.argv = saved
 
-TEN_CSDL_THU = "zz_kiem_ml"
+
+TEST_DATABASE = "zz_check_ml"
 SES = "33333333-3333-3333-3333-333333333333"
 
-#: Các bảng tham chiếu được sao từ CSDL thật, theo thứ tự an toàn khóa ngoại.
-BANG_THAM_CHIEU = (
+#: The email of the form-filling user. Declared once because four queries
+#: match on it.
+FORM_EMAIL = "form-filler@test.test"
+
+#: The note text on the test-only rule section 7 inserts. Declared once
+#: because the rule is matched by it and then deleted by it.
+TEST_RULE_NOTE = "TEST-ONLY RULE for the checker — not any recommendation"
+
+#: The reference tables copied from the real database, in a foreign-key-safe
+#: order.
+REFERENCE_TABLES = (
     "food_categories",
     "tags",
     "conditions",
@@ -111,53 +129,55 @@ BANG_THAM_CHIEU = (
     "food_tags",
 )
 
-#: Số lượt vuốt của từng người, chọn để phủ **cả bốn giai đoạn**.
-#: `giai_doan`: 0 → cold, 1–29 → content, 30–100 → hybrid, >100 → ml.
-SO_VUOT = [0, 12, 12, 18, 45, 45, 60, 60, 120, 150, 25, 25]
+#: Each person's swipe count, chosen to cover **all four stages**.
+#: `stage`: 0 -> cold, 1-29 -> content, 30-100 -> hybrid, >100 -> ml.
+SWIPE_COUNTS = [0, 12, 12, 18, 45, 45, 60, 60, 120, 150, 25, 25]
 
-_dat = 0
-_loi: list[str] = []
+_passed = 0
+_failures: list[str] = []
 
 
-def kiem(dieu_kien: bool, mo_ta: str) -> None:
-    global _dat
-    if dieu_kien:
-        _dat += 1
-        print(f"  ✓ {mo_ta}")
+def check(condition: bool, description: str) -> None:
+    global _passed
+    if condition:
+        _passed += 1
+        print(f"  ok   {description}")
     else:
-        _loi.append(mo_ta)
-        print(f"  ✗ {mo_ta}")
+        _failures.append(description)
+        print(f"  BAD  {description}")
 
 
-#: Sai số khi so hai tổng dinh dưỡng. `food_nutrition` là `DECIMAL`, khẩu
-#: phần là `DECIMAL(4,2)`, nên tổng do MySQL cộng và tổng do Python cộng có
-#: thể lệch ở chữ số cuối — nhưng chỉ ở đó.
-SAI_SO_TONG = 1e-6
+#: The tolerance when comparing two nutrient totals. `food_nutrition` is
+#: `DECIMAL` and the portion is `DECIMAL(4,2)`, so a total summed by MySQL and
+#: one summed by Python may differ in the last digit — but only there.
+TOTALS_TOLERANCE = 1e-6
 
 
-def gan(thuc_te: float, mong_doi: float, mo_ta: str) -> None:
-    kiem(
-        abs(thuc_te - mong_doi) < SAI_SO_TONG,
-        f"{mo_ta}: được {thuc_te:.4f}, mong đợi {mong_doi:.4f}",
+def approx(actual: float, expected: float, description: str) -> None:
+    check(
+        abs(actual - expected) < TOTALS_TOLERANCE,
+        f"{description}: got {actual:.4f}, expected {expected:.4f}",
     )
 
 
-# ── Dựng CSDL thử ─────────────────────────────────────────────────────
+# -- Building the test database ----------------------------------------
 
 
-def _cot_ghi_duoc(cn, db: str, bang: str) -> list[str]:
-    """Các cột ghi được — bỏ **cột sinh**, vì `INSERT` vào chúng là lỗi 3105.
+def _writable_columns(cn, db: str, table: str) -> list[str]:
+    """The writable columns — excluding **generated columns**, because an
+    `INSERT` into one is error 3105.
 
-    Lọc theo `GENERATION_EXPRESSION`, không lọc theo `EXTRA`. Cách đầu tiên
-    tôi viết là `EXTRA NOT LIKE '%GENERATED%'`, và nó sai một cách rất khó
-    thấy: MySQL 8 đánh dấu **mọi** cột có mặc định dạng biểu thức là
-    `DEFAULT_GENERATED`, nên `id CHAR(36) DEFAULT (UUID())` và
-    `created_at DATETIME DEFAULT CURRENT_TIMESTAMP` cũng bị loại.
+    Filtered on `GENERATION_EXPRESSION`, not on `EXTRA`. My first attempt was
+    `EXTRA NOT LIKE '%GENERATED%'`, and it was wrong in a very hard-to-see
+    way: MySQL 8 marks **every** column with an expression default as
+    `DEFAULT_GENERATED`, so `id CHAR(36) DEFAULT (UUID())` and
+    `created_at DATETIME DEFAULT CURRENT_TIMESTAMP` were excluded too.
 
-    Hậu quả không phải một lỗi SQL mà là **dữ liệu sai trong im lặng**: bản
-    sao vẫn chèn đủ dòng, nhưng mỗi dòng nhận một `UUID()` mới, nên
-    `foods.category_id` trỏ tới những `food_categories.id` không còn tồn tại.
-    Phép `JOIN` sau đó trả về 0 dòng, và dấu hiệu duy nhất là "tập món rỗng".
+    The consequence was not a SQL error but **silently wrong data**: the copy
+    still inserted every row, but each row got a fresh `UUID()`, so
+    `foods.category_id` pointed at `food_categories.id` values that no longer
+    existed. The subsequent `JOIN` returned 0 rows, and the only symptom was
+    "the food set is empty".
     """
     with cn.cursor() as cur:
         cur.execute(
@@ -166,46 +186,51 @@ def _cot_ghi_duoc(cn, db: str, bang: str) -> list[str]:
             "  AND (GENERATION_EXPRESSION IS NULL "
             "       OR GENERATION_EXPRESSION = '') "
             "ORDER BY ORDINAL_POSITION",
-            (db, bang),
+            (db, table),
         )
         return [d["COLUMN_NAME"] for d in cur.fetchall()]
 
 
-def dung_csdl_thu(goc: str, thu: str) -> None:
-    """Sao lược đồ của toàn bộ bảng + dữ liệu của các bảng tham chiếu.
+def build_test_database(source: str, test: str) -> None:
+    """Copy every table's schema plus the reference tables' data.
 
-    `CREATE TABLE ... LIKE` sao đủ cột sinh, khóa và chỉ mục, nên lược đồ thử
-    giống lược đồ thật từng chi tiết — kể cả `uq_sample` và `uq_eval`, hai
-    khóa mà bài kiểm này cần để chứng minh chạy lại không nhân đôi dữ liệu.
+    `CREATE TABLE ... LIKE` copies the generated columns, keys and indexes, so
+    the test schema matches the real one in every detail — including
+    `uq_sample` and `uq_eval`, the two keys this checker needs in order to
+    prove that rerunning does not duplicate data.
     """
-    cn = ket_noi(goc, dict_cursor=True)
+    cn = connect(source, dict_cursor=True)
     try:
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT TABLE_NAME FROM information_schema.TABLES "
                 "WHERE TABLE_SCHEMA = %s AND TABLE_TYPE = 'BASE TABLE'",
-                (goc,),
+                (source,),
             )
-            tat_ca = {d["TABLE_NAME"] for d in cur.fetchall()}
+            all_tables = {d["TABLE_NAME"] for d in cur.fetchall()}
 
-        # Thứ tự tạo bảng: khóa ngoại trỏ tới bảng chưa tồn tại thì lỗi 1215.
-        # Tắt kiểm khóa ngoại trong lúc dựng rồi bật lại — rẻ hơn nhiều so với
-        # sắp xếp topo, và lược đồ sau khi dựng vẫn có đủ ràng buộc.
+        # Table creation order: a foreign key pointing at a table that does
+        # not exist yet is error 1215. Foreign-key checking is turned off
+        # during the build and back on after — far cheaper than a topological
+        # sort, and the resulting schema still has every constraint.
         with cn.cursor() as cur:
-            cur.execute(f"DROP DATABASE IF EXISTS `{thu}`")
+            cur.execute(f"DROP DATABASE IF EXISTS `{test}`")
             cur.execute(
-                f"CREATE DATABASE `{thu}` CHARACTER SET utf8mb4 "
+                f"CREATE DATABASE `{test}` CHARACTER SET utf8mb4 "
                 f"COLLATE utf8mb4_unicode_ci"
             )
             cur.execute("SET FOREIGN_KEY_CHECKS = 0")
-            for b in sorted(tat_ca):
-                cur.execute(f"CREATE TABLE `{thu}`.`{b}` LIKE `{goc}`.`{b}`")
-            for b in BANG_THAM_CHIEU:
-                cot = _cot_ghi_duoc(cn, goc, b)
-                ds = ", ".join(f"`{c}`" for c in cot)
+            for table in sorted(all_tables):
                 cur.execute(
-                    f"INSERT INTO `{thu}`.`{b}` ({ds}) "
-                    f"SELECT {ds} FROM `{goc}`.`{b}`"
+                    f"CREATE TABLE `{test}`.`{table}` "
+                    f"LIKE `{source}`.`{table}`"
+                )
+            for table in REFERENCE_TABLES:
+                columns = _writable_columns(cn, source, table)
+                column_list = ", ".join(f"`{c}`" for c in columns)
+                cur.execute(
+                    f"INSERT INTO `{test}`.`{table}` ({column_list}) "
+                    f"SELECT {column_list} FROM `{source}`.`{table}`"
                 )
             cur.execute("SET FOREIGN_KEY_CHECKS = 1")
         cn.commit()
@@ -213,40 +238,44 @@ def dung_csdl_thu(goc: str, thu: str) -> None:
         cn.close()
 
 
-def xoa_csdl_thu(thu: str) -> None:
-    cn = ket_noi("information_schema", dict_cursor=True)
+def drop_test_database(test: str) -> None:
+    cn = connect("information_schema", dict_cursor=True)
     try:
         with cn.cursor() as cur:
-            cur.execute(f"DROP DATABASE IF EXISTS `{thu}`")
+            cur.execute(f"DROP DATABASE IF EXISTS `{test}`")
         cn.commit()
     finally:
         cn.close()
 
 
-# ── Dựng người dùng giả ───────────────────────────────────────────────
+# -- Building the fake users -------------------------------------------
 
 
-def dung_nguoi_dung(cn) -> dict[str, int]:
-    """Tạo người dùng với số lượt vuốt phủ cả bốn giai đoạn.
+def build_users(cn) -> dict[str, int]:
+    """Create users whose swipe counts cover all four stages.
 
-    Trả về `{user_id: số lượt vuốt tính được}`. Số tính được khác số đã chèn
-    vì lượt `unknown` không được đếm — và đó chính là một điều cần kiểm.
+    Returns `{user_id: the computed signal count}`. The computed count differs
+    from the inserted count because `unknown` swipes are not counted — and
+    that is itself one of the things to check.
     """
     rng = random.Random(2026)
-    mon, _ = nap_mon(cn)
-    kg = KhongGianDacTrung.tu_mon(mon)
-    mon_theo_id = {m.id: m for m in mon}
-    fid = sorted(mon_theo_id)
-    goc = datetime(2026, 9, 1, 8, 0, 0)
+    foods, _ = load_foods(cn)
+    space = FeatureSpace.from_foods(foods)
+    foods_by_id = {f.id: f for f in foods}
+    food_ids = sorted(foods_by_id)
+    base_time = datetime(2026, 9, 1, 8, 0, 0)
 
-    ket_qua: dict[str, int] = {}
+    result: dict[str, int] = {}
     with cn.cursor() as cur:
-        for u, so in enumerate(SO_VUOT):
+        for u, count in enumerate(SWIPE_COUNTS):
             uid = f"{u:08d}-0000-0000-0000-000000000000"
             cur.execute(
                 "INSERT INTO users (id, email, password_hash, display_name) "
                 "VALUES (%s, %s, %s, %s)",
-                (uid, f"u{u}@thu.test", "x" * 20, f"Người thử {u} ({so} vuốt)"),
+                (
+                    uid, f"u{u}@test.test", "x" * 20,
+                    f"Test user {u} ({count} swipes)",
+                ),
             )
             cur.execute(
                 "INSERT INTO health_profiles (id, user_id, gender, "
@@ -260,36 +289,45 @@ def dung_nguoi_dung(cn) -> dict[str, int]:
                     rng.randint(45, 95),
                     rng.choice(["sedentary", "light", "moderate", "active"]),
                     rng.choice(
-                        ["lose_weight", "maintain", "gain_weight", "healthy_eating"]
+                        [
+                            "lose_weight", "maintain", "gain_weight",
+                            "healthy_eating",
+                        ]
                     ),
                 ),
             )
 
-            cap = []
-            for i, f in enumerate(rng.sample(fid, so)):
-                # Một phần nhỏ là `unknown` để kiểm rằng nó bị loại khỏi cả
-                # vector Rocchio lẫn tập huấn luyện.
-                hd = rng.choices(
+            pairs = []
+            for i, food_id in enumerate(rng.sample(food_ids, count)):
+                # A small share are `unknown`, to check that they are excluded
+                # from both the Rocchio vector and the training set.
+                action = rng.choices(
                     ["like", "dislike", "neutral", "unknown"],
                     weights=[40, 40, 15, 5],
                 )[0]
                 cur.execute(
                     "INSERT INTO interactions (id, user_id, food_id, action, "
-                    "session_id, interacted_at) VALUES (UUID(), %s, %s, %s, %s, %s)",
-                    (uid, f, hd, SES, goc + timedelta(seconds=u * 7200 + i)),
+                    "session_id, interacted_at) "
+                    "VALUES (UUID(), %s, %s, %s, %s, %s)",
+                    (
+                        uid, food_id, action, SES,
+                        base_time + timedelta(seconds=u * 7200 + i),
+                    ),
                 )
-                cap.append((mon_theo_id[f], hd))
+                pairs.append((foods_by_id[food_id], action))
 
-            # Vài tín hiệu khác nguồn, nhãn cũng ngẫu nhiên.
-            for f in rng.sample(fid, min(4, so) if so else 0):
+            # A few signals from other sources, with random labels too.
+            for food_id in rng.sample(food_ids, min(4, count) if count else 0):
                 cur.execute(
                     "INSERT INTO feedbacks (id, user_id, food_id, rating, "
                     "created_at) VALUES (UUID(), %s, %s, %s, %s)",
-                    (uid, f, rng.randint(1, 5),
-                     goc + timedelta(days=5, seconds=u * 60)),
+                    (
+                        uid, food_id, rng.randint(1, 5),
+                        base_time + timedelta(days=5, seconds=u * 60),
+                    ),
                 )
 
-            ho_so = dung_ho_so(kg, cap)
+            profile = build_profile(space, pairs)
             cur.execute(
                 "INSERT INTO user_preference_profiles (user_id, "
                 "feature_version, weights, sum_abs_weight, n_signals, stage, "
@@ -297,58 +335,62 @@ def dung_nguoi_dung(cn) -> dict[str, int]:
                 (
                     uid,
                     FEATURE_VERSION,
-                    json.dumps(list(ho_so.weights)),
-                    ho_so.sum_abs_weight,
-                    ho_so.n_signals,
-                    giai_doan(ho_so.n_signals),
-                    round(alpha(ho_so.n_signals), 3),
+                    json.dumps(list(profile.weights)),
+                    profile.sum_abs_weight,
+                    profile.n_signals,
+                    stage(profile.n_signals),
+                    round(alpha(profile.n_signals), 3),
                 ),
             )
-            ket_qua[uid] = ho_so.n_signals
+            result[uid] = profile.n_signals
     cn.commit()
-    return ket_qua
+    return result
 
 
-# ── Các phép kiểm ─────────────────────────────────────────────────────
+# -- The checks --------------------------------------------------------
 
 
-def kiem_nhap_phieu(db: str) -> str | None:
-    """Sinh một phiếu khảo sát, điền sẵn, nhập vào — kèm các đường lỗi.
+def check_form_import(db: str) -> str | None:
+    """Generate a survey form, fill it in, import it — error paths included.
 
-    Người dùng nhập từ phiếu sẽ đi tiếp qua cả đường ống phía sau cùng những
-    người dùng giả khác, nên bài kiểm này chứng minh luôn rằng dữ liệu thu
-    bằng phiếu **dùng được ở hạ nguồn**, không chỉ ghi vào bảng là xong.
+    The user imported from a form goes on through the rest of the pipeline
+    alongside the other fake users, so this check also proves that
+    form-collected data is **usable downstream**, not merely written to a
+    table.
     """
-    print("\n0. Nhập phiếu khảo sát khẩu vị")
+    print("\n0. Importing a taste survey form")
     rng = random.Random(99)
-    # `tempfile` chứ không phải một thư mục trong repo: bài kiểm này không
-    # được để lại tệp nào trong cây nguồn, kể cả khi nó hỏng giữa đường.
-    thu_muc = Path(tempfile.mkdtemp(prefix="kiem_ml_phieu_"))
+    # `tempfile` rather than a directory inside the repo: this checker must
+    # leave no file in the source tree, not even when it breaks halfway.
+    work_dir = Path(tempfile.mkdtemp(prefix="check_ml_form_"))
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
-        mon, _ = nap_mon(cn)
+        foods, _ = load_foods(cn)
     finally:
         cn.close()
-    kg = KhongGianDacTrung.tu_mon(mon)
-    bo = chon_bo_mon(mon, kg, 40)
-    kiem(len(bo) == 40, "chọn được bộ 40 món khảo sát")
-    kiem(
-        len({m.category for m in bo}) == len({m.category for m in mon}),
-        "bộ món phủ đủ mọi nhóm món",
+    space = FeatureSpace.from_foods(foods)
+    deck = pick_deck(foods, space, 40)
+    check(len(deck) == 40, "a 40-food survey deck was selected")
+    check(
+        len({f.category for f in deck}) == len({f.category for f in foods}),
+        "the deck covers every food category",
     )
-    kiem(
-        chon_bo_mon(mon, kg, 40) == bo,
-        "chọn lại cho đúng bộ cũ — thuật toán xác định, không ngẫu nhiên",
+    check(
+        pick_deck(foods, space, 40) == deck,
+        "reselecting gives the same deck — the algorithm is deterministic, "
+        "not random",
     )
 
-    def viet_phieu(
-        ten: str, *, lua_chon=None, thong_tin_them="", so_mon: int = 40
+    def write_form(
+        name: str, *, choice_fn=None, extra_info="", n_foods: int = 40
     ) -> Path:
-        p = thu_muc / ten
-        with p.open("w", encoding="utf-8", newline="") as f:
-            f.write("# ho_ten: Người điền phiếu\n")
-            f.write("# email: nguoi.dien@thu.test\n")
+        path = work_dir / name
+        with path.open("w", encoding="utf-8", newline="") as f:
+            # The `# key: value` block uses the form's own Vietnamese keys —
+            # see the note on language at the top of the file.
+            f.write("# ho_ten: Form filler\n")
+            f.write(f"# email: {FORM_EMAIL}\n")
             f.write("# gioi_tinh: female\n")
             f.write("# ngay_sinh: 1999-04-20\n")
             f.write("# chieu_cao_cm: 162\n")
@@ -357,124 +399,137 @@ def kiem_nhap_phieu(db: str) -> str | None:
             f.write("# muc_tieu: healthy_eating\n")
             f.write("# benh_ly: Tăng huyết áp\n")
             f.write("# ngay_khao_sat: 2026-10-20\n")
-            f.write(thong_tin_them)
-            w = csv.writer(f)
-            w.writerow(["stt", "ma_mon", "ten_mon", "nhom", "muc_cay", "lua_chon"])
-            for i, m in enumerate(bo[:so_mon], start=1):
-                chon = (
-                    lua_chon(i, m)
-                    if lua_chon
+            f.write(extra_info)
+            writer = csv.writer(f)
+            writer.writerow(
+                ["stt", "ma_mon", "ten_mon", "nhom", "muc_cay", "lua_chon"]
+            )
+            for i, food in enumerate(deck[:n_foods], start=1):
+                choice = (
+                    choice_fn(i, food)
+                    if choice_fn
                     else rng.choice(
-                        ["thich", "thich", "khong_thich", "binh_thuong", "chua_biet"]
+                        [
+                            "thich", "thich", "khong_thich", "binh_thuong",
+                            "chua_biet",
+                        ]
                     )
                 )
-                w.writerow([i, m.id, m.name, m.category, m.spice_level, chon])
-        return p
+                writer.writerow(
+                    [i, food.id, food.name, food.category, food.spice_level,
+                     choice]
+                )
+        return path
 
-    # ── Đường lỗi: phải từ chối TRƯỚC khi ghi gì ──
-    truong_hop_loi = [
+    # -- Error paths: must be refused BEFORE anything is written --
+    error_cases = [
         (
-            "sai_lua_chon.csv",
-            dict(lua_chon=lambda i, m: "co_le_thich" if i == 3 else "thich"),
-            "`lua_chon` sai giá trị",
+            "bad_choice.csv",
+            dict(choice_fn=lambda i, f: "maybe_like" if i == 3 else "thich"),
+            "an invalid `lua_chon` value",
         ),
         (
-            "chua_dien.csv",
-            dict(lua_chon=lambda i, m: ""),
-            "phiếu chưa điền lựa chọn nào",
+            "unfilled.csv",
+            dict(choice_fn=lambda i, f: ""),
+            "a form with no choice filled in",
         ),
         (
-            "thieu_thong_tin.csv",
-            dict(thong_tin_them="# chieu_cao_cm: \n"),
-            "phần thông tin còn trống",
+            "missing_info.csv",
+            dict(extra_info="# chieu_cao_cm: \n"),
+            "a blank in the info block",
         ),
     ]
-    for ten, kw, mo_ta in truong_hop_loi:
-        p = viet_phieu(ten, **kw)
-        if ten == "thieu_thong_tin.csv":
-            # Ghi lại cả tệp với chiều cao để trống, vì khóa trùng thì bản
-            # sau thắng — viết thêm một dòng không xóa được dòng cũ.
-            noi_dung = p.read_text(encoding="utf-8").replace(
+    for name, kwargs, description in error_cases:
+        path = write_form(name, **kwargs)
+        if name == "missing_info.csv":
+            # Rewrite the whole file with the height removed, because on a
+            # duplicate key the later line wins — adding a line does not
+            # remove the earlier one.
+            content = path.read_text(encoding="utf-8").replace(
                 "# chieu_cao_cm: 162\n", ""
             )
-            p.write_text(noi_dung, encoding="utf-8")
-        ma = chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"])
-        kiem(ma == 1, f"từ chối phiếu: {mo_ta}")
+            path.write_text(content, encoding="utf-8")
+        code = run_import_swipes(["--form", str(path), "--db", db, "--apply"])
+        check(code == 1, f"the form is refused: {description}")
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
         with cn.cursor() as cur:
             cur.execute(
-                "SELECT COUNT(*) n FROM users WHERE email = 'nguoi.dien@thu.test'"
+                "SELECT COUNT(*) n FROM users WHERE email = %s", (FORM_EMAIL,)
             )
-            kiem(
+            check(
                 int(cur.fetchone()["n"]) == 0,
-                "phiếu bị từ chối không để lại người dùng nào",
+                "a refused form leaves no user behind",
             )
     finally:
         cn.close()
 
-    # Chiều cao ngoài khoảng CHECK của health_profiles.
-    p = viet_phieu("cao_vo_ly.csv")
-    p.write_text(
-        p.read_text(encoding="utf-8").replace(
+    # A height outside the health_profiles CHECK range.
+    path = write_form("absurd_height.csv")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
             "# chieu_cao_cm: 162", "# chieu_cao_cm: 320"
         ),
         encoding="utf-8",
     )
-    kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 1,
-        "từ chối phiếu: chiều cao ngoài khoảng 50–250",
+    check(
+        run_import_swipes(["--form", str(path), "--db", db, "--apply"]) == 1,
+        "the form is refused: a height outside 50-250",
     )
 
-    # Tên bệnh lý không khớp `conditions`.
-    p = viet_phieu("benh_la.csv")
-    p.write_text(
-        p.read_text(encoding="utf-8").replace(
+    # A condition name that does not match `conditions`.
+    path = write_form("unknown_condition.csv")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
             "# benh_ly: Tăng huyết áp", "# benh_ly: Cảm nắng"
         ),
         encoding="utf-8",
     )
-    kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 1,
-        "từ chối phiếu: tên bệnh lý không có trong `conditions`",
+    check(
+        run_import_swipes(["--form", str(path), "--db", db, "--apply"]) == 1,
+        "the form is refused: a condition name not in `conditions`",
     )
 
-    # ── Đường đúng ──
-    p = viet_phieu("hop_le.csv")
-    kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db]) == 0,
-        "chạy thử phiếu hợp lệ: mã trả về 0",
+    # -- The happy path --
+    path = write_form("valid.csv")
+    check(
+        run_import_swipes(["--form", str(path), "--db", db]) == 0,
+        "a dry run of a valid form: exit code 0",
     )
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
         with cn.cursor() as cur:
             cur.execute("SELECT COUNT(*) n FROM users")
-            truoc = int(cur.fetchone()["n"])
+            before = int(cur.fetchone()["n"])
     finally:
         cn.close()
 
-    kiem(
-        chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 0,
-        "nhập phiếu hợp lệ: mã trả về 0",
+    check(
+        run_import_swipes(["--form", str(path), "--db", db, "--apply"]) == 0,
+        "importing a valid form: exit code 0",
     )
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
         with cn.cursor() as cur:
             cur.execute("SELECT COUNT(*) n FROM users")
-            kiem(int(cur.fetchone()["n"]) == truoc + 1, "chạy thử KHÔNG ghi gì")
+            check(
+                int(cur.fetchone()["n"]) == before + 1,
+                "the dry run wrote NOTHING",
+            )
 
             cur.execute(
                 "SELECT id, password_hash, display_name FROM users "
-                "WHERE email = 'nguoi.dien@thu.test'"
+                "WHERE email = %s",
+                (FORM_EMAIL,),
             )
-            u = cur.fetchone()
-            kiem(u is not None, "đã tạo người dùng")
-            uid = u["id"]
-            kiem(
-                u["password_hash"].startswith("!"),
-                "mật khẩu là giá trị không dùng được (có dấu `!` đầu)",
+            user = cur.fetchone()
+            check(user is not None, "the user was created")
+            uid = user["id"]
+            check(
+                user["password_hash"].startswith("!"),
+                "the password is an unusable value (leading `!`)",
             )
 
             cur.execute(
@@ -482,11 +537,12 @@ def kiem_nhap_phieu(db: str) -> str | None:
                 "FROM health_profiles WHERE user_id = %s",
                 (uid,),
             )
-            hp = cur.fetchone()
-            kiem(hp is not None, "đã tạo health_profiles")
-            kiem(
-                abs(float(hp["bmi"]) - 54 / (1.62**2)) < 0.01,
-                f"cột sinh bmi tự tính đúng ({float(hp['bmi']):.2f})",
+            health = cur.fetchone()
+            check(health is not None, "health_profiles was created")
+            check(
+                abs(float(health["bmi"]) - 54 / (1.62**2)) < 0.01,
+                f"the generated bmi column computes correctly "
+                f"({float(health['bmi']):.2f})",
             )
 
             cur.execute(
@@ -495,9 +551,9 @@ def kiem_nhap_phieu(db: str) -> str | None:
                 "WHERE uc.user_id = %s",
                 (uid,),
             )
-            kiem(
+            check(
                 [d["name_vi"] for d in cur.fetchall()] == ["Tăng huyết áp"],
-                "đã ghi bệnh lý",
+                "the condition was recorded",
             )
 
             cur.execute(
@@ -505,66 +561,76 @@ def kiem_nhap_phieu(db: str) -> str | None:
                 "WHERE user_id = %s GROUP BY action",
                 (uid,),
             )
-            dem = {d["action"]: int(d["n"]) for d in cur.fetchall()}
-            kiem(sum(dem.values()) == 40, f"ghi đủ 40 lượt vuốt (được {dem})")
+            counts = {d["action"]: int(d["n"]) for d in cur.fetchall()}
+            check(
+                sum(counts.values()) == 40,
+                f"all 40 swipes were written (got {counts})",
+            )
 
             cur.execute(
                 "SELECT COUNT(DISTINCT interacted_at) n FROM interactions "
                 "WHERE user_id = %s",
                 (uid,),
             )
-            kiem(
+            check(
                 int(cur.fetchone()["n"]) == 40,
-                "40 lượt có 40 mốc thời gian phân biệt — thứ tự phiếu được giữ",
+                "40 swipes have 40 distinct timestamps — the form's order is "
+                "preserved",
             )
 
             cur.execute(
                 "SELECT feature_version, n_signals, stage, "
-                "       JSON_LENGTH(weights) so_chieu "
+                "       JSON_LENGTH(weights) n_dimensions "
                 "FROM user_preference_profiles WHERE user_id = %s",
                 (uid,),
             )
-            pr = cur.fetchone()
-            kiem(pr is not None, "đã tính user_preference_profiles")
-            kiem(
-                int(pr["so_chieu"]) == kg.length,
-                f"vector sở thích đủ {kg.length} chiều",
+            preference = cur.fetchone()
+            check(
+                preference is not None,
+                "user_preference_profiles was computed",
             )
-            kiem(
-                int(pr["n_signals"]) == 40 - dem.get("unknown", 0),
-                f"n_signals = {pr['n_signals']} đã trừ "
-                f"{dem.get('unknown', 0)} lượt `chua_biet`",
+            check(
+                int(preference["n_dimensions"]) == space.length,
+                f"the preference vector has all {space.length} dimensions",
             )
-            kiem(
-                pr["feature_version"] == FEATURE_VERSION,
-                "hồ sơ ghi kèm phiên bản đặc trưng",
+            check(
+                int(preference["n_signals"])
+                == 40 - counts.get("unknown", 0),
+                f"n_signals = {preference['n_signals']} after subtracting "
+                f"{counts.get('unknown', 0)} `chua_biet` swipes",
+            )
+            check(
+                preference["feature_version"] == FEATURE_VERSION,
+                "the profile records the feature version alongside",
             )
 
-        # Nhập lại cùng phiếu: phải từ chối vì email đã tồn tại.
-        kiem(
-            chay_nhap_phieu(["--phieu", str(p), "--db", db, "--apply"]) == 1,
-            "nhập lại cùng phiếu thì từ chối — email đã tồn tại",
+        # Importing the same form again: must be refused, the email exists.
+        check(
+            run_import_swipes(
+                ["--form", str(path), "--db", db, "--apply"]
+            ) == 1,
+            "reimporting the same form is refused — the email already exists",
         )
     finally:
         cn.close()
 
-    shutil.rmtree(thu_muc, ignore_errors=True)
+    shutil.rmtree(work_dir, ignore_errors=True)
     return uid
 
 
-def kiem_duong_ong(db: str, so_tin_hieu: dict[str, int]) -> None:
-    print("\n1. Bộ dựng tập dữ liệu")
-    ma = chay_dung_tap(
+def check_pipeline(db: str, signal_counts: dict[str, int]) -> None:
+    print("\n1. The dataset builder")
+    code = run_build_dataset(
         ["--version", "e2e", "--db", db, "--apply", "--random-neg", "8",
          "--folds", "5", "--seed", "7"]
     )
-    kiem(ma == 0, "build_dataset chạy xong, mã trả về 0")
+    check(code == 0, "build_dataset finished, exit code 0")
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
         with cn.cursor() as cur:
             cur.execute("SELECT COUNT(*) n FROM ml_training_samples")
-            n_mau = cur.fetchone()["n"]
+            n_samples = cur.fetchone()["n"]
             cur.execute(
                 "SELECT COUNT(*) n FROM ml_training_samples s "
                 "JOIN interactions i ON i.user_id = s.user_id "
@@ -575,251 +641,275 @@ def kiem_duong_ong(db: str, so_tin_hieu: dict[str, int]) -> None:
             cur.execute(
                 "SELECT COUNT(DISTINCT fold) n FROM ml_training_samples"
             )
-            n_fold = cur.fetchone()["n"]
+            n_folds = cur.fetchone()["n"]
             cur.execute(
                 "SELECT COUNT(*) n FROM ("
                 "  SELECT user_id FROM ml_training_samples "
                 "  GROUP BY user_id HAVING COUNT(DISTINCT fold) > 1) x"
             )
-            n_vo_fold = cur.fetchone()["n"]
+            n_split_users = cur.fetchone()["n"]
             cur.execute(
                 "SELECT COUNT(*) n FROM ml_training_samples "
                 "WHERE profile_snapshot IS NULL"
             )
-            n_thieu_anh = cur.fetchone()["n"]
+            n_no_snapshot = cur.fetchone()["n"]
 
-        kiem(n_mau > 0, f"có {n_mau} mẫu")
-        kiem(n_unknown == 0, "không mẫu `swipe` nào đến từ lượt `unknown`")
-        kiem(n_fold == 5, f"dùng đủ 5 fold (được {n_fold})")
-        kiem(n_vo_fold == 0, "không người dùng nào bị cắt qua hai fold")
-        kiem(n_thieu_anh == 0, "mọi mẫu đều có profile_snapshot")
+        check(n_samples > 0, f"{n_samples} samples produced")
+        check(n_unknown == 0, "no `swipe` sample comes from an `unknown` swipe")
+        check(n_folds == 5, f"all 5 folds are used (got {n_folds})")
+        check(n_split_users == 0, "no user is split across two folds")
+        check(n_no_snapshot == 0, "every sample has a profile_snapshot")
 
-        print("\n1b. Độ phổ biến — phương án đối chứng phải thôi suy biến")
+        print("\n1b. Popularity — the control variant must stop being degenerate")
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(DISTINCT popularity_score) n FROM foods"
             )
-            kiem(
+            check(
                 cur.fetchone()["n"] == 1,
-                "trước khi tính: mọi món cùng một popularity_score (suy biến)",
+                "before computing: every food shares one popularity_score "
+                "(degenerate)",
             )
-        ma = chay_cap_nhat_pho_bien(["--db", db, "--apply"])
-        kiem(ma == 0, "update_popularity chạy xong, mã trả về 0")
+        code = run_update_popularity(["--db", db, "--apply"])
+        check(code == 0, "update_popularity finished, exit code 0")
         cn.commit()
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(DISTINCT popularity_score) n, "
-                "       MIN(popularity_score) nho, MAX(popularity_score) lon, "
-                "       SUM(popularity_score > 0) co_diem "
+                "       MIN(popularity_score) lo, MAX(popularity_score) hi, "
+                "       SUM(popularity_score > 0) scored "
                 "FROM foods"
             )
-            pb = cur.fetchone()
-        kiem(
-            int(pb["n"]) > 1,
-            f"sau khi tính: có {pb['n']} mức điểm phân biệt — thôi suy biến",
+            popularity = cur.fetchone()
+        check(
+            int(popularity["n"]) > 1,
+            f"after computing: {popularity['n']} distinct scores — no longer "
+            f"degenerate",
         )
-        kiem(
-            0 <= float(pb["nho"]) and float(pb["lon"]) <= 1,
-            f"điểm nằm trong [0, 1]: {float(pb['nho']):.4f}–{float(pb['lon']):.4f}",
+        check(
+            0 <= float(popularity["lo"]) and float(popularity["hi"]) <= 1,
+            f"the scores lie within [0, 1]: "
+            f"{float(popularity['lo']):.4f}-{float(popularity['hi']):.4f}",
         )
-        kiem(
-            int(pb["co_diem"]) > 0,
-            f"{pb['co_diem']} món có điểm lớn hơn 0",
+        check(
+            int(popularity["scored"]) > 0,
+            f"{popularity['scored']} foods score above 0",
         )
 
-        print("\n2. Huấn luyện")
-        ma = chay_huan_luyen(
+        print("\n2. Training")
+        code = run_train(
             ["--dataset", "e2e", "--db", db, "--apply",
              "--algorithm", "logistic_regression",
-             "--kich-hoat", "logistic_regression"]
+             "--activate", "logistic_regression"]
         )
-        kiem(ma == 0, "train chạy xong, mã trả về 0")
+        check(code == 0, "train finished, exit code 0")
 
-        cn.commit()  # thoát ảnh chụp giao dịch cũ để thấy hàng vừa ghi
+        cn.commit()  # leave the old transaction snapshot to see the new rows
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT version, n_train, n_test, is_active, feature_version "
                 "FROM ml_models"
             )
-            mh = cur.fetchall()
-        kiem(len(mh) == 1, f"ghi 1 mô hình (được {len(mh)})")
-        kiem(
-            sum(int(r["is_active"]) for r in mh) == 1,
-            "đúng một mô hình is_active = 1",
+            models = cur.fetchall()
+        check(len(models) == 1, f"1 model written (got {len(models)})")
+        check(
+            sum(int(r["is_active"]) for r in models) == 1,
+            "exactly one model has is_active = 1",
         )
-        kiem(
-            mh[0]["feature_version"] == FEATURE_VERSION,
-            "feature_version của mô hình khớp mã hiện tại",
+        check(
+            models[0]["feature_version"] == FEATURE_VERSION,
+            "the model's feature_version matches the current code",
         )
-        kiem(
-            mh[0]["n_train"] > 0 and mh[0]["n_test"] > 0,
-            f"n_train = {mh[0]['n_train']}, n_test = {mh[0]['n_test']}",
+        check(
+            models[0]["n_train"] > 0 and models[0]["n_test"] > 0,
+            f"n_train = {models[0]['n_train']}, "
+            f"n_test = {models[0]['n_test']}",
         )
-        ban_mo_hinh = mh[0]["version"]
+        model_version = models[0]["version"]
 
-        print("\n3. Đánh giá")
-        ma = chay_danh_gia(
-            ["--dataset", "e2e", "--model", ban_mo_hinh, "--db", db, "--apply"]
+        print("\n3. Evaluation")
+        code = run_evaluate(
+            ["--dataset", "e2e", "--model", model_version, "--db", db,
+             "--apply"]
         )
-        kiem(ma == 0, "evaluate chạy xong, mã trả về 0")
+        check(code == 0, "evaluate finished, exit code 0")
 
         cn.commit()
         with cn.cursor() as cur:
             cur.execute("SELECT COUNT(*) n FROM ml_evaluations")
-            n_dg = cur.fetchone()["n"]
+            n_rows = cur.fetchone()["n"]
             cur.execute(
                 "SELECT COUNT(DISTINCT variant) n FROM ml_evaluations"
             )
-            n_pa = cur.fetchone()["n"]
+            n_variants = cur.fetchone()["n"]
             cur.execute(
                 "SELECT COUNT(DISTINCT metric) n FROM ml_evaluations"
             )
-            n_cs = cur.fetchone()["n"]
+            n_metrics = cur.fetchone()["n"]
             cur.execute(
                 "SELECT variant, ROUND(AVG(value), 4) v FROM ml_evaluations "
                 "WHERE metric = 'auc' GROUP BY variant ORDER BY variant"
             )
             auc = {d["variant"]: float(d["v"]) for d in cur.fetchall()}
-        kiem(n_dg > 0, f"ghi {n_dg} dòng đánh giá")
-        kiem(n_pa == 5, f"đủ 5 phương án đối chứng (được {n_pa})")
-        kiem(n_cs == 8, f"đủ 8 chỉ số (được {n_cs})")
+        check(n_rows > 0, f"{n_rows} evaluation rows written")
+        check(n_variants == 5, f"all 5 control variants (got {n_variants})")
+        check(n_metrics == 8, f"all 8 metrics (got {n_metrics})")
 
-        # ── Chốt canh rò rỉ dữ liệu ──
+        # -- The data-leakage tripwire --
         #
-        # Nhãn ngẫu nhiên hoàn toàn, nên **mọi** phương án phải ở mức tình cờ.
-        # Kiểm bằng AUC chứ không bằng nDCG: AUC có mức tình cờ xác định là
-        # 0,5 bất kể phân bố nhãn và bất kể hòa điểm, còn nDCG@5 thì không —
-        # mức tình cờ của nó phụ thuộc độ dài danh sách của từng người và số
-        # món hòa điểm, nên nDCG của hai phương án lệch nhau 0,15 vẫn có thể
-        # là cả hai đều vô thông tin.
+        # The labels are entirely random, so **every** variant must sit at
+        # chance. Checked by AUC rather than nDCG: AUC has a definite chance
+        # level of 0.5 regardless of the label distribution and regardless of
+        # ties, while nDCG@5 does not — its chance level depends on each
+        # person's list length and on how many foods tie, so two variants
+        # 0.15 apart on nDCG may both still be uninformative.
         #
-        # Kiểm cả năm phương án, không chỉ `ml`: hai lần rò rỉ đã tìm ra đều
-        # xuất hiện ở `popularity` TRƯỚC khi lan sang mô hình.
-        for pa in sorted(auc):
-            kiem(
-                0.35 <= auc[pa] <= 0.65,
-                f"CHỐT CANH RÒ RỈ: AUC của `{pa}` = {auc[pa]:.4f}, "
-                f"quanh mức tình cờ",
+        # All five variants are checked, not just `ml`: both leaks found so
+        # far showed up in `popularity` BEFORE reaching the model.
+        for variant in sorted(auc):
+            check(
+                0.35 <= auc[variant] <= 0.65,
+                f"LEAKAGE TRIPWIRE: AUC of `{variant}` = {auc[variant]:.4f}, "
+                f"around chance",
             )
 
-        # Chạy lại không nhân đôi — hai khóa duy nhất phải chặn.
-        chay_dung_tap(
+        # Rerunning must not duplicate — the two unique keys must block it.
+        run_build_dataset(
             ["--version", "e2e", "--db", db, "--apply", "--random-neg", "8",
              "--folds", "5", "--seed", "7"]
         )
-        chay_danh_gia(
-            ["--dataset", "e2e", "--model", ban_mo_hinh, "--db", db, "--apply"]
+        run_evaluate(
+            ["--dataset", "e2e", "--model", model_version, "--db", db,
+             "--apply"]
         )
         cn.commit()
         with cn.cursor() as cur:
             cur.execute("SELECT COUNT(*) n FROM ml_training_samples")
-            n_mau2 = cur.fetchone()["n"]
+            n_samples2 = cur.fetchone()["n"]
             cur.execute("SELECT COUNT(*) n FROM ml_evaluations")
-            n_dg2 = cur.fetchone()["n"]
-        kiem(n_mau2 == n_mau, f"chạy lại: {n_mau} → {n_mau2} mẫu, không nhân đôi")
-        kiem(n_dg2 == n_dg, f"chạy lại: {n_dg} → {n_dg2} dòng đánh giá")
+            n_rows2 = cur.fetchone()["n"]
+        check(
+            n_samples2 == n_samples,
+            f"rerun: {n_samples} -> {n_samples2} samples, no duplication",
+        )
+        check(
+            n_rows2 == n_rows,
+            f"rerun: {n_rows} -> {n_rows2} evaluation rows",
+        )
     finally:
         cn.close()
 
 
-def kiem_phuc_vu(db: str, so_tin_hieu: dict[str, int]) -> None:
-    print("\n4. Tầng phục vụ — bốn giai đoạn")
-    cn = ket_noi(db)
+def check_serving(db: str, signal_counts: dict[str, int]) -> None:
+    print("\n4. The serving layer — the four stages")
+    cn = connect(db)
     try:
-        theo_gd: dict[str, str] = {}
-        for uid, n in sorted(so_tin_hieu.items(), key=lambda kv: kv[1]):
-            theo_gd.setdefault(giai_doan(n), uid)
+        by_stage: dict[str, str] = {}
+        for uid, n in sorted(signal_counts.items(), key=lambda kv: kv[1]):
+            by_stage.setdefault(stage(n), uid)
 
-        kiem(
-            set(theo_gd) == {"cold", "content", "hybrid", "ml"},
-            f"dữ liệu thử phủ cả bốn giai đoạn (được {sorted(theo_gd)})",
+        check(
+            set(by_stage) == {"cold", "content", "hybrid", "ml"},
+            f"the test data covers all four stages (got {sorted(by_stage)})",
         )
 
-        mong_doi_nguon = {
+        expected_source = {
             "cold": "rule_based",
             "content": "content_based",
             "hybrid": "hybrid",
             "ml": "ml",
         }
-        for gd, uid in sorted(theo_gd.items()):
-            kq = goi_y(cn, uid, gioi_han=5)
-            kiem(
-                kq.stage == gd and kq.generation_source == mong_doi_nguon[gd],
-                f"{gd}: generation_source = {kq.generation_source}",
+        for stage_name, uid in sorted(by_stage.items()):
+            result = recommend(cn, uid, limit=5)
+            check(
+                result.stage == stage_name
+                and result.generation_source == expected_source[stage_name],
+                f"{stage_name}: generation_source = "
+                f"{result.generation_source}",
             )
-            kiem(
-                len(kq.ung_vien) == 5,
-                f"{gd}: trả về 5 ứng viên hàng đầu",
+            check(
+                len(result.candidates) == 5,
+                f"{stage_name}: 5 top candidates returned",
             )
-            kiem(
-                all(0.0 <= u.diem <= 1.0 for u in kq.ung_vien),
-                f"{gd}: mọi điểm nằm trong [0, 1]",
+            check(
+                all(0.0 <= c.score <= 1.0 for c in result.candidates),
+                f"{stage_name}: every score lies within [0, 1]",
             )
-            kiem(
+            check(
                 all(
-                    kq.ung_vien[i].diem >= kq.ung_vien[i + 1].diem
-                    for i in range(len(kq.ung_vien) - 1)
+                    result.candidates[i].score
+                    >= result.candidates[i + 1].score
+                    for i in range(len(result.candidates) - 1)
                 ),
-                f"{gd}: danh sách đã xếp giảm dần",
+                f"{stage_name}: the list is sorted descending",
             )
-            dung_mo_hinh = gd in ("hybrid", "ml")
-            kiem(
-                (kq.model_id is not None) == dung_mo_hinh,
-                f"{gd}: {'dùng' if dung_mo_hinh else 'không dùng'} mô hình",
+            uses_model = stage_name in ("hybrid", "ml")
+            check(
+                (result.model_id is not None) == uses_model,
+                f"{stage_name}: "
+                f"{'uses' if uses_model else 'does not use'} a model",
             )
-            if gd == "cold":
-                kiem(
-                    all(u.diem_ml is None for u in kq.ung_vien),
-                    "cold: không gọi mô hình chút nào",
+            if stage_name == "cold":
+                check(
+                    all(c.ml_score is None for c in result.candidates),
+                    "cold: the model is not called at all",
                 )
-            if gd == "hybrid":
-                kiem(0 < kq.alpha < 1, f"hybrid: 0 < α = {kq.alpha:.3f} < 1")
-            if gd == "ml":
-                kiem(kq.alpha == 1.0, "ml: α = 1")
+            if stage_name == "hybrid":
+                check(
+                    0 < result.alpha < 1,
+                    f"hybrid: 0 < α = {result.alpha:.3f} < 1",
+                )
+            if stage_name == "ml":
+                check(result.alpha == 1.0, "ml: α = 1")
 
-        # ── Bộ lọc F1 thật sự cắt ứng viên ──
-        uid = theo_gd["content"]
-        truoc = goi_y(cn, uid, gioi_han=1000).so_mon_sau_f1
-        dk = dieu_kien_theo_ten(cn, ["Ăn thuần chay", "Dị ứng đậu nành"], "severe")
+        # -- The F1 filter really does cut candidates --
+        uid = by_stage["content"]
+        before = recommend(cn, uid, limit=1000).n_foods_after_f1
+        conditions = conditions_by_name(
+            cn, ["Ăn thuần chay", "Dị ứng đậu nành"], "severe"
+        )
         with cn.cursor() as cur:
-            for d in dk:
+            for condition in conditions:
                 cur.execute(
                     "INSERT INTO user_conditions (id, user_id, condition_id, "
                     "severity) VALUES (UUID(), %s, %s, 'severe')",
-                    (uid, d.condition_id),
+                    (uid, condition.condition_id),
                 )
         cn.commit()
-        sau = goi_y(cn, uid, gioi_han=1000).so_mon_sau_f1
-        kiem(
-            sau < truoc,
-            f"thêm bệnh lý thì F1 cắt ứng viên: {truoc} → {sau} món",
+        after = recommend(cn, uid, limit=1000).n_foods_after_f1
+        check(
+            after < before,
+            f"adding conditions makes F1 cut candidates: {before} -> {after} "
+            f"foods",
         )
 
-        # Món đã dùng trong ngày bị loại.
-        kq = goi_y(cn, uid, gioi_han=3)
-        da_dung = [u.mon.id for u in kq.ung_vien[:2]]
-        kq2 = goi_y(cn, uid, gioi_han=3, mon_da_dung=da_dung)
-        kiem(
-            all(u.mon.id not in da_dung for u in kq2.ung_vien),
-            "món đã dùng trong ngày không xuất hiện lại",
+        # Foods already used today are excluded.
+        result = recommend(cn, uid, limit=3)
+        already_used = [c.food.id for c in result.candidates[:2]]
+        result2 = recommend(cn, uid, limit=3, exclude_foods=already_used)
+        check(
+            all(c.food.id not in already_used for c in result2.candidates),
+            "a food already used today does not reappear",
         )
 
-        print("\n5. Hạ cấp có công bố")
-        uid_ml = theo_gd["ml"]
+        print("\n5. Announced degradation")
+        uid_ml = by_stage["ml"]
         with cn.cursor() as cur:
             cur.execute("UPDATE ml_models SET is_active = 0")
         cn.commit()
-        kq = goi_y(cn, uid_ml, gioi_han=3)
-        kiem(
-            kq.stage == "content" and kq.generation_source == "content_based",
-            f"không có mô hình → lùi về content_based (được {kq.stage})",
+        result = recommend(cn, uid_ml, limit=3)
+        check(
+            result.stage == "content"
+            and result.generation_source == "content_based",
+            f"with no model it falls back to content_based (got "
+            f"{result.stage})",
         )
-        kiem(
-            any("hạ về Giai đoạn 1" in c for c in kq.canh_bao),
-            "việc hạ cấp được công bố trong cảnh báo",
+        check(
+            any("falling back to Stage 1" in w for w in result.warnings),
+            "the fallback is announced in the warnings",
         )
 
-        # Hai mô hình cùng is_active: phải từ chối chọn bừa.
+        # Two models both is_active: it must refuse to pick arbitrarily.
         with cn.cursor() as cur:
             cur.execute(
                 "INSERT INTO ml_models (version, algorithm, feature_version, "
@@ -830,34 +920,37 @@ def kiem_phuc_vu(db: str, so_tin_hieu: dict[str, int]) -> None:
             )
             cur.execute("UPDATE ml_models SET is_active = 1")
         cn.commit()
-        mon, _ = nap_mon(cn)
-        kg = KhongGianDacTrung.tu_mon(mon)
-        mh, ly_do = nap_mo_hinh_hoat_dong(cn, kg)
-        kiem(
-            mh is None and ly_do is not None and "cùng is_active" in ly_do,
-            f"hai mô hình cùng is_active thì từ chối chọn bừa ({ly_do})",
+        foods, _ = load_foods(cn)
+        space = FeatureSpace.from_foods(foods)
+        model, reason = load_active_model(cn, space)
+        check(
+            model is None and reason is not None
+            and "share is_active" in reason,
+            f"two models both is_active: it refuses to pick arbitrarily "
+            f"({reason})",
         )
 
-        # Hồ sơ sở thích sai phiên bản đặc trưng: bỏ qua và công bố.
+        # A preference profile on the wrong feature version: skip and announce.
         with cn.cursor() as cur:
             cur.execute("UPDATE ml_models SET is_active = 0")
             cur.execute(
-                "UPDATE user_preference_profiles SET feature_version = 'v0-cu' "
-                "WHERE user_id = %s",
+                "UPDATE user_preference_profiles "
+                "SET feature_version = 'v0-old' WHERE user_id = %s",
                 (uid_ml,),
             )
         cn.commit()
-        kq = goi_y(cn, uid_ml, gioi_han=3)
-        kiem(
-            kq.stage == "cold" and kq.n_signals == 0,
-            f"hồ sơ sai phiên bản → lùi về Giai đoạn 0 (được {kq.stage})",
+        result = recommend(cn, uid_ml, limit=3)
+        check(
+            result.stage == "cold" and result.n_signals == 0,
+            f"a wrong-version profile falls back to Stage 0 (got "
+            f"{result.stage})",
         )
-        kiem(
-            any("phiên bản đặc trưng" in c for c in kq.canh_bao),
-            "việc bỏ qua hồ sơ được công bố",
+        check(
+            any("feature version" in w for w in result.warnings),
+            "skipping the profile is announced",
         )
 
-        # Hồ sơ thiếu chiều: cũng phải bị bỏ qua.
+        # A profile with too few dimensions: must also be skipped.
         with cn.cursor() as cur:
             cur.execute(
                 "UPDATE user_preference_profiles "
@@ -865,67 +958,77 @@ def kiem_phuc_vu(db: str, so_tin_hieu: dict[str, int]) -> None:
                 (FEATURE_VERSION, json.dumps([0.1] * 5), uid_ml),
             )
         cn.commit()
-        kq = goi_y(cn, uid_ml, gioi_han=3)
-        kiem(
-            kq.stage == "cold",
-            f"hồ sơ thiếu chiều → lùi về Giai đoạn 0 (được {kq.stage})",
+        result = recommend(cn, uid_ml, limit=3)
+        check(
+            result.stage == "cold",
+            f"a short-vector profile falls back to Stage 0 (got "
+            f"{result.stage})",
         )
-        kiem(
-            any("chiều" in c for c in kq.canh_bao),
-            "việc bỏ qua hồ sơ thiếu chiều được công bố",
+        check(
+            any("dimensions" in w for w in result.warnings),
+            "skipping a short-vector profile is announced",
         )
     finally:
         cn.close()
 
 
-def kiem_han_muc_ngay(db: str) -> None:
-    """Hạn mức theo ngày trên CSDL thật — hai nguồn, và quy ước không đếm đôi.
+def check_daily_limits_sql(db: str) -> None:
+    """Daily limits against the real database — two sources, and the
+    no-double-counting convention.
 
-    Phần này chèn nhật ký và thực đơn thật rồi đối chiếu tổng với số cộng tay
-    lấy ngay từ `food_nutrition`. Nó kiểm những điều phép kiểm hàm thuần
-    không chạm tới: câu SQL có nhân `portion_multiplier` không, ô `replaced`
-    có tính theo món **mới** không, và ô `eaten` có bị cộng hai lần không.
+    This section inserts a real diary and a real meal plan, then compares the
+    totals with figures summed by hand straight from `food_nutrition`. It
+    checks what the pure-function checks cannot reach: whether the SQL
+    multiplies by `portion_multiplier`, whether a `replaced` slot counts the
+    **new** food, and whether an `eaten` slot gets counted twice.
     """
-    print("\n6. Hạn mức theo ngày — nhật ký, thực đơn và quy ước đếm")
-    ngay = date(2026, 10, 15)
+    print("\n6. Daily limits — the diary, the meal plan and the counting rules")
+    day = date(2026, 10, 15)
     uid = "00000003-0000-0000-0000-000000000000"
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
         with cn.cursor() as cur:
-            # Gút mức vừa + Tăng huyết áp mức nhẹ: đúng hai bệnh có ngưỡng
-            # cứng theo ngày trong bộ quy tắc.
-            for cid, muc in ((5, "moderate"), (2, "mild")):
+            # Gout at moderate + hypertension at mild: exactly the two
+            # conditions with a hard daily threshold in the rule set.
+            for condition_id, severity in ((5, "moderate"), (2, "mild")):
                 cur.execute(
                     "INSERT INTO user_conditions (id, user_id, condition_id, "
                     "severity, created_at) VALUES (UUID(), %s, %s, %s, NOW())",
-                    (uid, cid, muc),
+                    (uid, condition_id, severity),
                 )
 
             cur.execute(
                 "SELECT f.id, f.name, fn.sodium_mg, fn.purine_mg "
                 "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
                 "WHERE f.name IN (%s, %s, %s, %s)",
-                ("Bánh cuốn nóng", "Canh chua chay", "Cá chiên xù", "Bắp cải luộc"),
+                (
+                    "Bánh cuốn nóng", "Canh chua chay", "Cá chiên xù",
+                    "Bắp cải luộc",
+                ),
             )
-            mon = {d["name"]: d for d in cur.fetchall()}
+            foods = {d["name"]: d for d in cur.fetchall()}
 
-        kiem(len(mon) == 4, f"tìm đủ 4 món mốc trong CSDL thử, được {len(mon)}")
-        if len(mon) != 4:
+        check(
+            len(foods) == 4,
+            f"all 4 anchor foods found in the test database, got {len(foods)}",
+        )
+        if len(foods) != 4:
             return
 
-        natri = {k: float(v["sodium_mg"]) for k, v in mon.items()}
-        purin = {k: float(v["purine_mg"]) for k, v in mon.items()}
+        sodium = {k: float(v["sodium_mg"]) for k, v in foods.items()}
+        purine = {k: float(v["purine_mg"]) for k, v in foods.items()}
 
         with cn.cursor() as cur:
-            # ĐÃ ĂN: một suất rưỡi, để bắt lỗi quên nhân khẩu phần. Lỗi đó
-            # cho ra số NHỎ hơn thật, tức là nới hạn mức an toàn mà không
-            # báo gì — đúng loại lỗi không bao giờ tự lộ.
+            # EATEN: half a serving, to catch a forgotten portion multiplier.
+            # That bug produces a SMALLER number than the truth, that is, it
+            # loosens a safety limit without reporting anything — exactly the
+            # kind of bug that never reveals itself.
             cur.execute(
                 "INSERT INTO food_diary (id, user_id, food_id, ate_on, "
                 "meal_type, portion_multiplier, created_at) "
                 "VALUES (UUID(), %s, %s, %s, 'breakfast', 0.50, NOW())",
-                (uid, mon["Bánh cuốn nóng"]["id"], ngay),
+                (uid, foods["Bánh cuốn nóng"]["id"], day),
             )
 
             cur.execute(
@@ -934,27 +1037,28 @@ def kiem_han_muc_ngay(db: str) -> None:
                 "target_fat_g, generation_source, status, generated_at) "
                 "VALUES (UUID(), %s, %s, 2000, 90, 250, 60, 'rule_based', "
                 "'active', NOW())",
-                (uid, ngay),
+                (uid, day),
             )
             cur.execute(
-                "SELECT id FROM meal_plans WHERE user_id = %s AND plan_date = %s",
-                (uid, ngay),
+                "SELECT id FROM meal_plans "
+                "WHERE user_id = %s AND plan_date = %s",
+                (uid, day),
             )
             plan_id = cur.fetchone()["id"]
 
-            o = (
-                # (món, trạng thái, khẩu phần, món thay thế)
+            slots = (
+                # (food, status, portion, replacement food)
                 ("Canh chua chay", "kept", 1.00, None),
                 ("Cá chiên xù", "suggested", 2.00, None),
-                # Ô bị đổi: phải tính Bắp cải luộc, KHÔNG phải Cá chiên xù.
+                # A replaced slot: must count Bắp cải luộc, NOT Cá chiên xù.
                 ("Cá chiên xù", "replaced", 1.00, "Bắp cải luộc"),
-                # Có nhật ký kèm → quy ước được tôn trọng.
+                # With a matching diary entry -> the convention is respected.
                 ("Bánh cuốn nóng", "eaten", 1.00, None),
-                # KHÔNG có nhật ký → `kiem_dem_doi` phải bắt được.
+                # With NO diary entry -> `check_double_counting` must catch it.
                 ("Cá chiên xù", "eaten", 1.00, None),
                 ("Bắp cải luộc", "skipped", 1.00, None),
             )
-            for ten, tt_o, khau, thay in o:
+            for name, slot_status, portion, replacement in slots:
                 cur.execute(
                     "INSERT INTO meal_plan_items (id, meal_plan_id, food_id, "
                     "meal_type, portion_multiplier, status, "
@@ -962,154 +1066,189 @@ def kiem_han_muc_ngay(db: str) -> None:
                     "VALUES (UUID(), %s, %s, 'lunch', %s, %s, %s, NOW())",
                     (
                         plan_id,
-                        mon[ten]["id"],
-                        khau,
-                        tt_o,
-                        mon[thay]["id"] if thay else None,
+                        foods[name]["id"],
+                        portion,
+                        slot_status,
+                        foods[replacement]["id"] if replacement else None,
                     ),
                 )
         cn.commit()
 
-        # ── Từng tổng đối chiếu với số cộng tay ──
-        an = da_an(cn, uid, ngay)
-        mong_an = natri["Bánh cuốn nóng"] * 0.5
-        gan(an.tong["sodium_mg"], mong_an, "đã ăn: natri = 0,5 suất Bánh cuốn nóng")
+        # -- Each total against the hand-summed figure --
+        eaten = eaten_totals(cn, uid, day)
+        expected_eaten = sodium["Bánh cuốn nóng"] * 0.5
+        approx(
+            eaten.totals["sodium_mg"], expected_eaten,
+            "eaten: sodium = 0.5 servings of Bánh cuốn nóng",
+        )
 
-        ke = da_len_ke_hoach(cn, uid, ngay)
-        mong_ke = (
-            natri["Canh chua chay"] * 1.0
-            + natri["Cá chiên xù"] * 2.0
-            + natri["Bắp cải luộc"] * 1.0  # ô `replaced` tính theo món MỚI
+        planned = planned_totals(cn, uid, day)
+        expected_planned = (
+            sodium["Canh chua chay"] * 1.0
+            + sodium["Cá chiên xù"] * 2.0
+            + sodium["Bắp cải luộc"] * 1.0  # a `replaced` slot counts the NEW food
         )
-        gan(
-            ke.tong["sodium_mg"],
-            mong_ke,
-            "kế hoạch: `kept` + `suggested`×2 + `replaced`→món mới",
+        approx(
+            planned.totals["sodium_mg"],
+            expected_planned,
+            "planned: `kept` + `suggested`x2 + `replaced`->the new food",
         )
-        kiem(
-            abs(ke.tong["sodium_mg"] - (mong_ke + natri["Bánh cuốn nóng"])) > 1.0,
-            "ô `eaten` KHÔNG bị cộng vào kế hoạch — nếu cộng là đếm đôi",
-        )
-        kiem(
-            abs(ke.tong["sodium_mg"] - (mong_ke + natri["Bắp cải luộc"])) > 1.0,
-            "ô `skipped` không được cộng",
-        )
-        kiem(
+        check(
             abs(
-                ke.tong["sodium_mg"]
-                - (mong_ke - natri["Bắp cải luộc"] + natri["Cá chiên xù"])
-            )
-            > 1.0,
-            "ô `replaced` không tính theo món CŨ",
+                planned.totals["sodium_mg"]
+                - (expected_planned + sodium["Bánh cuốn nóng"])
+            ) > 1.0,
+            "an `eaten` slot is NOT added to the plan — adding it would be "
+            "double counting",
+        )
+        check(
+            abs(
+                planned.totals["sodium_mg"]
+                - (expected_planned + sodium["Bắp cải luộc"])
+            ) > 1.0,
+            "a `skipped` slot is not added",
+        )
+        check(
+            abs(
+                planned.totals["sodium_mg"]
+                - (
+                    expected_planned - sodium["Bắp cải luộc"]
+                    + sodium["Cá chiên xù"]
+                )
+            ) > 1.0,
+            "a `replaced` slot does not count the OLD food",
         )
 
-        # ── Trạng thái hạn mức ──
-        dk = dieu_kien_cua_nguoi_dung(cn, uid)
-        kiem(len(dk) == 2, f"đọc được 2 bệnh của người này, được {len(dk)}")
-        tt = trang_thai(cn, uid, dieu_kien=dk, ngay=ngay)
-        kiem(not tt.rong, "có ngưỡng cứng theo ngày")
-        chat = {h.chat for h in tt.han_muc}
-        kiem(
-            chat == {"sodium_mg", "purine_mg"},
-            f"hai ngưỡng: natri và purin, được {sorted(chat)}",
+        # -- The limit status --
+        conditions = conditions_for_user(cn, uid)
+        check(
+            len(conditions) == 2,
+            f"both of this person's conditions are read, got {len(conditions)}",
+        )
+        limit_status = status(cn, uid, conditions=conditions, day=day)
+        check(not limit_status.is_empty, "there are hard daily thresholds")
+        nutrients = {limit.nutrient for limit in limit_status.limits}
+        check(
+            nutrients == {"sodium_mg", "purine_mg"},
+            f"two thresholds: sodium and purine, got {sorted(nutrients)}",
         )
 
-        h_natri = tt.han_muc_chat_nhat("sodium_mg")
-        kiem(h_natri is not None, "có ngưỡng trần cho natri")
-        if h_natri is not None:
-            gan(h_natri.nguong, 2000.0, "ngưỡng natri 2 000 mg (WHO)")
-            gan(h_natri.da_an, mong_an, "phần đã ăn khớp")
-            gan(h_natri.da_len_ke_hoach, mong_ke, "phần kế hoạch khớp")
-            gan(
-                h_natri.con_lai,
-                2000.0 - mong_an - mong_ke,
-                "phần còn lại = ngưỡng − đã ăn − kế hoạch",
+        sodium_limit = limit_status.tightest_limit("sodium_mg")
+        check(sodium_limit is not None, "there is a sodium ceiling")
+        if sodium_limit is not None:
+            approx(
+                sodium_limit.threshold, 2000.0,
+                "the sodium threshold is 2000 mg (WHO)",
+            )
+            approx(sodium_limit.eaten, expected_eaten, "the eaten part matches")
+            approx(
+                sodium_limit.planned, expected_planned,
+                "the planned part matches",
+            )
+            approx(
+                sodium_limit.remaining,
+                2000.0 - expected_eaten - expected_planned,
+                "remaining = threshold - eaten - planned",
             )
 
-        h_purin = tt.han_muc_chat_nhat("purine_mg")
-        kiem(h_purin is not None, "có ngưỡng trần cho purin")
-        if h_purin is not None:
-            gan(h_purin.nguong, 400.0, "ngưỡng purin 400 mg")
-            mong_purin = (
-                purin["Bánh cuốn nóng"] * 0.5
-                + purin["Canh chua chay"]
-                + purin["Cá chiên xù"] * 2.0
-                + purin["Bắp cải luộc"]
+        purine_limit = limit_status.tightest_limit("purine_mg")
+        check(purine_limit is not None, "there is a purine ceiling")
+        if purine_limit is not None:
+            approx(
+                purine_limit.threshold, 400.0,
+                "the purine threshold is 400 mg",
             )
-            gan(h_purin.tong, mong_purin, "tổng purin khớp số cộng tay")
+            expected_purine = (
+                purine["Bánh cuốn nóng"] * 0.5
+                + purine["Canh chua chay"]
+                + purine["Cá chiên xù"] * 2.0
+                + purine["Bắp cải luộc"]
+            )
+            approx(
+                purine_limit.used, expected_purine,
+                "the purine total matches the hand-summed figure",
+            )
 
-        # ── `mon_khong_vua` trên toàn danh mục thật ──
+        # -- `classify_foods` over the whole real catalogue --
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT f.id, f.name, fn.sodium_mg, fn.purine_mg "
                 "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
                 "WHERE f.is_active = 1 ORDER BY f.name"
             )
-            tat_ca = list(cur.fetchall())
+            catalogue = list(cur.fetchall())
 
-        kq = mon_khong_vua(tt, tat_ca)
-        khong_vua = kq.khong_vua
-        if h_natri is not None and h_purin is not None:
-            # Phép lọc tay phải xử lý NULL y như mã: ô khuyết KHÔNG kết luận
-            # được, nên không vào tập này.
-            def vuot(d, chat, h):
-                v = d[chat]
-                return v is not None and float(v) > h.con_lai
+        result = classify_foods(limit_status, catalogue)
+        does_not_fit = result.does_not_fit
+        if sodium_limit is not None and purine_limit is not None:
+            # The hand filter must handle NULL exactly as the code does: a
+            # missing cell is undecidable, so it does not join this set.
+            def over(row, nutrient, limit):
+                value = row[nutrient]
+                return value is not None and float(value) > limit.remaining
 
-            bang_tay = {
-                d["id"]
-                for d in tat_ca
-                if vuot(d, "sodium_mg", h_natri) or vuot(d, "purine_mg", h_purin)
+            by_hand = {
+                row["id"]
+                for row in catalogue
+                if over(row, "sodium_mg", sodium_limit)
+                or over(row, "purine_mg", purine_limit)
             }
-            kiem(
-                set(khong_vua) == bang_tay,
-                f"tập món không vừa khớp phép lọc tay "
-                f"({len(khong_vua)} vs {len(bang_tay)} món)",
+            check(
+                set(does_not_fit) == by_hand,
+                f"the non-fitting set matches the hand filter "
+                f"({len(does_not_fit)} vs {len(by_hand)} foods)",
             )
-            # Nhóm chưa xét được phải khớp đúng số ô NULL của danh mục.
-            tay_thieu = {
-                d["id"]
-                for d in tat_ca
-                if d["id"] not in bang_tay
-                and (d["sodium_mg"] is None or d["purine_mg"] is None)
+            # The undecidable group must match the catalogue's NULL cells.
+            undecidable_by_hand = {
+                row["id"]
+                for row in catalogue
+                if row["id"] not in by_hand
+                and (row["sodium_mg"] is None or row["purine_mg"] is None)
             }
-            kiem(
-                set(kq.khong_xet_duoc) == tay_thieu,
-                f"nhóm chưa xét được khớp số ô NULL "
-                f"({len(kq.khong_xet_duoc)} vs {len(tay_thieu)} món)",
+            check(
+                set(result.undecidable) == undecidable_by_hand,
+                f"the undecidable group matches the NULL cells "
+                f"({len(result.undecidable)} vs "
+                f"{len(undecidable_by_hand)} foods)",
             )
-            kiem(
-                len(kq.khong_xet_duoc) > 0,
-                f"danh mục thật CÓ món thiếu số liệu — {len(kq.khong_xet_duoc)} "
-                f"món; nếu con số này là 0 thì phép kiểm mất ý nghĩa",
+            check(
+                len(result.undecidable) > 0,
+                f"the real catalogue DOES have foods with missing data — "
+                f"{len(result.undecidable)} of them; were this 0 the check "
+                f"would be meaningless",
             )
-            kiem(
-                not any(f in kq.khong_xet_duoc for f in khong_vua),
-                "không món nào ở cả hai nhóm cùng lúc",
+            check(
+                not any(f in result.undecidable for f in does_not_fit),
+                "no food is in both groups at once",
             )
-        kiem(
-            all(l.vuot_bao_nhieu > 0 for ly_do in khong_vua.values() for l in ly_do),
-            "mọi lý do đều nêu một lượng vượt dương",
-        )
-        kiem(
+        check(
             all(
-                l.chat in ("sodium_mg", "purine_mg")
-                for ly_do in khong_vua.values()
-                for l in ly_do
+                limit.excess > 0
+                for reasons in does_not_fit.values()
+                for limit in reasons
             ),
-            "không lý do nào viện một chất không bị hạn chế",
+            "every reason states a positive excess amount",
+        )
+        check(
+            all(
+                limit.nutrient in ("sodium_mg", "purine_mg")
+                for reasons in does_not_fit.values()
+                for limit in reasons
+            ),
+            "no reason invokes an unlimited nutrient",
         )
 
-        # ── Cờ đủ dữ liệu, trên danh mục thật ──
-        if h_purin is not None:
-            kiem(
-                h_purin.du_lieu_du,
-                "bốn món mốc đều có số liệu purin nên cờ báo ĐỦ dữ liệu",
+        # -- The data-completeness flag, on the real catalogue --
+        if purine_limit is not None:
+            check(
+                purine_limit.has_full_data,
+                "all four anchor foods have purine data, so the flag reports "
+                "COMPLETE data",
             )
 
-        # Giờ chèn một món KHUYẾT purin vào nhật ký. Trên 318 món hoạt động
-        # có 248 món như vậy, nên đây là trường hợp thường, không phải ngoại
-        # lệ — và cờ phải bật.
+        # Now insert a food with NO purine figure into the diary. 248 of the
+        # 318 active foods are like that, so this is the common case rather
+        # than an exception — and the flag must come on.
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT f.id, f.name FROM foods f "
@@ -1117,196 +1256,224 @@ def kiem_han_muc_ngay(db: str) -> None:
                 "WHERE f.is_active = 1 AND fn.purine_mg IS NULL "
                 "ORDER BY f.name LIMIT 1"
             )
-            mon_khuyet = cur.fetchone()
-        kiem(mon_khuyet is not None, "danh mục có món khuyết purine_mg")
-        if mon_khuyet is not None:
+            no_purine = cur.fetchone()
+        check(
+            no_purine is not None,
+            "the catalogue has a food with no purine_mg",
+        )
+        if no_purine is not None:
             with cn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO food_diary (id, user_id, food_id, ate_on, "
                     "meal_type, portion_multiplier, created_at) "
                     "VALUES (UUID(), %s, %s, %s, 'snack', 1.00, NOW())",
-                    (uid, mon_khuyet["id"], ngay),
+                    (uid, no_purine["id"], day),
                 )
             cn.commit()
 
-            tt2 = trang_thai(cn, uid, dieu_kien=dk, ngay=ngay)
-            h2 = tt2.han_muc_chat_nhat("purine_mg")
-            kiem(h2 is not None, "vẫn đọc được ngưỡng purin sau khi thêm món")
-            if h2 is not None:
-                kiem(
-                    not h2.du_lieu_du,
-                    f"thêm 1 món khuyết purin thì cờ báo THIẾU dữ liệu "
-                    f"({mon_khuyet['name']})",
+            status2 = status(cn, uid, conditions=conditions, day=day)
+            purine2 = status2.tightest_limit("purine_mg")
+            check(
+                purine2 is not None,
+                "the purine threshold is still readable after the insert",
+            )
+            if purine2 is not None:
+                check(
+                    not purine2.has_full_data,
+                    f"adding 1 food with no purine makes the flag report "
+                    f"INCOMPLETE data ({no_purine['name']})",
                 )
-                gan(
-                    float(h2.so_mon_thieu_so),
+                approx(
+                    float(purine2.n_missing_servings),
                     1.0,
-                    "đếm đúng 1 suất thiếu số liệu purin",
+                    "exactly 1 serving with missing purine data is counted",
                 )
-                gan(
-                    h2.tong,
-                    h_purin.tong if h_purin else 0.0,
-                    "tổng purin KHÔNG đổi — món khuyết cộng vào 0, và chính "
-                    "đó là lý do phải có cờ chứ không thể tin con số",
+                approx(
+                    purine2.used,
+                    purine_limit.used if purine_limit else 0.0,
+                    "the purine total is UNCHANGED — the missing food adds 0, "
+                    "and that is precisely why the flag exists rather than "
+                    "trusting the number",
                 )
-            h2_natri = tt2.han_muc_chat_nhat("sodium_mg")
-            if h2_natri is not None:
-                kiem(
-                    h2_natri.tong > (h_natri.tong if h_natri else 0.0),
-                    "natri của cùng món đó thì CÓ cộng vào — khuyết theo "
-                    "từng chất, không theo cả món",
+            sodium2 = status2.tightest_limit("sodium_mg")
+            if sodium2 is not None:
+                check(
+                    sodium2.used
+                    > (sodium_limit.used if sodium_limit else 0.0),
+                    "that same food's sodium IS added — data is missing per "
+                    "nutrient, not per food",
                 )
 
-        # ── Quy ước đếm đôi ──
-        lech = kiem_dem_doi(cn, uid, ngay)
-        kiem(
-            len(lech) == 1,
-            f"bắt đúng 1 ô `eaten` thiếu nhật ký, được {len(lech)}",
+        # -- The double-counting convention --
+        flagged = check_double_counting(cn, uid, day)
+        check(
+            len(flagged) == 1,
+            f"exactly 1 `eaten` slot with no diary entry is caught, got "
+            f"{len(flagged)}",
         )
-        kiem(
-            bool(lech) and lech[0]["food_name"] == "Cá chiên xù",
-            "ô bị bắt là Cá chiên xù, còn Bánh cuốn nóng có nhật ký nên bỏ qua",
+        check(
+            bool(flagged) and flagged[0]["food_name"] == "Cá chiên xù",
+            "the one caught is Cá chiên xù; Bánh cuốn nóng has a diary entry "
+            "so it is skipped",
         )
     finally:
         cn.close()
 
 
-def kiem_ly_do_loai_sql(db: str) -> None:
-    """`ly_do_loai` phải khớp `loc_f1` — và nhánh ngưỡng theo suất phải chạy.
+def check_exclusion_reasons_sql(db: str) -> None:
+    """`exclusion_reasons` must agree with `allowed_foods` — and the
+    per-serving threshold branch must actually run.
 
-    Phép kiểm cốt lõi là `doi_chieu_loc_f1`: hai câu SQL viết tay đọc cùng
-    một bộ quy tắc, nên chúng có thể lệch nhau sau một lần sửa, và khi đó
-    giao diện hiện một món vừa trong thực đơn vừa trong danh sách bị loại.
+    The core check is `cross_check_f1`: two hand-written SQL statements read
+    the same rule set, so they can drift apart after one edit, and when they do
+    the interface shows a food both in the meal plan and in the excluded list.
 
-    Phần sau quan trọng không kém: bộ quy tắc THẬT hiện **không có** luật
-    `nutrient_limit` cứng theo suất nào — mọi luật theo suất đều mềm. Nghĩa
-    là nhánh thứ ba của cả hai câu SQL chưa bao giờ chạy trên dữ liệu thật.
-    Phần này dựng một luật như vậy trong CSDL thử để nhánh đó được kiểm, kể
-    cả đường thiếu số liệu.
+    What follows matters just as much: the REAL rule set currently has **no**
+    hard per-serving `nutrient_limit` — every per-serving rule is soft. Which
+    means the third branch of both statements has never run against real data.
+    This section builds such a rule in the test database so that branch is
+    exercised, including the missing-data path.
     """
-    print("\n7. Lý do bị F1 loại — đối chiếu với loc_f1 và nhánh theo suất")
+    print(
+        "\n7. F1 exclusion reasons — against allowed_foods, and the "
+        "per-serving branch"
+    )
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
-        # ── Đối chiếu trên bộ quy tắc thật ──
-        for ten, muc in (
+        # -- Cross-check on the real rule set --
+        for names, severity in (
             (["Gút"], "moderate"),
             (["Gút", "Tăng huyết áp"], "moderate"),
             (["Ăn chay"], "mild"),
             (["Dị ứng hải sản", "Gút", "Bệnh thận"], "severe"),
             (["Ăn thuần chay", "Dị ứng đậu phộng"], "severe"),
         ):
-            dk = dieu_kien_theo_ten(cn, ten, severity=muc)
-            con = loc_f1(cn, dieu_kien=dk)
-            ly = ly_do_loai(cn, dieu_kien=dk)
-            kh = doi_chieu_loc_f1(cn, dieu_kien=dk)
-            nhan = "+".join(ten)
-            kiem(
-                not kh["thieu_ly_do"],
-                f"{nhan}: mọi món bị bỏ đều có lý do "
-                f"({len(kh['thieu_ly_do'])} món không giải thích được)",
+            conditions = conditions_by_name(cn, names, severity=severity)
+            allowed = allowed_foods(cn, conditions=conditions)
+            reasons = exclusion_reasons(cn, conditions=conditions)
+            cross = cross_check_f1(cn, conditions=conditions)
+            label = "+".join(names)
+            check(
+                not cross["unexplained"],
+                f"{label}: every dropped food has a reason "
+                f"({len(cross['unexplained'])} foods unexplained)",
             )
-            kiem(
-                not kh["ly_do_du"],
-                f"{nhan}: không món nào vừa bị loại vừa được cho qua "
-                f"({len(kh['ly_do_du'])} món)",
+            check(
+                not cross["spurious"],
+                f"{label}: no food is both excluded and allowed "
+                f"({len(cross['spurious'])} foods)",
             )
-            kiem(
-                len(con) + len(ly) == 318,
-                f"{nhan}: còn {len(con)} + bị loại {len(ly)} = 318",
+            check(
+                len(allowed) + len(reasons) == 318,
+                f"{label}: {len(allowed)} allowed + {len(reasons)} excluded "
+                f"= 318",
             )
 
-        # ── `severity_min` chặn đúng ──
-        # Luật `Giàu purin` của Gút có `severity_min = 'moderate'`.
-        dk_nhe = dieu_kien_theo_ten(cn, ["Gút"], severity="mild")
-        dk_vua = dieu_kien_theo_ten(cn, ["Gút"], severity="moderate")
-        kiem(
-            len(ly_do_loai(cn, dieu_kien=dk_nhe)) == 0,
-            "Gút mức NHẸ: không món nào bị loại — luật cần mức vừa",
+        # -- `severity_min` gates correctly --
+        # Gout's `Giàu purin` rule has `severity_min = 'moderate'`.
+        gout_mild = conditions_by_name(cn, ["Gút"], severity="mild")
+        gout_moderate = conditions_by_name(cn, ["Gút"], severity="moderate")
+        check(
+            len(exclusion_reasons(cn, conditions=gout_mild)) == 0,
+            "gout at MILD: no food excluded — the rule needs moderate",
         )
-        kiem(
-            len(ly_do_loai(cn, dieu_kien=dk_vua)) == 91,
-            "Gút mức VỪA: 91 món bị loại vì nhãn Giàu purin",
-        )
-
-        # ── Nội dung lý do `require_tag` ──
-        dk_chay = dieu_kien_theo_ten(cn, ["Ăn chay"], severity="mild")
-        ly_chay = ly_do_loai(cn, dieu_kien=dk_chay)
-        kiem(len(ly_chay) == 201, f"Ăn chay: 201 món bị loại, được {len(ly_chay)}")
-        mot = next(iter(ly_chay.values()))[0]
-        kiem(
-            mot.rule_type == "require_tag" and mot.the == "Món chay",
-            "lý do nêu đúng loại luật và đúng tên nhãn còn thiếu",
-        )
-        kiem(
-            all(l.bac == "nhan" for v in ly_chay.values() for l in v),
-            "mọi lý do của Ăn chay đều ở bậc `nhan`",
+        check(
+            len(exclusion_reasons(cn, conditions=gout_moderate)) == 91,
+            "gout at MODERATE: 91 foods excluded by the Giàu purin tag",
         )
 
-        # ── Món nhiều lý do ──
-        dk_ba = dieu_kien_theo_ten(
+        # -- The content of a `require_tag` reason --
+        vegetarian = conditions_by_name(cn, ["Ăn chay"], severity="mild")
+        vegetarian_reasons = exclusion_reasons(cn, conditions=vegetarian)
+        check(
+            len(vegetarian_reasons) == 201,
+            f"vegetarian: 201 foods excluded, got {len(vegetarian_reasons)}",
+        )
+        one = next(iter(vegetarian_reasons.values()))[0]
+        check(
+            one.rule_type == "require_tag" and one.tag == "Món chay",
+            "the reason names the right rule type and the missing tag",
+        )
+        check(
+            all(
+                r.kind == "tag"
+                for reasons in vegetarian_reasons.values()
+                for r in reasons
+            ),
+            "every vegetarian reason is of kind `tag`",
+        )
+
+        # -- Foods with several reasons --
+        two_conditions = conditions_by_name(
             cn, ["Dị ứng hải sản", "Gút"], severity="severe"
         )
-        ly_ba = ly_do_loai(cn, dieu_kien=dk_ba)
-        nhieu = [v for v in ly_ba.values() if len(v) >= 2]
-        kiem(
-            len(nhieu) > 0,
-            f"có món vi phạm nhiều luật cùng lúc ({len(nhieu)} món) — nêu "
-            f"một lý do là chưa đủ để người dùng hiểu",
+        reasons_two = exclusion_reasons(cn, conditions=two_conditions)
+        multiple = [v for v in reasons_two.values() if len(v) >= 2]
+        check(
+            len(multiple) > 0,
+            f"some foods breach several rules at once ({len(multiple)} foods) "
+            f"— naming one reason is not enough for the user to understand",
         )
-        kiem(
-            any({l.benh for l in v} == {"Gút", "Dị ứng hải sản"} for v in nhieu),
-            "một món nêu được cả hai bệnh, không gộp thành một",
+        check(
+            any(
+                {r.condition for r in v} == {"Gút", "Dị ứng hải sản"}
+                for v in multiple
+            ),
+            "one food names both conditions rather than merging them into one",
         )
 
-        # ── Dựng luật cứng theo suất để nhánh 3 được chạy ──
+        # -- Build a hard per-serving rule so branch 3 is exercised --
         with cn.cursor() as cur:
             cur.execute(
                 "INSERT INTO condition_rules (id, condition_id, rule_type, "
                 "nutrient, comparator, threshold, scope, severity_min, "
                 "is_hard, note) VALUES (UUID(), 2, 'nutrient_limit', "
                 "'sodium_mg', 'lte', 500.00, 'per_serving', 'mild', 1, %s)",
-                ("LUẬT DỰNG RIÊNG cho phép kiểm — không phải khuyến cáo nào",),
+                (TEST_RULE_NOTE,),
             )
             cur.execute(
-                "SELECT SUM(fn.sodium_mg > 500) AS vuot, "
-                "       SUM(fn.sodium_mg IS NULL) AS khuyet "
+                "SELECT SUM(fn.sodium_mg > 500) AS over_limit, "
+                "       SUM(fn.sodium_mg IS NULL) AS no_data "
                 "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
                 "WHERE f.is_active = 1"
             )
-            d = cur.fetchone()
-            so_vuot, so_khuyet = int(d["vuot"]), int(d["khuyet"])
+            row = cur.fetchone()
+            n_over, n_no_data = int(row["over_limit"]), int(row["no_data"])
         cn.commit()
 
-        dk_tha = dieu_kien_theo_ten(cn, ["Tăng huyết áp"], severity="mild")
-        ly_tha = ly_do_loai(cn, dieu_kien=dk_tha)
-        kh_tha = doi_chieu_loc_f1(cn, dieu_kien=dk_tha)
-        kiem(
-            not kh_tha["thieu_ly_do"] and not kh_tha["ly_do_du"],
-            "luật theo suất: hai câu SQL vẫn khớp nhau",
+        hypertension = conditions_by_name(
+            cn, ["Tăng huyết áp"], severity="mild"
+        )
+        reasons_ht = exclusion_reasons(cn, conditions=hypertension)
+        cross_ht = cross_check_f1(cn, conditions=hypertension)
+        check(
+            not cross_ht["unexplained"] and not cross_ht["spurious"],
+            "with a per-serving rule the two SQL statements still agree",
         )
 
-        bac = {}
-        for v in ly_tha.values():
-            for l in v:
-                bac[l.bac] = bac.get(l.bac, 0) + 1
-        kiem(
-            bac.get("nguong_suat", 0) == so_vuot,
-            f"bậc `nguong_suat` đếm đúng {so_vuot} món vượt 500 mg, "
-            f"được {bac.get('nguong_suat', 0)}",
+        kinds: dict[str, int] = {}
+        for reasons in reasons_ht.values():
+            for reason in reasons:
+                kinds[reason.kind] = kinds.get(reason.kind, 0) + 1
+        check(
+            kinds.get("serving_threshold", 0) == n_over,
+            f"kind `serving_threshold` counts exactly {n_over} foods over "
+            f"500 mg, got {kinds.get('serving_threshold', 0)}",
         )
-        kiem(
-            bac.get("thieu_so_lieu", 0) == so_khuyet,
-            f"bậc `thieu_so_lieu` đếm đúng {so_khuyet} món khuyết natri, "
-            f"được {bac.get('thieu_so_lieu', 0)}",
+        check(
+            kinds.get("missing_data", 0) == n_no_data,
+            f"kind `missing_data` counts exactly {n_no_data} foods with no "
+            f"sodium figure, got {kinds.get('missing_data', 0)}",
         )
-        kiem(
-            so_khuyet > 0,
-            f"danh mục thật CÓ món khuyết natri ({so_khuyet}) — nếu bằng 0 "
-            f"thì đường thiếu số liệu không được kiểm",
+        check(
+            n_no_data > 0,
+            f"the real catalogue DOES have foods with no sodium figure "
+            f"({n_no_data}) — were it 0 the missing-data path would go "
+            f"unchecked",
         )
 
-        # Một lý do cụ thể, đối chiếu số đo với CSDL.
+        # One specific reason, with its measurement compared to the database.
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT f.id, f.name, fn.sodium_mg FROM foods f "
@@ -1314,30 +1481,36 @@ def kiem_ly_do_loai_sql(db: str) -> None:
                 "WHERE f.is_active = 1 AND fn.sodium_mg IS NOT NULL "
                 "ORDER BY fn.sodium_mg DESC LIMIT 1"
             )
-            man_nhat = cur.fetchone()
-        v = ly_tha.get(man_nhat["id"], [])
-        nguong_suat = [l for l in v if l.bac == "nguong_suat"]
-        kiem(
-            len(nguong_suat) == 1,
-            f"{man_nhat['name']} có đúng 1 lý do ngưỡng theo suất",
+            saltiest = cur.fetchone()
+        reasons = reasons_ht.get(saltiest["id"], [])
+        threshold_reasons = [
+            r for r in reasons if r.kind == "serving_threshold"
+        ]
+        check(
+            len(threshold_reasons) == 1,
+            f"{saltiest['name']} has exactly 1 per-serving threshold reason",
         )
-        if nguong_suat:
-            l = nguong_suat[0]
-            gan(l.gia_tri or 0.0, float(man_nhat["sodium_mg"]), "số đo khớp CSDL")
-            gan(l.nguong or 0.0, 500.0, "ngưỡng khớp luật")
-            gan(
-                l.vuot_bao_nhieu or 0.0,
-                float(man_nhat["sodium_mg"]) - 500.0,
-                "lượng vượt = số đo − ngưỡng",
+        if threshold_reasons:
+            reason = threshold_reasons[0]
+            approx(
+                reason.value or 0.0, float(saltiest["sodium_mg"]),
+                "the measurement matches the database",
             )
-            kiem(l.comparator == "lte", "chiều so sánh được giữ lại")
-            kiem(
-                "LUẬT DỰNG RIÊNG" in l.note,
-                "ghi chú của luật đi theo lý do — giao diện cần nó để nói "
-                "nguồn khuyến cáo",
+            approx(reason.threshold or 0.0, 500.0, "the threshold matches the rule")
+            approx(
+                reason.excess or 0.0,
+                float(saltiest["sodium_mg"]) - 500.0,
+                "the excess = measurement - threshold",
+            )
+            check(reason.comparator == "lte", "the comparison direction is kept")
+            check(
+                TEST_RULE_NOTE[:16] in reason.note,
+                "the rule's note travels with the reason — the interface "
+                "needs it to state the source of the recommendation",
             )
 
-        # Món khuyết natri phải vào bậc thiếu số liệu, KHÔNG phải vượt ngưỡng.
+        # A food with no sodium figure must land in the missing-data kind, NOT
+        # over-threshold.
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT f.id, f.name FROM foods f "
@@ -1345,252 +1518,306 @@ def kiem_ly_do_loai_sql(db: str) -> None:
                 "WHERE f.is_active = 1 AND fn.sodium_mg IS NULL "
                 "ORDER BY f.name LIMIT 1"
             )
-            khuyet = cur.fetchone()
-        if khuyet is not None:
-            v2 = ly_tha.get(khuyet["id"], [])
-            kiem(
-                any(l.bac == "thieu_so_lieu" for l in v2),
-                f"{khuyet['name']}: khuyết natri → bậc `thieu_so_lieu`",
+            no_sodium = cur.fetchone()
+        if no_sodium is not None:
+            reasons2 = reasons_ht.get(no_sodium["id"], [])
+            check(
+                any(r.kind == "missing_data" for r in reasons2),
+                f"{no_sodium['name']}: no sodium figure -> kind "
+                f"`missing_data`",
             )
-            kiem(
-                all(l.vuot_bao_nhieu is None for l in v2 if l.thieu_so_lieu),
-                "không bịa ra lượng vượt cho món không có số đo",
+            check(
+                all(r.excess is None for r in reasons2 if r.missing_data),
+                "no excess amount is invented for a food with no measurement",
             )
 
-        # Dọn luật dựng riêng. Một phép kiểm để lại CSDL đã bị sửa thì mọi
-        # phép kiểm sau nó phụ thuộc thứ tự chạy — và mục 9 đã đếm 21 quy
-        # tắc thay vì 20 đúng vì chuyện này.
+        # Clean up the test-only rule. A check that leaves the database
+        # modified makes every later check depend on run order — and section 9
+        # once counted 21 rules instead of 20 for exactly this reason.
         with cn.cursor() as cur:
             cur.execute(
-                "DELETE FROM condition_rules "
-                "WHERE note LIKE 'LUẬT DỰNG RIÊNG%'"
+                "DELETE FROM condition_rules WHERE note = %s",
+                (TEST_RULE_NOTE,),
             )
-            so_xoa = cur.rowcount
+            n_deleted = cur.rowcount
         cn.commit()
-        kiem(so_xoa == 1, f"đã dọn luật dựng riêng, xóa {so_xoa} dòng")
+        check(
+            n_deleted == 1,
+            f"the test-only rule was cleaned up, {n_deleted} row deleted",
+        )
     finally:
         cn.close()
 
 
-def kiem_hinh_phat_mem_sql(db: str) -> None:
-    """Ràng buộc mềm trên bộ quy tắc thật — và điều chúng KHÔNG được làm.
+def check_soft_penalty_sql(db: str) -> None:
+    """Soft constraints against the real rule set — and what they must NOT do.
 
-    Bất biến quan trọng nhất: một ràng buộc mềm **không bao giờ** được làm
-    một món rời khỏi `loc_f1`. `is_hard = 0` nghĩa là trừ điểm; nếu nó loại
-    món thì cả tầng mềm mất lý do tồn tại, và Bước 4 lại hết đường xoay xở
-    đúng như trước khi tầng này được thêm.
+    The most important invariant: a soft constraint must **never** make a food
+    leave `allowed_foods`. `is_hard = 0` means a score reduction; if it
+    excluded foods, the whole soft layer would lose its reason to exist and
+    Step 4 would be back to having no room to manoeuvre, exactly as before the
+    layer was added.
     """
-    print("\n8. Ràng buộc mềm trên bộ quy tắc thật")
-    ngay = date(2026, 10, 20)
+    print("\n8. Soft constraints against the real rule set")
+    day = date(2026, 10, 20)
     uid = "00000004-0000-0000-0000-000000000000"
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
-        bon_benh = ["Gút", "Tăng huyết áp", "Đái tháo đường", "Rối loạn mỡ máu"]
-        dk = dieu_kien_theo_ten(cn, bon_benh, severity="severe")
-        lm = luat_mem(cn, dk)
-        kiem(len(lm) == 7, f"bốn bệnh cho 7 luật mềm, được {len(lm)}")
-
-        theo = luat_mem_theo_pham_vi(lm)
-        kiem(
-            len(theo["per_serving"]) == 4,
-            f"4 luật theo suất, được {len(theo['per_serving'])}",
-        )
-        kiem(len(theo["per_meal"]) == 1, f"1 luật theo bữa, được {len(theo['per_meal'])}")
-        kiem(len(theo["per_day"]) == 2, f"2 luật theo ngày, được {len(theo['per_day'])}")
-
-        chua = luat_chua_thi_hanh(lm)
-        kiem(
-            [l.scope for l in chua] == ["per_meal"],
-            f"đúng 1 luật chưa có tầng thi hành, được {[l.scope for l in chua]}",
-        )
-        kiem(
-            chua and chua[0].nutrient == "carbs_g" and chua[0].benh == "Đái tháo đường",
-            "luật chưa thi hành là bột đường ≤ 60 g mỗi bữa của Đái tháo đường",
+        four_conditions = [
+            "Gút", "Tăng huyết áp", "Đái tháo đường", "Rối loạn mỡ máu",
+        ]
+        conditions = conditions_by_name(cn, four_conditions, severity="severe")
+        rules = soft_rules(cn, conditions)
+        check(
+            len(rules) == 7,
+            f"the four conditions give 7 soft rules, got {len(rules)}",
         )
 
-        # `penalty` là hệ số nhân: mức nặng phải có hệ số NHỎ hơn mức nhẹ.
-        natri = sorted(
-            [l for l in theo["per_serving"] if l.nutrient == "sodium_mg"],
-            key=lambda l: l.nguong,
+        by_scope = soft_rules_by_scope(rules)
+        check(
+            len(by_scope["per_serving"]) == 4,
+            f"4 per-serving rules, got {len(by_scope['per_serving'])}",
         )
-        kiem(len(natri) == 2, f"hai dải natri theo suất, được {len(natri)}")
-        if len(natri) == 2:
-            chat, long_ = natri[0], natri[1]
-            kiem(
-                chat.nguong < long_.nguong and chat.penalty < long_.penalty,
-                f"dải chặt hơn ({chat.nguong:.0f} mg) có hệ số nhỏ hơn "
-                f"({chat.penalty} < {long_.penalty}) — hệ số NHÂN, không "
-                f"phải lượng trừ",
+        check(
+            len(by_scope["per_meal"]) == 1,
+            f"1 per-meal rule, got {len(by_scope['per_meal'])}",
+        )
+        check(
+            len(by_scope["per_day"]) == 2,
+            f"2 per-day rules, got {len(by_scope['per_day'])}",
+        )
+
+        unenforced = unenforced_rules(rules)
+        check(
+            [r.scope for r in unenforced] == ["per_meal"],
+            f"exactly 1 rule has no enforcing layer, got "
+            f"{[r.scope for r in unenforced]}",
+        )
+        check(
+            unenforced
+            and unenforced[0].nutrient == "carbs_g"
+            and unenforced[0].condition == "Đái tháo đường",
+            "the unenforced rule is diabetes' carbohydrate <= 60 g per meal",
+        )
+
+        # `penalty` is a multiplier: the severe level must have the SMALLER
+        # coefficient.
+        sodium_rules = sorted(
+            [r for r in by_scope["per_serving"] if r.nutrient == "sodium_mg"],
+            key=lambda r: r.threshold,
+        )
+        check(
+            len(sodium_rules) == 2,
+            f"two per-serving sodium bands, got {len(sodium_rules)}",
+        )
+        if len(sodium_rules) == 2:
+            tighter, looser = sodium_rules[0], sodium_rules[1]
+            check(
+                tighter.threshold < looser.threshold
+                and tighter.penalty < looser.penalty,
+                f"the tighter band ({tighter.threshold:.0f} mg) has the "
+                f"smaller coefficient ({tighter.penalty} < {looser.penalty}) "
+                f"— it MULTIPLIES, it is not an amount subtracted",
             )
 
-        # ── Áp lên danh mục thật ──
+        # -- Applied to the real catalogue --
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT f.id, f.name, fn.sodium_mg, fn.purine_mg, fn.fat_g "
                 "FROM foods f JOIN food_nutrition fn ON fn.food_id = f.id "
                 "WHERE f.is_active = 1 ORDER BY f.name"
             )
-            tat_ca = list(cur.fetchall())
+            catalogue = list(cur.fetchall())
 
-        bi_tru = 0
-        thieu = 0
-        he_so_nho_nhat = 1.0
-        for d in tat_ca:
-            so_do = {
-                "sodium_mg": d["sodium_mg"],
-                "purine_mg": d["purine_mg"],
-                "fat_g": d["fat_g"],
+        n_penalised = 0
+        n_missing = 0
+        lowest_factor = 1.0
+        for row in catalogue:
+            measurements = {
+                "sodium_mg": row["sodium_mg"],
+                "purine_mg": row["purine_mg"],
+                "fat_g": row["fat_g"],
             }
-            r = hinh_phat(so_do, theo["per_serving"])
-            kiem_am_tham = 0.0 < r.he_so <= 1.0
-            if not kiem_am_tham:
-                kiem(False, f"{d['name']}: hệ số {r.he_so} ra ngoài (0, 1]")
+            outcome = penalty(measurements, by_scope["per_serving"])
+            in_range = 0.0 < outcome.factor <= 1.0
+            if not in_range:
+                check(
+                    False,
+                    f"{row['name']}: factor {outcome.factor} is outside (0, 1]",
+                )
                 return
-            if r.bi_tru_diem:
-                bi_tru += 1
-            if r.thieu_so_lieu:
-                thieu += 1
-            he_so_nho_nhat = min(he_so_nho_nhat, r.he_so)
+            if outcome.is_penalised:
+                n_penalised += 1
+            if outcome.missing_data:
+                n_missing += 1
+            lowest_factor = min(lowest_factor, outcome.factor)
 
-        kiem(True, f"mọi hệ số của 318 món nằm trong (0, 1]")
-        kiem(
-            bi_tru > 0,
-            f"{bi_tru} món bị trừ điểm vì ràng buộc mềm — nếu bằng 0 thì "
-            f"tầng mềm không làm gì cả",
+        check(True, "every factor across the 318 foods lies within (0, 1]")
+        check(
+            n_penalised > 0,
+            f"{n_penalised} foods are penalised by a soft constraint — were "
+            f"this 0 the soft layer would be doing nothing",
         )
-        kiem(
-            thieu > 0,
-            f"{thieu} món thiếu số liệu ở chất có luật mềm — không bị phạt, "
-            f"nhưng được ghi lại",
+        check(
+            n_missing > 0,
+            f"{n_missing} foods lack data on a nutrient with a soft rule — "
+            f"not penalised, but recorded",
         )
-        kiem(
-            he_so_nho_nhat < 0.4,
-            f"có món vướng nhiều nhóm luật nên hệ số xuống {he_so_nho_nhat:.3f} "
-            f"— thấp hơn hệ số nặng nhất của một nhóm (0,400)",
-        )
-
-        # ── Bất biến: luật mềm KHÔNG loại món ──
-        chi_cung = dieu_kien_theo_ten(cn, ["Gút"], severity="mild")
-        kiem(
-            len(loc_f1(cn, dieu_kien=chi_cung)) == 318,
-            "Gút mức nhẹ: luật mềm purin ≤ 150 mg/suất KHÔNG loại món nào",
-        )
-        kiem(
-            len(ly_do_loai(cn, dieu_kien=chi_cung)) == 0,
-            "và cũng không sinh ra lý do bị loại nào",
-        )
-        bon = loc_f1(cn, dieu_kien=dk)
-        kiem(
-            len(bon) == len(loc_f1(cn, dieu_kien=dieu_kien_theo_ten(
-                cn, ["Gút", "Tăng huyết áp"], severity="severe"))),
-            "thêm Đái tháo đường và Rối loạn mỡ máu — toàn luật mềm — không "
-            "làm tập ứng viên nhỏ đi",
+        check(
+            lowest_factor < 0.4,
+            f"some food breaches several rule groups, driving the factor to "
+            f"{lowest_factor:.3f} — below the harshest single group's 0.400",
         )
 
-        # ── Hạn mức MỀM theo ngày ──
+        # -- The invariant: soft rules do NOT exclude foods --
+        gout_only = conditions_by_name(cn, ["Gút"], severity="mild")
+        check(
+            len(allowed_foods(cn, conditions=gout_only)) == 318,
+            "gout at mild: the soft purine <= 150 mg/serving rule excludes NO "
+            "food",
+        )
+        check(
+            len(exclusion_reasons(cn, conditions=gout_only)) == 0,
+            "and generates no exclusion reason either",
+        )
+        four_allowed = allowed_foods(cn, conditions=conditions)
+        check(
+            len(four_allowed) == len(allowed_foods(
+                cn,
+                conditions=conditions_by_name(
+                    cn, ["Gút", "Tăng huyết áp"], severity="severe"
+                ),
+            )),
+            "adding diabetes and dyslipidaemia — both soft only — does not "
+            "shrink the candidate set",
+        )
+
+        # -- SOFT daily limits --
         with cn.cursor() as cur:
-            for cid, muc in ((6, "severe"),):  # Đái tháo đường
-                cur.execute(
-                    "SELECT id FROM conditions WHERE name_vi = %s",
-                    ("Đái tháo đường",),
-                )
-                cid = cur.fetchone()["id"]
-                cur.execute(
-                    "INSERT INTO user_conditions (id, user_id, condition_id, "
-                    "severity, created_at) VALUES (UUID(), %s, %s, %s, NOW())",
-                    (uid, cid, muc),
-                )
-            # Một món rất ngọt, ăn hai suất, để vượt hẳn mốc 25 g/ngày.
+            cur.execute(
+                "SELECT id FROM conditions WHERE name_vi = %s",
+                ("Đái tháo đường",),
+            )
+            condition_id = cur.fetchone()["id"]
+            cur.execute(
+                "INSERT INTO user_conditions (id, user_id, condition_id, "
+                "severity, created_at) VALUES (UUID(), %s, %s, %s, NOW())",
+                (uid, condition_id, "severe"),
+            )
+            # A very sweet food, eaten in two servings, to go well past the
+            # 25 g/day mark.
             cur.execute(
                 "SELECT f.id, f.name, fn.sugar_g FROM foods f "
                 "JOIN food_nutrition fn ON fn.food_id = f.id "
                 "WHERE f.is_active = 1 AND fn.sugar_g IS NOT NULL "
                 "ORDER BY fn.sugar_g DESC LIMIT 1"
             )
-            ngot = cur.fetchone()
+            sweetest = cur.fetchone()
             cur.execute(
                 "INSERT INTO food_diary (id, user_id, food_id, ate_on, "
                 "meal_type, portion_multiplier, created_at) "
                 "VALUES (UUID(), %s, %s, %s, 'snack', 2.00, NOW())",
-                (uid, ngot["id"], ngay),
+                (uid, sweetest["id"], day),
             )
         cn.commit()
 
-        dk_dtd = dieu_kien_cua_nguoi_dung(cn, uid)
-        tt = trang_thai(cn, uid, dieu_kien=dk_dtd, ngay=ngay)
-        kiem(len(tt.nguong_mem()) == 1, f"một ngưỡng mềm theo ngày, được {len(tt.nguong_mem())}")
-        kiem(len(tt.nguong_cung()) == 0, "Đái tháo đường không có ngưỡng CỨNG theo ngày")
-
-        mem = tt.nguong_mem()[0]
-        gan(mem.nguong, 25.0, "mốc đường 25 g/ngày")
-        gan(mem.penalty or 0.0, 0.600, "hệ số phạt 0,600 đi theo ngưỡng")
-        gan(
-            mem.da_an,
-            float(ngot["sugar_g"]) * 2,
-            f"đã ăn 2 suất {ngot['name']}",
+        diabetes = conditions_for_user(cn, uid)
+        limit_status = status(cn, uid, conditions=diabetes, day=day)
+        check(
+            len(limit_status.soft_limits()) == 1,
+            f"one soft daily threshold, got {len(limit_status.soft_limits())}",
         )
-        kiem(
-            mem.da_vuot,
-            f"{mem.tong:.1f} g đường vượt mốc 25 g — vào `vuot_khuyen_cao`",
-        )
-        kiem(
-            [h.chat for h in tt.vuot_khuyen_cao()] == ["sugar_g"],
-            "`vuot_khuyen_cao` nêu đúng chất",
+        check(
+            len(limit_status.hard_limits()) == 0,
+            "diabetes has no HARD daily threshold",
         )
 
-        # Và đây là điều phải giữ: vượt khuyến cáo KHÔNG chặn món nào.
-        kq = mon_khong_vua(tt, tat_ca)
-        kiem(
-            kq.khong_vua == {} and kq.khong_xet_duoc == {},
-            f"vượt mốc đường mềm không chặn món nào "
-            f"({len(kq.khong_vua)} bị chặn) — mềm là trừ điểm, không phải cấm",
+        soft = limit_status.soft_limits()[0]
+        approx(soft.threshold, 25.0, "the sugar mark is 25 g/day")
+        approx(
+            soft.penalty or 0.0, 0.600,
+            "the 0.600 penalty coefficient travels with the threshold",
         )
-        kiem(
-            tt.han_muc_chat_nhat("sugar_g") is None,
-            "`han_muc_chat_nhat` chỉ trả ngưỡng CỨNG, nên đường trả None",
+        approx(
+            soft.eaten,
+            float(sweetest["sugar_g"]) * 2,
+            f"2 servings of {sweetest['name']} eaten",
+        )
+        check(
+            soft.is_exceeded,
+            f"{soft.used:.1f} g of sugar is over the 25 g mark — it goes into "
+            f"`exceeded_recommendations`",
+        )
+        check(
+            [
+                limit.nutrient
+                for limit in limit_status.exceeded_recommendations()
+            ] == ["sugar_g"],
+            "`exceeded_recommendations` names the right nutrient",
+        )
+
+        # And here is what must hold: exceeding a recommendation blocks NO food.
+        result = classify_foods(limit_status, catalogue)
+        check(
+            result.does_not_fit == {} and result.undecidable == {},
+            f"exceeding the soft sugar mark blocks no food "
+            f"({len(result.does_not_fit)} blocked) — soft means a score "
+            f"reduction, not a prohibition",
+        )
+        check(
+            limit_status.tightest_limit("sugar_g") is None,
+            "`tightest_limit` returns HARD thresholds only, so sugar gives "
+            "None",
         )
     finally:
         cn.close()
 
 
-def kiem_muc_tin_cay_sql(db: str) -> None:
-    """Mức tin cậy trên bộ quy tắc thật — và ràng buộc giữ nó khỏi bị lạm dụng.
+def check_evidence_levels_sql(db: str) -> None:
+    """Evidence levels against the real rule set — and the constraint that
+    keeps them from being abused.
 
-    Điều quan trọng nhất ở đây không phải mấy con số đếm được, mà là
-    `chk_rule_evidence`: không có nó thì một ngưỡng dinh dưỡng có thể tự
-    khai `definitional` và thoát khỏi mọi yêu cầu dẫn nguồn.
+    What matters most here is not the counts but `chk_rule_evidence`: without
+    it, a nutrient threshold could declare itself `definitional` and escape
+    every requirement to cite a source.
     """
-    print("\n9. Mức tin cậy của ngưỡng trên bộ quy tắc thật")
+    print("\n9. Threshold evidence levels against the real rule set")
 
-    cn = ket_noi(db)
+    cn = connect(db)
     try:
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT evidence_level e, COUNT(*) n FROM condition_rules "
                 "GROUP BY e"
             )
-            dem = {d["e"]: int(d["n"]) for d in cur.fetchall()}
+            counts = {d["e"]: int(d["n"]) for d in cur.fetchall()}
 
-        kiem(sum(dem.values()) == 20, f"20 quy tắc, được {sum(dem.values())}")
-        kiem(
-            dem.get("definitional") == 9,
-            f"9 quy tắc nhãn là `definitional`, được {dem.get('definitional')}",
+        check(
+            sum(counts.values()) == 20,
+            f"20 rules, got {sum(counts.values())}",
         )
-        kiem(
-            dem.get("published") == 3,
-            f"3 ngưỡng lấy nguyên từ nguồn, được {dem.get('published')}",
+        check(
+            counts.get("definitional") == 9,
+            f"9 tag rules are `definitional`, got {counts.get('definitional')}",
         )
-        kiem(
-            dem.get("derived") == 6,
-            f"6 ngưỡng suy ra kèm giả thiết, được {dem.get('derived')}",
+        check(
+            counts.get("published") == 3,
+            f"3 thresholds taken verbatim from a source, got "
+            f"{counts.get('published')}",
         )
-        kiem(
-            dem.get("unsupported") == 2,
-            f"2 ngưỡng không có nguồn đang hiệu lực, được {dem.get('unsupported')}",
+        check(
+            counts.get("derived") == 6,
+            f"6 thresholds derived with assumptions, got "
+            f"{counts.get('derived')}",
+        )
+        check(
+            counts.get("unsupported") == 2,
+            f"2 thresholds with no source in force, got "
+            f"{counts.get('unsupported')}",
         )
 
-        # Mọi quy tắc nhãn phải là `definitional`, và ngược lại.
+        # Every tag rule must be `definitional`, and vice versa.
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*) n FROM condition_rules "
@@ -1599,157 +1826,182 @@ def kiem_muc_tin_cay_sql(db: str) -> None:
                 "   OR (rule_type = 'nutrient_limit' "
                 "       AND evidence_level = 'definitional')"
             )
-            lech = int(cur.fetchone()["n"])
-        kiem(lech == 0, f"không quy tắc nào lệch loại ↔ mức, được {lech}")
+            mismatched = int(cur.fetchone()["n"])
+        check(
+            mismatched == 0,
+            f"no rule mismatches its type and level, got {mismatched}",
+        )
 
-        # Ràng buộc CHECK phải thực sự chặn, không chỉ là chú thích.
+        # The CHECK constraint must really block, not merely document.
         with cn.cursor() as cur:
             try:
                 cur.execute(
-                    "UPDATE condition_rules SET evidence_level = 'definitional' "
+                    "UPDATE condition_rules "
+                    "SET evidence_level = 'definitional' "
                     "WHERE rule_type = 'nutrient_limit' LIMIT 1"
                 )
-                chan = False
+                blocked = False
             except pymysql.err.OperationalError:
-                chan = True
+                blocked = True
             except pymysql.err.IntegrityError:
-                chan = True
+                blocked = True
         cn.rollback()
-        kiem(
-            chan,
-            "`chk_rule_evidence` CHẶN một ngưỡng tự khai `definitional` — "
-            "không có ràng buộc này thì nó thoát mọi yêu cầu dẫn nguồn",
+        check(
+            blocked,
+            "`chk_rule_evidence` BLOCKS a threshold declaring itself "
+            "`definitional` — without it, that would escape every "
+            "source requirement",
         )
 
-        # Ba ngưỡng `published` phải là đúng ba cái có nguồn trong `note`.
+        # The three `published` thresholds must be exactly the three with a
+        # source in their `note`.
         with cn.cursor() as cur:
             cur.execute(
-                "SELECT co.name_vi b, cr.nutrient, cr.threshold, cr.note "
+                "SELECT co.name_vi c, cr.nutrient, cr.threshold, cr.note "
                 "FROM condition_rules cr "
                 "JOIN conditions co ON co.id = cr.condition_id "
                 "WHERE cr.evidence_level = 'published' "
                 "ORDER BY co.name_vi, cr.nutrient"
             )
-            pub = list(cur.fetchall())
-        kiem(
+            published = list(cur.fetchall())
+        # The matched substrings are the real `condition_rules.note` text.
+        check(
             all(
-                "WHO" in d["note"] or "Nhật Bản" in d["note"] or "KDIGO" in d["note"]
-                for d in pub
+                "WHO" in d["note"]
+                or "Nhật Bản" in d["note"]
+                or "KDIGO" in d["note"]
+                for d in published
             ),
-            "mọi ngưỡng `published` nêu được tên nguồn trong `note`",
+            "every `published` threshold names its source in `note`",
         )
-        kiem(
-            all(float(d["threshold"]) in (400.0, 2000.0) for d in pub),
-            "ba ngưỡng đó là purin 400 mg và natri 2 000 mg (hai bệnh)",
+        check(
+            all(float(d["threshold"]) in (400.0, 2000.0) for d in published),
+            "those three are purine 400 mg and sodium 2000 mg (two conditions)",
         )
 
-        # Hai ngưỡng `unsupported`: `note` phải nói rõ vì sao.
+        # The two `unsupported` thresholds: `note` must say why.
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT cr.note FROM condition_rules cr "
                 "WHERE cr.evidence_level = 'unsupported'"
             )
-            un = [d["note"] for d in cur.fetchall()]
-        kiem(
-            any("BỊ RÚT" in n for n in un),
-            "một ngưỡng `unsupported` vì đã BỊ RÚT khỏi hướng dẫn",
+            unsupported = [d["note"] for d in cur.fetchall()]
+        check(
+            any("BỊ RÚT" in n for n in unsupported),
+            "one `unsupported` threshold because it was WITHDRAWN from the "
+            "guideline",
         )
-        kiem(
-            any("chưa xác minh" in n for n in un),
-            "ngưỡng còn lại vì CHƯA ai tra — hai lý do khác nhau, cùng một "
-            "cách trình bày",
+        check(
+            any("chưa xác minh" in n for n in unsupported),
+            "the other because NOBODY has checked it — two different reasons, "
+            "one way of presenting them",
         )
 
-        # Mức đi tới được cả ba lớp đọc nó.
-        dk = dieu_kien_theo_ten(
+        # The level reaches all three classes that read it.
+        conditions = conditions_by_name(
             cn, ["Gút", "Tăng huyết áp", "Rối loạn mỡ máu"], severity="severe"
         )
-        ly = ly_do_loai(cn, dieu_kien=dk)
-        kiem(
+        reasons = exclusion_reasons(cn, conditions=conditions)
+        check(
             all(
-                l.evidence_level == "definitional"
-                for v in ly.values()
-                for l in v
+                r.evidence_level == "definitional"
+                for v in reasons.values()
+                for r in v
             ),
-            "mọi lý do bị loại hiện tại đều từ quy tắc nhãn → `definitional`",
+            "every current exclusion reason comes from a tag rule -> "
+            "`definitional`",
         )
-        lm = luat_mem(cn, dk)
-        kiem(
-            {l.evidence_level for l in lm} == {"derived", "unsupported"},
-            f"luật mềm có hai mức, được {sorted({l.evidence_level for l in lm})}",
+        rules = soft_rules(cn, conditions)
+        check(
+            {r.evidence_level for r in rules} == {"derived", "unsupported"},
+            f"the soft rules carry two levels, got "
+            f"{sorted({r.evidence_level for r in rules})}",
         )
-        tt = trang_thai(cn, "khong-ai", dieu_kien=dk, ngay=date(2026, 11, 7))
-        cung = [h for h in tt.han_muc if h.la_cung]
-        kiem(
-            cung and all(h.dan_duoc_nguon for h in cung),
-            "mọi ngưỡng CỨNG theo ngày đều dẫn được nguồn — đúng như phải "
-            "thế: chặn món thì phải có nguồn",
+        limit_status = status(
+            cn, "nobody", conditions=conditions, day=date(2026, 11, 7)
         )
-        mem = [h for h in tt.han_muc if not h.la_cung]
-        kiem(
-            mem and not any(h.dan_duoc_nguon for h in mem),
-            "còn ngưỡng MỀM thì không ngưỡng nào dẫn được nguồn",
+        hard = [limit for limit in limit_status.limits if limit.is_hard]
+        check(
+            hard and all(limit.is_citable for limit in hard),
+            "every HARD daily threshold can cite a source — as it must: "
+            "blocking a food requires one",
+        )
+        soft = [limit for limit in limit_status.limits if not limit.is_hard]
+        check(
+            soft and not any(limit.is_citable for limit in soft),
+            "while no SOFT threshold can cite one",
         )
     finally:
         cn.close()
 
 
 def main() -> int:
-    in_utf8()
-    bo = argparse.ArgumentParser(description=__doc__)
-    bo.add_argument("--goc", default="nutrition_rec", help="CSDL nguồn để sao món")
-    bo.add_argument("--db", default=TEN_CSDL_THU, help="tên CSDL thử")
-    bo.add_argument("--giu", action="store_true", help="không xóa CSDL thử khi xong")
-    t = bo.parse_args()
+    use_utf8()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--source", default="nutrition_rec",
+        help="the source database to copy the foods from",
+    )
+    parser.add_argument(
+        "--db", default=TEST_DATABASE, help="the test database name"
+    )
+    parser.add_argument(
+        "--keep", action="store_true",
+        help="do not drop the test database when done",
+    )
+    args = parser.parse_args()
 
-    if t.db == t.goc:
-        print("CSDL thử không được trùng CSDL nguồn.", file=sys.stderr)
+    if args.db == args.source:
+        print(
+            "The test database must not be the source database.",
+            file=sys.stderr,
+        )
         return 1
 
-    print("Kiểm đầu-cuối phần học máy")
+    print("End-to-end machine-learning checks")
     print("=" * 62)
-    print(f"Dựng CSDL thử {t.db!r} từ {t.goc!r}…")
+    print(f"Building the test database {args.db!r} from {args.source!r}…")
     try:
-        dung_csdl_thu(t.goc, t.db)
+        build_test_database(args.source, args.db)
     except pymysql.Error as e:
-        print(f"Không dựng được CSDL thử: {e}", file=sys.stderr)
+        print(f"Could not build the test database: {e}", file=sys.stderr)
         return 1
 
     try:
-        cn = ket_noi(t.db)
+        cn = connect(args.db)
         try:
-            so_tin_hieu = dung_nguoi_dung(cn)
+            signal_counts = build_users(cn)
         finally:
             cn.close()
         print(
-            f"Đã dựng {len(so_tin_hieu)} người dùng giả, "
-            f"nhãn NGẪU NHIÊN (xem phần đầu tệp)."
+            f"Built {len(signal_counts)} fake users with RANDOM labels "
+            f"(see the top of this file)."
         )
 
-        kiem_nhap_phieu(t.db)
-        kiem_duong_ong(t.db, so_tin_hieu)
-        kiem_phuc_vu(t.db, so_tin_hieu)
-        kiem_han_muc_ngay(t.db)
-        kiem_ly_do_loai_sql(t.db)
-        kiem_hinh_phat_mem_sql(t.db)
-        kiem_muc_tin_cay_sql(t.db)
+        check_form_import(args.db)
+        check_pipeline(args.db, signal_counts)
+        check_serving(args.db, signal_counts)
+        check_daily_limits_sql(args.db)
+        check_exclusion_reasons_sql(args.db)
+        check_soft_penalty_sql(args.db)
+        check_evidence_levels_sql(args.db)
     finally:
-        if t.giu:
-            print(f"\nGiữ lại CSDL {t.db!r} theo --giu.")
+        if args.keep:
+            print(f"\nKeeping the database {args.db!r} as --keep asks.")
         else:
-            xoa_csdl_thu(t.db)
-            print(f"\nĐã xóa CSDL thử {t.db!r}.")
+            drop_test_database(args.db)
+            print(f"\nDropped the test database {args.db!r}.")
 
     print("=" * 62)
-    if _loi:
-        print(f"{_dat} mục đạt, {len(_loi)} MỤC SAI:")
-        for x in _loi:
+    if _failures:
+        print(f"{_passed} checks passed, {len(_failures)} FAILED:")
+        for x in _failures:
             print("  -", x)
         return 1
-    print(f"Tất cả {_dat} mục kiểm đều đạt.")
+    print(f"All {_passed} checks passed.")
     print(
-        "Lưu ý: mọi con số ở trên là của dữ liệu giả, KHÔNG phải kết quả "
-        "thực nghiệm."
+        "Note: every number above comes from fake data and is NOT an "
+        "experimental result."
     )
     return 0
 

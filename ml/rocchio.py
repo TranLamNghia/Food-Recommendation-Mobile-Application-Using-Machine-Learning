@@ -1,25 +1,27 @@
 # -*- coding: utf-8 -*-
-"""Hồ sơ sở thích Rocchio — **bản Python của `preference_profile.dart`**.
+"""Rocchio preference profile — **the Python twin of `preference_profile.dart`**.
 
-Giai đoạn 1 của chiến lược khởi đầu nguội:
+Stage 1 of the cold-start strategy:
 
-        p_u  =  Σ w(aᵢ) · vᵢ  /  Σ |w(aᵢ)|
-        w: thích = +1 , trung tính = 0 , không thích = −1
-        lượt `unknown` bị loại khỏi **cả tử số lẫn mẫu số**
+        p_u  =  sum w(a_i) * v_i  /  sum |w(a_i)|
+        w: like = +1 , neutral = 0 , dislike = -1
+        `unknown` swipes are dropped from **both** numerator and denominator
 
-Vì sao bản Python cũng cần. Hai chỗ dùng tới nó mà ứng dụng Flutter không
-chạm được:
+Why a Python version is needed too. Two callers that the Flutter app cannot
+reach:
 
-1.  `profile_snapshot` khi dựng tập huấn luyện — phải là vector **tại thời
-    điểm thu tín hiệu**, nên phải phát lại lịch sử vuốt theo thứ tự thời
-    gian ở phía máy chủ. Xem `ml/build_dataset.py`.
-2.  Phương án đối chứng `content_based` khi đánh giá — chính là phương án mà
-    đồ án phải chứng minh hơn `rule_based` và `popularity`.
+1.  `profile_snapshot` when building the training set — it has to be the
+    vector **at the moment the signal was collected**, so the swipe history
+    has to be replayed in chronological order on the server. See
+    `ml/build_dataset.py`.
+2.  The `content_based` baseline during evaluation — the very baseline this
+    project has to beat `rule_based` and `popularity` with.
 
-Lượt `neutral` có trọng số 0 nên không đóng góp vào tử số lẫn mẫu số, **song
-vẫn được đếm** vào `n_signals`: nó là một tín hiệu người dùng đã cho, chỉ là
-tín hiệu trung tính. Phân biệt này giữ cho `n_signals` đo đúng "đã vuốt bao
-nhiêu món", tức là đúng đại lượng mà công thức chuyển giai đoạn α dùng tới.
+A `neutral` swipe carries weight 0, so it contributes to neither numerator
+nor denominator, **yet it is still counted** in `n_signals`: it is a signal
+the user did give, merely a neutral one. That distinction keeps `n_signals`
+measuring the right quantity — "how many foods were swiped" — which is what
+the stage-transition formula for alpha consumes.
 """
 
 from __future__ import annotations
@@ -28,13 +30,13 @@ import math
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from .features import FEATURE_VERSION, KhongGianDacTrung, Mon, cosine_similarity
+from .features import FEATURE_VERSION, FeatureSpace, Food, cosine_similarity
 
-#: `interactions.action` → trọng số Rocchio. `None` nghĩa là loại khỏi phép
-#: tính: "tôi chưa biết món này" khác hoàn toàn với "tôi thấy nó bình thường".
-#: Gộp `unknown` vào như một giá trị 0 sẽ làm phình mẫu số và kéo vector về
-#: gốc, tức làm loãng mọi sở thích thật.
-TRONG_SO = {
+#: `interactions.action` -> Rocchio weight. `None` means drop from the
+#: computation: "I have never tried this" is nothing like "I find it
+#: unremarkable". Folding `unknown` in as a 0 would inflate the denominator
+#: and pull the vector toward the origin, diluting every real preference.
+WEIGHTS = {
     "like": 1.0,
     "neutral": 0.0,
     "dislike": -1.0,
@@ -43,8 +45,8 @@ TRONG_SO = {
 
 
 @dataclass(frozen=True)
-class HoSoSoThich:
-    """Vector sở thích `p_u` cùng hai đại lượng đi kèm nó trong CSDL."""
+class PreferenceProfile:
+    """The vector `p_u` together with the two quantities stored beside it."""
 
     weights: tuple[float, ...]
     sum_abs_weight: float
@@ -52,27 +54,28 @@ class HoSoSoThich:
 
     @property
     def is_empty(self) -> bool:
-        """Rỗng khi **mọi trọng số bằng 0**, không phải khi chưa có lượt vuốt.
+        """Empty when **every weight is zero**, not when there are no swipes.
 
-        Phân biệt này quan trọng vì người dùng có thể khai mục tiêu dinh
-        dưỡng trước khi vuốt lượt đầu tiên: hồ sơ khi đó có `n_signals == 0`
-        nhưng trọng số khác 0, và vẫn phải xếp hạng được.
+        The distinction matters because a user can state a nutrition goal
+        before their first swipe: the profile then has `n_signals == 0` but
+        non-zero weights, and it still has to be able to rank.
         """
         return all(w == 0 for w in self.weights)
 
-    def score(self, kg: KhongGianDacTrung, m: Mon) -> float:
-        """Điểm ưa thích trong đoạn [0, 1].
+    def score(self, space: FeatureSpace, food: Food) -> float:
+        """Preference score in [0, 1].
 
-        Cosin nhận giá trị trong [−1, 1]; phép `(1 + cos) / 2` đưa về [0, 1]
-        để dùng **chung thang đo** với điểm của mô hình ở Giai đoạn 2 — nhờ
-        vậy công thức trộn `α·ML + (1−α)·cosin` không phải quy đổi thang.
+        Cosine lands in [-1, 1]; `(1 + cos) / 2` maps it into [0, 1] so it
+        shares **one scale** with the Stage 2 model score — which is what
+        lets the blend `alpha*ML + (1-alpha)*cosine` skip any rescaling.
         """
         if self.is_empty:
             return 0.5
-        return (1 + cosine_similarity(self.weights, kg.encode(m))) / 2
+        return (1 + cosine_similarity(self.weights, space.encode(food))) / 2
 
     def to_json(self) -> dict[str, Any]:
-        """Dạng ghi vào `user_preference_profiles.weights` / `profile_snapshot`."""
+        """The form written to `user_preference_profiles.weights` and to
+        `ml_training_samples.profile_snapshot`."""
         return {
             "feature_version": FEATURE_VERSION,
             "weights": list(self.weights),
@@ -81,59 +84,60 @@ class HoSoSoThich:
         }
 
 
-def ho_so_rong(kg: KhongGianDacTrung) -> HoSoSoThich:
-    return HoSoSoThich(tuple([0.0] * kg.length), 0.0, 0)
+def empty_profile(space: FeatureSpace) -> PreferenceProfile:
+    return PreferenceProfile(tuple([0.0] * space.length), 0.0, 0)
 
 
-def dung_ho_so(
-    kg: KhongGianDacTrung,
-    luot_vuot: Sequence[tuple[Mon, str]],
-) -> HoSoSoThich:
-    """Dựng `p_u` từ một dãy lượt vuốt `(món, action)`.
+def build_profile(
+    space: FeatureSpace,
+    swipes: Sequence[tuple[Food, str]],
+) -> PreferenceProfile:
+    """Build `p_u` from a sequence of `(food, action)` swipes.
 
-    Mẫu số bằng 0 — cả phiên chỉ toàn `neutral` — thì **giữ vector rỗng**
-    thay vì chia cho 0: khi đó mọi món nhận cùng một điểm 0,5 và thứ tự do
-    các tiêu chí khác quyết định. Phía Dart làm đúng vậy.
+    When the denominator is zero — a session of nothing but `neutral` — keep
+    the empty vector instead of dividing by zero: every food then scores 0.5
+    and the ordering is decided by the other criteria. The Dart side does the
+    same.
     """
-    tong = [0.0] * kg.length
-    tong_tri_tuyet_doi = 0.0
-    da_dung = 0
+    total = [0.0] * space.length
+    sum_abs_weight = 0.0
+    used = 0
 
-    for m, action in luot_vuot:
-        if action not in TRONG_SO:
+    for food, action in swipes:
+        if action not in WEIGHTS:
             raise ValueError(
-                f"action không hợp lệ: {action!r} — phải thuộc {tuple(TRONG_SO)}"
+                f"invalid action: {action!r} — must be one of {tuple(WEIGHTS)}"
             )
-        w = TRONG_SO[action]
+        w = WEIGHTS[action]
         if w is None:
             continue
 
-        da_dung += 1
-        tong_tri_tuyet_doi += abs(w)
+        used += 1
+        sum_abs_weight += abs(w)
 
         if w != 0.0:
-            v = kg.encode(m)
-            for i in range(kg.length):
-                tong[i] += w * v[i]
+            v = space.encode(food)
+            for i in range(space.length):
+                total[i] += w * v[i]
 
-    if tong_tri_tuyet_doi > 0:
-        tong = [x / tong_tri_tuyet_doi for x in tong]
+    if sum_abs_weight > 0:
+        total = [x / sum_abs_weight for x in total]
 
-    return HoSoSoThich(tuple(tong), tong_tri_tuyet_doi, da_dung)
+    return PreferenceProfile(tuple(total), sum_abs_weight, used)
 
 
 def alpha(n_signals: int, n_min: int = 30, n_max: int = 100) -> float:
-    """Hệ số trộn giữa Giai đoạn 1 và Giai đoạn 2.
+    """The blend coefficient between Stage 1 and Stage 2.
 
-            α = 0                               nếu n < n_min
-                (n − n_min) / (n_max − n_min)    nếu n_min ≤ n ≤ n_max
-                1                               nếu n > n_max
+            alpha = 0                            if n < n_min
+                    (n - n_min) / (n_max - n_min) if n_min <= n <= n_max
+                    1                            if n > n_max
 
-    Chuyển dần chứ không chuyển đột ngột, vì người dùng sẽ thấy thực đơn đổi
-    bất thường ngay khi vừa vượt ngưỡng.
+    A gradual rather than abrupt switch, because the user would otherwise see
+    the meal plan change oddly the moment they crossed the threshold.
     """
     if n_max <= n_min:
-        raise ValueError("n_max phải lớn hơn n_min")
+        raise ValueError("n_max must be greater than n_min")
     if n_signals < n_min:
         return 0.0
     if n_signals > n_max:
@@ -141,8 +145,8 @@ def alpha(n_signals: int, n_min: int = 30, n_max: int = 100) -> float:
     return (n_signals - n_min) / (n_max - n_min)
 
 
-def giai_doan(n_signals: int, n_min: int = 30, n_max: int = 100) -> str:
-    """Giá trị cho `user_preference_profiles.stage`."""
+def stage(n_signals: int, n_min: int = 30, n_max: int = 100) -> str:
+    """The value for `user_preference_profiles.stage`."""
     if n_signals <= 0:
         return "cold"
     if n_signals < n_min:
@@ -152,6 +156,6 @@ def giai_doan(n_signals: int, n_min: int = 30, n_max: int = 100) -> str:
     return "ml"
 
 
-def do_lech_cosin(a: Sequence[float], b: Sequence[float]) -> float:
-    """Khoảng cách góc giữa hai vector, dùng khi so hai hồ sơ với nhau."""
+def cosine_distance(a: Sequence[float], b: Sequence[float]) -> float:
+    """The angle between two vectors, used when comparing two profiles."""
     return math.acos(max(-1.0, min(1.0, cosine_similarity(a, b))))

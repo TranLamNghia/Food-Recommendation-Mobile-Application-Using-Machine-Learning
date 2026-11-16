@@ -1,37 +1,36 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Bước 1 phải cho cùng một bộ số ở cả ba bản hiện thực.
+"""Step 1 must produce the same numbers in all three implementations.
 
-    tools/gen_buoc1_cases.py                    Python — bản tham chiếu
-    backend/Api/Nutrition/NutritionTargets.cs   C#     — máy chủ
-    mobile/lib/data/models/health_profile.dart  Dart   — ứng dụng
+    tools/gen_buoc1_cases.py                    Python — the reference
+    backend/Api/Nutrition/NutritionTargets.cs   C#     — the server
+    mobile/lib/data/models/health_profile.dart  Dart   — the app
 
-Vì sao cần. Ba bản chạy ở ba tầng và không bao giờ gặp nhau. Khi chúng lệch,
-**không gì báo ra**: ứng dụng hiện một hạn mức năng lượng, máy chủ sinh thực
-đơn theo một hạn mức khác, và cả hai con số đều trông hợp lý. Người dùng
-không có cách nào biết, và lập trình viên cũng không — cho tới khi ai đó
-ngồi tính tay.
+Why it is needed. The three run in three layers and never meet. When they
+drift, **nothing reports it**: the app shows one calorie limit, the server
+generates a meal plan from a different one, and both numbers look plausible.
+The user has no way to tell, and neither does the developer — until somebody
+works it out by hand.
 
-Chuyện đó đã xảy ra, ba lần, và cả ba đều do bộ kiểm này bắt được khi nó
-chạy lần đầu:
+That happened three times, and this checker caught all three on its first run:
 
-  · **macro 17/60/23 ở Dart** trong khi cột `DEFAULT` của CSDL và đặc tả API
-    đều ghi 15/60/25. Ba nguồn, hai con số.
-  · **`mealDistribution` 25/40/27/8 trong đặc tả** trong khi `meal_plan.dart`
-    dùng điểm giữa các khoảng của SYSTEM_ARCHITECTURE §3.1, tức
-    27.5/37.5/27.5/7.5. Cả hai bộ đều nằm trong khoảng và đều cộng đủ 100 %,
-    nên không bộ nào trông sai.
-  · **`bmiCategory: "normal"` cho bmi 23.15 trong đặc tả**, trong khi hệ
-    thống dùng ngưỡng châu Á 23/25 — ở đó 23.15 là `overweight`.
+  - **a 17/60/23 macro split in Dart** while the database's `DEFAULT` column
+    and the API specification both said 15/60/25. Three sources, two numbers.
+  - **`mealDistribution` 25/40/27/8 in the specification** while
+    `meal_plan.dart` used the midpoints of the SYSTEM_ARCHITECTURE §3.1
+    ranges, that is 27.5/37.5/27.5/7.5. Both sets are inside the ranges and
+    both sum to 100%, so neither looks wrong.
+  - **`bmiCategory: "normal"` for a BMI of 23.15 in the specification**, while
+    the system uses the Asian thresholds 23/25 — where 23.15 is `overweight`.
 
-BA PHÉP KIỂM
-    1. sinh lại `data/buoc1_cases.json` từ bản tham chiếu Python
-    2. `dotnet test` — 44 phép kiểm C#, không cần CSDL
-    3. `flutter test test/buoc1_parity_test.dart` — 32 phép kiểm Dart
+THE THREE CHECKS
+    1. regenerate `data/buoc1_cases.json` from the Python reference
+    2. `dotnet test` — 44 C# assertions, no database needed
+    3. `flutter test test/buoc1_parity_test.dart` — 32 Dart assertions
 
-Chạy:
+Run:
     python tools/check_be_parity.py
-    python tools/check_be_parity.py --chi-sinh
+    python tools/check_be_parity.py --cases-only
 """
 
 from __future__ import annotations
@@ -48,33 +47,33 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import gen_buoc1_cases  # noqa: E402
 
-CA = ROOT / "data" / "buoc1_cases.json"
-BE = ROOT / "backend"
+CASES = ROOT / "data" / "buoc1_cases.json"
+BACKEND = ROOT / "backend"
 MOBILE = ROOT / "mobile"
-BAI_DART = "test/buoc1_parity_test.dart"
+DART_TEST = "test/buoc1_parity_test.dart"
 
 
-def _in_utf8() -> None:
-    for luong in (sys.stdout, sys.stderr):
+def _use_utf8() -> None:
+    for stream in (sys.stdout, sys.stderr):
         try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
         except Exception:
             pass
 
 
-def chay(lenh: list[str], cwd: pathlib.Path) -> tuple[int, str] | None:
-    """Chạy một lệnh ngoài; trả `None` khi không tìm thấy nó trong PATH.
+def run(command: list[str], cwd: pathlib.Path) -> tuple[int, str] | None:
+    """Run an external command; returns `None` when it is not on PATH.
 
-    Phải tra PATH tường minh bằng `shutil.which`: trên Windows `flutter` và
-    `dotnet` là tệp `.bat`/`.cmd`, và `CreateProcess` không tự thêm đuôi —
-    gọi thẳng `["flutter", ...]` sẽ ném `FileNotFoundError` dù chính lệnh đó
-    chạy được từ dòng lệnh.
+    PATH has to be resolved explicitly with `shutil.which`: on Windows
+    `flutter` and `dotnet` are `.bat`/`.cmd` files, and `CreateProcess` does
+    not append the extension — calling `["flutter", ...]` directly raises
+    `FileNotFoundError` even though that exact command works from a shell.
     """
-    duong = shutil.which(lenh[0])
-    if duong is None:
+    resolved = shutil.which(command[0])
+    if resolved is None:
         return None
     r = subprocess.run(
-        [duong, *lenh[1:]], cwd=str(cwd), capture_output=True, text=True,
+        [resolved, *command[1:]], cwd=str(cwd), capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         env=dict(os.environ, PYTHONIOENCODING="utf-8"),
     )
@@ -82,76 +81,81 @@ def chay(lenh: list[str], cwd: pathlib.Path) -> tuple[int, str] | None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _in_utf8()
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--chi-sinh", action="store_true",
-                    help="chỉ sinh tệp ca thử, không gọi hai bộ kiểm")
-    ts = ap.parse_args(argv)
+    _use_utf8()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cases-only", action="store_true",
+        help="write the case file only, do not run the two test suites",
+    )
+    args = parser.parse_args(argv)
 
-    print("Soát: Bước 1 — Python ↔ C# ↔ Dart")
+    print("Audit: Step 1 — Python <-> C# <-> Dart")
     print("=" * 72)
 
-    # ── 1. Sinh ca thử ───────────────────────────────────────────────────
-    print("\n1. Bản tham chiếu Python")
+    # -- 1. Generate the cases --------------------------------------------
+    print("\n1. The Python reference")
     if gen_buoc1_cases.main([]) != 0:
         return 1
-    if ts.chi_sinh:
+    if args.cases_only:
         return 0
 
-    loi: list[str] = []
+    errors: list[str] = []
 
-    # ── 2. C# ────────────────────────────────────────────────────────────
+    # -- 2. C# -----------------------------------------------------------
     print("\n2. C# — backend/Api.Tests")
-    kq = chay(["dotnet", "test", "--nologo"], BE)
-    if kq is None:
-        print("   ! không thấy `dotnet` trong PATH — bỏ qua phần C#")
-        print("     chạy bằng tay:  cd backend && dotnet test")
-        loi.append("không chạy được phần C# (thiếu `dotnet` trong PATH)")
-        ma, chu = 0, ""
+    result = run(["dotnet", "test", "--nologo"], BACKEND)
+    if result is None:
+        print("   !  `dotnet` is not on PATH — skipping the C# part")
+        print("      run it by hand:  cd backend && dotnet test")
+        errors.append("could not run the C# part (`dotnet` not on PATH)")
+        code, output = 0, ""
     else:
-        ma, chu = kq
-    for dong in chu.splitlines():
-        if "Passed!" in dong or "Failed!" in dong or "error" in dong.lower():
-            print(f"   {dong.strip()[:120]}")
-    if ma != 0:
-        loi.append("dotnet test thất bại")
+        code, output = result
+    for line in output.splitlines():
+        if "Passed!" in line or "Failed!" in line or "error" in line.lower():
+            print(f"   {line.strip()[:120]}")
+    if code != 0:
+        errors.append("dotnet test failed")
 
-    # ── 3. Dart ──────────────────────────────────────────────────────────
+    # -- 3. Dart ---------------------------------------------------------
     print("\n3. Dart — mobile/test/buoc1_parity_test.dart")
-    kq = chay(["flutter", "test", BAI_DART], MOBILE)
-    if kq is None:
-        print("   ! không thấy `flutter` trong PATH — bỏ qua phần Dart")
-        print(f"     chạy bằng tay:  cd mobile && flutter test {BAI_DART}")
-        loi.append("không chạy được phần Dart (thiếu `flutter` trong PATH)")
-        ma, chu = 0, ""
+    result = run(["flutter", "test", DART_TEST], MOBILE)
+    if result is None:
+        print("   !  `flutter` is not on PATH — skipping the Dart part")
+        print(f"      run it by hand:  cd mobile && flutter test {DART_TEST}")
+        errors.append("could not run the Dart part (`flutter` not on PATH)")
+        code, output = 0, ""
     else:
-        ma, chu = kq
-    dong_cuoi = [d for d in chu.splitlines() if d.strip()]
-    if dong_cuoi:
-        print(f"   {dong_cuoi[-1].strip()[:120]}")
-    # Những ca bị bỏ qua phải NÓI RA, không được lẫn vào số liệu "đạt":
-    # `Gender` của Dart không có `other`, nên ba ca giới tính thứ ba không
-    # kiểm được ở bản Dart. Im lặng về chúng là để một khoảng trống thật
-    # trông như đã được phủ.
-    bo_qua = [d.strip() for d in chu.splitlines()
-              if "không có 'other'" in d or "DateTime.now()" in d]
-    if bo_qua:
-        print(f"   {len(bo_qua)} ca bỏ qua ở bản Dart:")
-        for d in sorted(set(bo_qua)):
-            print(f"     ~ {d[:110]}")
-    if ma != 0:
-        loi.append("flutter test thất bại")
+        code, output = result
+    lines = [line for line in output.splitlines() if line.strip()]
+    if lines:
+        print(f"   {lines[-1].strip()[:120]}")
+    # Skipped cases must be STATED, never folded into the "passed" figure:
+    # Dart's `Gender` has no `other`, so the three third-gender cases cannot
+    # be checked on the Dart side. Staying silent about them makes a real gap
+    # look covered. The matched strings are the Dart test's own Vietnamese
+    # output, so they stay as they are.
+    skipped = [
+        line.strip() for line in output.splitlines()
+        if "không có 'other'" in line or "DateTime.now()" in line
+    ]
+    if skipped:
+        print(f"   {len(skipped)} cases skipped on the Dart side:")
+        for line in sorted(set(skipped)):
+            print(f"     ~ {line[:110]}")
+    if code != 0:
+        errors.append("flutter test failed")
 
     print("\n" + "=" * 72)
-    if loi:
-        print(f"{len(loi)} CHỖ LỆCH:")
-        for x in loi:
+    if errors:
+        print(f"{len(errors)} DIVERGENCES:")
+        for x in errors:
             print("  -", x)
-        print("\nXem đầu ra đầy đủ:")
+        print("\nFor the full output:")
         print("    cd backend && dotnet test")
-        print(f"    cd mobile  && flutter test {BAI_DART}")
+        print(f"    cd mobile  && flutter test {DART_TEST}")
         return 1
-    print("Ba bản hiện thực Bước 1 cho cùng một bộ số.")
+    print("All three Step 1 implementations produce the same numbers.")
     return 0
 
 

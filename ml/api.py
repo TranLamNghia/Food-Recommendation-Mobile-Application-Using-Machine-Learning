@@ -1,63 +1,64 @@
 # -*- coding: utf-8 -*-
-"""ML Service — bốn endpoint nội bộ của `API_SPECIFICATION.md` mục 8.
+"""ML Service — the four internal endpoints of `API_SPECIFICATION.md` §8.
 
-Trước tệp này, `ml/serve.py` là một **thư viện Python**: chạy được từ dòng
-lệnh, nhưng Backend viết bằng C# không có đường nào gọi tới. Đó là một trong
-hai mối nối còn thiếu giữa ba tầng của hệ thống, và nó chặn các đợt 4, 5, 6
-của Backend — khảo sát khẩu vị, sinh thực đơn, gợi ý — chứ không phải việc
-thiếu endpoint công khai.
+Before this file, `ml/serve.py` was a **Python library**: runnable from the
+command line, but with no way for a C# backend to reach it. That was one of
+the two missing seams between the system's three layers, and it blocked
+backend waves 4, 5 and 6 — taste survey, meal plan, recommendations — rather
+than any shortage of public endpoints.
 
-    POST /predict                     Bước 3 — chấm điểm tập ứng viên
-    POST /profiles/{userId}/rebuild   dựng lại vector sở thích
-    POST /train                       huấn luyện lại, bất đồng bộ
-    GET  /health                      mô hình nào đang phục vụ
+    POST /predict                     Step 3 — score a candidate set
+    POST /profiles/{userId}/rebuild   rebuild the preference vector
+    POST /train                       retrain, asynchronously
+    GET  /health                      which model is serving
 
-Chạy:  python tools/run_ml_service.py        → http://localhost:8000
-Kiểm:  python tools/smoke_ml_api.py
+Run:   python tools/run_ml_service.py        -> http://localhost:8000
+Check: python tools/smoke_ml_api.py
 
-## Xác thực bằng khóa dùng chung, và vì sao không có mặc định
+## Shared-secret authentication, and why there is no default
 
-Mọi endpoint đòi header `X-Internal-Key` khớp biến môi trường
-`ML_INTERNAL_KEY`. Thiếu hoặc sai thì `401`.
+Every endpoint requires an `X-Internal-Key` header matching the
+`ML_INTERNAL_KEY` environment variable. Missing or wrong gives `401`.
 
-**Không có khóa mặc định trong mã nguồn, có chủ ý** — cùng lý do với
-`JWT_SIGNING_KEY` của Backend: repo này là repo công khai, một khóa nằm trong
-tệp được commit thì mọi ai đọc được repo đều gọi được dịch vụ này. Và dịch vụ
-này đọc thẳng cơ sở dữ liệu, kể cả bảng `users`.
+**There is deliberately no default key in the source** — the same reasoning
+as the backend's `JWT_SIGNING_KEY`: this is a public repository, and a key
+committed to a file lets anyone who can read the repo call this service. And
+this service reads the database directly, including the `users` table.
 
-Máy chủ **dừng ngay lúc khởi động** nếu thiếu khóa, chứ không chạy ở chế độ
-mở. Chạy mở thì mọi thứ trông bình thường cho tới khi có người thử.
+The server **stops at startup** if the key is missing, rather than running
+wide open. Running wide open looks completely normal until somebody tries.
 
-## Một kết nối cho mỗi yêu cầu
+## One connection per request
 
-Các endpoint viết bằng `def` thường (không `async`), nên FastAPI chạy chúng
-trong threadpool. Kết nối PyMySQL **không an toàn giữa các luồng**, nên mỗi
-yêu cầu mở và đóng kết nối của riêng nó. Dùng một kết nối toàn cục sẽ cho ra
-lỗi "Packet sequence number wrong" dưới tải — một lỗi chỉ hiện ra khi có
-nhiều yêu cầu cùng lúc, tức không bao giờ hiện ra lúc thử tay.
+The endpoints are plain `def`, not `async`, so FastAPI runs them in a thread
+pool. A PyMySQL connection is **not thread-safe**, so each request opens and
+closes its own. A single global connection produces "Packet sequence number
+wrong" under load — a failure that only appears with concurrent requests,
+which is to say never during manual testing.
 
-## Suy giảm mềm là hợp đồng, không phải tai nạn
+## Graceful degradation is a contract, not an accident
 
-`/predict` trả `503` khi chưa có mô hình `is_active = 1`, và đặc tả mục 8.1
-nói rõ Backend khi đó **vẫn sinh thực đơn** bằng quy tắc và đặt
-`generationSource = "rule_based"`. Nhưng `serve.goi_y` còn đi xa hơn: nó tự
-hạ cấp sang Giai đoạn 1 và vẫn trả điểm theo nội dung. Nên `503` ở đây chỉ
-dành cho trường hợp **không chấm được gì cả**; còn hạ cấp thì trả `200` kèm
-`stage` và `warnings` để Backend biết điểm này đến từ tầng nào.
+`/predict` returns `503` when no model is `is_active = 1`, and specification
+§8.1 says the backend then **still builds a meal plan** from the rules and
+sets `generationSource = "rule_based"`. But `serve.recommend` goes further:
+it falls back to Stage 1 by itself and still returns content-based scores. So
+`503` here is reserved for the case where **nothing can be scored at all**;
+degradation returns `200` with `stage` and `warnings` so the backend knows
+which layer the scores came from.
 
-Phân biệt này quan trọng: trả `503` mỗi khi thiếu mô hình sẽ làm Backend bỏ
-luôn cả Giai đoạn 1 — tức bỏ phần cá nhân hóa **đang chạy được** — và tụt về
-xếp theo độ phổ biến. Đo trên tập mô phỏng, đó là khoảng cách 0,862 đối lại
-0,694 nDCG@5.
+The distinction matters: returning `503` whenever a model is missing would
+make the backend drop Stage 1 as well — dropping the personalisation that
+**does** work — and fall back to ranking by popularity. Measured on the
+simulated set, that is the difference between 0.862 and 0.694 nDCG@5.
 """
 
 from __future__ import annotations
 
+import hmac
 import os
 import sys
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -68,68 +69,65 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import ket_noi  # noqa: E402
-from ml.features import FEATURE_VERSION, KhongGianDacTrung, nap_mon  # noqa: E402
-from ml.rocchio import alpha, giai_doan  # noqa: E402
-from ml.serve import (  # noqa: E402
-    dung_lai_ho_so,
-    goi_y,
-    nap_mo_hinh_hoat_dong,
-)
-from ml.time_vn import bay_gio  # noqa: E402
+from ml.db import connect  # noqa: E402
+from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
+from ml.rocchio import alpha, stage as stage_for  # noqa: E402
+from ml.serve import load_active_model, rebuild_profile, recommend  # noqa: E402
+from ml.time_vn import now_vn  # noqa: E402
 
-TEN_KHOA = "ML_INTERNAL_KEY"
+KEY_ENV = "ML_INTERNAL_KEY"
 
-#: Thuật toán cho `POST /train`, đúng ba cái `ml/train.py` cài đặt.
-THUAT_TOAN = ("logistic_regression", "random_forest", "gradient_boosting")
+#: The algorithms accepted by `POST /train`, exactly the three `ml/train.py`
+#: implements.
+ALGORITHMS = ("logistic_regression", "random_forest", "gradient_boosting")
 
 
-# ── Xác thực ──────────────────────────────────────────────────────────────
+# ── Authentication ────────────────────────────────────────────────────
 
 
-def khoa_noi_bo() -> str:
-    khoa = os.environ.get(TEN_KHOA, "").strip()
-    if not khoa:
+def require_key() -> str:
+    key = os.environ.get(KEY_ENV, "").strip()
+    if not key:
         raise SystemExit(
-            f"Thiếu {TEN_KHOA}. Dịch vụ này đọc thẳng cơ sở dữ liệu nên không "
-            f"chạy ở chế độ mở.\nĐặt {TEN_KHOA} vào .env rồi chạy lại bằng "
-            "python tools/run_ml_service.py"
+            f"{KEY_ENV} is missing. This service reads the database directly, "
+            f"so it does not run wide open.\nSet {KEY_ENV} in .env and start "
+            "it with python tools/run_ml_service.py"
         )
-    return khoa
+    return key
 
 
-def kiem_khoa(x_internal_key: str | None = Header(default=None)) -> None:
-    """Phụ thuộc chung cho mọi endpoint. Trả `401` theo vỏ lỗi mục 2.5."""
-    mong_doi = os.environ.get(TEN_KHOA, "")
-    # So sánh theo thời gian hằng: so bằng `!=` làm rò rỉ độ dài tiền tố
-    # khớp qua thời gian phản hồi.
-    import hmac
-
-    if not x_internal_key or not hmac.compare_digest(x_internal_key, mong_doi):
+def check_key(x_internal_key: str | None = Header(default=None)) -> None:
+    """The shared dependency for every endpoint. Returns `401` in the §2.5
+    error envelope."""
+    expected = os.environ.get(KEY_ENV, "")
+    # Constant-time comparison: `!=` leaks the length of the matching prefix
+    # through response time.
+    if not x_internal_key or not hmac.compare_digest(x_internal_key, expected):
         raise HTTPException(
             status_code=401,
             detail={
                 "code": "UNAUTHORIZED",
-                "message": "Thiếu hoặc sai header X-Internal-Key.",
+                "message": "Missing or incorrect X-Internal-Key header.",
             },
         )
 
 
-# ── Lược đồ thân yêu cầu và phản hồi ──────────────────────────────────────
+# ── Request and response schemas ──────────────────────────────────────
 
 
-class DacTrungNguoiDung(BaseModel):
-    """Khối `userFeatures` của mục 8.1.
+class UserFeatures(BaseModel):
+    """The `userFeatures` block from §8.1.
 
-    **Nhận vào nhưng không dùng để chấm điểm, và điều đó là có chủ ý.** Dịch
-    vụ này đọc hồ sơ sức khỏe thẳng từ `health_profiles` — cùng cơ sở dữ liệu
-    mà Backend ghi — nên dữ liệu trong thân yêu cầu là bản sao của thứ đã có.
-    Chấm điểm theo bản sao thì khi hai bên lệch nhau, điểm số và hồ sơ hiển
-    thị cho người dùng không còn nói về cùng một người, và không gì báo ra.
+    **Accepted but not used for scoring, deliberately.** This service reads
+    the health profile straight from `health_profiles` — the same database
+    the backend writes — so the data in the request body is a copy of
+    something already available. Scoring from the copy means that when the
+    two drift apart, the scores and the profile shown to the user no longer
+    describe the same person, and nothing reports it.
 
-    Giữ trong lược đồ để đúng đặc tả và để Backend không phải sửa, nhưng
-    `/predict` **đối chiếu** nó với cơ sở dữ liệu và trả chỗ lệch trong
-    `warnings` thay vì bỏ qua im lặng.
+    Kept in the schema to match the specification and to spare the backend a
+    change, but `/predict` **cross-checks** it against the database and
+    returns any mismatch in `warnings` instead of ignoring it silently.
     """
 
     age: int | None = None
@@ -140,14 +138,14 @@ class DacTrungNguoiDung(BaseModel):
     remainingCaloriesKcal: float | None = None
 
 
-class YeuCauPredict(BaseModel):
+class PredictRequest(BaseModel):
     userId: str = Field(min_length=1)
     candidateFoodIds: list[str] = Field(min_length=1)
     contextMealType: Literal["breakfast", "lunch", "dinner", "snack"] | None = None
-    userFeatures: DacTrungNguoiDung | None = None
+    userFeatures: UserFeatures | None = None
 
 
-class DiemMon(BaseModel):
+class FoodScore(BaseModel):
     foodId: str
     score: float
     scoreContent: float
@@ -155,19 +153,19 @@ class DiemMon(BaseModel):
     scoreRule: float
 
 
-class PhanHoiPredict(BaseModel):
+class PredictResponse(BaseModel):
     modelVersion: str | None
     featureVersion: str
     stage: str
     alpha: float
     generationSource: str
-    scores: list[DiemMon]
+    scores: list[FoodScore]
     skippedFoodIds: list[str]
     warnings: list[str]
     elapsedMs: int
 
 
-class PhanHoiRebuild(BaseModel):
+class RebuildResponse(BaseModel):
     userId: str
     featureVersion: str
     nSignals: int
@@ -177,7 +175,7 @@ class PhanHoiRebuild(BaseModel):
     updatedAt: str
 
 
-class YeuCauTrain(BaseModel):
+class TrainRequest(BaseModel):
     datasetVersion: str = Field(min_length=1)
     algorithm: Literal[
         "logistic_regression", "random_forest", "gradient_boosting"
@@ -185,123 +183,133 @@ class YeuCauTrain(BaseModel):
     activate: bool = False
 
 
-class PhanHoiTrain(BaseModel):
+class TrainResponse(BaseModel):
     jobId: str
     status: str
     startedAt: str
 
 
-class MoHinhTrongHealth(BaseModel):
+class HealthModel(BaseModel):
     version: str
     algorithm: str
     trainedAt: str | None
 
 
-class PhanHoiHealth(BaseModel):
+class HealthResponse(BaseModel):
     status: str
-    activeModel: MoHinhTrongHealth | None
+    activeModel: HealthModel | None
     featureVersion: str
     reason: str | None = None
 
 
-# ── Phiên huấn luyện ──────────────────────────────────────────────────────
+# ── The training job ──────────────────────────────────────────────────
 
 
-class SoHuanLuyen:
-    """Trạng thái phiên huấn luyện. Một phiên một lúc, theo mục 8.3 (`409`).
+class TrainingRegistry:
+    """Training job state. One at a time, per §8.3 (`409`).
 
-    Khóa bằng `threading.Lock` chứ không bằng một cờ boolean: hai yêu cầu
-    `POST /train` tới cùng lúc đều đọc thấy cờ `False` rồi đều đặt nó lên,
-    và khi đó hai phiên huấn luyện cùng ghi `ml_models` — đúng loại lỗi chỉ
-    xảy ra dưới tải.
+    Guarded by a `threading.Lock` rather than a boolean flag: two
+    simultaneous `POST /train` requests would both read the flag as `False`
+    and both set it, and two training runs would then write `ml_models` at
+    once — the kind of bug that only appears under load.
     """
 
     def __init__(self) -> None:
-        self._khoa = threading.Lock()
-        self.dang_chay: dict[str, Any] | None = None
+        self._lock = threading.Lock()
+        self.running: dict[str, Any] | None = None
 
-    def nhan(self, job_id: str, bat_dau: str) -> bool:
-        if not self._khoa.acquire(blocking=False):
+    def acquire(self, job_id: str, started_at: str) -> bool:
+        if not self._lock.acquire(blocking=False):
             return False
-        self.dang_chay = {"jobId": job_id, "startedAt": bat_dau}
+        self.running = {"jobId": job_id, "startedAt": started_at}
         return True
 
-    def tra(self) -> None:
-        self.dang_chay = None
+    def release(self) -> None:
+        self.running = None
         try:
-            self._khoa.release()
+            self._lock.release()
         except RuntimeError:
             pass
 
 
-so_huan_luyen = SoHuanLuyen()
+training = TrainingRegistry()
 
 
-def _chay_huan_luyen(job_id: str, t: YeuCauTrain) -> None:
-    """Chạy `ml.train` trong luồng nền. Lỗi được ghi ra, không làm sập app."""
+def _run_training(job_id: str, request: TrainRequest) -> None:
+    """Run `ml.train` on a background thread. Errors are logged, not fatal."""
     try:
-        from ml import train as mo_dun_train
+        from ml import train as train_module
 
-        doi_so = ["--dataset", t.datasetVersion, "--algorithm", t.algorithm, "--apply"]
-        if t.activate:
-            doi_so += ["--kich-hoat", t.algorithm]
-        ma = mo_dun_train.main(doi_so)
-        print(f"[train {job_id}] xong, mã trả về {ma}", flush=True)
+        args = [
+            "--dataset",
+            request.datasetVersion,
+            "--algorithm",
+            request.algorithm,
+            "--apply",
+        ]
+        if request.activate:
+            args += ["--activate", request.algorithm]
+        code = train_module.main(args)
+        print(f"[train {job_id}] finished, exit code {code}", flush=True)
     except Exception as e:  # pragma: no cover
-        print(f"[train {job_id}] LỖI: {type(e).__name__}: {e}", flush=True)
+        print(f"[train {job_id}] ERROR: {type(e).__name__}: {e}", flush=True)
     finally:
-        so_huan_luyen.tra()
+        training.release()
 
 
-# ── Ứng dụng ──────────────────────────────────────────────────────────────
+# ── The application ───────────────────────────────────────────────────
 
 app = FastAPI(
-    title="ML Service — nội bộ",
+    title="ML Service — internal",
     description=__doc__,
     version=FEATURE_VERSION,
 )
 
 
 @app.exception_handler(HTTPException)
-def vo_loi(_r: Request, e: HTTPException) -> JSONResponse:
-    """Vỏ lỗi `{"error": {...}}` như mục 2.5 của đặc tả."""
-    chi_tiet = e.detail
-    if not isinstance(chi_tiet, dict):
-        chi_tiet = {"code": "ERROR", "message": str(chi_tiet)}
-    return JSONResponse(status_code=e.status_code, content={"error": chi_tiet})
+def error_envelope(_request: Request, e: HTTPException) -> JSONResponse:
+    """The `{"error": {...}}` envelope from §2.5 of the specification."""
+    detail = e.detail
+    if not isinstance(detail, dict):
+        detail = {"code": "ERROR", "message": str(detail)}
+    return JSONResponse(status_code=e.status_code, content={"error": detail})
 
 
-@app.get("/health", response_model=PhanHoiHealth)
-def health() -> PhanHoiHealth:
-    """Không đòi khóa: `/health` là thứ bộ điều phối gọi, không phải Backend.
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    """No key required: `/health` is what an orchestrator calls, not the
+    backend.
 
-    Nó cũng không tiết lộ gì ngoài tên phiên bản mô hình. Đòi khóa ở đây làm
-    mọi phép kiểm sống của hạ tầng phải mang bí mật của ứng dụng.
+    It also reveals nothing beyond a model version name. Requiring the key
+    here would force every infrastructure liveness probe to carry an
+    application secret.
     """
-    cn = ket_noi(None)
+    cn = connect(None)
     try:
-        mon, _ = nap_mon(cn)
-        kg = KhongGianDacTrung.tu_mon(mon)
-        mo_hinh, ly_do = nap_mo_hinh_hoat_dong(cn, kg)
-        if mo_hinh is None:
-            return PhanHoiHealth(
+        foods, _ = load_foods(cn)
+        space = FeatureSpace.from_foods(foods)
+        model, reason = load_active_model(cn, space)
+        if model is None:
+            return HealthResponse(
                 status="degraded",
                 activeModel=None,
                 featureVersion=FEATURE_VERSION,
-                reason=ly_do,
+                reason=reason,
             )
         with cn.cursor() as cur:
             cur.execute(
-                "SELECT trained_at FROM ml_models WHERE id = %s", (mo_hinh.model_id,)
+                "SELECT trained_at FROM ml_models WHERE id = %s", (model.model_id,)
             )
-            d = cur.fetchone()
-        return PhanHoiHealth(
+            row = cur.fetchone()
+        return HealthResponse(
             status="healthy",
-            activeModel=MoHinhTrongHealth(
-                version=mo_hinh.version,
-                algorithm=mo_hinh.algorithm,
+            activeModel=HealthModel(
+                version=model.version,
+                algorithm=model.algorithm,
                 trainedAt=(
-                    d["trained_at"].isoformat() if d and d.get("trained_at") else None
+                    row["trained_at"].isoformat()
+                    if row and row.get("trained_at")
+                    else None
                 ),
             ),
             featureVersion=FEATURE_VERSION,
@@ -310,9 +318,9 @@ def health() -> PhanHoiHealth:
         cn.close()
 
 
-def _doi_chieu_dac_trung(cn, user_id: str, gui: DacTrungNguoiDung | None) -> list[str]:
-    """So `userFeatures` Backend gửi với `health_profiles`. Trả danh sách lệch."""
-    if gui is None:
+def _cross_check_features(cn, user_id: str, sent: UserFeatures | None) -> list[str]:
+    """Compare the `userFeatures` the backend sent against `health_profiles`."""
+    if sent is None:
         return []
     with cn.cursor() as cur:
         cur.execute(
@@ -320,89 +328,94 @@ def _doi_chieu_dac_trung(cn, user_id: str, gui: DacTrungNguoiDung | None) -> lis
             "WHERE user_id = %s",
             (user_id,),
         )
-        d = cur.fetchone()
-    if d is None:
-        return ["userFeatures được gửi nhưng người dùng chưa có health_profiles"]
+        row = cur.fetchone()
+    if row is None:
+        return ["userFeatures was sent but the user has no health_profiles row"]
 
-    lech: list[str] = []
-    for ten, a, b in (
-        ("gender", gui.gender, d["gender"]),
-        ("activityLevel", gui.activityLevel, d["activity_level"]),
-        ("goal", gui.goal, d["goal"]),
+    mismatches: list[str] = []
+    for name, sent_value, stored in (
+        ("gender", sent.gender, row["gender"]),
+        ("activityLevel", sent.activityLevel, row["activity_level"]),
+        ("goal", sent.goal, row["goal"]),
     ):
-        if a is not None and a != b:
-            lech.append(f"userFeatures.{ten} = {a!r} nhưng CSDL ghi {b!r}")
-    if gui.bmi is not None and d["bmi"] is not None:
-        if abs(float(gui.bmi) - float(d["bmi"])) > 0.05:
-            lech.append(
-                f"userFeatures.bmi = {gui.bmi} nhưng CSDL tính {float(d['bmi'])}"
+        if sent_value is not None and sent_value != stored:
+            mismatches.append(
+                f"userFeatures.{name} = {sent_value!r} but the database holds "
+                f"{stored!r}"
             )
-    return lech
+    if sent.bmi is not None and row["bmi"] is not None:
+        if abs(float(sent.bmi) - float(row["bmi"])) > 0.05:
+            mismatches.append(
+                f"userFeatures.bmi = {sent.bmi} but the database computes "
+                f"{float(row['bmi'])}"
+            )
+    return mismatches
 
 
-@app.post("/predict", response_model=PhanHoiPredict, dependencies=[Depends(kiem_khoa)])
-def predict(t: YeuCauPredict) -> PhanHoiPredict:
-    bat_dau = time.perf_counter()
-    cn = ket_noi(None)
+@app.post("/predict", response_model=PredictResponse, dependencies=[Depends(check_key)])
+def predict(request: PredictRequest) -> PredictResponse:
+    started = time.perf_counter()
+    cn = connect(None)
     try:
         with cn.cursor() as cur:
-            cur.execute("SELECT id FROM users WHERE id = %s", (t.userId,))
+            cur.execute("SELECT id FROM users WHERE id = %s", (request.userId,))
             if cur.fetchone() is None:
                 raise HTTPException(
                     status_code=404,
                     detail={
                         "code": "USER_NOT_FOUND",
-                        "message": f"Không có người dùng {t.userId}.",
+                        "message": f"No user {request.userId}.",
                     },
                 )
 
-        canh_bao = _doi_chieu_dac_trung(cn, t.userId, t.userFeatures)
+        warnings = _cross_check_features(cn, request.userId, request.userFeatures)
 
-        # `gioi_han` phải bằng số ứng viên gửi lên. Mặc định của `goi_y` là
-        # 20: để nguyên thì Backend gửi 50 món và nhận 20 điểm, và 30 món
-        # còn lại bị coi như không có — một phép cắt im lặng ngay giữa Bước 3.
-        kq = goi_y(
+        # `limit` must equal the number of candidates sent. `recommend`
+        # defaults to 20: leaving that would have the backend send 50 foods
+        # and receive 20 scores, with the other 30 treated as if they did not
+        # exist — a silent truncation in the middle of Step 3.
+        result = recommend(
             cn,
-            t.userId,
-            gioi_han=len(t.candidateFoodIds),
-            chi_ung_vien=t.candidateFoodIds,
+            request.userId,
+            limit=len(request.candidateFoodIds),
+            only_candidates=request.candidateFoodIds,
         )
 
-        cham_duoc = {u.mon.id for u in kq.ung_vien}
-        bi_bo = [f for f in t.candidateFoodIds if f not in cham_duoc]
+        scored = {c.food.id for c in result.candidates}
+        skipped = [f for f in request.candidateFoodIds if f not in scored]
 
-        if not kq.ung_vien:
+        if not result.candidates:
             raise HTTPException(
                 status_code=422,
                 detail={
                     "code": "NO_SCOREABLE_CANDIDATE",
                     "message": (
-                        "Bộ lọc F1 đã loại toàn bộ "
-                        f"{len(t.candidateFoodIds)} món gửi lên — người dùng "
-                        "này không được ăn món nào trong số đó."
+                        "The F1 filter removed all "
+                        f"{len(request.candidateFoodIds)} foods sent — this "
+                        "user may eat none of them."
                     ),
                 },
             )
 
-        return PhanHoiPredict(
-            modelVersion=kq.model_version,
+        return PredictResponse(
+            modelVersion=result.model_version,
             featureVersion=FEATURE_VERSION,
-            stage=kq.stage,
-            alpha=round(kq.alpha, 3),
-            generationSource=kq.generation_source,
+            stage=result.stage,
+            alpha=round(result.alpha, 3),
+            generationSource=result.generation_source,
             scores=[
-                DiemMon(
-                    foodId=u.mon.id,
-                    score=round(u.diem, 4),
-                    scoreContent=round(u.diem_noi_dung, 4),
-                    scoreMl=(None if u.diem_ml is None else round(u.diem_ml, 4)),
-                    scoreRule=round(u.diem_luat, 4),
+                FoodScore(
+                    foodId=c.food.id,
+                    score=round(c.score, 4),
+                    scoreContent=round(c.content_score, 4),
+                    scoreMl=(None if c.ml_score is None else round(c.ml_score, 4)),
+                    scoreRule=round(c.rule_score, 4),
                 )
-                for u in kq.ung_vien
+                for c in result.candidates
             ],
-            skippedFoodIds=bi_bo,
-            warnings=canh_bao + list(kq.canh_bao),
-            elapsedMs=int((time.perf_counter() - bat_dau) * 1000),
+            skippedFoodIds=skipped,
+            warnings=warnings + list(result.warnings),
+            elapsedMs=int((time.perf_counter() - started) * 1000),
         )
     finally:
         cn.close()
@@ -410,11 +423,11 @@ def predict(t: YeuCauPredict) -> PhanHoiPredict:
 
 @app.post(
     "/profiles/{user_id}/rebuild",
-    response_model=PhanHoiRebuild,
-    dependencies=[Depends(kiem_khoa)],
+    response_model=RebuildResponse,
+    dependencies=[Depends(check_key)],
 )
-def rebuild(user_id: str) -> PhanHoiRebuild:
-    cn = ket_noi(None)
+def rebuild(user_id: str) -> RebuildResponse:
+    cn = connect(None)
     try:
         with cn.cursor() as cur:
             cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
@@ -423,33 +436,34 @@ def rebuild(user_id: str) -> PhanHoiRebuild:
                     status_code=404,
                     detail={
                         "code": "USER_NOT_FOUND",
-                        "message": f"Không có người dùng {user_id}.",
+                        "message": f"No user {user_id}.",
                     },
                 )
 
-        ho_so = dung_lai_ho_so(cn, user_id)
-        if ho_so.n_signals == 0:
-            # `422` theo mục 8.2. Vector rỗng vẫn được ghi: Giai đoạn 0 chạy
-            # được với nó, và một dòng rỗng khác hẳn một dòng không tồn tại —
-            # dòng không tồn tại làm `serve` không biết đã dựng hay chưa.
+        profile = rebuild_profile(cn, user_id)
+        if profile.n_signals == 0:
+            # `422` per §8.2. The empty vector is still stored: Stage 0 works
+            # with it, and an empty row is very different from a missing one
+            # — a missing row leaves `serve` unable to tell whether the
+            # profile was ever built.
             raise HTTPException(
                 status_code=422,
                 detail={
                     "code": "INSUFFICIENT_SIGNALS",
                     "message": (
-                        "Người dùng chưa có lượt vuốt nào dùng được sau Bộ "
-                        "lọc F1 — chưa dựng được vector sở thích."
+                        "This user has no usable swipe left after the F1 "
+                        "filter — no preference vector could be built."
                     ),
                 },
             )
-        return PhanHoiRebuild(
+        return RebuildResponse(
             userId=user_id,
             featureVersion=FEATURE_VERSION,
-            nSignals=ho_so.n_signals,
-            sumAbsWeight=float(ho_so.sum_abs_weight),
-            stage=giai_doan(ho_so.n_signals),
-            alpha=round(alpha(ho_so.n_signals), 3),
-            updatedAt=bay_gio().isoformat(),
+            nSignals=profile.n_signals,
+            sumAbsWeight=float(profile.sum_abs_weight),
+            stage=stage_for(profile.n_signals),
+            alpha=round(alpha(profile.n_signals), 3),
+            updatedAt=now_vn().isoformat(),
         )
     finally:
         cn.close()
@@ -457,18 +471,18 @@ def rebuild(user_id: str) -> PhanHoiRebuild:
 
 @app.post(
     "/train",
-    response_model=PhanHoiTrain,
+    response_model=TrainResponse,
     status_code=202,
-    dependencies=[Depends(kiem_khoa)],
+    dependencies=[Depends(check_key)],
 )
-def train(t: YeuCauTrain) -> PhanHoiTrain:
-    cn = ket_noi(None)
+def train(request: TrainRequest) -> TrainResponse:
+    cn = connect(None)
     try:
         with cn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*) n FROM ml_training_samples "
                 "WHERE dataset_version = %s",
-                (t.datasetVersion,),
+                (request.datasetVersion,),
             )
             n = int(cur.fetchone()["n"])
         if n == 0:
@@ -477,32 +491,33 @@ def train(t: YeuCauTrain) -> PhanHoiTrain:
                 detail={
                     "code": "DATASET_NOT_FOUND",
                     "message": (
-                        f"Không có mẫu nào với dataset_version = "
-                        f"{t.datasetVersion!r}. Dựng trước bằng "
+                        f"No sample has dataset_version = "
+                        f"{request.datasetVersion!r}. Build it first with "
                         f"`python -m ml.build_dataset --version "
-                        f"{t.datasetVersion} --apply`."
+                        f"{request.datasetVersion} --apply`."
                     ),
                 },
             )
     finally:
         cn.close()
 
-    gio = bay_gio()
-    job_id = f"train-{gio:%Y%m%d-%H%M%S}"
-    if not so_huan_luyen.nhan(job_id, gio.isoformat()):
-        dang = so_huan_luyen.dang_chay or {}
+    now = now_vn()
+    job_id = f"train-{now:%Y%m%d-%H%M%S}"
+    if not training.acquire(job_id, now.isoformat()):
+        current = training.running or {}
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "TRAINING_IN_PROGRESS",
                 "message": (
-                    f"Đang có phiên huấn luyện chạy ({dang.get('jobId')}, bắt "
-                    f"đầu {dang.get('startedAt')})."
+                    f"A training run is already in progress "
+                    f"({current.get('jobId')}, started "
+                    f"{current.get('startedAt')})."
                 ),
             },
         )
 
     threading.Thread(
-        target=_chay_huan_luyen, args=(job_id, t), name=job_id, daemon=True
+        target=_run_training, args=(job_id, request), name=job_id, daemon=True
     ).start()
-    return PhanHoiTrain(jobId=job_id, status="queued", startedAt=gio.isoformat())
+    return TrainResponse(jobId=job_id, status="queued", startedAt=now.isoformat())

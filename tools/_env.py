@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Đọc tệp `.env` ở gốc dự án.
+"""Read the project's root `.env` file.
 
-Viết tay thay vì dùng `python-dotenv` để bộ công cụ chạy được ngay sau khi
-clone, không cần cài thêm gì. Cả tệp chỉ có một việc: nạp các cặp khóa–giá
-trị vào `os.environ` nếu chúng chưa được đặt sẵn.
+Hand-written rather than using `python-dotenv` so the tooling runs straight
+after a clone with nothing to install. The whole file does one job: load
+key-value pairs into `os.environ` unless they are already set.
 
-Biến đã có trong môi trường luôn được ưu tiên hơn tệp `.env`. Nhờ vậy khi
-chạy trong CI hay khi muốn thử nhanh một khóa khác, chỉ cần đặt biến môi
-trường mà không phải sửa tệp:
+A variable already present in the environment always wins over the `.env`
+file. That way, running in CI or trying a different key quickly needs only an
+environment variable, with no file to edit:
 
     USDA_API_KEY=abc python tools/fill_gaps_usda.py
 """
@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_env(path: Path | None = None) -> dict[str, str]:
-    """Nạp `.env` vào `os.environ`. Trả về những khóa đã nạp thêm."""
+    """Load `.env` into `os.environ`. Returns the keys it added."""
     env_path = path or ROOT / ".env"
     loaded: dict[str, str] = {}
 
@@ -40,7 +40,7 @@ def load_env(path: Path | None = None) -> dict[str, str]:
 
         if not key or not value:
             continue
-        # Không ghi đè biến đã có sẵn trong môi trường.
+        # Never override a variable already present in the environment.
         if key in os.environ:
             continue
 
@@ -51,36 +51,41 @@ def load_env(path: Path | None = None) -> dict[str, str]:
 
 
 def require(name: str, hint: str = "") -> str:
-    """Lấy một biến bắt buộc, báo lỗi rõ ràng nếu thiếu."""
+    """Fetch a required variable, failing with a clear message if it is absent."""
     load_env()
     value = os.environ.get(name, "").strip()
     if not value:
         raise SystemExit(
-            f"Thiếu biến môi trường {name}.\n"
-            f"Chép .env.example thành .env rồi điền giá trị."
+            f"Missing environment variable {name}.\n"
+            f"Copy .env.example to .env and fill in the values."
             + (f"\n{hint}" if hint else "")
         )
     return value
 
 
 def get(name: str, default: str = "") -> str:
-    """Lấy một biến tùy chọn."""
+    """Fetch an optional variable."""
     load_env()
     return os.environ.get(name, default).strip() or default
 
 
-def in_utf8() -> None:
-    """Bắt stdout nhận được tiếng Việt trên Windows (mặc định là cp1252).
+def use_utf8() -> None:
+    """Make stdout accept non-ASCII output on Windows (it defaults to cp1252).
 
-    Không gọi hàm này thì mọi bộ kiểm in ký tự ✓ ✗ hay khung kẻ sẽ **chết giữa
-    lúc chạy** với UnicodeEncodeError, chứ không phải in ra chữ sai. Chạy trực
-    tiếp trên console thì có thể không thấy vì console Windows mới đã là utf-8;
-    lỗi chỉ nổ khi đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức là đúng
-    lúc chạy trong CI. Cùng một hàm với `ml.db.in_utf8`; để ở hai nơi vì `ml/`
-    không phụ thuộc vào `tools/`.
+    Without this call, every checker that prints a check mark, a cross or a
+    box-drawing character **dies mid-run** with `UnicodeEncodeError` rather
+    than printing the wrong character. Running directly in a console may hide
+    it, because a modern Windows console is already utf-8; the failure only
+    appears once output is redirected through a pipe or into a file — which
+    is to say exactly when running in CI.
+
+    Still needed after the English refactor, because the **data** stays
+    Vietnamese: food names, condition names and rule notes are printed
+    verbatim. Same function as `ml.db.use_utf8`; it lives in both places
+    because `ml/` does not depend on `tools/`.
     """
-    for luong in (sys.stdout, sys.stderr):
+    for stream in (sys.stdout, sys.stderr):
         try:
-            luong.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-        except Exception:  # pragma: no cover - console lạ
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+        except Exception:  # pragma: no cover - unusual console
             pass

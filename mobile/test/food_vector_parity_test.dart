@@ -56,7 +56,7 @@ void main() {
         isTrue,
         reason:
             'Chưa có tệp mẫu ${tep.path}. '
-            'Sinh bằng: python tools/check_feature_parity.py --chi-sinh',
+            'Sinh bằng: python tools/check_feature_parity.py --fixture-only',
       );
     });
 

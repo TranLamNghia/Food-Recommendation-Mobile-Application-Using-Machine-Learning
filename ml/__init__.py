@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
-"""Phần học máy chạy phía máy chủ.
+"""Server-side machine learning package.
 
-`docs/ML_PIPELINE.md` là tài liệu đặc tả của thư mục này. Thứ tự các tệp
-đúng bằng thứ tự chạy của quy trình:
+`docs/ML_PIPELINE.md` is the design document for this directory. The files
+are listed in the order the pipeline runs them:
 
-    db.py        kết nối CSDL, dùng lại `tools/_env.py`
-    features.py  trích chọn đặc trưng — bản Python của `food_vector.dart`
-    f1_filter.py bộ lọc an toàn theo bệnh lý (Bước F1)
-    build_dataset.py  bảy nguồn tín hiệu  → `ml_training_samples`
-    train.py          ba thuật toán       → `ml_models`
-    evaluate.py       bốn phương án đối chứng → `ml_evaluations`
+    db.py             database connection, reuses `tools/_env.py`
+    time_vn.py        the single clock: Asia/Ho_Chi_Minh
+    features.py       feature extraction — Python twin of `food_vector.dart`
+    f1_filter.py      medical safety filter (Step F1)
+    build_dataset.py  seven signal sources  -> `ml_training_samples`
+    train.py          three algorithms      -> `ml_models`
+    evaluate.py       four baselines        -> `ml_evaluations`
+    serve.py          scoring for one user
+    api.py            the four internal HTTP endpoints
 """

@@ -4,24 +4,38 @@ using System.Reflection;
 namespace Api.Profile;
 
 /// <summary>
-/// Danh sách giá trị hợp lệ — đặc tả §5.1, trùng khớp từng chữ với ENUM
-/// trong CSDL.
+/// The lists of valid values — specification §5.1, matching the database's
+/// ENUMs word for word.
 ///
-/// <para>Kiểm bằng danh sách ở tầng này chứ không ánh xạ sang <c>enum</c> của
-/// C#: giá trị sai phải ra <c>400 VALIDATION_FAILED</c> kèm tên trường, không
-/// phải một lỗi khử tuần tự JSON với thông báo của thư viện.</para>
+/// <para>Validated against a list at this layer rather than mapped onto a C#
+/// <c>enum</c>: a wrong value has to come out as <c>400 VALIDATION_FAILED</c>
+/// naming the field, not as a JSON deserialization error carrying the
+/// library's own wording.</para>
 ///
-/// <para><b>Bốn danh sách này là nguồn duy nhất.</b> Bản trước khai chúng ở
-/// đây rồi viết lại nguyên văn trong từng <c>[InEnum("male", …)]</c>, vì tham
-/// số attribute phải là hằng biên dịch nên không truyền được một
-/// <c>string[]</c> vào. Hệ quả: lớp này không có chỗ nào đọc, và thêm một giá
-/// trị vào đây sẽ KHÔNG đổi gì trong validation mà cũng không báo lỗi.
-/// <c>InEnumAttribute</c> giờ nhận <b>tên</b> của danh sách và tra
-/// <see cref="Theo_ten"/> lúc chạy, nên <c>[InEnum(nameof(Enums.Gender))]</c>
-/// vừa là hằng biên dịch vừa trỏ thật vào mảng ở dưới.</para>
+/// <para><b>These four arrays are the single source.</b> An earlier version
+/// declared them here and then repeated them verbatim inside every
+/// <c>[InEnum("male", …)]</c>, because an attribute argument has to be a
+/// compile-time constant and a <c>string[]</c> cannot be passed in. The
+/// consequence: nothing in the class was ever read, and adding a value here
+/// would NOT change validation at all — and would not report an error either.
+/// <c>InEnumAttribute</c> now takes the <b>name</b> of a list and looks it up
+/// in <see cref="ByName"/> at run time, so
+/// <c>[InEnum(nameof(Enums.Gender))]</c> is both a compile-time constant and
+/// a real reference to the array below.</para>
 ///
-/// <para><c>tools/gen_entities.py</c> đối chiếu bốn mảng này với tập giá trị
-/// ENUM trong <c>db/schema.sql</c>, cả hai chiều — xem phép kiểm 5 ở đó.</para>
+/// <para><c>tools/gen_entities.py</c> compares these four arrays against the
+/// ENUM value sets in <c>db/schema.sql</c>, in both directions — see check 5
+/// there. It matches them by the regular expression
+/// <c>public static readonly string[] (\w+) = [...]</c>, so the four field
+/// names and that declaration shape have to stay as they are.</para>
+///
+/// <para>Note on language: the values inside the arrays are ENUM values of
+/// the schema and of specification §5.1, so they are compared against the
+/// database and never translated. The message returned by
+/// <see cref="InEnumAttribute.FormatErrorMessage"/> and every
+/// <c>ErrorMessage</c> below stay in Vietnamese — they are the
+/// <c>error.details[].message</c> strings of §2.5, which end users
+/// read.</para>
 /// </summary>
 public static class Enums
 {
@@ -36,10 +50,11 @@ public static class Enums
     public static readonly string[] Severity = ["mild", "moderate", "severe"];
 
     /// <summary>
-    /// {tên trường: danh sách}, dựng bằng phản chiếu từ chính các trường ở
-    /// trên — không viết tay, để từ điển không thể lệch khỏi chúng.
+    /// {field name: list}, built by reflection over the fields above rather
+    /// than written out by hand, so the dictionary cannot drift away from
+    /// them.
     /// </summary>
-    public static readonly IReadOnlyDictionary<string, string[]> Theo_ten =
+    public static readonly IReadOnlyDictionary<string, string[]> ByName =
         typeof(Enums)
             .GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.FieldType == typeof(string[]))
@@ -47,37 +62,37 @@ public static class Enums
 }
 
 /// <summary>
-/// Giá trị phải nằm trong một danh sách của <see cref="Enums"/>.
+/// The value has to be in one of <see cref="Enums"/>' lists.
 ///
-/// <para>Dùng với <c>nameof</c>: <c>[InEnum(nameof(Enums.Gender))]</c>. Đổi
-/// tên trường thì <c>nameof</c> đi theo, và phản chiếu dựng lại khóa tương
-/// ứng — nên không có cách nào để tên ở đây trỏ vào một danh sách không tồn
-/// tại mà vẫn biên dịch được.</para>
+/// <para>Used with <c>nameof</c>: <c>[InEnum(nameof(Enums.Gender))]</c>.
+/// Rename the field and <c>nameof</c> follows, and reflection rebuilds the
+/// matching key — so there is no way for a name here to point at a list that
+/// does not exist and still compile.</para>
 /// </summary>
 public sealed class InEnumAttribute : ValidationAttribute
 {
-    private readonly string[] _cho_phep;
+    private readonly string[] _allowed;
 
-    public InEnumAttribute(string ten)
+    public InEnumAttribute(string listName)
     {
-        if (!Enums.Theo_ten.TryGetValue(ten, out var ds))
+        if (!Enums.ByName.TryGetValue(listName, out var values))
         {
             throw new ArgumentException(
-                $"`{ten}` không phải tên một danh sách trong Api.Profile.Enums",
-                nameof(ten));
+                $"`{listName}` is not the name of a list in Api.Profile.Enums",
+                nameof(listName));
         }
-        _cho_phep = ds;
+        _allowed = values;
     }
 
     public override bool IsValid(object? value)
-        => value is string s && _cho_phep.Contains(s);
+        => value is string s && _allowed.Contains(s);
 
     public override string FormatErrorMessage(string name)
         => "Giá trị không nằm trong danh sách cho phép: "
-            + string.Join(" · ", _cho_phep);
+            + string.Join(" · ", _allowed);
 }
 
-/// <summary>Thân của <c>PUT /profile</c> — đặc tả §7.2.2.</summary>
+/// <summary>Body of <c>PUT /profile</c> — specification §7.2.2.</summary>
 public sealed class UpsertProfileRequest
 {
     [Required(ErrorMessage = "Thiếu giới tính")]
@@ -87,10 +102,10 @@ public sealed class UpsertProfileRequest
     [Required(ErrorMessage = "Thiếu ngày sinh")]
     public DateOnly? DateOfBirth { get; set; }
 
-    // Khoảng trùng với `chk_height CHECK (height_cm BETWEEN 50 AND 250)`.
-    // Kiểm ở cả hai tầng, có chủ ý: ràng buộc CSDL là tầng bảo đảm cuối, còn
-    // tầng này là chỗ duy nhất nói được *trường nào* sai cho người dùng —
-    // một `MySqlException` thì không.
+    // The range matches `chk_height CHECK (height_cm BETWEEN 50 AND 250)`.
+    // Checked at both layers, deliberately: the database constraint is the
+    // last line of defence, while this layer is the only place that can tell
+    // the user *which field* is wrong — a `MySqlException` cannot.
     [Required(ErrorMessage = "Thiếu chiều cao")]
     [Range(50, 250, ErrorMessage = "Chiều cao phải trong khoảng 50 đến 250 cm")]
     public decimal? HeightCm { get; set; }
@@ -108,7 +123,7 @@ public sealed class UpsertProfileRequest
     public string Goal { get; set; } = string.Empty;
 }
 
-/// <summary>Một bệnh lý của người dùng — §7.2.4.</summary>
+/// <summary>One of the user's medical conditions — §7.2.4.</summary>
 public sealed class UserConditionDto
 {
     public uint ConditionId { get; init; }
@@ -118,7 +133,7 @@ public sealed class UserConditionDto
     public string? Note { get; init; }
 }
 
-/// <summary>Hồ sơ sức khỏe đầy đủ — §7.2.1.</summary>
+/// <summary>The complete health profile — §7.2.1.</summary>
 public sealed class ProfileResponse
 {
     public string Gender { get; init; } = string.Empty;
@@ -135,7 +150,7 @@ public sealed class ProfileResponse
     public DateTime UpdatedAt { get; init; }
 }
 
-/// <summary>Một chất sinh năng lượng trong hạn mức — §7.2.3.</summary>
+/// <summary>One energy-bearing macronutrient in the targets — §7.2.3.</summary>
 public sealed class MacroTargetsDto
 {
     public byte ProteinPct { get; init; }
@@ -146,7 +161,7 @@ public sealed class MacroTargetsDto
     public decimal FatG { get; init; }
 }
 
-/// <summary>Một bữa trong phân bổ năng lượng — §7.2.3.</summary>
+/// <summary>One meal in the energy split — §7.2.3.</summary>
 public sealed class MealShareDto
 {
     public string MealType { get; init; } = string.Empty;
@@ -154,14 +169,15 @@ public sealed class MealShareDto
     public int CaloriesKcal { get; init; }
 }
 
-/// <summary>Công thức BMR, để màn hồ sơ nói con số đến từ đâu — §7.2.3.</summary>
+/// <summary>The BMR formula, so the profile screen can say where the number
+/// came from — §7.2.3.</summary>
 public sealed class FormulaDto
 {
     public string Bmr { get; init; } = "Mifflin-St Jeor";
     public string Expression { get; init; } = string.Empty;
 }
 
-/// <summary>Đầu ra Bước 1 — §7.2.3.</summary>
+/// <summary>Step 1's output — §7.2.3.</summary>
 public sealed class NutritionTargetsResponse
 {
     public decimal Bmi { get; init; }
@@ -177,8 +193,9 @@ public sealed class NutritionTargetsResponse
 }
 
 /// <summary>
-/// Phản hồi của <c>PUT /profile</c> — §7.2.2 trả hồ sơ <b>kèm</b> hạn mức
-/// vừa tính lại, để Frontend không phải gọi thêm một lượt.
+/// The <c>PUT /profile</c> response — §7.2.2 returns the profile
+/// <b>together with</b> the freshly recomputed targets, so the frontend does
+/// not need a second round trip.
 /// </summary>
 public sealed class UpsertProfileResponse
 {
@@ -186,7 +203,7 @@ public sealed class UpsertProfileResponse
     public NutritionTargetsResponse NutritionTargets { get; init; } = new();
 }
 
-/// <summary>Một phần tử trong thân của <c>PUT /profile/conditions</c>.</summary>
+/// <summary>One element of the <c>PUT /profile/conditions</c> body.</summary>
 public sealed class ConditionInput
 {
     [Required(ErrorMessage = "Thiếu conditionId")]
@@ -200,17 +217,18 @@ public sealed class ConditionInput
     public string? Note { get; set; }
 }
 
-/// <summary>Thân của <c>PUT /profile/conditions</c> — §7.2.5.</summary>
+/// <summary>Body of <c>PUT /profile/conditions</c> — §7.2.5.</summary>
 public sealed class UpsertConditionsRequest
 {
     /// <summary>
-    /// Thay thế <b>toàn bộ</b> danh sách. Gửi mảng rỗng để xóa hết.
+    /// Replaces the <b>whole</b> list. Send an empty array to clear it.
     ///
-    /// <para><c>Required</c> chứ không để mặc định rỗng: thân
-    /// <c>{}</c> và thân <c>{"conditions": []}</c> phải khác nhau. Cái thứ
-    /// hai là "tôi không có bệnh gì"; cái thứ nhất là một yêu cầu thiếu
-    /// trường, và nếu coi nó là mảng rỗng thì một lỗi phía Frontend sẽ âm
-    /// thầm xóa sạch bệnh lý của người dùng.</para>
+    /// <para><c>Required</c> rather than defaulting to empty: a body of
+    /// <c>{}</c> and a body of <c>{"conditions": []}</c> have to mean
+    /// different things. The second one is "I have no conditions"; the first
+    /// is a request with a field missing, and treating it as an empty array
+    /// would let a frontend bug silently wipe out the user's
+    /// conditions.</para>
     /// </summary>
     [Required(ErrorMessage = "Thiếu danh sách `conditions`")]
     public List<ConditionInput>? Conditions { get; set; }

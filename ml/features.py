@@ -1,34 +1,38 @@
 # -*- coding: utf-8 -*-
-"""Trích chọn đặc trưng món ăn — **bản Python của `food_vector.dart`**.
+"""Food feature extraction — **the Python twin of `food_vector.dart`**.
 
-Vì sao tệp này tồn tại. Ứng dụng Flutter chấm điểm món bằng vector đặc trưng
-dựng ở `mobile/lib/data/recommender/food_vector.dart`, nhưng việc huấn luyện
-mô hình phải chạy bằng Python. Hai bản **buộc phải cho ra cùng một vector**:
-nếu lệch, mô hình học trên một không gian rồi suy luận trên một không gian
-khác — một lỗi không bao giờ báo ra, vì mô hình vẫn chạy và vẫn trả về số.
-`tools/check_feature_parity.py` đối chiếu từng chiều giữa hai bản.
+Why this file exists. The Flutter app scores foods with a feature vector
+built in `mobile/lib/data/recommender/food_vector.dart`, but model training
+has to run in Python. The two implementations **must produce the same
+vector**: if they drift, the model learns in one space and infers in another
+— a failure that never announces itself, because the model still runs and
+still returns numbers. `tools/check_feature_parity.py` compares them
+dimension by dimension.
 
-Ba cái bẫy đã gặp khi dịch, ghi lại ở đây vì chúng vô hình khi đọc mã:
+Three traps hit while porting, recorded here because they are invisible in
+the code itself:
 
-1.  **`kcal` là số nguyên ở phía Dart** (`Food.kcal` khai `int`) nhưng là
-    `DECIMAL(7,2)` trong CSDL. Phải làm tròn ở đúng một chỗ, và làm tròn
-    **giống Dart**: `num.round()` của Dart làm tròn 0,5 ra xa số không, còn
-    `round()` của Python làm tròn về số chẵn — `round(2.5)` cho 2. Nên dùng
-    `floor(x + 0.5)`, xem `lam_tron_kcal`.
+1.  **`kcal` is an integer on the Dart side** (`Food.kcal` is declared `int`)
+    but `DECIMAL(7,2)` in the database. It has to be rounded in exactly one
+    place, and rounded **the way Dart does**: Dart's `num.round()` rounds .5
+    away from zero, while Python's `round()` rounds to even — `round(2.5)`
+    gives 2. Hence `floor(x + 0.5)`; see `round_kcal`.
 
-2.  **Ba chiều macro là tỷ lệ *năng lượng*, không phải tỷ lệ gam**: đạm và
-    bột đường nhân 4, béo nhân 9. Dịch thành `protein / (protein+carb+fat)`
-    sẽ cho ra một vector trông rất hợp lý và sai hoàn toàn.
+2.  **The three macro dimensions are shares of *energy*, not of grams**:
+    protein and carbohydrate times 4, fat times 9. Porting this as
+    `protein / (protein+carb+fat)` yields a very plausible vector that is
+    completely wrong.
 
-3.  **Thứ tự chiều phải ổn định**, nên danh sách nhóm món luôn được sắp xếp.
-    `List<String>.sort()` của Dart so sánh theo đơn vị mã UTF-16, `sorted()`
-    của Python so theo điểm mã Unicode. Hai cách này **trùng nhau** với mọi
-    ký tự thuộc mặt phẳng cơ bản, mà chữ Việt thì đều thuộc mặt phẳng đó —
-    nên hiện tại an toàn. Chỉ hỏng nếu tên nhóm có emoji.
+3.  **Dimension order must be stable**, so the category list is always
+    sorted. Dart's `List<String>.sort()` compares UTF-16 code units while
+    Python's `sorted()` compares Unicode code points. The two **agree** for
+    every character in the Basic Multilingual Plane, and Vietnamese text is
+    entirely within it — so this is safe today. It only breaks if a category
+    name ever contains an emoji.
 
-Phiên bản đặc trưng được gắn vào `ml_models.feature_version`: đổi bất cứ
-chiều nào thì **phải** tăng số này, nếu không một mô hình cũ sẽ được nạp lại
-với một vector khác và không ai biết.
+The feature version is stamped into `ml_models.feature_version`: changing any
+dimension **must** bump it, otherwise an old model gets reloaded against a
+different vector and nobody finds out.
 """
 
 from __future__ import annotations
@@ -38,26 +42,28 @@ from dataclasses import dataclass, field
 from statistics import median
 from typing import Any, Iterable, Sequence
 
-#: Tăng mỗi khi tập chiều hoặc cách chuẩn hóa thay đổi.
+#: Bumped whenever the dimension set or the normalisation changes.
 #:
-#: v1 → v2: chiều "Vị ngọt" đổi từ `sugar_g / carbs_g` sang **nồng độ đường**
-#: `sugar_g / serving_size_g` rồi chuẩn hóa min–max. Lý do ở `Mon.nong_do_duong`.
+#: v1 -> v2: the "sweetness" dimension changed from `sugar_g / carbs_g` to
+#: **sugar density** `sugar_g / serving_size_g`, then min-max normalised. The
+#: reasoning is in `Food.sugar_density`.
 FEATURE_VERSION = "v2"
 
-#: Mức cay chạy 0–3 (`foods.spice_level`), chia cho hằng này để về [0, 1].
-MUC_CAY_TOI_DA = 3
+#: Spice runs 0-3 (`foods.spice_level`); divide by this to land in [0, 1].
+MAX_SPICE_LEVEL = 3
 
 
-# ── Món ăn ────────────────────────────────────────────────────────────
+# ── Food ──────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class Mon:
-    """Một món ăn, đã quy về đúng kiểu dữ liệu mà phía Dart nhìn thấy.
+class Food:
+    """One food, coerced to exactly the types the Dart side sees.
 
-    `suy_ra` liệt kê những trường vốn `NULL` trong CSDL và đã được **suy ra**
-    bằng trung vị. Giữ danh sách này thay vì âm thầm thay số là có chủ ý: khi
-    báo cáo kết quả phải nói được bao nhiêu món mang giá trị suy ra.
+    `imputed` lists the fields that were `NULL` in the database and have been
+    **filled in** from a median. Keeping that list instead of silently
+    substituting numbers is deliberate: when reporting results you have to be
+    able to say how many foods carry an imputed value.
     """
 
     id: str
@@ -72,248 +78,272 @@ class Mon:
     sugar: float
     sodium: float
     fiber: float
-    #: Khối lượng một suất, tính bằng gam (`food_nutrition.serving_size_g`).
-    #: Mọi số dinh dưỡng ở trên là **của cả suất**, không phải trên 100 g.
+    #: Serving weight in grams (`food_nutrition.serving_size_g`). Every
+    #: nutrient figure above is **per serving**, not per 100 g.
     serving_size_g: float = 100.0
-    suy_ra: tuple[str, ...] = ()
+    imputed: tuple[str, ...] = ()
 
-    # Tỷ lệ năng lượng từ mỗi chất sinh năng lượng — xem bẫy số 2 ở đầu tệp.
+    # Share of energy from each macronutrient — see trap 2 at the top.
     @property
     def macro_share(self) -> tuple[float, float, float]:
-        tong = self.protein * 4 + self.carb * 4 + self.fat * 9
-        if tong <= 0:
+        total = self.protein * 4 + self.carb * 4 + self.fat * 9
+        if total <= 0:
             return (0.0, 0.0, 0.0)
         return (
-            self.protein * 4 / tong,
-            self.carb * 4 / tong,
-            self.fat * 9 / tong,
+            self.protein * 4 / total,
+            self.carb * 4 / total,
+            self.fat * 9 / total,
         )
 
     @property
-    def nong_do_duong(self) -> float:
-        """Đường trên mỗi gam món ăn — đại lượng đo được cho vị ngọt.
+    def sugar_density(self) -> float:
+        """Sugar per gram of food — the measurable stand-in for sweetness.
 
-        Dùng **nồng độ** chứ không dùng số gam thuần vì khẩu vị là về *cấu
-        trúc* món ăn: một suất 400 g chứa 20 g đường không ngọt bằng một
-        suất 100 g chứa 15 g đường.
+        Uses **density** rather than raw grams because taste is about the
+        *composition* of a dish: a 400 g serving holding 20 g of sugar is not
+        as sweet as a 100 g serving holding 15 g.
 
-        **Vì sao mẫu số là khối lượng suất, không phải lượng bột đường.** Bản
-        v1 dùng `sugar_g / carbs_g`, và nó vỡ ở món ít bột đường: tỷ lệ nổ
-        khi mẫu số nhỏ. Đo trên 318 món thật, **46 món bị kẹp về đúng 1,000**
-        — tức 14 % danh mục đọc ra "ngọt tối đa" — và trong đó có *trứng
-        luộc* (0,6 g bột đường) cùng *canh hẹ đậu phụ* (2,2 g) đứng ngang
-        *chuối sứ* và *nước ép lựu*. Khi hai món đó không phân biệt được trên
-        chiều này thì Rocchio **không thể học được sở thích ngọt**: nó là một
-        chiều đầy nhiễu chứ không phải một chiều đặc trưng.
+        **Why the denominator is serving weight, not carbohydrate.** v1 used
+        `sugar_g / carbs_g`, and it broke on low-carbohydrate dishes: the
+        ratio explodes when the denominator is small. Measured over the 318
+        real foods, **46 of them clamped to exactly 1.000** — 14% of the
+        catalogue reading as "maximally sweet" — and among them were *boiled
+        egg* (0.6 g carbohydrate) and *chive and tofu soup* (2.2 g), sitting
+        level with *banana* and *pomegranate juice*. When those cannot be
+        told apart on this dimension, Rocchio **cannot learn a sweet
+        preference**: it is a noise dimension, not a feature.
 
-        Đổi mẫu số sang `serving_size_g` giữ nguyên ý định ban đầu — vẫn là
-        nồng độ, vẫn không phụ thuộc khẩu phần — nhưng mẫu số là khối lượng
-        cả suất nên không bao giờ nhỏ bất thường. Sau khi đổi: 1/318 món ở
-        mức tối đa, trứng luộc 0,036, canh hẹ 0,074, dưa hấu 0,279, chuối sứ
-        1,000.
+        Switching the denominator to `serving_size_g` keeps the original
+        intent — still a density, still independent of portion size — but the
+        denominator is a whole serving weight, so it is never anomalously
+        small. After the change: 1 food of 318 at the maximum, boiled egg
+        0.036, chive soup 0.074, watermelon 0.279, banana 1.000.
 
-        Trả về nồng độ **thô**; phép chuẩn hóa min–max do `KhongGianDacTrung`
-        làm, cùng cách với natri và chất xơ, vì "ngọt" là khái niệm tương đối
-        trong phạm vi tập món đang có.
+        Returns the **raw** density; min-max normalisation is done by
+        `FeatureSpace`, the same way as sodium and fiber, because "sweet" is
+        a relative notion within the catalogue at hand.
         """
         if self.serving_size_g <= 0:
             return 0.0
         return self.sugar / self.serving_size_g
 
 
-def lam_tron_kcal(x: float) -> int:
-    """Làm tròn năng lượng về số nguyên **giống `num.round()` của Dart**.
+def round_kcal(x: float) -> int:
+    """Round energy to an integer **the way Dart's `num.round()` does**.
 
-    Không dùng `round()` của Python: nó làm tròn về số chẵn, nên `round(2.5)`
-    ra 2 trong khi Dart cho 3. Xem bẫy số 1 ở đầu tệp.
+    Not Python's `round()`: it rounds half to even, so `round(2.5)` gives 2
+    where Dart gives 3. See trap 1 at the top of the file.
     """
     return math.floor(x + 0.5) if x >= 0 else math.ceil(x - 0.5)
 
 
-def _ep(x: float, thap: float = 0.0, cao: float = 1.0) -> float:
-    """Kẹp về đoạn [thap, cao] — tương đương `clamp` của Dart."""
-    return thap if x < thap else cao if x > cao else x
+def _clamp(x: float, low: float = 0.0, high: float = 1.0) -> float:
+    """Clamp into [low, high] — the equivalent of Dart's `clamp`."""
+    return low if x < low else high if x > high else x
 
 
-# ── Nạp món từ CSDL, kèm báo cáo chất lượng ──────────────────────────
+# ── Loading foods from the database, with a quality report ───────────
 
 
 @dataclass
-class BaoCaoChatLuong:
-    """Những gì dữ liệu còn thiếu hoặc còn tự mâu thuẫn.
+class DataQualityReport:
+    """What the data is missing or where it contradicts itself.
 
-    In ra mỗi lần nạp. Một con số đánh giá đẹp dựng trên dữ liệu khuyết mà
-    không ai nhắc tới thì không bảo vệ được.
+    Printed on every load. A handsome evaluation figure built on incomplete
+    data that nobody mentions is not defensible.
     """
 
-    so_mon: int = 0
-    suy_ra: dict[str, int] = field(default_factory=dict)
-    #: `(tên món, g đường, g bột đường, đường có phải suy ra hay không)`
-    duong_vuot_bot_duong: list[tuple[str, float, float, bool]] = field(
+    n_foods: int = 0
+    imputed: dict[str, int] = field(default_factory=dict)
+    #: `(food name, g sugar, g carbohydrate, whether sugar was imputed)`
+    sugar_over_carbs: list[tuple[str, float, float, bool]] = field(
         default_factory=list
     )
-    cay_bang_khong: int = 0
+    zero_spice: int = 0
 
-    def in_ra(self) -> None:
-        print(f"Đã nạp {self.so_mon} món.")
-        for cot, n in sorted(self.suy_ra.items()):
-            print(f"  · {cot:12} {n:3} món NULL → thay bằng trung vị nhóm")
-        # Đường nhiều hơn tổng bột đường là điều không thể về mặt dinh dưỡng.
-        # Từ v2, chiều vị ngọt không còn chia cho `carbs_g` nên những món này
-        # **không làm lệch vector** nữa — nhưng vẫn phải báo, và phải tách
-        # làm hai nhóm, vì hai nhóm có hai nguyên nhân khác nhau:
+    def print_report(self) -> None:
+        print(f"Loaded {self.n_foods} foods.")
+        for column, n in sorted(self.imputed.items()):
+            print(f"  - {column:12} {n:3} NULL -> replaced by category median")
+        # More sugar than total carbohydrate is nutritionally impossible.
+        # Since v2 the sweetness dimension no longer divides by `carbs_g`, so
+        # these foods **no longer skew the vector** — but they still have to
+        # be reported, and split into two groups, because the two groups have
+        # different causes:
         #
-        #   · đo được  — `carbs_g` khóa theo FCT Việt Nam còn `sugar_g` vay
-        #     từ USDA. Hai định nghĩa đo khác nhau, dồn vào trái cây và nước
-        #     ép. Là một mục của phần hạn chế dữ liệu, không phải lỗi mã.
-        #   · suy ra   — chính `carbs_g` của món đó thấp bất thường, nên bất
-        #     kỳ lượng đường hợp lý nào cũng vượt nó. Đây là **cờ báo lỗi dữ
-        #     liệu ở cột bột đường**, chỗ cần kiểm lại khi rà danh mục.
-        for ten_nhom, loc in (
-            ("đo được", lambda s: not s),
-            ("suy ra", lambda s: s),
+        #   - measured — `carbs_g` is keyed to the Vietnamese food composition
+        #     table while `sugar_g` is borrowed from USDA. Two measurement
+        #     definitions, concentrated in fruit and juice. A data-limitation
+        #     item for the report, not a code bug.
+        #   - imputed  — that food's own `carbs_g` is anomalously low, so any
+        #     plausible sugar figure exceeds it. This is a **data error flag
+        #     on the carbohydrate column**, the place to re-check during a
+        #     catalogue review.
+        for group_name, keep in (
+            ("measured", lambda imputed: not imputed),
+            ("imputed", lambda imputed: imputed),
         ):
-            ds = [t for t in self.duong_vuot_bot_duong if loc(t[3])]
-            if not ds:
+            rows = [t for t in self.sugar_over_carbs if keep(t[3])]
+            if not rows:
                 continue
-            ten, d, b, _ = max(ds, key=lambda t: t[1] / t[2])
+            name, sugar, carb, _ = max(rows, key=lambda t: t[1] / t[2])
             print(
-                f"  · {'sugar>carb':12} {len(ds):3} món có đường > tổng bột "
-                f"đường ({ten_nhom})"
+                f"  - {'sugar>carb':12} {len(rows):3} foods with sugar > total "
+                f"carbohydrate ({group_name})"
             )
-            print(f"      nặng nhất: {ten} ({d:g} g đường / {b:g} g bột đường)")
-        print(f"  · {'spice_level':12} {self.cay_bang_khong:3} món ở mức cay 0")
+            print(f"      worst: {name} ({sugar:g} g sugar / {carb:g} g carbohydrate)")
+        print(f"  - {'spice_level':12} {self.zero_spice:3} foods at spice level 0")
 
 
-SQL_MON = """
+SQL_FOODS = """
 SELECT f.id, f.name, c.name AS category, f.dish_role, f.spice_level,
        n.serving_size_g, n.calories_kcal, n.protein_g, n.carbs_g, n.fat_g,
        n.sugar_g, n.sodium_mg, n.fiber_g
 FROM foods f
 JOIN food_categories c ON c.id = f.category_id
 JOIN food_nutrition  n ON n.food_id = f.id
-WHERE (%(chi_mon_hoat_dong)s = 0 OR f.is_active = 1)
+WHERE (%(active_only)s = 0 OR f.is_active = 1)
 ORDER BY f.name, f.id
 """
 
-#: Các cột `NULL` được phép suy ra. `calories_kcal`, `protein_g`, `carbs_g`,
-#: `fat_g` không có ở đây vì chúng `NOT NULL` — thiếu là lỗi dữ liệu, không
-#: phải chỗ để đoán.
-COT_SUY_RA = ("sugar_g", "sodium_mg", "fiber_g")
+#: Columns whose `NULL`s may be imputed. `calories_kcal`, `protein_g`,
+#: `carbs_g` and `fat_g` are absent because they are `NOT NULL` — a missing
+#: value there is a data error, not something to guess at.
+IMPUTABLE_COLUMNS = ("sugar_g", "sodium_mg", "fiber_g")
 
-#: `sugar_g` suy theo **nồng độ**, không theo số gam tuyệt đối.
+#: `sugar_g` is imputed as a **density**, not as absolute grams.
 #:
-#: Lần làm đầu dùng trung vị số gam của nhóm cho cả ba cột, và số món có
-#: `đường > bột đường` nhảy từ 28 lên 35: phép suy **tự tạo thêm 7 món tự
-#: mâu thuẫn**, vì trung vị đường của nhóm không liên quan gì tới khẩu phần
-#: của chính món đang thiếu.
+#: The first implementation used the category's median grams for all three
+#: columns, and the count of foods with `sugar > carbohydrate` jumped from 28
+#: to 35: imputation **manufactured 7 extra self-contradictory foods**,
+#: because a category's median sugar has nothing to do with the serving size
+#: of the particular food that is missing one.
 #:
-#: Mẫu số phải **trùng với mẫu số mà chiều vị ngọt dùng tới**, nếu không
-#: phép suy sẽ tạo tác ngay trên chiều đó. Khi chiều vị ngọt còn là
-#: `sugar/carbs`, mẫu số ở đây là `carbs_g` — và cơm trắng (60 g bột đường)
-#: bị suy ra một lượng đường lớn, đọc thành 0,201 trên thang ngọt dù cơm
-#: không ngọt. Giờ chiều vị ngọt là `sugar/serving_size_g` thì mẫu số ở đây
-#: cũng là `serving_size_g`, và tạo tác đó biến mất.
+#: The denominator must **match the denominator the sweetness dimension
+#: uses**, otherwise imputation creates an artefact on that very dimension.
+#: While sweetness was `sugar/carbs`, the denominator here was `carbs_g` —
+#: and white rice (60 g carbohydrate) was imputed a large amount of sugar,
+#: reading as 0.201 on the sweetness scale even though rice is not sweet. Now
+#: that sweetness is `sugar/serving_size_g`, the denominator here is
+#: `serving_size_g` too, and the artefact is gone.
 #:
-#: Natri và chất xơ thì ngược lại: chúng vào vector dưới dạng **tuyệt đối**
-#: đã chuẩn hóa min–max, nên trung vị số gam mới là ước lượng đúng.
-COT_SUY_THEO_TY_LE = {"sugar_g": "serving_size_g"}
+#: Sodium and fiber are the opposite: they enter the vector as **absolute**
+#: min-max normalised values, so a median in grams is the right estimate.
+IMPUTE_AS_RATIO = {"sugar_g": "serving_size_g"}
 
 
-def nap_mon(cn, *, chi_mon_hoat_dong: bool = True) -> tuple[list[Mon], BaoCaoChatLuong]:
-    """Nạp toàn bộ món kèm dinh dưỡng, suy ra giá trị khuyết, trả kèm báo cáo.
+def load_foods(
+    cn, *, active_only: bool = True
+) -> tuple[list[Food], DataQualityReport]:
+    """Load every food with its nutrition, impute missing values, report back.
 
-    **Suy giá trị khuyết đặt ở đây, không đặt trong `KhongGianDacTrung`.** Lý
-    do là kiến trúc: ứng dụng Flutter nhận số đã sạch qua API và khai các
-    trường dinh dưỡng là `double` không rỗng, nên nó *không thể* biết giá trị
-    nào là suy ra. Vậy phép suy phải nằm phía máy chủ, ở trên tầng dựng
-    vector — và hai bản dựng vector nhờ đó vẫn giống nhau từng chiều.
+    **Imputation lives here, not in `FeatureSpace`.** The reason is
+    architectural: the Flutter app receives already-clean numbers over the API
+    and declares its nutrition fields as non-nullable `double`, so it *cannot*
+    know which value was imputed. Imputation therefore has to sit on the
+    server, above the vector-building layer — and that is what keeps the two
+    vector builders identical dimension for dimension.
 
-    Cách suy: **trung vị của chính nhóm món**, lùi về trung vị toàn danh mục
-    nếu cả nhóm không có số nào. Không dùng 0: một món thiếu `sodium_mg` mà
-    gán 0 sẽ thành món nhạt nhất danh mục, tức là bịa ra một giá trị cực trị.
-    Riêng `sugar_g` suy theo tỷ lệ — xem `COT_SUY_THEO_TY_LE`.
+    How: **the median of the food's own category**, falling back to the
+    catalogue-wide median when the whole category has no value. Not zero: a
+    food missing `sodium_mg` that is given 0 becomes the blandest item in the
+    catalogue, which is to say an invented extreme. `sugar_g` is imputed as a
+    ratio instead — see `IMPUTE_AS_RATIO`.
     """
     with cn.cursor() as cur:
-        cur.execute(SQL_MON, {"chi_mon_hoat_dong": 1 if chi_mon_hoat_dong else 0})
-        dong = cur.fetchall()
+        cur.execute(SQL_FOODS, {"active_only": 1 if active_only else 0})
+        rows = cur.fetchall()
 
-    # Trung vị theo nhóm, rồi trung vị toàn bộ, cho từng cột được phép suy.
-    # Với cột suy theo tỷ lệ thì lấy trung vị của chính tỷ lệ đó.
-    tv_nhom: dict[tuple[str, str], float] = {}
-    tv_chung: dict[str, float] = {}
-    for cot in COT_SUY_RA:
-        mau = COT_SUY_THEO_TY_LE.get(cot)
-        theo_nhom: dict[str, list[float]] = {}
-        tat_ca: list[float] = []
-        for d in dong:
-            v = d[cot]
-            if v is None:
+    # Per-category median, then overall median, for each imputable column.
+    # For a ratio-imputed column, take the median of the ratio itself.
+    median_by_category: dict[tuple[str, str], float] = {}
+    median_all: dict[str, float] = {}
+    for column in IMPUTABLE_COLUMNS:
+        denominator = IMPUTE_AS_RATIO.get(column)
+        by_category: dict[str, list[float]] = {}
+        all_values: list[float] = []
+        for row in rows:
+            value = row[column]
+            if value is None:
                 continue
-            if mau is not None:
-                chia = float(d[mau] or 0)
-                if chia <= 0:
-                    continue  # tỷ lệ không xác định, không góp vào trung vị
-                x = _ep(float(v) / chia)
+            if denominator is not None:
+                divisor = float(row[denominator] or 0)
+                if divisor <= 0:
+                    continue  # ratio undefined, leave it out of the median
+                x = _clamp(float(value) / divisor)
             else:
-                x = float(v)
-            theo_nhom.setdefault(d["category"], []).append(x)
-            tat_ca.append(x)
-        for nhom, ds in theo_nhom.items():
-            tv_nhom[(cot, nhom)] = float(median(ds))
-        tv_chung[cot] = float(median(tat_ca)) if tat_ca else 0.0
+                x = float(value)
+            by_category.setdefault(row["category"], []).append(x)
+            all_values.append(x)
+        for category, values in by_category.items():
+            median_by_category[(column, category)] = float(median(values))
+        median_all[column] = float(median(all_values)) if all_values else 0.0
 
-    bao_cao = BaoCaoChatLuong(so_mon=len(dong))
-    mon: list[Mon] = []
+    report = DataQualityReport(n_foods=len(rows))
+    foods: list[Food] = []
 
-    for d in dong:
-        da_suy: list[str] = []
-        gia_tri: dict[str, float] = {}
-        for cot in COT_SUY_RA:
-            v = d[cot]
-            if v is None:
-                uoc = tv_nhom.get((cot, d["category"]), tv_chung[cot])
-                mau = COT_SUY_THEO_TY_LE.get(cot)
-                # Cột suy theo tỷ lệ: nhân trung vị tỷ lệ với mẫu số của
-                # chính món này, nên không thể vượt quá mẫu số đó.
-                gia_tri[cot] = uoc * float(d[mau] or 0) if mau else uoc
-                da_suy.append(cot)
-                bao_cao.suy_ra[cot] = bao_cao.suy_ra.get(cot, 0) + 1
+    for row in rows:
+        was_imputed: list[str] = []
+        values: dict[str, float] = {}
+        for column in IMPUTABLE_COLUMNS:
+            value = row[column]
+            if value is None:
+                estimate = median_by_category.get(
+                    (column, row["category"]), median_all[column]
+                )
+                denominator = IMPUTE_AS_RATIO.get(column)
+                # Ratio-imputed column: multiply the median ratio by this
+                # food's own denominator, so it can never exceed it.
+                values[column] = (
+                    estimate * float(row[denominator] or 0)
+                    if denominator
+                    else estimate
+                )
+                was_imputed.append(column)
+                report.imputed[column] = report.imputed.get(column, 0) + 1
             else:
-                gia_tri[cot] = float(v)
+                values[column] = float(value)
 
-        m = Mon(
-            id=d["id"],
-            name=d["name"],
-            category=d["category"],
-            dish_role=d["dish_role"],
-            spice_level=int(d["spice_level"]),
-            kcal=lam_tron_kcal(float(d["calories_kcal"])),
-            protein=float(d["protein_g"]),
-            carb=float(d["carbs_g"]),
-            fat=float(d["fat_g"]),
-            sugar=gia_tri["sugar_g"],
-            sodium=gia_tri["sodium_mg"],
-            fiber=gia_tri["fiber_g"],
-            serving_size_g=float(d["serving_size_g"]),
-            suy_ra=tuple(da_suy),
+        food = Food(
+            id=row["id"],
+            name=row["name"],
+            category=row["category"],
+            dish_role=row["dish_role"],
+            spice_level=int(row["spice_level"]),
+            kcal=round_kcal(float(row["calories_kcal"])),
+            protein=float(row["protein_g"]),
+            carb=float(row["carbs_g"]),
+            fat=float(row["fat_g"]),
+            sugar=values["sugar_g"],
+            sodium=values["sodium_mg"],
+            fiber=values["fiber_g"],
+            serving_size_g=float(row["serving_size_g"]),
+            imputed=tuple(was_imputed),
         )
-        mon.append(m)
+        foods.append(food)
 
-        if m.carb > 0 and m.sugar > m.carb:
-            bao_cao.duong_vuot_bot_duong.append(
-                (m.name, m.sugar, m.carb, "sugar_g" in m.suy_ra)
+        if food.carb > 0 and food.sugar > food.carb:
+            report.sugar_over_carbs.append(
+                (food.name, food.sugar, food.carb, "sugar_g" in food.imputed)
             )
-        if m.spice_level == 0:
-            bao_cao.cay_bang_khong += 1
+        if food.spice_level == 0:
+            report.zero_spice += 1
 
-    return mon, bao_cao
-
-
-# ── Không gian đặc trưng ─────────────────────────────────────────────
+    return foods, report
 
 
-NHAN_CO_DINH = (
+# ── Feature space ────────────────────────────────────────────────────
+
+
+#: Dimension labels. **The values stay Vietnamese on purpose.**
+#:
+#: These strings are a *contract*, not prose: they are written into
+#: `ml_models.scaler_params`, they are what `feature_importance` prints, and
+#: `mobile/lib/data/recommender/food_vector.dart` carries the identical list.
+#: `tools/check_feature_parity.py` compares the two, so renaming them here
+#: alone turns that check red. They change in the same commit as the Dart
+#: side, not before.
+FIXED_LABELS = (
     "Tỷ lệ đạm",
     "Tỷ lệ bột đường",
     "Tỷ lệ béo",
@@ -324,29 +354,30 @@ NHAN_CO_DINH = (
     "Mức cay",
 )
 
-#: Chiều ứng với một chất dinh dưỡng đơn lẻ, dùng khi người dùng **tự khai**
-#: một mục tiêu ("tôi muốn ăn nhiều chất xơ"). Ba chiều macro cố tình không
-#: có mặt: chúng là tỷ lệ cộng lại bằng 1, nên đẩy tỷ lệ đạm lên đồng nghĩa
-#: với dìm hai tỷ lệ kia xuống — không cùng một ý với "muốn ăn nhiều đạm".
-NHAN_THEO_CHAT = {
+#: Dimensions that map to a single nutrient, used when the user **states** a
+#: goal ("I want more fiber"). The three macro dimensions are deliberately
+#: absent: they are shares that sum to 1, so pushing the protein share up
+#: necessarily pushes the other two down — which is not the same thing as
+#: "I want more protein".
+NUTRIENT_LABELS = {
     "sugar_g": "Vị ngọt",
     "sodium_mg": "Vị mặn",
     "fiber_g": "Chất xơ",
 }
 
 
-class KhongGianDacTrung:
-    """Phép ánh xạ món ăn → vector số, cố định sau khi dựng.
+class FeatureSpace:
+    """The food -> numeric vector mapping, fixed once built.
 
-    Số chiều là `8 + số nhóm món`: 4 dinh dưỡng + ngọt + mặn + xơ + cay, rồi
-    one-hot nhóm. Nhóm món **gánh luôn phương pháp chế biến** — nhóm
-    `Món chiên` thì cách chế biến là chiên — nên không có khối one-hot riêng
-    cho cách chế biến.
+    The dimension count is `8 + number of categories`: 4 nutrition + sweet +
+    salty + fiber + spice, then a one-hot block for the category. Category
+    **also carries the cooking method** — the `Fried` category is by
+    definition fried — so there is no separate one-hot block for method.
 
-    Ba tham số min–max (năng lượng, natri, chất xơ) là **trạng thái của
-    không gian**, không phải của món. Chúng phải được lưu cùng mô hình
-    (`ml_models.scaler_params`) và nạp lại khi suy luận: tính lại min–max
-    trên dữ liệu mới là một lỗi âm thầm làm điểm số lệch dần theo thời gian.
+    The three min-max parameters (energy, sodium, fiber) are **state of the
+    space**, not of a food. They must be stored alongside the model
+    (`ml_models.scaler_params`) and reloaded at inference: recomputing
+    min-max over new data is a silent error that drifts scores over time.
     """
 
     def __init__(
@@ -365,36 +396,37 @@ class KhongGianDacTrung:
         self.categories = list(categories)
         self.min_kcal = min_kcal
         self.max_kcal = max_kcal
-        #: Biên nồng độ đường (g đường trên g món), xem `Mon.nong_do_duong`.
+        #: Sugar density bounds (g sugar per g of food), see
+        #: `Food.sugar_density`.
         self.min_sugar = min_sugar
         self.max_sugar = max_sugar
         self.min_sodium = min_sodium
         self.max_sodium = max_sodium
         self.min_fiber = min_fiber
         self.max_fiber = max_fiber
-        self._chi_so_nhom = {c: i for i, c in enumerate(self.categories)}
+        self._category_index = {c: i for i, c in enumerate(self.categories)}
 
-    # ── dựng ──
+    # ── build ──
     @classmethod
-    def tu_mon(cls, mon: Iterable[Mon]) -> "KhongGianDacTrung":
-        ds = list(mon)
-        if not ds:
-            raise ValueError("Không dựng được không gian đặc trưng từ tập món rỗng.")
+    def from_foods(cls, foods: Iterable[Food]) -> "FeatureSpace":
+        items = list(foods)
+        if not items:
+            raise ValueError("Cannot build a feature space from an empty food set.")
         return cls(
-            categories=sorted({m.category for m in ds}),
-            min_kcal=min(m.kcal for m in ds),
-            max_kcal=max(m.kcal for m in ds),
-            min_sugar=min(m.nong_do_duong for m in ds),
-            max_sugar=max(m.nong_do_duong for m in ds),
-            min_sodium=min(m.sodium for m in ds),
-            max_sodium=max(m.sodium for m in ds),
-            min_fiber=min(m.fiber for m in ds),
-            max_fiber=max(m.fiber for m in ds),
+            categories=sorted({f.category for f in items}),
+            min_kcal=min(f.kcal for f in items),
+            max_kcal=max(f.kcal for f in items),
+            min_sugar=min(f.sugar_density for f in items),
+            max_sugar=max(f.sugar_density for f in items),
+            min_sodium=min(f.sodium for f in items),
+            max_sodium=max(f.sodium for f in items),
+            min_fiber=min(f.fiber for f in items),
+            max_fiber=max(f.fiber for f in items),
         )
 
-    # ── lưu / nạp lại ──
-    def tham_so(self) -> dict[str, Any]:
-        """Dạng JSON để ghi vào `ml_models.scaler_params`."""
+    # ── store / reload ──
+    def params(self) -> dict[str, Any]:
+        """JSON form, written into `ml_models.scaler_params`."""
         return {
             "feature_version": FEATURE_VERSION,
             "categories": list(self.categories),
@@ -409,13 +441,14 @@ class KhongGianDacTrung:
         }
 
     @classmethod
-    def tu_tham_so(cls, d: dict[str, Any]) -> "KhongGianDacTrung":
-        ban = d.get("feature_version")
-        if ban != FEATURE_VERSION:
+    def from_params(cls, d: dict[str, Any]) -> "FeatureSpace":
+        version = d.get("feature_version")
+        if version != FEATURE_VERSION:
             raise ValueError(
-                f"scaler_params thuộc phiên bản đặc trưng {ban!r} nhưng mã "
-                f"hiện tại là {FEATURE_VERSION!r}. Mô hình cũ không nạp được "
-                f"với vector mới — huấn luyện lại hoặc dùng đúng bản mã."
+                f"scaler_params belongs to feature version {version!r} but "
+                f"the code is at {FEATURE_VERSION!r}. An old model cannot be "
+                f"loaded against a new vector — retrain, or use the matching "
+                f"code revision."
             )
         return cls(
             categories=d["categories"],
@@ -429,61 +462,62 @@ class KhongGianDacTrung:
             max_fiber=d["max_fiber"],
         )
 
-    # ── mô tả ──
+    # ── description ──
     @property
     def length(self) -> int:
-        return len(NHAN_CO_DINH) + len(self.categories)
+        return len(FIXED_LABELS) + len(self.categories)
 
     @property
     def labels(self) -> list[str]:
-        return [*NHAN_CO_DINH, *(f"Nhóm: {c}" for c in self.categories)]
+        return [*FIXED_LABELS, *(f"Nhóm: {c}" for c in self.categories)]
 
-    def chieu_cua_chat(self, nutrient: str) -> int | None:
-        nhan = NHAN_THEO_CHAT.get(nutrient)
-        if nhan is None:
+    def nutrient_dimension(self, nutrient: str) -> int | None:
+        label = NUTRIENT_LABELS.get(nutrient)
+        if label is None:
             return None
-        nhan_ds = self.labels
-        return nhan_ds.index(nhan) if nhan in nhan_ds else None
+        all_labels = self.labels
+        return all_labels.index(label) if label in all_labels else None
 
-    # ── mã hóa ──
-    def encode(self, m: Mon) -> list[float]:
+    # ── encode ──
+    def encode(self, food: Food) -> list[float]:
         v = [0.0] * self.length
-        dam, bot, beo = m.macro_share
+        protein, carb, fat = food.macro_share
 
-        v[0] = dam
-        v[1] = bot
-        v[2] = beo
-        v[3] = self._chuan_hoa(float(m.kcal), self.min_kcal, self.max_kcal)
-        v[4] = self._chuan_hoa(m.nong_do_duong, self.min_sugar, self.max_sugar)
-        v[5] = self._chuan_hoa(m.sodium, self.min_sodium, self.max_sodium)
-        v[6] = self._chuan_hoa(m.fiber, self.min_fiber, self.max_fiber)
-        v[7] = m.spice_level / MUC_CAY_TOI_DA
+        v[0] = protein
+        v[1] = carb
+        v[2] = fat
+        v[3] = self._normalize(float(food.kcal), self.min_kcal, self.max_kcal)
+        v[4] = self._normalize(food.sugar_density, self.min_sugar, self.max_sugar)
+        v[5] = self._normalize(food.sodium, self.min_sodium, self.max_sodium)
+        v[6] = self._normalize(food.fiber, self.min_fiber, self.max_fiber)
+        v[7] = food.spice_level / MAX_SPICE_LEVEL
 
-        i = self._chi_so_nhom.get(m.category)
+        i = self._category_index.get(food.category)
         if i is not None:
-            v[len(NHAN_CO_DINH) + i] = 1.0
+            v[len(FIXED_LABELS) + i] = 1.0
 
         return v
 
     @staticmethod
-    def _chuan_hoa(x: float, thap: float, cao: float) -> float:
-        """Chuẩn hóa min–max.
+    def _normalize(x: float, low: float, high: float) -> float:
+        """Min-max normalisation.
 
-        Khi cả tập chỉ có một mức giá trị thì mẫu số bằng 0; lúc đó trả 0,5
-        để chiều này không đóng góp lệch về bên nào. Phía Dart làm đúng vậy.
+        When the whole set holds a single value the denominator is 0; return
+        0.5 then, so this dimension contributes no bias either way. The Dart
+        side does exactly the same.
         """
-        if cao <= thap:
+        if high <= low:
             return 0.5
-        return _ep((x - thap) / (cao - thap))
+        return _clamp((x - low) / (high - low))
 
 
 def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
-    """Độ tương đồng cosin, trả 0 khi một vector có độ dài 0."""
+    """Cosine similarity, returning 0 when either vector has zero length."""
     if len(a) != len(b):
-        raise ValueError(f"Hai vector phải cùng số chiều: {len(a)} ≠ {len(b)}")
-    tich = sum(x * y for x, y in zip(a, b))
+        raise ValueError(f"Vectors must have the same length: {len(a)} != {len(b)}")
+    dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     if na == 0 or nb == 0:
         return 0.0
-    return tich / (na * nb)
+    return dot / (na * nb)

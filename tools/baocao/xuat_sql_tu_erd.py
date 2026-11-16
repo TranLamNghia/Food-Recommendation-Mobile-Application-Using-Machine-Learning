@@ -259,7 +259,7 @@ def _in_utf8() -> None:
 
     Không gọi thì script chết giữa lúc chạy với UnicodeEncodeError ngay khi
     đầu ra bị chuyển hướng qua ống hoặc vào tệp — tức đúng lúc chạy trong CI.
-    Bản sao của `tools/_env.in_utf8`; để ở đây vì `tools/baocao/` không chắc
+    Bản sao của `tools/_env.use_utf8`; để ở đây vì `tools/baocao/` không chắc
     có `tools/` trên `sys.path`.
     """
     for luong in (sys.stdout, sys.stderr):

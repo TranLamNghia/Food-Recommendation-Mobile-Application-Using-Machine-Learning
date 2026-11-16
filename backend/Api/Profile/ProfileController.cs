@@ -10,66 +10,74 @@ using Microsoft.EntityFrameworkCore;
 namespace Api.Profile;
 
 /// <summary>
-/// Nhóm Hồ sơ sức khỏe — đặc tả §7.2.1 đến §7.2.5.
+/// The Health profile group — specification §7.2.1 through §7.2.5.
 ///
-/// <para>Đợt 2 trong thứ tự hiện thực ở §10.2: đây là <b>Bước 1</b> của thuật
-/// toán khuyến nghị, và nó không phụ thuộc ML Service.</para>
+/// <para>Wave 2 in the implementation order of §10.2: this is <b>Step 1</b> of
+/// the recommendation algorithm, and it does not depend on the ML
+/// service.</para>
 ///
-/// <para>Mọi endpoint ở đây chỉ thao tác trên dữ liệu của chính người đang
-/// đăng nhập. <c>userId</c> lấy từ claim <c>sub</c> của token, <b>không bao
-/// giờ</b> từ tham số — đặc tả §2.4.</para>
+/// <para>Every endpoint here works only on the data of the person currently
+/// logged in. <c>userId</c> comes from the token's <c>sub</c> claim and
+/// <b>never</b> from a parameter — specification §2.4.</para>
+///
+/// <para>Note on language: every <c>message</c> passed to <see cref="Fail"/>
+/// and every <c>FieldError.Message</c> stays in Vietnamese. Those are the
+/// <c>error.message</c> and <c>error.details[].message</c> of specification
+/// §2.5, which end users read; the stable string the frontend branches on is
+/// <c>error.code</c>.</para>
 /// </summary>
 [ApiController]
 [Route("api/v1/profile")]
 [Authorize]
 public sealed class ProfileController(AppDbContext db) : ControllerBase
 {
-    private ObjectResult Loi(int status, string code, string message)
+    private ObjectResult Fail(int status, string code, string message)
         => ApiProblem.Make(status, code, message, HttpContext.TraceIdentifier);
 
     private string? UserId => User.FindFirst("sub")?.Value;
 
-    // ── 7.2.1 Xem hồ sơ ──────────────────────────────────────────────────
+    // ── 7.2.1 Read the profile ───────────────────────────────────────────
 
     [HttpGet]
     public async Task<IActionResult> Get()
     {
         if (UserId is not { } uid)
         {
-            return Loi(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
 
-        var ho_so = await db.HealthProfiles
+        var profile = await db.HealthProfiles
             .FirstOrDefaultAsync(h => h.UserId == uid);
-        if (ho_so is null)
+        if (profile is null)
         {
-            // 404, không phải 200 với thân rỗng: Frontend dùng chính mã này
-            // để quyết định đẩy người dùng vào màn khai báo hồ sơ.
-            return Loi(404, ErrorCode.NotFound, "Chưa khai báo hồ sơ sức khỏe");
+            // 404, not a 200 with an empty body: the frontend uses this very
+            // code to decide whether to send the user to the profile form.
+            return Fail(404, ErrorCode.NotFound,
+                        "Chưa khai báo hồ sơ sức khỏe");
         }
 
-        return Ok(await DungHoSo(ho_so));
+        return Ok(await BuildProfile(profile));
     }
 
-    // ── 7.2.2 Tạo hoặc cập nhật hồ sơ ────────────────────────────────────
+    // ── 7.2.2 Create or update the profile ───────────────────────────────
 
     [HttpPut]
     public async Task<IActionResult> Upsert(UpsertProfileRequest req)
     {
         if (UserId is not { } uid)
         {
-            return Loi(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
 
-        var ngay_sinh = req.DateOfBirth!.Value;
-        var hom_nay = DongHo.HomNay;
-        var tuoi = NutritionTargets.Age(ngay_sinh, hom_nay);
+        var dateOfBirth = req.DateOfBirth!.Value;
+        var today = Clock.Today;
+        var age = NutritionTargets.Age(dateOfBirth, today);
 
-        // Khoảng tuổi 13–100 ở §7.2.2 KHÔNG có ràng buộc CSDL tương ứng —
-        // `health_profiles` chỉ có chk_height và chk_weight. Nên phép kiểm
-        // này là tầng duy nhất chặn nó, và bỏ nó đi thì công thức Mifflin sẽ
-        // được áp cho một đứa trẻ 5 tuổi, nơi nó không có hiệu lực.
-        if (tuoi is < 13 or > 100)
+        // The 13–100 age range in §7.2.2 has NO matching database constraint
+        // — `health_profiles` only has chk_height and chk_weight. So this
+        // check is the only layer stopping it, and dropping it would apply
+        // the Mifflin formula to a five-year-old, where it does not hold.
+        if (age is < 13 or > 100)
         {
             return ApiProblem.Make(
                 400, ErrorCode.ValidationFailed,
@@ -78,110 +86,113 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 [new ApiError.FieldError
                 {
                     Field = "dateOfBirth",
-                    Message = $"Tuổi tính ra {tuoi}, phải trong khoảng 13 đến 100",
+                    Message = $"Tuổi tính ra {age}, phải trong khoảng 13 đến 100",
                 }]);
         }
 
-        var ho_so = await db.HealthProfiles
+        var profile = await db.HealthProfiles
             .FirstOrDefaultAsync(h => h.UserId == uid);
-        var tao_moi = ho_so is null;
+        var isNew = profile is null;
 
-        if (ho_so is null)
+        if (profile is null)
         {
-            ho_so = new HealthProfiles
+            profile = new HealthProfiles
             {
                 Id = Guid.NewGuid().ToString(),
                 UserId = uid,
-                // Ba tỷ lệ macro lấy MẶC ĐỊNH CỦA LƯỢC ĐỒ, không cứng hóa ở
-                // đây. 15/60/25 là `DEFAULT` của ba cột target_*_pct, và
-                // `chk_macro_sum` buộc chúng cộng đúng 100.
+                // The three macro percentages take the SCHEMA'S DEFAULTS
+                // rather than being hard-coded here. 15/60/25 is the
+                // `DEFAULT` of the three target_*_pct columns, and
+                // `chk_macro_sum` forces them to add up to exactly 100.
                 TargetProteinPct = 15,
                 TargetCarbsPct = 60,
                 TargetFatPct = 25,
-                CreatedAt = DongHo.BayGio,
+                CreatedAt = Clock.Now,
             };
-            db.HealthProfiles.Add(ho_so);
+            db.HealthProfiles.Add(profile);
         }
 
-        ho_so.Gender = req.Gender;
-        ho_so.DateOfBirth = ngay_sinh;
-        ho_so.HeightCm = req.HeightCm!.Value;
-        ho_so.WeightKg = req.WeightKg!.Value;
-        ho_so.ActivityLevel = req.ActivityLevel;
-        ho_so.Goal = req.Goal;
-        ho_so.UpdatedAt = DongHo.BayGio;
+        profile.Gender = req.Gender;
+        profile.DateOfBirth = dateOfBirth;
+        profile.HeightCm = req.HeightCm!.Value;
+        profile.WeightKg = req.WeightKg!.Value;
+        profile.ActivityLevel = req.ActivityLevel;
+        profile.Goal = req.Goal;
+        profile.UpdatedAt = Clock.Now;
 
-        // Tính lại Bước 1 ở MỌI lần gọi. Cả sáu trường người dùng sửa được
-        // đều chảy vào công thức, nên không có trường hợp nào sửa mà hạn mức
-        // giữ nguyên — xem ghi chú "không có cột computed_at" trong
-        // db/schema.sql.
-        var buoc1 = TinhBuoc1(ho_so, hom_nay);
-        ho_so.BmrKcal = LamTron(buoc1.BmrKcal);
-        ho_so.TdeeKcal = LamTron(buoc1.TdeeKcal);
-        ho_so.DailyCaloriesTarget = LamTron(buoc1.DailyCaloriesTarget);
+        // Step 1 is recomputed on EVERY call. All six fields the user can
+        // edit feed into the formula, so there is no case where an edit
+        // leaves the targets unchanged — see the note on "no computed_at
+        // column" in db/schema.sql.
+        var step1 = ComputeStep1(profile, today);
+        profile.BmrKcal = Round(step1.BmrKcal);
+        profile.TdeeKcal = Round(step1.TdeeKcal);
+        profile.DailyCaloriesTarget = Round(step1.DailyCaloriesTarget);
 
         await db.SaveChangesAsync();
 
-        // `bmi` là cột GENERATED VIRTUAL — CSDL tính lúc đọc, nên giá trị
-        // trong bộ nhớ vẫn là của lần đọc trước. Nạp lại để phản hồi mang
-        // đúng con số mà CSDL sẽ trả về sau này.
-        await db.Entry(ho_so).ReloadAsync();
+        // `bmi` is a GENERATED VIRTUAL column — the database computes it on
+        // read, so the in-memory value is still the one from the previous
+        // read. Reload so the response carries exactly the number the
+        // database will return later.
+        await db.Entry(profile).ReloadAsync();
 
-        var than = new UpsertProfileResponse
+        var body = new UpsertProfileResponse
         {
-            Profile = await DungHoSo(ho_so),
-            NutritionTargets = DungHanMuc(ho_so, buoc1),
+            Profile = await BuildProfile(profile),
+            NutritionTargets = BuildTargets(profile, step1),
         };
 
-        return tao_moi
-            ? StatusCode(StatusCodes.Status201Created, than)
-            : Ok(than);
+        return isNew
+            ? StatusCode(StatusCodes.Status201Created, body)
+            : Ok(body);
     }
 
-    // ── 7.2.3 Xem hạn mức dinh dưỡng ─────────────────────────────────────
+    // ── 7.2.3 Read the nutrition targets ─────────────────────────────────
 
     [HttpGet("nutrition-targets")]
     public async Task<IActionResult> GetTargets()
     {
         if (UserId is not { } uid)
         {
-            return Loi(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
 
-        var ho_so = await db.HealthProfiles
+        var profile = await db.HealthProfiles
             .FirstOrDefaultAsync(h => h.UserId == uid);
-        if (ho_so is null)
+        if (profile is null)
         {
-            // 409 PROFILE_REQUIRED, không 404: tài nguyên "hạn mức" không
-            // phải là thứ bị thiếu — nó không tính được vì thiếu một bước
-            // trước. Đặc tả §4 nói Frontend phải chuyển tới màn khai báo
-            // hồ sơ.
-            return Loi(409, ErrorCode.ProfileRequired,
-                       "Chưa khai báo hồ sơ sức khỏe");
+            // 409 PROFILE_REQUIRED rather than 404: the "targets" resource is
+            // not the thing that is missing — it cannot be computed because
+            // an earlier step is missing. Specification §4 says the frontend
+            // has to send the user to the profile form.
+            return Fail(409, ErrorCode.ProfileRequired,
+                        "Chưa khai báo hồ sơ sức khỏe");
         }
 
-        // Tính lại chứ không đọc ba cột đã lưu. Ba cột đó là BẢN CHỤP cho
-        // thực đơn cũ giữ đúng hạn mức cũ; còn endpoint này trả hạn mức
-        // HIỆN TẠI, và nó phải bao gồm cả phần không được lưu — gram macro
-        // và phân bổ bữa đều không có cột nào.
-        var buoc1 = TinhBuoc1(ho_so, DongHo.HomNay);
-        return Ok(DungHanMuc(ho_so, buoc1));
+        // Recomputed rather than read from the three stored columns. Those
+        // three are a SNAPSHOT so that an older meal plan keeps its own
+        // targets; this endpoint returns the CURRENT targets, and it has to
+        // include the part that is not stored at all — neither the macro
+        // grams nor the meal split has a column.
+        var step1 = ComputeStep1(profile, Clock.Today);
+        return Ok(BuildTargets(profile, step1));
     }
 
-    // ── 7.2.4 Xem bệnh lý của tôi ────────────────────────────────────────
+    // ── 7.2.4 Read my conditions ─────────────────────────────────────────
 
     [HttpGet("conditions")]
     public async Task<IActionResult> GetConditions()
     {
         if (UserId is not { } uid)
         {
-            return Loi(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
-        // Mảng thuần, không phân trang — danh sách này tối đa vài phần tử.
-        return Ok(await DocBenhLy(uid));
+        // A plain array, not paginated — this list has at most a few items.
+        return Ok(await ReadConditions(uid));
     }
 
-    // ── 7.2.5 Cập nhật bệnh lý ───────────────────────────────────────────
+    // ── 7.2.5 Update the conditions ──────────────────────────────────────
 
     [HttpPut("conditions")]
     public async Task<IActionResult> PutConditions(
@@ -189,18 +200,19 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
     {
         if (UserId is not { } uid)
         {
-            return Loi(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
 
-        var muon = req.Conditions!;
+        var incoming = req.Conditions!;
 
-        // Trùng `conditionId` trong cùng một yêu cầu: `uq_user_condition`
-        // sẽ chặn, nhưng bằng một `MySqlException` không nói được trường nào.
-        var trung = muon.GroupBy(c => c.ConditionId)
+        // A repeated `conditionId` within one request: `uq_user_condition`
+        // would stop it, but with a `MySqlException` that cannot say which
+        // field was wrong.
+        var duplicates = incoming.GroupBy(c => c.ConditionId)
             .Where(g => g.Count() > 1)
             .Select(g => g.Key!.Value)
             .ToList();
-        if (trung.Count > 0)
+        if (duplicates.Count > 0)
         {
             return ApiProblem.Make(
                 400, ErrorCode.ValidationFailed,
@@ -210,17 +222,17 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 {
                     Field = "conditions",
                     Message = "conditionId lặp lại: "
-                        + string.Join(", ", trung),
+                        + string.Join(", ", duplicates),
                 }]);
         }
 
-        var ma = muon.Select(c => c.ConditionId!.Value).ToList();
-        var co_that = await db.Conditions
-            .Where(c => ma.Contains(c.Id))
+        var ids = incoming.Select(c => c.ConditionId!.Value).ToList();
+        var existing = await db.Conditions
+            .Where(c => ids.Contains(c.Id))
             .Select(c => c.Id)
             .ToListAsync();
-        var khong_co = ma.Except(co_that).ToList();
-        if (khong_co.Count > 0)
+        var missing = ids.Except(existing).ToList();
+        if (missing.Count > 0)
         {
             return ApiProblem.Make(
                 400, ErrorCode.ValidationFailed,
@@ -230,20 +242,21 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 {
                     Field = "conditions",
                     Message = "conditionId không tồn tại: "
-                        + string.Join(", ", khong_co),
+                        + string.Join(", ", missing),
                 }]);
         }
 
-        // "Thay thế toàn bộ danh sách" (§7.2.5) phải là MỘT giao dịch. Xóa
-        // rồi chèn mà không có giao dịch thì một lỗi ở bước chèn sẽ để người
-        // dùng ở trạng thái không có bệnh lý nào — nghĩa là Bộ lọc F1 ngừng
-        // loại món, và một người dị ứng hải sản sẽ được gợi ý tôm.
-        await using var gd = await db.Database.BeginTransactionAsync();
+        // "Replaces the whole list" (§7.2.5) has to be ONE transaction.
+        // Deleting and then inserting without one would leave the user with
+        // no conditions at all if the insert failed — which means the F1
+        // filter stops excluding dishes, and someone allergic to seafood gets
+        // recommended shrimp.
+        await using var tx = await db.Database.BeginTransactionAsync();
 
         await db.UserConditions.Where(x => x.UserId == uid)
             .ExecuteDeleteAsync();
 
-        foreach (var c in muon)
+        foreach (var c in incoming)
         {
             db.UserConditions.Add(new UserConditions
             {
@@ -252,63 +265,64 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 ConditionId = c.ConditionId!.Value,
                 Severity = c.Severity,
                 Note = string.IsNullOrWhiteSpace(c.Note) ? null : c.Note,
-                CreatedAt = DongHo.BayGio,
+                CreatedAt = Clock.Now,
             });
         }
 
         await db.SaveChangesAsync();
-        await gd.CommitAsync();
+        await tx.CommitAsync();
 
-        return Ok(await DocBenhLy(uid));
+        return Ok(await ReadConditions(uid));
     }
 
-    // ── chung ────────────────────────────────────────────────────────────
+    // ── shared ───────────────────────────────────────────────────────────
 
-    private static Step1Result TinhBuoc1(HealthProfiles h, DateOnly hom_nay)
+    private static Step1Result ComputeStep1(HealthProfiles h, DateOnly today)
         => NutritionTargets.Compute(
             h.Gender, h.DateOfBirth, h.HeightCm, h.WeightKg,
             h.ActivityLevel, h.Goal,
             h.TargetProteinPct, h.TargetCarbsPct, h.TargetFatPct,
-            hom_nay);
+            today);
 
     /// <summary>
-    /// Làm tròn về <c>SMALLINT UNSIGNED</c> của lược đồ.
+    /// Rounds to the schema's <c>SMALLINT UNSIGNED</c>.
     ///
-    /// <para><c>MidpointRounding.AwayFromZero</c> chứ không mặc định:
-    /// <c>Math.Round</c> của .NET mặc định làm tròn về số chẵn (2.5 thành 2),
-    /// trong khi Dart và Python đều làm tròn ra xa 0. Khác biệt đó chỉ hiện
-    /// ra ở đúng những ca .5 — hiếm, nên nó sẽ lọt qua mọi lần thử tay và
-    /// chỉ bị bộ kiểm parity bắt.</para>
+    /// <para><c>MidpointRounding.AwayFromZero</c> rather than the default:
+    /// .NET's <c>Math.Round</c> rounds to even by default (2.5 becomes 2),
+    /// while Dart and Python both round away from zero. That difference only
+    /// shows up on exactly the .5 cases — rare, so it would slip past every
+    /// manual trial and only the parity suite would catch it.</para>
     /// </summary>
-    private static ushort LamTron(decimal v)
+    private static ushort Round(decimal v)
         => (ushort)Math.Clamp(
             Math.Round(v, MidpointRounding.AwayFromZero), 0, ushort.MaxValue);
 
-    private async Task<ProfileResponse> DungHoSo(HealthProfiles h)
+    private async Task<ProfileResponse> BuildProfile(HealthProfiles h)
     {
-        var hom_nay = DongHo.HomNay;
-        // `bmi` của CSDL là DECIMAL(5,2) đã làm tròn. Dùng nó nếu có, để
-        // phản hồi khớp đúng thứ một truy vấn SQL trả về; tính lại chỉ khi
-        // dòng chưa qua CSDL.
+        var today = Clock.Today;
+        // The database's `bmi` is an already-rounded DECIMAL(5,2). Use it
+        // when there is one, so the response matches exactly what an SQL
+        // query returns; recompute only when the row has not been through the
+        // database.
         var bmi = h.Bmi ?? NutritionTargets.Bmi(h.WeightKg, h.HeightCm);
         return new ProfileResponse
         {
             Gender = h.Gender,
             DateOfBirth = h.DateOfBirth,
-            Age = NutritionTargets.Age(h.DateOfBirth, hom_nay),
+            Age = NutritionTargets.Age(h.DateOfBirth, today),
             HeightCm = h.HeightCm,
             WeightKg = h.WeightKg,
             Bmi = bmi,
             BmiCategory = NutritionTargets.BmiCategory(bmi),
             ActivityLevel = h.ActivityLevel,
             Goal = h.Goal,
-            Conditions = await DocBenhLy(h.UserId),
+            Conditions = await ReadConditions(h.UserId),
             CreatedAt = h.CreatedAt,
             UpdatedAt = h.UpdatedAt,
         };
     }
 
-    private Task<List<UserConditionDto>> DocBenhLy(string uid)
+    private Task<List<UserConditionDto>> ReadConditions(string uid)
         => db.UserConditions
             .Where(uc => uc.UserId == uid)
             .Join(db.Conditions, uc => uc.ConditionId, c => c.Id,
@@ -323,34 +337,34 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
             .OrderBy(x => x.ConditionId)
             .ToListAsync();
 
-    private static NutritionTargetsResponse DungHanMuc(
-        HealthProfiles h, Step1Result k)
+    private static NutritionTargetsResponse BuildTargets(
+        HealthProfiles h, Step1Result s)
         => new()
         {
-            Bmi = h.Bmi ?? Math.Round(k.Bmi, 2,
+            Bmi = h.Bmi ?? Math.Round(s.Bmi, 2,
                                       MidpointRounding.AwayFromZero),
-            BmiCategory = k.BmiCategory,
-            BmrKcal = LamTron(k.BmrKcal),
-            TdeeKcal = LamTron(k.TdeeKcal),
-            ActivityFactor = k.ActivityFactorValue,
-            DailyCaloriesTarget = LamTron(k.DailyCaloriesTarget),
+            BmiCategory = s.BmiCategory,
+            BmrKcal = Round(s.BmrKcal),
+            TdeeKcal = Round(s.TdeeKcal),
+            ActivityFactor = s.ActivityFactorValue,
+            DailyCaloriesTarget = Round(s.DailyCaloriesTarget),
             GoalAdjustmentKcal = (int)Math.Round(
-                k.GoalAdjustmentKcal, MidpointRounding.AwayFromZero),
+                s.GoalAdjustmentKcal, MidpointRounding.AwayFromZero),
             MacroTargets = new MacroTargetsDto
             {
-                ProteinPct = k.ProteinPct,
-                // Một chữ số thập phân, như JSON mẫu ở §7.2.3. Gram không
-                // cần chính xác hơn thế: bảng thành phần thực phẩm cũng chỉ
-                // có một chữ số.
-                ProteinG = Math.Round(k.ProteinG, 1,
+                ProteinPct = s.ProteinPct,
+                // One decimal place, like the sample JSON in §7.2.3. The
+                // grams do not need to be more precise than that: the food
+                // composition table only has one decimal either.
+                ProteinG = Math.Round(s.ProteinG, 1,
                                       MidpointRounding.AwayFromZero),
-                CarbsPct = k.CarbsPct,
-                CarbsG = Math.Round(k.CarbsG, 1,
+                CarbsPct = s.CarbsPct,
+                CarbsG = Math.Round(s.CarbsG, 1,
                                     MidpointRounding.AwayFromZero),
-                FatPct = k.FatPct,
-                FatG = Math.Round(k.FatG, 1, MidpointRounding.AwayFromZero),
+                FatPct = s.FatPct,
+                FatG = Math.Round(s.FatG, 1, MidpointRounding.AwayFromZero),
             },
-            MealDistribution = k.MealDistribution()
+            MealDistribution = s.MealDistribution()
                 .Select(m => new MealShareDto
                 {
                     MealType = m.MealType,
@@ -361,7 +375,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                 .ToList(),
             Formula = new FormulaDto
             {
-                Expression = k.FormulaExpression(
+                Expression = s.FormulaExpression(
                     h.Gender, h.WeightKg, h.HeightCm),
             },
         };

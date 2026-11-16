@@ -1,40 +1,41 @@
 # -*- coding: utf-8 -*-
-"""Độ phổ biến của món — chặn dưới Wilson trên tỷ lệ người thích.
+"""Food popularity — the Wilson lower bound on the share of users who like it.
 
-Hai cách tính, cùng một công thức, khác nhau ở **phạm vi dữ liệu**:
+Two entry points, one formula, differing in **data scope**:
 
-    tu_csdl()   — từ toàn bộ tín hiệu. Dùng khi phục vụ: `tools/update_popularity.py`
-                  ghi kết quả vào `foods.popularity_score`.
-    tu_tap_mau()— chỉ từ các fold huấn luyện. Dùng khi đánh giá.
+    from_database()  — over every signal. Used when serving:
+                       `tools/update_popularity.py` writes the result into
+                       `foods.popularity_score`.
+    from_samples()   — over the training folds only. Used when evaluating.
 
-## Vì sao phải có bản thứ hai
+## Why the second one has to exist
 
-Phát hiện khi chạy `tools/check_ml_e2e.py` với nhãn **ngẫu nhiên**: phương án
-`popularity` đạt nDCG@5 = 0,796 — gần như hoàn hảo trên dữ liệu không có quy
-luật nào. Và AUC của mô hình `ml` nhảy từ 0,48 lên 0,67.
+Found by running `tools/check_ml_e2e.py` with **random** labels: the
+`popularity` baseline reached nDCG@5 = 0.796 — near-perfect on data with no
+structure at all. And the `ml` model's AUC jumped from 0.48 to 0.67.
 
-Nguyên nhân chung: `popularity_score` được tính từ **mọi** tín hiệu, kể cả
-tín hiệu của những người dùng nằm trong fold kiểm tra. Một món mà chính người
-bị kiểm đã thích thì đã góp phần đẩy điểm phổ biến của nó lên — nên "độ phổ
-biến" khi đó mang sẵn thông tin về **nhãn** của tập kiểm tra. Rò rỉ này vào
-cả hai chỗ:
+One shared cause: `popularity_score` is computed from **every** signal,
+including signals from users in the test fold. A food that the very user
+being tested liked has already pushed its own popularity up — so "popularity"
+carries information about the test set's **labels**. That leak reaches two
+places:
 
-1.  phương án đối chứng `popularity`, làm nó mạnh lên một cách không thật;
-2.  đặc trưng `mon.do_pho_bien` của mô hình, làm chính mô hình rò rỉ theo.
+1.  the `popularity` baseline, strengthening it unrealistically;
+2.  the model's `mon.do_pho_bien` feature, so the model leaks along with it.
 
-Khi **phục vụ** thì không có rò rỉ: độ phổ biến tính từ quá khứ và dùng cho
-người dùng trong tương lai. Rò rỉ chỉ xuất hiện trong phép đánh giá ngoại
-tuyến, nơi "quá khứ" và "tương lai" bị cắt theo người dùng chứ không theo
-thời gian. Nên bản `tu_tap_mau` tồn tại đúng để dùng trong `ml/evaluate.py`.
+When **serving** there is no leak: popularity is computed from the past and
+applied to future users. The leak appears only in offline evaluation, where
+"past" and "future" are split by user rather than by time. So `from_samples`
+exists precisely for `ml/evaluate.py`.
 
-## Định nghĩa: đếm NGƯỜI, không đếm lượt
+## Definition: count PEOPLE, not events
 
-    n_thấy(món)  = số người dùng phân biệt có **bất kỳ** tín hiệu nào về món
-    n_thích(món) = số người dùng phân biệt có **ít nhất một** tín hiệu dương
+    n_seen(food)  = distinct users with **any** signal about the food
+    n_liked(food) = distinct users with **at least one** positive signal
 
-Một người dùng nhiệt tình ăn cùng một món hai mươi lần sẽ một mình đẩy món đó
-lên đầu bảng nếu đếm lượt, trong khi "phổ biến" phải có nghĩa là *nhiều
-người* thích.
+One enthusiastic user eating the same dish twenty times would single-handedly
+push it to the top of the table if events were counted, whereas "popular" has
+to mean *many people* like it.
 """
 
 from __future__ import annotations
@@ -42,68 +43,68 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
-#: Mức tin cậy 95 % → z = 1,96.
+#: 95% confidence -> z = 1.96.
 Z = 1.959963984540054
 
-#: Đánh giá từ bao nhiêu sao trở lên được tính là tín hiệu dương.
-#: 4 sao, không phải 3: 3 sao mang nhãn 0,500 — đúng điểm trung tính — nên
-#: tính nó là "thích" sẽ đẩy mọi món trung bình lên.
-SAO_DUONG = 4
+#: From how many stars a rating counts as a positive signal.
+#: 4, not 3: a 3-star rating carries the label 0.500 — exactly the neutral
+#: point — so counting it as "liked" would lift every mediocre food.
+POSITIVE_STARS = 4
 
-#: `meal_plan_items.status` được tính là dương. `suggested` không có mặt:
-#: người dùng chưa quyết định gì. `replaced` và `skipped` là tín hiệu âm nên
-#: chỉ vào mẫu số.
-TRANG_THAI_DUONG = ("kept", "eaten")
+#: Which `meal_plan_items.status` counts as positive. `suggested` is absent:
+#: the user has decided nothing. `replaced` and `skipped` are negative
+#: signals, so they only enter the denominator.
+POSITIVE_STATUSES = ("kept", "eaten")
 
 
-def wilson_chan_duoi(so_duong: int, so_mau: int, z: float = Z) -> float:
-    """Chặn dưới khoảng tin cậy Wilson cho một tỷ lệ.
+def wilson_lower_bound(positives: int, total: int, z: float = Z) -> float:
+    """The Wilson confidence-interval lower bound for a proportion.
 
-                p̂ + z²/2n  −  z·√( p̂(1−p̂)/n + z²/4n² )
-        thấp =  ────────────────────────────────────────
-                            1 + z²/n
+                p + z^2/2n  -  z*sqrt( p(1-p)/n + z^2/4n^2 )
+        low =   --------------------------------------------
+                               1 + z^2/n
 
-    Vì sao không dùng thẳng `so_duong / so_mau`: một món được đưa cho 2 người
-    và cả 2 đều thích sẽ ra tỷ lệ 1,00, đứng trên một món được đưa cho 100
-    người và 90 người thích (0,90). Đó là kết luận sai — cỡ mẫu 2 không chứng
-    minh được gì. Chặn dưới Wilson trả lời đúng câu cần hỏi: *tỷ lệ thích
-    thật sự của món này ít nhất là bao nhiêu?*
+    Why not simply `positives / total`: a food shown to 2 people and liked by
+    both scores 1.00 and outranks a food shown to 100 people and liked by 90
+    (0.90). That is a wrong conclusion — a sample of 2 proves nothing. The
+    Wilson lower bound answers the question actually being asked: *what is
+    the lowest this food's true like-rate plausibly is?*
 
-        2/2   → 0,3424      90/100 → 0,8256      0/10 → 0,0000
-        1/1   → 0,2065      9/10   → 0,5958
+        2/2   -> 0.3424      90/100 -> 0.8256      0/10 -> 0.0000
+        1/1   -> 0.2065      9/10   -> 0.5958
 
-    Nhờ vậy món ít dữ liệu bị kéo về 0 một cách tự nhiên, không cần đặt tay
-    một ngưỡng "tối thiểu N người" nào.
+    Thinly-sampled foods are pulled toward 0 naturally, with no hand-set
+    "minimum N users" threshold anywhere.
 
-    Trả 0 khi chưa có mẫu nào. Đó là một lựa chọn, không phải sự thật: 0 ở
-    đây nghĩa là "chưa chứng minh được là phổ biến", không phải "không ai
-    thích". Lấy trung bình toàn danh mục cho chúng thì sẽ **bịa ra** một độ
-    phổ biến mà không ai từng thể hiện.
+    Returns 0 when there is no sample at all. That is a choice, not a fact: 0
+    here means "not yet shown to be popular", not "nobody likes it". Giving
+    them the catalogue average would **invent** a popularity that nobody ever
+    expressed.
 
-    Kẹp về [0, 1] vì sai số dấu phẩy động có thể cho ra −1e−17, và cột
-    `DECIMAL(5,4)` sẽ từ chối một giá trị âm.
+    Clamped to [0, 1] because floating-point error can produce -1e-17, and the
+    `DECIMAL(5,4)` column rejects a negative value.
     """
-    if so_mau <= 0:
+    if total <= 0:
         return 0.0
-    if so_duong < 0 or so_duong > so_mau:
-        raise ValueError(f"số dương {so_duong} không hợp lệ với cỡ mẫu {so_mau}")
+    if positives < 0 or positives > total:
+        raise ValueError(f"{positives} positives is invalid for a sample of {total}")
 
-    p = so_duong / so_mau
+    p = positives / total
     z2 = z * z
-    tu = p + z2 / (2 * so_mau) - z * math.sqrt(
-        p * (1 - p) / so_mau + z2 / (4 * so_mau * so_mau)
+    numerator = p + z2 / (2 * total) - z * math.sqrt(
+        p * (1 - p) / total + z2 / (4 * total * total)
     )
-    mau = 1 + z2 / so_mau
-    return min(1.0, max(0.0, tu / mau))
+    denominator = 1 + z2 / total
+    return min(1.0, max(0.0, numerator / denominator))
 
 
-# ── Từ toàn bộ tín hiệu trong CSDL ────────────────────────────────────
+# ── From every signal in the database ─────────────────────────────────
 
-# Mỗi nguồn góp hai tập người dùng: "đã thấy" và "đã tỏ ra thích". Viết bằng
-# `UNION` để một người có nhiều tín hiệu về cùng một món chỉ được đếm một
-# lần — `COUNT(DISTINCT user_id)` ở ngoài làm phần đó.
-SQL_DEM = f"""
-WITH da_thay AS (
+# Each source contributes two user sets: "has seen" and "has shown liking".
+# Written with `UNION` so that a user with several signals about one food is
+# counted once — `COUNT(DISTINCT user_id)` on the outside does that part.
+SQL_COUNTS = f"""
+WITH seen AS (
     SELECT food_id, user_id FROM interactions
     UNION
     SELECT food_id, user_id FROM feedbacks
@@ -115,83 +116,84 @@ WITH da_thay AS (
     JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
     WHERE mpi.status <> 'suggested'
 ),
-da_thich AS (
+liked AS (
     SELECT food_id, user_id FROM interactions WHERE action = 'like'
     UNION
-    SELECT food_id, user_id FROM feedbacks WHERE rating >= {SAO_DUONG}
+    SELECT food_id, user_id FROM feedbacks WHERE rating >= {POSITIVE_STARS}
     UNION
     SELECT food_id, user_id FROM food_diary
     UNION
     SELECT mpi.food_id, mp.user_id
     FROM meal_plan_items mpi
     JOIN meal_plans mp ON mp.id = mpi.meal_plan_id
-    WHERE mpi.status IN {TRANG_THAI_DUONG}
+    WHERE mpi.status IN {POSITIVE_STATUSES}
 )
-SELECT f.id, f.name, f.popularity_score AS cu,
-       (SELECT COUNT(DISTINCT user_id) FROM da_thay  t WHERE t.food_id = f.id)
-           AS n_thay,
-       (SELECT COUNT(DISTINCT user_id) FROM da_thich h WHERE h.food_id = f.id)
-           AS n_thich
+SELECT f.id, f.name, f.popularity_score AS previous,
+       (SELECT COUNT(DISTINCT user_id) FROM seen  s WHERE s.food_id = f.id)
+           AS n_seen,
+       (SELECT COUNT(DISTINCT user_id) FROM liked l WHERE l.food_id = f.id)
+           AS n_liked
 FROM foods f
 ORDER BY f.name, f.id
 """
 
 
-def tu_csdl(cn) -> list[dict[str, Any]]:
-    """Đếm người theo từng món trên **toàn bộ** tín hiệu.
+def from_database(cn) -> list[dict[str, Any]]:
+    """Count users per food over **every** signal.
 
-    Trả về danh sách dòng kèm `n_thay`, `n_thich` và `diem` đã tính. Không
-    ghi gì — `tools/update_popularity.py` quyết định việc ghi.
+    Returns the rows with `n_seen`, `n_liked` and the computed `score`.
+    Writes nothing — `tools/update_popularity.py` decides about writing.
     """
     with cn.cursor() as cur:
-        cur.execute(SQL_DEM)
-        dong = cur.fetchall()
+        cur.execute(SQL_COUNTS)
+        rows = cur.fetchall()
 
-    for d in dong:
-        d["diem"] = wilson_chan_duoi(int(d["n_thich"]), int(d["n_thay"]))
-    return list(dong)
-
-
-# ── Chỉ từ các fold huấn luyện ────────────────────────────────────────
+    for row in rows:
+        row["score"] = wilson_lower_bound(int(row["n_liked"]), int(row["n_seen"]))
+    return list(rows)
 
 
-def tu_tap_mau(
+# ── From the training folds only ──────────────────────────────────────
+
+
+def from_samples(
     user_id: Sequence[str],
     food_id: Sequence[str],
     label: Sequence[float],
     source: Sequence[str],
-    chi_so: Sequence[int],
+    indices: Sequence[int],
     *,
-    nguong_duong: float,
-    bo_nguon: frozenset[str] = frozenset({"random_neg"}),
+    positive_threshold: float,
+    skip_sources: frozenset[str] = frozenset({"random_neg"}),
 ) -> dict[str, float]:
-    """Độ phổ biến dựng lại **chỉ từ những mẫu được chỉ định**.
+    """Popularity rebuilt from **only the given samples**.
 
-    `chi_so` là các vị trí thuộc fold huấn luyện. Mọi mẫu ngoài danh sách đó
-    bị bỏ hoàn toàn, nên điểm trả về không mang thông tin nào của fold kiểm
-    tra — đó là cả mục đích.
+    `indices` are the positions belonging to the training folds. Every sample
+    outside that list is dropped entirely, so the returned scores carry no
+    information from the test fold — which is the whole point.
 
-    Dựng lại từ `ml_training_samples` thay vì đọc `foods.popularity_score`:
-    bảng mẫu là thứ duy nhất `ml/evaluate.py` nên nhìn, và nó đã mang sẵn
-    `label` nên "tín hiệu dương" quy về `label >= nguong_duong`.
+    Rebuilt from `ml_training_samples` rather than reading
+    `foods.popularity_score`: the sample table is the only thing
+    `ml/evaluate.py` should look at, and it already carries `label`, so
+    "positive signal" reduces to `label >= positive_threshold`.
 
-    `random_neg` bị loại khỏi phép đếm. Mẫu âm ngẫu nhiên là món **chưa từng
-    hiển thị** cho người đó, nên tính nó vào `n_thấy` là nói rằng người dùng
-    đã thấy và đã từ chối một món mà họ chưa bao giờ được đưa ra.
+    `random_neg` is excluded from the count. A random negative is a food that
+    was **never shown** to that person, so counting it in `n_seen` would claim
+    the user saw and rejected a food they were never offered.
     """
-    thay: dict[str, set[str]] = {}
-    thich: dict[str, set[str]] = {}
+    seen: dict[str, set[str]] = {}
+    liked: dict[str, set[str]] = {}
 
-    for i in chi_so:
-        if source[i] in bo_nguon:
+    for i in indices:
+        if source[i] in skip_sources:
             continue
-        f = food_id[i]
-        u = user_id[i]
-        thay.setdefault(f, set()).add(u)
-        if label[i] >= nguong_duong:
-            thich.setdefault(f, set()).add(u)
+        food = food_id[i]
+        user = user_id[i]
+        seen.setdefault(food, set()).add(user)
+        if label[i] >= positive_threshold:
+            liked.setdefault(food, set()).add(user)
 
     return {
-        f: wilson_chan_duoi(len(thich.get(f, ())), len(nguoi))
-        for f, nguoi in thay.items()
+        food: wilson_lower_bound(len(liked.get(food, ())), len(users))
+        for food, users in seen.items()
     }

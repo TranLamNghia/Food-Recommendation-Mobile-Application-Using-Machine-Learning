@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tính `foods.popularity_score` từ tín hiệu thật.
+"""Compute `foods.popularity_score` from real signals.
 
-Việc số 9 của `ML_PIPELINE.md` §12. Cột này hiện bằng 0 ở **cả 318 món** vì
-nó mới chỉ có `DEFAULT 0` mà chưa ai tính, và hậu quả nặng hơn vẻ ngoài:
-§10.1 đặt `popularity` làm phương án đối chứng **bắt buộc phải vượt qua**,
-nên nếu nó bằng nhau ở mọi món thì nó không xếp hạng được gì — mọi món hòa
-điểm, và câu hỏi nghiên cứu cốt lõi thành một phép so với nhiễu.
+Task 9 of `ML_PIPELINE.md` section 12. The column currently reads 0 for **all
+318 foods** because it only ever had `DEFAULT 0` and nobody computed it, and
+the consequence is worse than it looks: section 10.1 makes `popularity` the
+baseline that **must** be beaten, so if it is equal across every food it
+ranks nothing — every food ties, and the core research question becomes a
+comparison against noise.
 
-Công thức, định nghĩa "đã thấy / đã thích", và lý do dùng chặn dưới Wilson
-đều ở `ml/popularity.py`. Tệp này chỉ là lớp vỏ dòng lệnh.
+The formula, the definitions of "seen / liked", and the reasoning behind the
+Wilson lower bound all live in `ml/popularity.py`. This file is only the
+command-line wrapper.
 
-Lưu ý quan trọng: điểm ghi ở đây tính từ **toàn bộ** tín hiệu, nên nó đúng
-cho việc **phục vụ** nhưng không được dùng khi **đánh giá** —
-`ml/evaluate.py` tự dựng lại độ phổ biến từ riêng các fold huấn luyện. Xem
-phần đầu `ml/popularity.py`.
+One important note: the score written here is computed from **every** signal,
+so it is right for **serving** but must not be used when **evaluating** —
+`ml/evaluate.py` rebuilds popularity from the training folds alone. See the
+header of `ml/popularity.py`.
 
-Chạy:
-    python tools/update_popularity.py            # chạy thử, không ghi
+Run:
+    python tools/update_popularity.py            # dry run, writes nothing
     python tools/update_popularity.py --apply
 """
 
@@ -30,61 +32,63 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ml.db import in_utf8, ket_noi  # noqa: E402
-from ml.popularity import tu_csdl  # noqa: E402
+from ml.db import connect, use_utf8  # noqa: E402
+from ml.popularity import from_database  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
-    in_utf8()
-    bo = argparse.ArgumentParser(description=__doc__)
-    bo.add_argument("--db", default=None)
-    bo.add_argument("--apply", action="store_true", help="ghi vào foods")
-    t = bo.parse_args(argv)
+    use_utf8()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", default=None)
+    parser.add_argument("--apply", action="store_true", help="write to foods")
+    t = parser.parse_args(argv)
 
-    cn = ket_noi(t.db)
+    cn = connect(t.db)
     try:
-        dong = tu_csdl(cn)
-        co_tin_hieu = sum(1 for d in dong if int(d["n_thay"]) > 0)
-        doi = sum(1 for d in dong if abs(d["diem"] - float(d["cu"])) > 1e-9)
+        rows = from_database(cn)
+        with_signal = sum(1 for d in rows if int(d["n_seen"]) > 0)
+        changed = sum(
+            1 for d in rows if abs(d["score"] - float(d["previous"])) > 1e-9
+        )
 
-        print(f"{len(dong)} món · {co_tin_hieu} món có tín hiệu")
-        if co_tin_hieu == 0:
+        print(f"{len(rows)} foods - {with_signal} with a signal")
+        if with_signal == 0:
             print(
-                "\nChưa có tín hiệu nào từ người dùng — mọi món vẫn nhận 0.\n"
-                "Đây KHÔNG phải lỗi: `popularity_score` là đại lượng suy ra từ\n"
-                "hành vi, nên nó chỉ có nghĩa sau khi thu được dữ liệu thật\n"
-                "(ML_PIPELINE.md §11.3). Cho tới lúc đó, phương án đối chứng\n"
-                "`popularity` vẫn suy biến và `ml/evaluate.py` sẽ tiếp tục báo\n"
-                "rằng phép so chưa có hiệu lực."
+                "\nNo user signals yet — every food stays at 0.\n"
+                "This is NOT an error: `popularity_score` is derived from\n"
+                "behaviour, so it only means anything once real data has been\n"
+                "collected (ML_PIPELINE.md section 11.3). Until then the\n"
+                "`popularity` baseline stays degenerate and `ml/evaluate.py`\n"
+                "will keep reporting that the comparison carries no weight."
             )
             return 0
 
-        xep = sorted(
+        ranked = sorted(
             (
-                (d["diem"], int(d["n_thich"]), int(d["n_thay"]), d["name"])
-                for d in dong
-                if int(d["n_thay"]) > 0
+                (d["score"], int(d["n_liked"]), int(d["n_seen"]), d["name"])
+                for d in rows
+                if int(d["n_seen"]) > 0
             ),
             reverse=True,
         )
-        print(f"\n{'điểm':>7}  {'thích/thấy':>11}  món")
-        for diem, nt, nx, ten in xep[:10]:
-            print(f"{diem:>7.4f}  {nt:>5}/{nx:<5}  {ten}")
-        if len(xep) > 10:
-            print(f"   … còn {len(xep) - 10} món")
+        print(f"\n{'score':>7}  {'liked/seen':>11}  food")
+        for score, n_liked, n_seen, name in ranked[:10]:
+            print(f"{score:>7.4f}  {n_liked:>5}/{n_seen:<5}  {name}")
+        if len(ranked) > 10:
+            print(f"   ... and {len(ranked) - 10} more")
 
-        print(f"\n{doi} món có điểm thay đổi.")
+        print(f"\n{changed} foods changed score.")
         if not t.apply:
-            print("Chạy thử — chưa ghi gì. Thêm --apply để ghi vào foods.")
+            print("Dry run — nothing written. Add --apply to write to foods.")
             return 0
 
         with cn.cursor() as cur:
             cur.executemany(
                 "UPDATE foods SET popularity_score = %s WHERE id = %s",
-                [(d["diem"], d["id"]) for d in dong],
+                [(d["score"], d["id"]) for d in rows],
             )
         cn.commit()
-        print(f"Đã cập nhật popularity_score cho {len(dong)} món.")
+        print(f"Updated popularity_score for {len(rows)} foods.")
         return 0
     finally:
         cn.close()

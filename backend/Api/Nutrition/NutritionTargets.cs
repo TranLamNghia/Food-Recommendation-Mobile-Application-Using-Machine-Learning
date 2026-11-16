@@ -1,27 +1,30 @@
 namespace Api.Nutrition;
 
 /// <summary>
-/// Bước 1 của thuật toán khuyến nghị — hạn mức năng lượng và dinh dưỡng.
+/// Step 1 of the recommendation algorithm — the energy and nutrient targets.
 ///
-/// <para>Nguồn công thức là <c>docs/SYSTEM_ARCHITECTURE.md</c> §3.1. Đây là
-/// bản hiện thực <b>thứ ba</b> của cùng phép tính đó: hai bản kia là
-/// <c>mobile/lib/data/models/health_profile.dart</c> và lớp này. Ba bản phải
-/// cho ra cùng con số, và <c>tools/check_be_parity.py</c> kiểm điều đó trên
-/// 30 ca thử — không có bộ kiểm ấy thì chúng sẽ lệch nhau mà không ai biết,
-/// vì mỗi bản chạy ở một tầng khác nhau và không bao giờ gặp nhau.</para>
+/// <para>The formulas come from <c>docs/SYSTEM_ARCHITECTURE.md</c> §3.1. This
+/// is the <b>third</b> implementation of that same calculation: the other two
+/// are <c>mobile/lib/data/models/health_profile.dart</c> and this class. All
+/// three have to produce the same numbers, and
+/// <c>tools/check_be_parity.py</c> checks that over 30 test cases — without
+/// that suite they would drift apart with nobody noticing, because each one
+/// runs in a different layer and they never meet.</para>
 ///
-/// <para><b>Lớp này không chạm vào CSDL.</b> Thuần hàm trên số, nên kiểm được
-/// mà không cần máy chủ MySQL — đó là điều kiện để bộ kiểm parity chạy được
-/// trong một bộ kiểm không có CSDL.</para>
+/// <para><b>This class never touches the database.</b> Pure functions over
+/// numbers, so it can be checked without a MySQL server — which is what makes
+/// it possible to run the parity suite in a test project that has no
+/// database.</para>
 /// </summary>
 public static class NutritionTargets
 {
-    // ── Hệ số vận động (SYSTEM_ARCHITECTURE §3.1) ────────────────────────
+    // ── Activity factors (SYSTEM_ARCHITECTURE §3.1) ──────────────────────
     //
-    // Khai là chuỗi đúng bằng ENUM `health_profiles.activity_level`, không
-    // phải `enum` của C#. Lý do giống chỗ sinh thực thể: CSDL thêm một mức
-    // vận động mà mã chưa biết thì phải báo ra ở tầng validation, không phải
-    // ném lỗi lúc đọc một dòng dữ liệu hợp lệ.
+    // Declared as strings matching the `health_profiles.activity_level` ENUM
+    // exactly, not as a C# `enum`. The reason is the same as in the entity
+    // generator: if the database gains an activity level the code does not
+    // know about, that has to be reported by the validation layer, not thrown
+    // while reading a perfectly valid row of data.
     public static readonly IReadOnlyDictionary<string, decimal> ActivityFactor =
         new Dictionary<string, decimal>
         {
@@ -33,14 +36,15 @@ public static class NutritionTargets
         };
 
     /// <summary>
-    /// Tỷ lệ năng lượng của từng bữa, theo <b>điểm giữa</b> các khoảng ở
-    /// SYSTEM_ARCHITECTURE §3.1: sáng 25–30, trưa 35–40, tối 25–30, phụ 5–10.
+    /// Each meal's share of the day's energy, taken as the <b>midpoint</b> of
+    /// the ranges in SYSTEM_ARCHITECTURE §3.1: breakfast 25–30, lunch 35–40,
+    /// dinner 25–30, snack 5–10.
     ///
-    /// <para>Điểm giữa chứ không phải con số chọn tay, vì một con số chọn tay
-    /// không suy ra được từ đâu và hai bên hiện thực sẽ chọn hai bộ khác nhau
-    /// — đúng điều đã xảy ra: đặc tả API từng ghi 25/40/27/8 trong khi
-    /// <c>meal_plan.dart</c> dùng điểm giữa. Bốn điểm giữa cộng đúng
-    /// 100 %.</para>
+    /// <para>Midpoints rather than hand-picked numbers, because a hand-picked
+    /// number cannot be derived from anything and the two implementations
+    /// would each pick their own set — which is exactly what happened: the API
+    /// specification once said 25/40/27/8 while <c>meal_plan.dart</c> used the
+    /// midpoints. The four midpoints add up to exactly 100 %.</para>
     /// </summary>
     public static readonly IReadOnlyDictionary<string, decimal> MealShare =
         new Dictionary<string, decimal>
@@ -51,21 +55,24 @@ public static class NutritionTargets
             ["snack"] = 0.075m,
         };
 
-    /// <summary>Ngưỡng BMI theo khuyến cáo WHO 2004 cho người châu Á.</summary>
+    /// <summary>BMI thresholds per the WHO 2004 advice for Asian
+    /// populations.</summary>
     //
-    // 23 và 25 chứ không phải 25 và 30 của ngưỡng quốc tế: người châu Á có
-    // tỷ lệ mỡ cơ thể và nguy cơ chuyển hóa cao hơn ở cùng một BMI. Dùng
-    // ngưỡng quốc tế cho người Việt sẽ xếp một người thừa cân thật vào nhóm
-    // "bình thường", và hệ thống sẽ không đề xuất giảm năng lượng.
+    // 23 and 25 rather than the international 25 and 30: at the same BMI,
+    // Asian populations carry a higher body-fat percentage and a higher
+    // metabolic risk. Using the international thresholds for Vietnamese users
+    // would place a genuinely overweight person in the "normal" group, and
+    // the system would not suggest reducing their energy intake.
     public const decimal BmiOverweightAsia = 23.0m;
     public const decimal BmiObeseAsia = 25.0m;
 
-    /// <summary>Tuổi tròn tại <paramref name="on"/>, theo ngày sinh.</summary>
+    /// <summary>Whole years old at <paramref name="on"/>, from the date of
+    /// birth.</summary>
     //
-    // Không dùng `(hôm nay - ngày sinh).Days / 365.25`: phép đó cho ra 22 cho
-    // một người còn một ngày nữa mới sinh nhật, và BMR lệch 5 kcal theo công
-    // thức Mifflin. Nhỏ, nhưng nó làm bản C# lệch bản Dart — bản Dart so
-    // tháng rồi so ngày.
+    // Not `(today - dateOfBirth).Days / 365.25`: that returns 22 for someone
+    // whose birthday is one day away, and the BMR is then off by 5 kcal under
+    // the Mifflin formula. Small, but it makes the C# implementation disagree
+    // with the Dart one — which compares the month and then the day.
     public static int Age(DateOnly dateOfBirth, DateOnly on)
     {
         var years = on.Year - dateOfBirth.Year;
@@ -77,7 +84,7 @@ public static class NutritionTargets
         return years;
     }
 
-    /// <summary>BMI = cân nặng(kg) / chiều cao(m)².</summary>
+    /// <summary>BMI = weight(kg) / height(m)².</summary>
     public static decimal Bmi(decimal weightKg, decimal heightCm)
     {
         var m = heightCm / 100m;
@@ -85,8 +92,8 @@ public static class NutritionTargets
     }
 
     /// <summary>
-    /// Nhóm BMI theo ngưỡng châu Á: <c>underweight</c> · <c>normal</c> ·
-    /// <c>overweight</c> · <c>obese</c>.
+    /// The BMI group by the Asian thresholds: <c>underweight</c> ·
+    /// <c>normal</c> · <c>overweight</c> · <c>obese</c>.
     /// </summary>
     public static string BmiCategory(decimal bmi) => bmi switch
     {
@@ -97,33 +104,36 @@ public static class NutritionTargets
     };
 
     /// <summary>
-    /// Chuyển hóa cơ bản theo Mifflin-St Jeor.
+    /// Basal metabolic rate by Mifflin-St Jeor.
     ///
-    /// <para>Nam: <c>10W + 6.25H − 5A + 5</c>; nữ: <c>… − 161</c>.</para>
+    /// <para>Male: <c>10W + 6.25H − 5A + 5</c>; female: <c>… − 161</c>.</para>
     /// </summary>
     //
-    // ── `gender = 'other'`: không có hằng số nào được công bố ──
+    // ── `gender = 'other'`: no published constant exists ──
     //
-    // ENUM `health_profiles.gender` nhận ba giá trị, nhưng Mifflin-St Jeor
-    // chỉ được kiểm định trên hai nhóm nam và nữ — không có công trình nào
-    // công bố hằng số cho nhóm thứ ba. Bốn cách xử lý, và vì sao chọn cách
-    // cuối:
+    // The `health_profiles.gender` ENUM takes three values, but Mifflin-St
+    // Jeor was only validated on two groups, male and female — no published
+    // work gives a constant for a third group. Four ways to handle it, and
+    // why the last one was chosen:
     //
-    //   1. Từ chối với `VALIDATION_FAILED`. Không: CSDL cho phép giá trị đó,
-    //      nên API phải nhận được thứ lược đồ cho phép.
-    //   2. Dùng hằng số của nam (+5). Không: hạn mức cao hơn, mà sai theo
-    //      hướng cho ăn nhiều hơn mức cần là hướng sai tệ hơn.
-    //   3. Dùng hằng số của nữ (−161). Nó an toàn cho người giảm cân nhưng
-    //      lại thiếu năng lượng cho người đang muốn tăng cân.
-    //   4. Trung điểm hai hằng số: (+5 + −161) / 2 = −78.
+    //   1. Reject with `VALIDATION_FAILED`. No: the database allows that
+    //      value, so the API has to accept what the schema permits.
+    //   2. Use the male constant (+5). No: that gives a higher target, and
+    //      erring towards feeding someone more than they need is the worse
+    //      direction to err in.
+    //   3. Use the female constant (−161). It is safe for someone losing
+    //      weight, but short on energy for someone trying to gain.
+    //   4. The midpoint of the two: (+5 + −161) / 2 = −78.
     //
-    // Chọn (4), và phải nói ra rằng đó là một con số SUY RA, không có nguồn
-    // — đúng nghĩa `evidence_level = 'derived'` mà lược đồ đã dùng cho
-    // `condition_rules`. Đây là một hạn chế thật, phải nêu trong báo cáo.
+    // (4) was chosen, and it has to be stated plainly that this is a DERIVED
+    // number with no source — exactly what `evidence_level = 'derived'`
+    // already means for `condition_rules` in the schema. This is a real
+    // limitation and has to be named in the report.
     //
-    // Cách đúng về lâu dài là tách "giới tính dùng cho công thức chuyển hóa"
-    // khỏi "giới tính người dùng tự nhận", vì đó là hai câu hỏi khác nhau.
-    // Việc đó cần thêm một cột, nên không làm trong lát này.
+    // The right long-term fix is to separate "the sex used for the metabolic
+    // formula" from "the gender the user identifies as", because those are two
+    // different questions. That needs another column, so it is not done in
+    // this slice.
     public const decimal MifflinMale = 5m;
     public const decimal MifflinFemale = -161m;
     public const decimal MifflinOther = (MifflinMale + MifflinFemale) / 2m;
@@ -139,29 +149,29 @@ public static class NutritionTargets
             "other" => MifflinOther,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(gender),
-                $"`{gender}` không nằm trong ENUM health_profiles.gender"),
+                $"`{gender}` is not in the health_profiles.gender ENUM"),
         };
     }
 
-    /// <summary>TDEE = BMR × hệ số vận động.</summary>
+    /// <summary>TDEE = BMR × the activity factor.</summary>
     public static decimal Tdee(decimal bmr, string activityLevel)
     {
         if (!ActivityFactor.TryGetValue(activityLevel, out var factor))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(activityLevel),
-                $"`{activityLevel}` không nằm trong ENUM "
-                + "health_profiles.activity_level");
+                $"`{activityLevel}` is not in the "
+                + "health_profiles.activity_level ENUM");
         }
         return bmr * factor;
     }
 
     /// <summary>
-    /// Hạn mức năng lượng theo mục tiêu, kèm ràng buộc an toàn.
+    /// The energy target for the goal, with its safety constraint.
     ///
-    /// <para><c>lose_weight</c> trừ 500 kcal nhưng <b>không bao giờ xuống
-    /// dưới BMR</b>: ăn dưới mức chuyển hóa cơ bản là thiếu năng lượng cho
-    /// chính hoạt động sống, không phải một chế độ giảm cân.</para>
+    /// <para><c>lose_weight</c> subtracts 500 kcal but <b>never goes below
+    /// the BMR</b>: eating less than the basal metabolic rate is not enough
+    /// energy for staying alive, which is not a weight-loss plan.</para>
     /// </summary>
     public static decimal EnergyTarget(
         decimal tdee, decimal bmr, string goal) => goal switch
@@ -171,19 +181,22 @@ public static class NutritionTargets
             "maintain" or "healthy_eating" => tdee,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(goal),
-                $"`{goal}` không nằm trong ENUM health_profiles.goal"),
+                $"`{goal}` is not in the health_profiles.goal ENUM"),
         };
 
-    /// <summary>Chênh lệch giữa hạn mức và TDEE, để giao diện giải thích.</summary>
+    /// <summary>The gap between the target and the TDEE, for the interface to
+    /// explain.</summary>
     public static decimal GoalAdjustment(decimal energyTarget, decimal tdee)
         => energyTarget - tdee;
 
     /// <summary>
-    /// Gram của một chất, từ phần trăm năng lượng và số kcal mỗi gram.
+    /// The grams of a macronutrient, from its percentage of the energy and
+    /// its kcal per gram.
     /// </summary>
     //
-    // 4 kcal/g cho đạm và bột đường, 9 kcal/g cho béo — hệ số Atwater, cũng
-    // là hệ số `tools/validate_foods.py` dùng để soát bảng thành phần.
+    // 4 kcal/g for protein and carbohydrate, 9 kcal/g for fat — the Atwater
+    // factors, the same ones `tools/validate_foods.py` uses to check the
+    // composition table.
     public const int KcalPerGramProtein = 4;
     public const int KcalPerGramCarbs = 4;
     public const int KcalPerGramFat = 9;
@@ -192,11 +205,12 @@ public static class NutritionTargets
         => energyKcal * pct / 100m / kcalPerGram;
 
     /// <summary>
-    /// Toàn bộ đầu ra Bước 1 cho một hồ sơ.
+    /// The whole of Step 1's output for one profile.
     ///
-    /// <para>Ba tỷ lệ macro là <b>tham số</b>, đọc từ ba cột
-    /// <c>health_profiles.target_*_pct</c>. Cứng hóa chúng ở đây thì sửa một
-    /// dòng trong CSDL sẽ không có tác dụng gì, mà cũng không báo lỗi.</para>
+    /// <para>The three macro percentages are <b>parameters</b>, read from the
+    /// three <c>health_profiles.target_*_pct</c> columns. Hard-coding them
+    /// here would mean editing a row in the database has no effect at all —
+    /// and reports no error either.</para>
     /// </summary>
     public static Step1Result Compute(
         string gender,
@@ -210,15 +224,17 @@ public static class NutritionTargets
         byte fatPct,
         DateOnly today)
     {
-        // `chk_macro_sum` trong lược đồ đã buộc điều này, nhưng lớp này còn
-        // được gọi với số liệu chưa qua CSDL — từ bộ kiểm parity, và từ
-        // PUT /profile trước lúc ghi. Kiểm lại ở đây để một bộ ba sai không
-        // lặng lẽ cho ra hạn mức không cộng đủ 100 % năng lượng.
+        // `chk_macro_sum` in the schema already enforces this, but this class
+        // is also called with numbers that never went through the database —
+        // from the parity suite, and from PUT /profile before the write.
+        // Checking again here stops a wrong triple from quietly producing
+        // targets that do not add up to 100 % of the energy.
         if (proteinPct + carbsPct + fatPct != 100)
         {
             throw new ArgumentException(
-                $"ba tỷ lệ macro cộng {proteinPct + carbsPct + fatPct}%, "
-                + "phải đúng 100% — xem chk_macro_sum");
+                $"the three macro percentages add up to "
+                + $"{proteinPct + carbsPct + fatPct}%, and must be exactly "
+                + "100% — see chk_macro_sum");
         }
 
         var age = Age(dateOfBirth, today);
@@ -248,15 +264,15 @@ public static class NutritionTargets
 }
 
 /// <summary>
-/// Đầu ra Bước 1, ở <b>độ chính xác đầy đủ</b>.
+/// Step 1's output, at <b>full precision</b>.
 ///
-/// <para>Chưa làm tròn, có chủ ý. Lược đồ lưu <c>bmr_kcal</c>,
-/// <c>tdee_kcal</c> và <c>daily_calories_target</c> dưới dạng
-/// <c>SMALLINT</c>, nên chúng sẽ được làm tròn khi ghi — nhưng phép tính
-/// trung gian thì không được làm tròn, và Bước 4 phải chia hạn mức theo
-/// <b>tỷ lệ</b> chứ không theo bốn số nguyên đã làm tròn. Tổng bốn số nguyên
-/// đó có thể nhỏ hơn hạn mức ngày 1–2 kcal, và nếu Bước 4 coi cả hai là
-/// ràng buộc cứng thì không tổ hợp món nào thỏa được cả hai.</para>
+/// <para>Deliberately not rounded. The schema stores <c>bmr_kcal</c>,
+/// <c>tdee_kcal</c> and <c>daily_calories_target</c> as <c>SMALLINT</c>, so
+/// they get rounded on the way in — but the intermediate arithmetic must not
+/// be rounded, and Step 4 has to split the target by <b>ratio</b> rather than
+/// by four already-rounded integers. Those four integers can add up to 1–2
+/// kcal less than the daily target, and if Step 4 treats both as hard
+/// constraints then no combination of dishes satisfies them both.</para>
 /// </summary>
 public sealed class Step1Result
 {
@@ -275,13 +291,14 @@ public sealed class Step1Result
     public decimal CarbsG { get; init; }
     public decimal FatG { get; init; }
 
-    /// <summary>Phân bổ năng lượng theo bữa, ở độ chính xác đầy đủ.</summary>
+    /// <summary>The per-meal energy split, at full precision.</summary>
     public IEnumerable<(string MealType, decimal Pct, decimal Kcal)>
         MealDistribution()
         => NutritionTargets.MealShare.Select(
             kv => (kv.Key, kv.Value * 100m, DailyCaloriesTarget * kv.Value));
 
-    /// <summary>Câu công thức BMR, để màn hồ sơ nói con số đến từ đâu.</summary>
+    /// <summary>The BMR formula written out, so the profile screen can say
+    /// where the number came from.</summary>
     public string FormulaExpression(
         string gender, decimal weightKg, decimal heightCm)
     {
