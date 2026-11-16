@@ -1413,8 +1413,11 @@ tools/gen_entities.py          · 24 lớp thực thể + 4 danh sách ENUM C# �
 tools/check_be_parity.py  76 mục · Bước 1: Python ↔ C# ↔ Dart
 tools/smoke_backend.py    93 mục · 9 endpoint trên MySQL thật
 cd backend && dotnet test  44 mục, Bước 1 phía C#, KHÔNG cần CSDL
-cd mobile && flutter test 124 mục, gồm 6 mục đối chiếu vector Dart ↔ Python
+cd mobile && flutter test 141 mục, gồm 6 mục đối chiếu vector Dart ↔ Python
                                   và 32 mục đối chiếu Bước 1 ba chiều
+                                  (3 mục bị bỏ qua: `Gender` của Dart không có
+                                  `other`, bản C# xử lý bằng trung điểm hai
+                                  hằng số Mifflin)
 ```
 
 `check_be_parity.py` tồn tại vì **Bước 1 được hiện thực ba lần** — máy chủ
