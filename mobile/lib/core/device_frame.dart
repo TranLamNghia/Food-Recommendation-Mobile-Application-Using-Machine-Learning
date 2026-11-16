@@ -3,19 +3,20 @@ import 'package:flutter/material.dart';
 
 import 'theme/app_colors.dart';
 
-/// Khung điện thoại giả, **chỉ bật khi chạy trên trình duyệt**.
+/// A fake phone frame, **enabled only when running in a browser**.
 ///
-/// Ứng dụng này thiết kế cho màn hình điện thoại. Khi xem thử bằng Chrome,
-/// cửa sổ rộng cả nghìn pixel làm bố cục giãn ra, không phản ánh đúng những
-/// gì người dùng thật sẽ thấy. Khung này ép nội dung về đúng khổ máy Android
-/// tầm trung để xem trước cho chuẩn.
+/// This app is designed for a phone screen. When previewing it in Chrome, a
+/// window a thousand pixels wide stretches the layout out and does not reflect
+/// what a real user would see. This frame forces the content back to the size
+/// of a mid-range Android phone so the preview is faithful.
 ///
-/// Khi biên dịch cho Android, [kIsWeb] bằng `false` nên widget trả thẳng
-/// [child] — không có gì thừa lọt vào bản dựng thật.
+/// When compiled for Android, [kIsWeb] is `false` and the widget returns
+/// [child] directly — nothing superfluous reaches the real build.
 class DeviceFrame extends StatelessWidget {
   const DeviceFrame({super.key, required this.child});
 
-  /// Kích thước logic của Pixel 7 — mốc quen thuộc cho máy Android tầm trung.
+  /// The logical size of a Pixel 7 — a familiar reference for a mid-range
+  /// Android phone.
   static const _size = Size(412, 915);
 
   final Widget child;

@@ -1,13 +1,13 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// Cho phép kéo cuộn bằng chuột, không chỉ bằng ngón tay.
+/// Allows drag-scrolling with a mouse, not only with a finger.
 ///
-/// Mặc định Flutter chỉ nhận kéo cuộn từ cảm ứng và bút, vì trên máy tính
-/// người ta cuộn bằng con lăn chứ hiếm khi kéo. Nhưng bản xem thử của ứng
-/// dụng này chạy trên trình duyệt, nơi bánh xe chọn số và danh sách dài đều
-/// phải kéo được bằng chuột — nếu không thì trên Chrome chúng đứng im như bị
-/// hỏng, dù trên Android vẫn chạy bình thường.
+/// By default Flutter only accepts drag-scrolling from touch and stylus,
+/// because on a desktop people scroll with the wheel and rarely drag. But
+/// this app's preview build runs in a browser, where the number wheels and
+/// the long lists both have to be draggable with a mouse — without this they
+/// sit motionless in Chrome as if broken, while working fine on Android.
 class AppScrollBehavior extends MaterialScrollBehavior {
   const AppScrollBehavior();
 

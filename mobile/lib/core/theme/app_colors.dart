@@ -1,54 +1,63 @@
 import 'package:flutter/material.dart';
 
-/// Bảng màu của hệ thống.
+/// The system's colour palette.
 ///
-/// Toàn bộ giao diện xoay quanh **ba màu**: trắng làm nền và mặt thẻ, đen làm
-/// nút hành động chính và trạng thái đã chọn, lơ `#2AD2EE` làm màu nhấn cho
-/// con số và thông tin cần bật lên. Các sắc xám ở giữa chỉ là biến thể độ
-/// sáng của trắng–đen, không phải màu thứ tư.
+/// The whole interface turns on **three colours**: white for the page
+/// background and card surfaces, black for the primary action button and the
+/// selected state, and the cyan `#2AD2EE` as the accent for numbers and
+/// information that has to stand out. The greys in between are only lightness
+/// variants of the white–black pair, not a fourth colour.
+///
+/// Note on naming: `tools/check_contrast.py` reads the constants below by
+/// NAME — its `PAIRS` table lists 20 of them and checks each pair against its
+/// WCAG threshold. Renaming one here means renaming it there in the same
+/// change, or the checker reports a colour that does not exist.
 abstract final class AppColors {
-  // ── Ba màu chủ đạo ───────────────────────────────────────────────
+  // ── The three leading colours ────────────────────────────────────
   static const white = Color(0xFFFFFFFF);
   static const ink = Color(0xFF000000);
   static const accent = Color(0xFF2AD2EE);
 
-  /// Nút hành động chính là khối đen đặc, nên `primary` trỏ thẳng vào [ink].
+  /// The primary action button is a solid black block, so `primary` points
+  /// straight at [ink].
   static const primary = ink;
   static const primaryDark = ink;
 
-  /// Nền lơ rất nhạt cho nhãn và vùng nhấn mềm.
+  /// A very pale cyan background for labels and soft accent areas.
   static const accentSoft = Color(0xFFE2F8FD);
 
-  /// Màu lơ **đã hạ sáng để làm màu chữ và biểu tượng**.
+  /// The cyan **darkened for use as a text and icon colour**.
   ///
-  /// [accent] chỉ đạt 1,82:1 trên trắng và 1,65:1 trên [accentSoft] —
-  /// dưới cả ngưỡng 3:1 của thành phần đồ họa, nên nó không thể mang
-  /// thông tin trên nền sáng. Nó vẫn là màu thương hiệu cho vùng tô lớn
-  /// và cho [accentSoft], nhưng mọi chữ, biểu tượng và ruột thanh tiến
-  /// độ dùng màu này: 5,12:1 trên trắng, 4,65:1 trên [accentSoft].
+  /// [accent] only reaches 1.82:1 on white and 1.65:1 on [accentSoft] —
+  /// below even the 3:1 threshold for a graphical component, so it cannot
+  /// carry information on a light background. It remains the brand colour
+  /// for large fills and for [accentSoft], but every piece of text, every
+  /// icon and every progress-bar fill uses this one: 5.12:1 on white,
+  /// 4.65:1 on [accentSoft].
   static const accentInk = Color(0xFF11788E);
   static const primarySoft = accentSoft;
 
-  // ── Nền và bề mặt ────────────────────────────────────────────────
-  /// Nền trang hơi xám hơn mặt thẻ một chút, để thẻ trắng nổi lên mà không
-  /// cần viền hay đổ bóng nặng.
+  // ── Backgrounds and surfaces ─────────────────────────────────────
+  /// The page background is slightly greyer than a card surface, so a white
+  /// card lifts off it without needing a border or a heavy shadow.
   static const background = Color(0xFFF4F5F7);
   static const surface = white;
   static const surfaceMuted = Color(0xFFEDEEF0);
   static const border = Color(0xFFE6E7EA);
 
-  // ── Chữ ──────────────────────────────────────────────────────────
+  // ── Text ─────────────────────────────────────────────────────────
   static const textPrimary = Color(0xFF0B0B0C);
   static const textSecondary = Color(0xFF6B6C71);
   static const textTertiary = Color(0xFFB4B5BA);
   static const textOnDark = white;
 
-  // ── Bốn hướng vuốt ───────────────────────────────────────────────
+  // ── The four swipe directions ────────────────────────────────────
   //
-  // `burst*` là màu nguyên bản của bốn vùng `Left` / `Right` / `Up` / `Down`
-  // trong Figma. Chúng rất tươi và sáng nên chỉ dùng cho hạt bay và dải sáng
-  // ở rìa màn hình. Bốn màu phía trên là bản đã hạ độ sáng để chữ và nút vẫn
-  // đọc được trên nền trắng.
+  // The `burst*` colours are the original ones from the `Left` / `Right` /
+  // `Up` / `Down` areas in Figma. They are very vivid and bright, so they are
+  // only used for the flying particles and the glow strips at the screen
+  // edges. The four colours above are the darkened versions, so text and
+  // buttons stay readable on white.
   static const like = Color(0xFF0A7A3C);
   static const dislike = Color(0xFFC62828);
   static const neutral = Color(0xFF3B57E8);
@@ -59,18 +68,18 @@ abstract final class AppColors {
   static const burstUp = Color(0xFF5C77FF);
   static const burstDown = Color(0xFFFFFA5C);
 
-  // ── Vùng chân màn hình khảo sát ──────────────────────────────────
-  /// Đáy của gradient `Footer_Backgound` (2:15). Gradient chạy từ trong suốt
-  /// ở mép trên xuống màu này ở đáy.
+  // ── The survey screen's footer area ──────────────────────────────
+  /// The bottom of the `Footer_Backgound` gradient (2:15). The gradient runs
+  /// from transparent at the top edge down to this colour at the bottom.
   static const footerBottom = Color(0xFF4F4E4E);
 
-  // ── Ba chất sinh năng lượng ──────────────────────────────────────
+  // ── The three energy-bearing macronutrients ──────────────────────
   static const kcal = Color(0xFFB3500F);
   static const protein = Color(0xFFC0392B);
   static const carb = Color(0xFF8A6314);
   static const fat = Color(0xFF2E5FBF);
 
-  // ── Đổ bóng ──────────────────────────────────────────────────────
+  // ── Shadows ──────────────────────────────────────────────────────
   static const shadowSoft = Color(0x0F0B0B0C);
   static const shadowLifted = Color(0x1F0B0B0C);
 }

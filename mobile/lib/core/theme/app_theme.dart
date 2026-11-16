@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 abstract final class AppTheme {
-  /// Chữ thường của toàn ứng dụng dùng Afacad — cùng font với phụ đề trên thẻ
-  /// món, và có sẵn bộ dấu tiếng Việt.
+  /// The app's body text uses Afacad — the same font as the subtitle on a
+  /// dish card, and it ships with the Vietnamese diacritics.
   static const fontBody = 'Afacad';
 
-  /// Font hiển thị, dành riêng cho tên món trên thẻ.
+  /// The display font, reserved for dish names on a card.
   static const fontDisplay = 'Display';
 
   static const _fallback = <String>['Roboto', 'Segoe UI', 'Arial'];
@@ -34,7 +34,8 @@ abstract final class AppTheme {
         thickness: 1,
         space: 1,
       ),
-      // Nút hành động chính: khối đen bo tròn hết cỡ, chiếm trọn bề ngang.
+      // The primary action button: a black block, fully rounded, spanning
+      // the whole width.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.ink,
@@ -81,7 +82,7 @@ abstract final class AppTheme {
     }
 
     return base.copyWith(
-      // Tiêu đề câu hỏi trong luồng khai báo hồ sơ.
+      // The question heading in the profile onboarding flow.
       displaySmall: style(30, 700, height: 1.22),
       headlineMedium: style(26, 700, height: 1.25),
       headlineSmall: style(22, 700, height: 1.3),

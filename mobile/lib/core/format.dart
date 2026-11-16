@@ -1,7 +1,7 @@
-/// Định dạng số theo quy ước Việt Nam: dấu phẩy ngăn phần thập phân, dấu
-/// chấm ngăn hàng nghìn.
+/// Formats a number the Vietnamese way: a comma before the decimals, a dot
+/// between thousands.
 ///
-/// `5.0` của Dart đọc ra thành `5,0`, và `1850` thành `1.850`.
+/// Dart's `5.0` comes out as `5,0`, and `1850` as `1.850`.
 String formatNumber(double value, [int digits = 0]) {
   final parts = value.toStringAsFixed(digits).split('.');
 

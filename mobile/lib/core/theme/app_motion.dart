@@ -1,39 +1,39 @@
 import 'package:flutter/animation.dart';
 
-/// Các hằng số chuyển động dùng chung.
+/// The shared motion constants.
 ///
-/// Gom về một chỗ để toàn ứng dụng có cùng "nhịp" chuyển động, và để
-/// báo cáo có thể trích dẫn được tham số cụ thể thay vì nói chung chung.
+/// Gathered in one place so the whole app moves to the same "rhythm", and so
+/// the report can quote specific parameters rather than speak in generalities.
 abstract final class AppMotion {
-  // ── Thời lượng ───────────────────────────────────────────────────
-  /// Phản hồi tức thì: đổi màu, hiện nhãn chồng lên thẻ.
+  // ── Durations ────────────────────────────────────────────────────
+  /// Immediate feedback: a colour change, an overlay label on a card.
   static const instant = Duration(milliseconds: 120);
 
-  /// Chuyển trạng thái nhỏ trong một widget.
+  /// A small state change within one widget.
   static const quick = Duration(milliseconds: 220);
 
-  /// Thẻ bật về vị trí cũ khi vuốt chưa đủ ngưỡng.
+  /// A card snapping back when the swipe did not reach the threshold.
   static const snapBack = Duration(milliseconds: 420);
 
-  /// Thẻ bay ra khỏi màn hình khi vuốt đạt ngưỡng.
+  /// A card flying off screen when the swipe did reach the threshold.
   static const flyOut = Duration(milliseconds: 300);
 
-  /// Hoàn tác — thẻ bay ngược trở lại chồng thẻ.
+  /// Undo — the card flies back onto the deck.
   static const undo = Duration(milliseconds: 380);
 
-  /// Chuyển màn hình.
+  /// A screen transition.
   static const page = Duration(milliseconds: 480);
 
-  // ── Đường cong ───────────────────────────────────────────────────
-  /// Dùng cho phần lớn chuyển động vào/ra: nhanh lúc đầu, dịu lúc cuối.
+  // ── Curves ──────────────────────────────────────────────────────
+  /// For most enter/exit motion: fast at the start, gentle at the end.
   static const standard = Curves.easeOutCubic;
 
-  /// Thẻ bật về chỗ cũ — có độ nảy nhẹ để cảm giác đàn hồi.
+  /// A card snapping back — a slight overshoot so it feels elastic.
   static const spring = Curves.easeOutBack;
 
-  /// Thẻ bay ra — tăng tốc dần, mô phỏng quán tính của cú vuốt.
+  /// A card flying off — accelerating, imitating the swipe's momentum.
   static const eject = Curves.easeInCubic;
 
-  /// Nhấn mạnh: dùng cho phần tử xuất hiện lần đầu.
+  /// Emphasis: for an element appearing for the first time.
   static const emphasized = Cubic(0.2, 0.0, 0.0, 1.0);
 }
