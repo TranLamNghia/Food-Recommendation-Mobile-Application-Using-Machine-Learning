@@ -2,41 +2,49 @@ import '../models/food.dart';
 import 'day_budget.dart';
 import 'evidence_level.dart';
 
-/// Vì sao một món bị bỏ khỏi gợi ý — **ba bậc, không phải hai**.
+/// Why a dish was dropped from the recommendations — **three tiers, not
+/// two**.
 ///
-/// `FeasibilityInfo` của các ứng dụng cùng loại chỉ có khả thi / không khả
-/// thi. Dữ liệu ở đây phân biệt được nhiều hơn, và gộp lại là bỏ mất thông
-/// tin người dùng cần nhất.
+/// The `FeasibilityInfo` of comparable apps only has feasible / not feasible.
+/// The data here can distinguish more than that, and collapsing it throws
+/// away exactly what the user needs most.
+///
+/// Note on language: `heading` is the group title shown on screen, so it
+/// stays in Vietnamese.
 enum ExclusionTier {
-  /// Thuộc tính của **chính món ăn** — mang nhãn bị cấm, hoặc thiếu nhãn
-  /// bắt buộc, hoặc vượt ngưỡng cứng theo suất. Không bao giờ hợp.
+  /// A property of **the dish itself** — it carries a forbidden tag, or lacks
+  /// a required one, or exceeds a hard per-serving threshold. Never
+  /// acceptable.
   dish('Không phù hợp với bạn'),
 
-  /// **Hôm nay** hết hạn mức. Món không có vấn đề gì — hôm khác vẫn chọn
-  /// được.
+  /// **Today's** allowance is used up. Nothing is wrong with the dish — it is
+  /// selectable on another day.
   ///
-  /// Bậc này là chỗ dễ nói sai nhất. Nếu hiện "Phở sốt vang bị loại" giống
-  /// kiểu "Tôm rang me bị loại", người dùng sẽ tin phở là món cấm với mình,
-  /// trong khi lý do thật chỉ là sáng nay họ đã ăn mặn.
+  /// This tier is the easiest one to describe wrongly. Showing "Phở sốt vang
+  /// was dropped" the same way as "Tôm rang me was dropped" leaves the user
+  /// believing phở is forbidden for them, when the real reason is only that
+  /// they ate something salty this morning.
   dayBudget('Hôm nay hết hạn mức'),
 
-  /// **Không xét được** vì danh mục thiếu số liệu ở chất bị hạn chế.
+  /// **Cannot be judged**, because the catalogue has no measurement for the
+  /// restricted nutrient.
   ///
-  /// Đây KHÔNG phải "vừa". Với purin đó là 248 trong 318 món, nên gộp nhóm
-  /// này vào nhóm vừa sẽ làm trần purin của người gút gần như không bao giờ
-  /// chạm tới.
+  /// This is NOT "fits". For purine it is 248 of 318 dishes, so folding this
+  /// group into the "fits" group would mean a gout patient's purine ceiling
+  /// is almost never reached.
   unknown('Chưa xét được');
 
   const ExclusionTier(this.heading);
 
-  /// Tiêu đề nhóm trên giao diện.
+  /// The group title in the interface.
   final String heading;
 }
 
-/// Một lý do khiến món bị bỏ.
+/// One reason a dish was dropped.
 ///
-/// Phản chiếu `LyDoLoai` ở `ml/f1_filter.py` cộng `MonVuotHanMuc` ở
-/// `ml/han_muc.py` — hai nguồn, một kiểu, vì giao diện xếp chúng cạnh nhau.
+/// Mirrors `ExclusionReason` in `ml/f1_filter.py` plus `LimitExceedance` in
+/// `ml/daily_limits.py` — two sources, one type, because the interface lists
+/// them side by side.
 class ExclusionReason {
   const ExclusionReason({
     required this.tier,
@@ -51,7 +59,7 @@ class ExclusionReason {
     this.note = '',
   });
 
-  /// Món mang nhãn bị cấm, hoặc thiếu nhãn bắt buộc.
+  /// The dish carries a forbidden tag, or lacks a required one.
   const ExclusionReason.tagRule({
     required String condition,
     required String tag,
@@ -68,39 +76,42 @@ class ExclusionReason {
   final String condition;
   final EvidenceLevel evidence;
 
-  /// Tên nhãn, với hai loại quy tắc nhãn.
+  /// The tag name, for either kind of tag rule.
   final String? tag;
 
   final String? nutrient;
   final String unit;
 
-  /// Ngưỡng của quy tắc.
+  /// The rule's threshold.
   final double? threshold;
 
-  /// Số đo của món. `null` nghĩa là **thiếu số liệu**, không phải 0.
+  /// The dish's measurement. `null` means **no data**, not 0.
   final double? measured;
 
-  /// Phần hạn mức còn lại, chỉ có ở bậc [ExclusionTier.dayBudget].
+  /// How much of the allowance is left; present only on the
+  /// [ExclusionTier.dayBudget] tier.
   final double? remaining;
 
   final String note;
 
-  /// Món bị bỏ vì không có số liệu, chứ không vì vượt ngưỡng.
+  /// The dish was dropped for having no measurement, not for exceeding a
+  /// threshold.
   ///
-  /// Nói với người dùng "món này vượt ngưỡng" khi thật ra là "chúng tôi
-  /// không biết" là sai sự thật, nên hai thứ phải tách ra.
+  /// Telling the user "this dish exceeds a limit" when the truth is "we do
+  /// not know" is a false statement, so the two have to be kept apart.
   bool get missingData => nutrient != null && measured == null;
 
-  /// Vượt bao nhiêu. `null` khi không tính được.
+  /// By how much it is over. `null` when that cannot be computed.
   double? get over {
     if (measured == null) return null;
-    final moc = tier == ExclusionTier.dayBudget ? remaining : threshold;
-    if (moc == null) return null;
-    return measured! - moc;
+    final limit = tier == ExclusionTier.dayBudget ? remaining : threshold;
+    if (limit == null) return null;
+    return measured! - limit;
   }
 }
 
-/// Một ràng buộc **mềm** theo suất: vượt thì trừ điểm, không loại món.
+/// A **soft** per-serving constraint: exceeding it costs score, it does not
+/// drop the dish.
 class SoftRule {
   const SoftRule({
     required this.condition,
@@ -117,14 +128,16 @@ class SoftRule {
   final String unit;
   final double threshold;
 
-  /// **Hệ số nhân**, không phải lượng trừ.
+  /// A **multiplier**, not an amount to subtract.
   ///
-  /// Lược đồ chỉ nói `DECIMAL(4,3)`, nhưng chính dữ liệu chỉ ra cách đọc:
-  /// Tăng huyết áp có 0,600 ở mức nhẹ và 0,400 ở mức nặng, kèm ghi chú
-  /// "phạt nặng hơn cho mức nặng". Đọc theo phép trừ thì 0,400 trừ ÍT hơn,
-  /// tức mức nặng bị phạt nhẹ hơn — ngược hẳn ghi chú. Là hệ số nhân thì
-  /// ×0,400 nặng hơn ×0,600, khớp; và phép nhân giữ điểm trong [0, 1] còn
-  /// trừ 0,750 sẽ đẩy một điểm [0, 1] xuống âm.
+  /// The schema only says `DECIMAL(4,3)`, but the data itself shows how to
+  /// read it: hypertension has 0.600 at the mild level and 0.400 at the
+  /// severe one, with a note saying "a harsher penalty for the severe level".
+  /// Read as a subtraction, 0.400 takes away LESS, meaning the severe level
+  /// is penalised more gently — the exact opposite of the note. As a
+  /// multiplier, ×0.400 is harsher than ×0.600, which matches; and
+  /// multiplying keeps the score inside [0, 1] while subtracting 0.750 would
+  /// push a score in [0, 1] below zero.
   final double penalty;
 
   final EvidenceLevel evidence;
@@ -133,7 +146,7 @@ class SoftRule {
   bool violatedBy(double value) => value > threshold;
 }
 
-/// Một ràng buộc mềm bị món này vượt.
+/// One soft constraint that this dish exceeds.
 class SoftViolation {
   const SoftViolation({required this.rule, required this.measured});
 
@@ -143,7 +156,7 @@ class SoftViolation {
   double get over => measured - rule.threshold;
 }
 
-/// Hệ số phạt của một món, kèm lý do để giao diện nói ra.
+/// A dish's penalty factor, with the reasons for the interface to state.
 class PenaltyOutcome {
   const PenaltyOutcome({
     required this.factor,
@@ -151,64 +164,68 @@ class PenaltyOutcome {
     this.missingNutrients = const [],
   });
 
-  /// Hệ số nhân cuối cùng, trong khoảng (0, 1].
+  /// The final multiplier, in (0, 1].
   final double factor;
 
   final List<SoftViolation> violations;
 
-  /// Chất mà món này không có số đo, nên không xét được luật mềm nào của nó.
-  /// Không phạt, nhưng cũng không được coi là đã kiểm.
+  /// The nutrients this dish has no measurement for, so none of their soft
+  /// rules could be judged. Not penalised, but not to be treated as checked
+  /// either.
   final List<String> missingNutrients;
 
   bool get penalised => factor < 1.0;
 
-  /// Áp hệ số vào một điểm trong [0, 1].
+  /// Applies the factor to a score in [0, 1].
   ///
-  /// Giữ điểm gốc ở phía gọi: giao diện cần nói "khớp khẩu vị 0,78, bị trừ
-  /// vì mặn" chứ không phải chỉ hiện 0,47 mà không giải thích.
+  /// The original score stays with the caller: the interface needs to say
+  /// "taste match 0.78, reduced for being salty" rather than just showing
+  /// 0.47 with no explanation.
   double applyTo(double score) => score * factor;
 
-  /// Hệ số phạt của một món theo các ràng buộc mềm **theo suất**.
+  /// A dish's penalty factor under the **per-serving** soft constraints.
   ///
-  /// **Cộng hình phạt theo nhóm, không nhân thẳng.** Hai luật cùng
-  /// (bệnh, chất) là hai dải lồng nhau — natri ≤ 700 mg và ≤ 500 mg của cùng
-  /// Tăng huyết áp. Một món 800 mg vượt cả hai, nhưng đó là **một** mối lo,
-  /// không phải hai: nhân cả hai ra ×0,24 thay vì ×0,40, tức đếm đôi. Nên
-  /// trong mỗi nhóm lấy hệ số nặng nhất, rồi nhân qua các nhóm khác nhau.
+  /// **Penalties are combined per group, not multiplied straight through.**
+  /// Two rules sharing a (condition, nutrient) pair are two nested bands —
+  /// sodium ≤ 700 mg and ≤ 500 mg, both from hypertension. A dish at 800 mg
+  /// exceeds both, but that is **one** concern, not two: multiplying both
+  /// gives ×0.24 instead of ×0.40, which is double counting. So within each
+  /// group the harshest factor wins, and the factors are then multiplied
+  /// across different groups.
   ///
-  /// Thiếu số liệu thì **không phạt**, nhưng được ghi lại. Ràng buộc mềm là
-  /// quyết định về xếp hạng, không phải về an toàn, nên hạ điểm một món vì
-  /// danh mục thiếu số liệu là phạt sai đối tượng.
+  /// Missing data means **no penalty**, but it is recorded. A soft constraint
+  /// is a ranking decision, not a safety one, so lowering a dish's score
+  /// because the catalogue is incomplete penalises the wrong party.
   static PenaltyOutcome of(Food food, List<SoftRule> rules) {
-    final nangNhat = <String, SoftViolation>{};
-    final thieu = <String>[];
+    final harshest = <String, SoftViolation>{};
+    final missing = <String>[];
 
     for (final r in rules) {
       final value = DayBudget.valueOf(food, r.nutrient);
       if (value == null) {
-        if (!thieu.contains(r.nutrient)) thieu.add(r.nutrient);
+        if (!missing.contains(r.nutrient)) missing.add(r.nutrient);
         continue;
       }
       if (!r.violatedBy(value)) continue;
-      final khoa = '${r.condition}|${r.nutrient}';
-      final cu = nangNhat[khoa];
-      if (cu == null || r.penalty < cu.rule.penalty) {
-        nangNhat[khoa] = SoftViolation(rule: r, measured: value);
+      final key = '${r.condition}|${r.nutrient}';
+      final current = harshest[key];
+      if (current == null || r.penalty < current.rule.penalty) {
+        harshest[key] = SoftViolation(rule: r, measured: value);
       }
     }
 
-    var heSo = 1.0;
-    for (final v in nangNhat.values) {
-      heSo *= v.rule.penalty;
+    var factor = 1.0;
+    for (final v in harshest.values) {
+      factor *= v.rule.penalty;
     }
-    final ds = nangNhat.values.toList()
+    final sorted = harshest.values.toList()
       ..sort((a, b) => a.rule.penalty.compareTo(b.rule.penalty));
-    thieu.sort();
+    missing.sort();
 
     return PenaltyOutcome(
-      factor: heSo,
-      violations: ds,
-      missingNutrients: thieu,
+      factor: factor,
+      violations: sorted,
+      missingNutrients: missing,
     );
   }
 }

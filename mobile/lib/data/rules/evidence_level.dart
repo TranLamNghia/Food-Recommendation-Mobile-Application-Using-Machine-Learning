@@ -1,62 +1,71 @@
-/// Mức tin cậy của một ngưỡng dinh dưỡng — cột
-/// `condition_rules.evidence_level`.
+/// How much a nutrition threshold can be trusted — the
+/// `condition_rules.evidence_level` column.
 ///
-/// Tồn tại vì một ứng dụng sức khỏe dẫn khuyến cáo của WHO và một con số
-/// chưa ai tra bằng **cùng một giọng** là không trung thực. Trước đây xuất
-/// xứ của mọi ngưỡng nằm trong văn xuôi cột `note`, nên muốn phân loại phải
-/// tìm chuỗi "chưa xác minh" trong câu chữ — hỏng ngay lần đầu ai sửa lời.
+/// It exists because a health app quoting a WHO recommendation and a number
+/// nobody has checked in the **same voice** is not honest. The provenance of
+/// every threshold used to live in the prose of the `note` column, so
+/// classifying one meant searching for the string "chưa xác minh" inside a
+/// sentence — which breaks the first time anybody edits the wording.
 ///
-/// Bốn mức, không phải ba: xem [definitional].
+/// Four levels, not three: see [definitional].
+///
+/// Note on language: `code` is the value stored in the database and `label`
+/// is the short phrase shown on screen, so both stay as they are.
 enum EvidenceLevel {
-  /// Quy tắc **LÀ** định nghĩa, không có ngưỡng nào để dẫn nguồn.
+  /// The rule **IS** the definition; there is no threshold to cite.
   ///
-  /// "Dị ứng trứng thì loại món có trứng" không cần tổ chức nào công bố.
-  /// Mọi quy tắc nhãn thuộc nhóm này — 9 trong 20 quy tắc. Nhồi chúng vào
-  /// [published] sẽ thành khẳng định rằng có ai đó công bố điều hiển nhiên.
+  /// "If you are allergic to eggs, drop dishes containing egg" needs no
+  /// organisation to publish it. Every tag rule belongs to this group — 9 of
+  /// 20 rules. Forcing them into [published] would amount to claiming
+  /// somebody published the obvious.
   definitional('definitional', 'quy tắc định nghĩa'),
 
-  /// Con số lấy nguyên từ một nguồn **đang hiệu lực**.
+  /// The number is taken verbatim from a source that is **still in force**.
   ///
-  /// WHO: natri dưới 2 000 mg/ngày. Hướng dẫn gút Nhật Bản: purin dưới
-  /// 400 mg/ngày. Đây là mức duy nhất được dẫn như khuyến cáo có nguồn.
+  /// WHO: sodium under 2 000 mg/day. The Japanese gout guideline: purine
+  /// under 400 mg/day. This is the only level that may be quoted as a sourced
+  /// recommendation.
   published('published', 'có nguồn công bố'),
 
-  /// Nguồn có thật nhưng con số là **phép suy ra**, nên nó chỉ đúng kèm
-  /// giả thiết đi theo.
+  /// The source is real but the number is a **derivation**, so it only holds
+  /// together with the assumption attached to it.
   ///
-  /// 48 g đạm của KDIGO đúng cho người 60 kg, không đúng cho người 90 kg;
-  /// 25 g đường là 5 % của khẩu phần 2 000 kcal; chất béo tổng được dùng
-  /// thay cho béo bão hòa vì bảng thành phần không tách.
+  /// KDIGO's 48 g of protein is right for a 60 kg person, not for a 90 kg
+  /// one; 25 g of sugar is 5 % of a 2 000 kcal diet; total fat stands in for
+  /// saturated fat because the composition table does not separate them.
   derived('derived', 'suy ra kèm giả thiết'),
 
-  /// Không có nguồn **đang hiệu lực**.
+  /// There is **no source still in force**.
   ///
-  /// Hai tình huống khác nhau cùng rơi vào đây, và `note` phân biệt chúng:
-  /// ngưỡng cholesterol 300 mg/ngày đã **bị rút** khỏi Dietary Guidelines
-  /// 2015 và AHA/ACC 2019; ngưỡng natri 500 mg cho mức nặng thì **chưa**
-  /// ai tra. Về mặt trình bày hai thứ như nhau — đều không được dẫn như
-  /// khuyến cáo.
+  /// Two different situations land here, and `note` tells them apart: the
+  /// 300 mg/day cholesterol threshold was **withdrawn** from the Dietary
+  /// Guidelines 2015 and AHA/ACC 2019; the 500 mg sodium threshold for the
+  /// severe level has **never** been checked by anyone. For presentation
+  /// purposes the two are the same — neither may be quoted as a
+  /// recommendation.
   unsupported('unsupported', 'không có nguồn đang hiệu lực');
 
   const EvidenceLevel(this.code, this.label);
 
-  /// Giá trị trong CSDL.
+  /// The value in the database.
   final String code;
 
-  /// Câu ngắn cho giao diện.
+  /// A short phrase for the interface.
   final String label;
 
-  /// Ngưỡng này có được dẫn như khuyến cáo có nguồn hay không.
+  /// Whether this threshold may be quoted as a sourced recommendation.
   ///
-  /// Chỉ [published]. [derived] kèm giả thiết nên không, [unsupported] thì
-  /// không có nguồn nào, và [definitional] không có ngưỡng nào để dẫn.
+  /// Only [published]. [derived] comes with an assumption attached so it may
+  /// not, [unsupported] has no source at all, and [definitional] has no
+  /// threshold to quote.
   bool get canCite => this == EvidenceLevel.published;
 
-  /// Đọc từ mã trong CSDL.
+  /// Reads the level from the code in the database.
   ///
-  /// Mã lạ trả về [derived] — mức **không** dẫn được nguồn. Trả về
-  /// [published] khi không nhận ra mã sẽ khiến một giá trị lỗi tự nhận là
-  /// có nguồn, đúng kiểu hỏng cần tránh nhất ở đây.
+  /// An unrecognised code returns [derived] — a level that **cannot** be
+  /// quoted as sourced. Returning [published] for an unrecognised code would
+  /// let a bad value claim to have a source, exactly the failure to avoid
+  /// here.
   static EvidenceLevel fromCode(String? code) => switch (code) {
     'definitional' => EvidenceLevel.definitional,
     'published' => EvidenceLevel.published,

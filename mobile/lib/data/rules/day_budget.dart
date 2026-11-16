@@ -1,30 +1,33 @@
 import '../models/food.dart';
 import 'evidence_level.dart';
 
-/// Hạn mức một chất trong **một ngày**, kèm phần đã dùng của hôm nay.
+/// A nutrient's allowance for **one day**, together with how much of today's
+/// has been used.
 ///
-/// Phản chiếu `MotHanMuc` ở `ml/han_muc.py`. Nó khác [NutrientTarget] ở chỗ
-/// mang theo **trạng thái**: một ngưỡng thì luôn là 2 000 mg natri, còn hạn
-/// mức thì nói hôm nay còn lại bao nhiêu — và phần còn lại phụ thuộc vào
-/// việc người dùng đã ăn gì, nên nó là thứ phải hiện trước khi nó chặn món
-/// nào. Một ràng buộc phụ thuộc trạng thái mà chỉ xuất hiện lúc báo lỗi thì
-/// luôn làm người ta bất ngờ.
+/// Mirrors `DailyLimit` in `ml/daily_limits.py`. It differs from
+/// [NutrientTarget] in carrying **state**: a threshold is always 2 000 mg of
+/// sodium, while an allowance says how much is left today — and what is left
+/// depends on what the user has eaten, so it is something that has to be
+/// shown before it blocks any dish. A state-dependent constraint that only
+/// appears at the moment it rejects something always takes people by
+/// surprise.
 ///
-/// ## Hai cột, không gộp
+/// ## Two columns, not merged
 ///
-/// [eaten] là đã ăn — không đổi được nữa. [planned] là đang nằm trong thực
-/// đơn — còn đổi, còn bỏ được. Cộng chúng thành một con số sẽ mất đúng thông
-/// tin người dùng cần: khi một món không vừa, họ đang chọn giữa *bỏ món đã
-/// lên kế hoạch* và *chịu vượt ngưỡng*. Nếu chỉ hiện một tổng, họ sẽ tưởng
-/// cả hai phần đều đã cố định.
+/// [eaten] is already eaten — no longer changeable. [planned] is still in the
+/// plan — swappable, droppable. Adding them into one number loses exactly the
+/// information the user needs: when a dish does not fit, they are choosing
+/// between *dropping something already planned* and *going over the limit*.
+/// Shown a single total, they would assume both parts were fixed.
 ///
-/// ## Số liệu khuyết được ĐẾM, không bị bỏ qua
+/// ## Missing data is COUNTED, not ignored
 ///
-/// Bảng thành phần chỉ công bố purin cho 70 trong 318 món. Cộng những món
-/// khuyết thành 0 rồi trả về một con số trông bình thường sẽ làm trần purin
-/// của người gút gần như không bao giờ chạm tới — một tầng an toàn thất bại
-/// theo hướng **mở** mà không báo gì. Nên [missingCount] đi kèm mọi tổng, và
-/// [dataComplete] là thứ giao diện buộc phải hiện cạnh con số.
+/// The composition table only publishes purine for 70 of 318 dishes. Adding
+/// the ones with no data up as 0 and returning a normal-looking number would
+/// mean a gout patient's purine ceiling is almost never reached — a safety
+/// layer failing **open** with no warning. So [missingCount] travels with
+/// every total, and [dataComplete] is something the interface is obliged to
+/// show next to the number.
 class DayLimit {
   const DayLimit({
     required this.condition,
@@ -40,64 +43,68 @@ class DayLimit {
     this.note = '',
   });
 
-  /// Tên bệnh lý đặt ra hạn mức này.
+  /// The name of the condition that sets this allowance.
   final String condition;
 
-  /// Tên cột dinh dưỡng, dùng đúng tên trong CSDL.
+  /// The nutrition column's name, spelled exactly as in the database.
   final String nutrient;
 
-  /// Đơn vị để hiện ra — `mg`, `g`.
+  /// The unit to display — `mg`, `g`.
   final String unit;
 
-  /// Ngưỡng trần của cả ngày.
+  /// The ceiling for the whole day.
   final double amount;
 
-  /// Đã ăn — theo `food_diary`. Không đổi được.
+  /// Already eaten — from `food_diary`. Not changeable.
   final double eaten;
 
-  /// Đang nằm trong thực đơn hôm nay, chưa ăn. Còn đổi được.
+  /// In today's plan but not eaten yet. Still swappable.
   final double planned;
 
-  /// Cứng thì **chặn** món; mềm thì chỉ **trừ điểm**.
+  /// A hard limit **blocks** a dish; a soft one only **costs score**.
   ///
-  /// Gộp hai thứ lại sẽ biến một khuyến cáo thành một lệnh cấm: đường
-  /// ≤ 25 g/ngày là khuyến cáo, natri ≤ 2 000 mg là ngưỡng chặn.
+  /// Merging the two turns a recommendation into a prohibition: sugar
+  /// ≤ 25 g/day is a recommendation, sodium ≤ 2 000 mg is a blocking
+  /// threshold.
   final bool isHard;
 
   final EvidenceLevel evidence;
 
-  /// Hệ số **nhân** điểm khi vượt, chỉ có ở hạn mức mềm. Nhỏ hơn là phạt
-  /// nặng hơn — xem `PenaltyOutcome`.
+  /// The factor the score is **multiplied** by when exceeded; present only on
+  /// a soft limit. Smaller is a harsher penalty — see `PenaltyOutcome`.
   final double? penalty;
 
-  /// Số suất tính vào hạn mức này mà **không có số liệu** cho chất đó.
+  /// How many servings counted towards this allowance have **no measurement**
+  /// for that nutrient.
   final int missingCount;
 
-  /// Xuất xứ của ngưỡng, nguyên văn từ `condition_rules.note`.
+  /// The threshold's provenance, verbatim from `condition_rules.note`.
   final String note;
 
-  /// Phần đã dùng — ăn rồi cộng với đang nằm trong thực đơn.
+  /// The amount used — eaten plus what is in the plan.
   double get used => eaten + planned;
 
-  /// Còn ăn thêm được bao nhiêu.
+  /// How much more can still be eaten.
   ///
-  /// **Không kẹp về 0.** Số âm nghĩa là đã vượt, và giao diện cần biết vượt
-  /// bao nhiêu để nói ra; kẹp về 0 thì câu "vượt 222 mg" không viết được.
+  /// **Not clamped at 0.** A negative number means the limit is already
+  /// exceeded, and the interface needs to know by how much in order to say
+  /// so; clamped at 0, the sentence "222 mg over" could not be written.
   double get remaining => amount - used;
 
   bool get exceeded => used > amount;
 
-  /// Phần đã dùng trên ngưỡng, để vẽ thanh tiến độ. Không kẹp.
+  /// The used amount as a fraction of the threshold, for drawing a progress
+  /// bar. Not clamped.
   double get ratio => amount <= 0 ? 0 : used / amount;
 
-  /// Mọi suất tính vào hạn mức này đều có số liệu.
+  /// Every serving counted towards this allowance has a measurement.
   ///
-  /// Sai nghĩa là [used] thấp hơn thực tế, nên [remaining] **cao hơn** thực
-  /// tế — hạn mức đang nới ra. Giao diện phải nói điều đó, không được hiện
-  /// con số trần trụi.
+  /// When false, [used] is lower than reality, so [remaining] is **higher**
+  /// than reality — the allowance is being loosened. The interface has to say
+  /// that, not show the bare number.
   bool get dataComplete => missingCount == 0;
 
-  /// Thêm [amount] đơn vị chất này thì còn trong ngưỡng không?
+  /// Would adding [addition] units of this nutrient stay within the limit?
   bool fits(double addition) => used + addition <= amount;
 
   DayLimit copyWith({double? eaten, double? planned, int? missingCount}) =>
@@ -116,7 +123,7 @@ class DayLimit {
       );
 }
 
-/// Toàn bộ hạn mức theo ngày của một người trong một ngày.
+/// All of one person's daily allowances for one day.
 class DayBudget {
   const DayBudget({this.limits = const []});
 
@@ -124,42 +131,46 @@ class DayBudget {
 
   bool get isEmpty => limits.isEmpty;
 
-  /// Hạn mức **chặn** món.
+  /// The allowances that **block** a dish.
   List<DayLimit> get hard => [
     for (final l in limits)
       if (l.isHard) l,
   ];
 
-  /// Hạn mức chỉ **trừ điểm** — khuyến cáo, không phải lệnh cấm.
+  /// The allowances that only **cost score** — recommendations, not
+  /// prohibitions.
   List<DayLimit> get soft => [
     for (final l in limits)
       if (!l.isHard) l,
   ];
 
-  /// Hạn mức **mềm** đã bị vượt. Giao diện nói "vượt khuyến cáo", không nói
-  /// "bị loại".
+  /// The **soft** allowances already exceeded. The interface says "over the
+  /// recommendation", not "excluded".
   List<DayLimit> get overRecommendation => [
     for (final l in limits)
       if (!l.isHard && l.exceeded) l,
   ];
 
-  /// Hạn mức CỨNG còn ít dư địa nhất cho một chất, `null` nếu không có.
+  /// The HARD allowance with the least room left for one nutrient, or `null`
+  /// when there is none.
   ///
-  /// Trả về danh sách rỗng thì `null`, vì hai bệnh có thể cùng hạn chế một
-  /// chất với hai ngưỡng khác nhau — Tăng huyết áp và Bệnh thận đều giới hạn
-  /// natri ở 2 000 mg, nhưng phần đã dùng có thể khác nếu ngưỡng khác.
+  /// It returns `null` for an empty list, because two conditions can restrict
+  /// the same nutrient with two different thresholds — hypertension and
+  /// kidney disease both cap sodium at 2 000 mg, but the amount used can
+  /// differ when the thresholds differ.
   DayLimit? tightestHardFor(String nutrient) {
-    final tran = [
+    final ceilings = [
       for (final l in limits)
         if (l.isHard && l.nutrient == nutrient) l,
     ];
-    if (tran.isEmpty) return null;
-    return tran.reduce((a, b) => a.remaining <= b.remaining ? a : b);
+    if (ceilings.isEmpty) return null;
+    return ceilings.reduce((a, b) => a.remaining <= b.remaining ? a : b);
   }
 
-  /// Lượng một chất trong một món, hoặc `null` nếu món không có số liệu.
+  /// The amount of one nutrient in one dish, or `null` when the dish has no
+  /// measurement.
   ///
-  /// `null` là **không biết**, không phải 0 — xem [Food.purine].
+  /// `null` means **unknown**, not 0 — see [Food.purine].
   static double? valueOf(Food food, String nutrient) => switch (nutrient) {
     'calories_kcal' => food.kcal.toDouble(),
     'protein_g' => food.protein,
@@ -172,11 +183,12 @@ class DayBudget {
     _ => null,
   };
 
-  /// Dựng hạn mức từ các ngưỡng cùng hai nhóm món: đã ăn và đã lên kế hoạch.
+  /// Builds the allowances from the thresholds plus the two groups of dishes:
+  /// already eaten and planned.
   ///
-  /// Mỗi ngưỡng đi vào đây chỉ mang `amount`; phần [DayLimit.eaten],
-  /// [DayLimit.planned] và [DayLimit.missingCount] được cộng ở đây để một
-  /// chỗ duy nhất chịu trách nhiệm đếm phần khuyết.
+  /// Each threshold arrives carrying only its `amount`; [DayLimit.eaten],
+  /// [DayLimit.planned] and [DayLimit.missingCount] are summed here so that
+  /// one single place is responsible for counting what is missing.
   static DayBudget from({
     required List<DayLimit> thresholds,
     required List<Food> eaten,
@@ -195,16 +207,18 @@ class DayBudget {
     );
   }
 
-  /// Bản sao của hạn mức sau khi **bỏ một món khỏi phần đã lên kế hoạch**.
+  /// A copy of the allowances with **one dish removed from the planned
+  /// part**.
   ///
-  /// Dùng khi người dùng mở bảng đổi món: dư địa cho món thay thế là phần
-  /// còn lại cộng với phần món cũ đang chiếm. Không trừ đi thì mọi ứng viên
-  /// đều bị so với một hạn mức chặt hơn thực tế, và bảng đổi món sẽ chặn cả
-  /// những món đáng ra chọn được — kể cả chính món đang nằm đó.
+  /// Used when the user opens the swap sheet: the room available to a
+  /// replacement is what is left plus what the old dish is taking up. Without
+  /// subtracting it, every candidate is compared against a tighter allowance
+  /// than the real one, and the swap sheet blocks dishes that ought to be
+  /// selectable — including the very dish sitting there.
   ///
-  /// Món khuyết số liệu thì trừ 0 **và** giảm [DayLimit.missingCount] đi
-  /// một: nó vốn chưa từng được cộng vào tổng, nên chỉ phần đếm khuyết là
-  /// thay đổi.
+  /// A dish with no measurement subtracts 0 **and** decreases
+  /// [DayLimit.missingCount] by one: it was never added to the total in the
+  /// first place, so only the missing count changes.
   DayBudget withoutPlanned(Food food) => DayBudget(
     limits: [
       for (final l in limits)
@@ -221,18 +235,18 @@ class DayBudget {
   );
 
   static double _sum(List<Food> foods, String nutrient) {
-    var tong = 0.0;
+    var total = 0.0;
     for (final f in foods) {
-      tong += valueOf(f, nutrient) ?? 0;
+      total += valueOf(f, nutrient) ?? 0;
     }
-    return tong;
+    return total;
   }
 
   static int _missing(List<Food> foods, String nutrient) {
-    var so = 0;
+    var count = 0;
     for (final f in foods) {
-      if (valueOf(f, nutrient) == null) so++;
+      if (valueOf(f, nutrient) == null) count++;
     }
-    return so;
+    return count;
   }
 }
