@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Biểu tượng lồng bàn phủ món ăn.
+/// The cloche icon covering a dish.
 ///
-/// Vẽ lại đúng đường path của layer `Vector` xuất từ Figma (node 5:11,
-/// viewBox 17×13) bằng `CustomPainter`, thay vì kéo thêm thư viện đọc SVG
-/// vào dự án. Nhờ vậy hình giữ nguyên hình học của bản thiết kế mà không
-/// phát sinh phụ thuộc.
+/// Redraws the exact path of the `Vector` layer exported from Figma (node
+/// 5:11, viewBox 17×13) with a `CustomPainter`, rather than pulling an SVG
+/// library into the project. The shape keeps the design's geometry with no
+/// new dependency.
 class DishIcon extends StatelessWidget {
   const DishIcon({super.key, required this.size, this.color = Colors.white});
 
-  /// Kích thước gốc trong thiết kế, giữ đúng tỷ lệ 17 : 13.
+  /// The original size in the design, keeping the 17 : 13 ratio.
   static const designSize = Size(17, 13);
 
   final Size size;
@@ -36,7 +36,7 @@ class _DishPainter extends CustomPainter {
     final sy = size.height / DishIcon.designSize.height;
 
     final path = Path()
-      // Vòm lồng bàn kèm núm cầm phía trên.
+      // The dome of the cloche, with its handle on top.
       ..moveTo(7.17188, 0)
       ..cubicTo(6.73027, 0, 6.375, 0.36224, 6.375, 0.8125)
       ..cubicTo(6.375, 1.26276, 6.73027, 1.625, 7.17188, 1.625)
@@ -50,7 +50,7 @@ class _DishPainter extends CustomPainter {
       ..cubicTo(10.2697, 1.625, 10.625, 1.26276, 10.625, 0.8125)
       ..cubicTo(10.625, 0.36224, 10.2697, 0, 9.82812, 0)
       ..close()
-      // Thanh đế nằm ngang.
+      // The horizontal base bar.
       ..moveTo(0.796875, 11.375)
       ..cubicTo(0.355273, 11.375, 0, 11.7372, 0, 12.1875)
       ..cubicTo(0, 12.6378, 0.355273, 13, 0.796875, 13)

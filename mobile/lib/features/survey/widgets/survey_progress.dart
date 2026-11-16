@@ -3,14 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 
-/// Thanh tiến độ của phiên khảo sát.
+/// The survey session's progress bar.
 ///
-/// Nằm trong khối `Introduce` ở vùng chân màn hình, tức trên nền chuyển sắc
-/// xám. Vì vậy thanh dùng rãnh tối và phần chạy màu trắng — cặp này đọc được
-/// ở mọi điểm của dải chuyển sắc, khác với cặp màu sáng trên nền trắng.
+/// It sits inside the `Introduce` block in the footer, that is, over the grey
+/// gradient. So the bar uses a dark track and a white fill — that pair reads
+/// at every point of the gradient, unlike a light pair on white.
 ///
-/// Số đếm dùng `AnimatedSwitcher` trượt dọc, để con số mới đẩy con số cũ đi
-/// lên — người dùng thấy rõ mình vừa tiến thêm một bước.
+/// The counter uses a vertically sliding `AnimatedSwitcher`, so the new
+/// number pushes the old one up — making it plain that another step has just
+/// been taken.
 class SurveyProgress extends StatelessWidget {
   const SurveyProgress({super.key, required this.done, required this.total});
 

@@ -10,16 +10,16 @@ import 'food_card.dart';
 import 'swipe_burst.dart';
 import 'swipe_overlay.dart';
 
-/// Chồng thẻ vuốt bốn hướng.
+/// The four-direction swipe deck.
 ///
-/// Đây là thành phần có nhiều chuyển động nhất trong ứng dụng. Toàn bộ được
-/// dựng bằng `GestureDetector` + `AnimationController` của Flutter, không
-/// dùng thư viện ngoài, để mọi tham số đều giải thích được trong báo cáo.
+/// This is the most heavily animated component in the app. All of it is built
+/// from Flutter's own `GestureDetector` + `AnimationController`, with no
+/// external library, so every parameter can be explained in the report.
 ///
-/// Widget này **không tự giữ con trỏ vị trí**. Nó nhận [cursor] từ màn hình
-/// cha và báo ngược lên qua [onSwipe]. Nhờ vậy thao tác hoàn tác chỉ là việc
-/// màn hình cha giảm [cursor] đi một; deck tự nhận ra và cho thẻ bay ngược
-/// trở lại chồng.
+/// This widget **does not hold the position cursor**. It takes [cursor] from
+/// the parent screen and reports back through [onSwipe]. That makes undo
+/// nothing more than the parent decrementing [cursor]; the deck notices by
+/// itself and flies the card back onto the stack.
 class SwipeDeck extends StatefulWidget {
   const SwipeDeck({
     super.key,
@@ -32,13 +32,13 @@ class SwipeDeck extends StatefulWidget {
 
   final List<Food> foods;
 
-  /// Chỉ số của thẻ đang nằm trên cùng.
+  /// The index of the card currently on top.
   final int cursor;
 
   final void Function(Food food, SwipeAction action) onSwipe;
 
-  /// Hướng mà thẻ vừa bị hoàn tác đã bay ra — dùng để cho nó bay ngược lại
-  /// đúng đường cũ, thay vì xuất hiện đột ngột.
+  /// The direction the just-undone card flew out in — used to fly it back
+  /// along the same path rather than having it appear out of nowhere.
   final SwipeAction? undoFrom;
 
   final SwipeDeckController? controller;
@@ -47,16 +47,16 @@ class SwipeDeck extends StatefulWidget {
   State<SwipeDeck> createState() => _SwipeDeckState();
 }
 
-/// Cho phép màn hình cha ra lệnh vuốt bằng nút bấm, dùng chung một đường
-/// chuyển động với cú vuốt bằng tay.
+/// Lets the parent screen command a swipe from a button, sharing the same
+/// motion path as a hand swipe.
 class SwipeDeckController {
   _SwipeDeckState? _state;
 
-  /// Hướng và tiến độ của cú vuốt đang diễn ra.
+  /// The direction and progress of the swipe in flight.
   ///
-  /// Phát ra dưới dạng [ValueNotifier] chứ không phải callback, để các lớp
-  /// hiệu ứng như [SwipeBurst] tự vẽ lại phần của mình mà không kéo theo cả
-  /// màn hình dựng lại mỗi khung hình.
+  /// Published as a [ValueNotifier] rather than a callback, so effect layers
+  /// such as [SwipeBurst] repaint their own part without dragging the whole
+  /// screen into a rebuild every frame.
   final ValueNotifier<SwipeSignal> signal = ValueNotifier(const SwipeSignal());
 
   void swipe(SwipeAction action) => _state?.commit(action, fromButton: true);
@@ -67,19 +67,21 @@ class SwipeDeckController {
 }
 
 class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
-  /// Tỷ lệ bề rộng thẻ mà ngón tay phải kéo qua để cú vuốt được tính.
+  /// The fraction of the card's width the finger has to drag for the
+  /// swipe to count.
   static const _thresholdX = 0.26;
   static const _thresholdY = 0.22;
 
-  /// Vận tốc đủ lớn thì tính là vuốt dứt khoát, không cần kéo đủ ngưỡng.
+  /// A high enough velocity counts as a decisive swipe, with no need to
+  /// reach the distance threshold.
   static const _flingVelocity = 820.0;
 
-  /// Góc nghiêng tối đa của thẻ khi kéo hết biên (radian ≈ 16°).
+  /// The card's maximum tilt at full drag (radians ≈ 16°).
   static const _maxTilt = 0.28;
 
-  /// Góc xoè của từng thẻ trong chồng, tính bằng độ, lấy từ bản thiết kế
-  /// Figma: thẻ trên cùng thẳng đứng, ba thẻ sau nghiêng 5°, −10° và 10°.
-  /// Số lượng phần tử cũng quyết định chồng thẻ vẽ bao nhiêu lớp.
+  /// Each card's fan angle in the stack, in degrees, taken from the Figma
+  /// design: the top card upright, the three behind it at 5°, −10° and 10°.
+  /// The number of entries also decides how many layers the deck draws.
   static const _restAngles = <double>[0, 5, -10, 10];
 
   late final AnimationController _exitCtrl;
@@ -95,10 +97,11 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
   bool get _isAnimating =>
       _exitCtrl.isAnimating || _returnCtrl.isAnimating || _undoCtrl.isAnimating;
 
-  /// Vị trí thực tế của thẻ trên cùng ở khung hình hiện tại.
+  /// The top card's actual position in the current frame.
   Offset get _offset => _isAnimating ? _animOffset : _drag;
 
-  /// Đẩy hướng và tiến độ hiện tại ra cho các lớp hiệu ứng bên ngoài.
+  /// Pushes the current direction and progress out to the external
+  /// effect layers.
   void _publish() {
     final controller = widget.controller;
     if (controller == null) return;
@@ -129,7 +132,7 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
       oldWidget.controller?._state = null;
       widget.controller?._state = this;
     }
-    // Con trỏ lùi lại nghĩa là người dùng vừa hoàn tác.
+    // The cursor moving back means the user has just undone a swipe.
     if (widget.cursor < oldWidget.cursor) _playUndo();
   }
 
@@ -142,7 +145,7 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // ── Suy ra hành động từ quãng kéo ────────────────────────────────
+  // ── Deriving the action from the drag ────────────────────────────
 
   SwipeAction? _actionFor(Offset d) {
     if (d.distance < 6) return null;
@@ -162,7 +165,7 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     return ratio.clamp(0.0, 1.0);
   }
 
-  // ── Cử chỉ ───────────────────────────────────────────────────────
+  // ── Gestures ─────────────────────────────────────────────────────
 
   void _onPanStart(DragStartDetails _) {
     if (_isAnimating) return;
@@ -175,8 +178,8 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     setState(() => _drag += details.delta);
     _publish();
 
-    // Rung nhẹ đúng một lần khi vượt ngưỡng, để người dùng cảm nhận được
-    // ranh giới mà không cần nhìn.
+    // One light haptic tick exactly when the threshold is crossed, so the
+    // user can feel the boundary without looking.
     final crossed = _progressFor(_drag) >= 1;
     if (crossed != _crossedThreshold) {
       _crossedThreshold = crossed;
@@ -204,12 +207,13 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     _snapBack();
   }
 
-  // ── Chuyển động ──────────────────────────────────────────────────
+  // ── Motion ───────────────────────────────────────────────────────
 
-  /// Thẻ bật về vị trí cũ khi cú vuốt chưa đủ ngưỡng.
+  /// The card snaps back when the swipe did not reach the threshold.
   ///
-  /// Dùng đường cong nảy nhẹ [AppMotion.spring]: thẻ vượt qua điểm gốc một
-  /// chút rồi mới dừng, cho cảm giác đàn hồi thay vì trượt về vô hồn.
+  /// It uses the slight overshoot curve [AppMotion.spring]: the card passes
+  /// its origin a little before settling, which feels elastic rather than
+  /// lifelessly sliding home.
   void _snapBack() {
     final from = _drag;
     _crossedThreshold = false;
@@ -236,7 +240,8 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     });
   }
 
-  /// Thẻ bay ra khỏi màn hình rồi báo kết quả lên màn hình cha.
+  /// The card flies off screen and then reports the result to the
+  /// parent screen.
   void commit(SwipeAction action, {Offset? velocity, bool fromButton = false}) {
     if (_isAnimating || widget.cursor >= widget.foods.length) return;
 
@@ -245,8 +250,8 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     final from = fromButton ? Offset.zero : _drag;
     final target = _exitTarget(action, from);
 
-    // Vuốt càng mạnh thì thẻ bay ra càng nhanh — giữ được quán tính của
-    // cú vuốt thay vì luôn chạy đúng một tốc độ cố định.
+    // The harder the swipe, the faster the card leaves — preserving the
+    // gesture's momentum instead of always running at one fixed speed.
     final speed = velocity?.distance ?? 0;
     final ms = (AppMotion.flyOut.inMilliseconds - (speed / 60).clamp(0, 110))
         .round();
@@ -279,8 +284,9 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     final w = _deckSize.width;
     final h = _deckSize.height;
     return switch (action) {
-      // Giữ lại độ lệch trục còn lại để đường bay nối tiếp hướng ngón tay,
-      // không bẻ ngoặt sang phương ngang/dọc thuần túy.
+      // Keep the remaining off-axis offset so the flight path continues
+      // the finger's direction instead of snapping to a pure horizontal or
+      // vertical one.
       SwipeAction.like => Offset(w * 1.6, from.dy + h * 0.12),
       SwipeAction.dislike => Offset(-w * 1.6, from.dy + h * 0.12),
       SwipeAction.neutral => Offset(from.dx * 0.4, -h * 1.3),
@@ -288,14 +294,15 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     };
   }
 
-  /// Hoàn tác — thẻ bay ngược từ ngoài màn hình về đúng chồng thẻ.
+  /// Undo — the card flies back from off screen onto the deck.
   void _playUndo() {
     final action = widget.undoFrom;
     if (action == null || _deckSize.isEmpty) return;
 
     final from = _exitTarget(action, Offset.zero);
-    // Đặt vị trí đầu ngay lập tức. Không có dòng này thì khung hình đầu tiên
-    // vẽ thẻ ở giữa màn hình rồi mới nhảy ra ngoài, thấy rõ một cú giật.
+    // Set the starting position immediately. Without this line the first
+    // frame draws the card in the middle of the screen and only then jumps
+    // it outside, which reads as a visible stutter.
     _animOffset = from;
 
     final anim = _undoCtrl.drive(
@@ -314,7 +321,7 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     });
   }
 
-  // ── Dựng giao diện ───────────────────────────────────────────────
+  // ── Building the interface ───────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +334,8 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
         final progress = _committedAction != null ? 1.0 : _progressFor(offset);
 
         final layers = <Widget>[];
-        // Vẽ từ thẻ xa nhất trở vào để thứ tự chồng lớp đúng.
+        // Painted from the furthest card inwards, so the layering
+        // order is right.
         for (var depth = _restAngles.length - 1; depth >= 1; depth--) {
           final index = widget.cursor + depth;
           if (index < 0 || index >= widget.foods.length) continue;
@@ -352,10 +360,11 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     );
   }
 
-  /// Đặt một thẻ vào đúng ô giữa vùng chồng thẻ.
+  /// Places a card in its slot at the centre of the deck area.
   ///
-  /// Bề rộng thẻ lấy đúng tỷ lệ của bản thiết kế: 198 trên khung 390, tức
-  /// hơn nửa bề ngang màn hình một chút. Chiều cao suy ra từ tỷ lệ 198 : 280.
+  /// The card's width takes the design's exact ratio: 198 on a 390 frame,
+  /// that is, a little over half the screen width. The height follows from
+  /// the 198 : 280 ratio.
   Widget _cardSlot(Widget child) {
     final width = _deckSize.width * (198 / 390);
     return Center(
@@ -367,8 +376,8 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     );
   }
 
-  /// Thẻ phía sau xoay dần về thẳng đứng theo tiến độ của thẻ trên cùng —
-  /// mỗi thẻ tiến lên một nấc trong hình xoè quạt của bản thiết kế.
+  /// The cards behind rotate towards upright as the top card progresses —
+  /// each one advancing a notch through the design's fan shape.
   Widget _buildStackedCard(Food food, int depth, double progress) {
     final angle = _lerp(_restAngles[depth], _restAngles[depth - 1], progress);
 
@@ -384,11 +393,13 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
     );
   }
 
-  /// Lớp sương trắng — layer `Background_FOG` (6:2), phủ 60 % lên các thẻ phía
-  /// sau và nằm dưới thẻ trên cùng, để thẻ đang xét nổi hẳn lên.
+  /// The white fog layer — `Background_FOG` (6:2), covering the cards
+  /// behind at 60 % and sitting under the top card, so the card under
+  /// consideration stands out.
   ///
-  /// Sương nhạt dần theo tiến độ vuốt: tới lúc thẻ kế tiếp lên làm thẻ chính
-  /// thì sương đã tan hết, nên không có cú nhảy sáng đột ngột.
+  /// The fog thins as the swipe progresses: by the time the next card becomes
+  /// the main one the fog has cleared entirely, so there is no sudden jump in
+  /// brightness.
   Widget _buildFog(double progress) {
     return Positioned.fill(
       child: IgnorePointer(
@@ -412,8 +423,8 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
             _maxTilt,
           );
 
-    // Quãng kéo chuẩn hóa, truyền xuống thẻ để biểu tượng món dịch ngược
-    // chiều tạo hiệu ứng chiều sâu.
+    // The normalised drag, passed down to the card so the dish icon shifts
+    // the opposite way and creates the depth effect.
     final parallax = _deckSize.isEmpty
         ? Offset.zero
         : Offset(
@@ -446,6 +457,6 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
   }
 }
 
-/// Nội suy tuyến tính có kẹp biên — đặt tên riêng để không đụng `lerpDouble`
-/// của `dart:ui`.
+/// Clamped linear interpolation — given its own name so it does not clash
+/// with `dart:ui`'s `lerpDouble`.
 double _lerp(double a, double b, double t) => a + (b - a) * t.clamp(0.0, 1.0);

@@ -6,11 +6,12 @@ import '../../data/models/swipe_action.dart';
 import '../home/home_shell.dart';
 import 'survey_screen.dart';
 
-/// Màn hình tổng kết sau khi vuốt xong.
+/// The summary screen shown once the swiping is done.
 ///
-/// Đây là lúc hệ thống dựng xong hồ sơ sở thích ban đầu, nên màn hình nói lại
-/// cho người dùng biết nó vừa học được gì — vừa để họ thấy công sức vuốt có
-/// ích, vừa là phần "giải thích được" của mô hình nội dung.
+/// This is the moment the system finishes building the initial preference
+/// profile, so the screen tells the user what it just learned — both so the
+/// swiping feels worthwhile and as the "explainable" part of the content
+/// model.
 class SurveyResultScreen extends StatefulWidget {
   const SurveyResultScreen({super.key, required this.results});
 
@@ -47,12 +48,14 @@ class _SurveyResultScreenState extends State<SurveyResultScreen>
     return map;
   }
 
-  /// Đặc trưng nổi bật của các món được thích — xếp theo số lần xuất hiện.
+  /// The standout features of the liked dishes — ranked by how often they
+  /// occur.
   ///
-  /// Chỉ đếm theo nhóm món. Bản trước đếm riêng cả phương pháp chế biến, rồi
-  /// phải khử trùng vì hai nhãn gần như đồng nghĩa ("Chiên" và "Món chiên")
-  /// cùng lọt vào và nói đi nói lại một ý. Bỏ một trục thì bộ máy khử trùng
-  /// cũng không còn cần.
+  /// Counted by food group only. An earlier version also counted the cooking
+  /// method separately, and then had to de-duplicate because two near-synonym
+  /// labels ("Chiên" and "Món chiên") both got through and said the same
+  /// thing twice. Dropping one axis removes the need for the de-duplication
+  /// machinery too.
   List<({String label, int count})> _topTraits() {
     final byCategory = <String, int>{};
     for (final r in widget.results.where((r) => r.action == SwipeAction.like)) {
@@ -161,8 +164,8 @@ class _SurveyResultScreenState extends State<SurveyResultScreen>
   }
 }
 
-/// Đưa một widget vào màn hình theo kiểu trượt lên + hiện dần, lệch pha nhau
-/// theo [start] để các khối xuất hiện nối tiếp chứ không ập vào cùng lúc.
+/// Brings a widget in by sliding up and fading in, staggered by [start] so
+/// the blocks arrive one after another rather than all at once.
 class _Stagger extends StatelessWidget {
   const _Stagger({
     required this.controller,
@@ -199,7 +202,8 @@ class _Stagger extends StatelessWidget {
   }
 }
 
-/// Dấu tích tròn: vòng nền nở ra trước, dấu tích nảy vào sau.
+/// The round tick: the backing circle expands first, then the tick
+/// springs in.
 class _SuccessMark extends StatelessWidget {
   const _SuccessMark();
 
@@ -229,7 +233,8 @@ class _SuccessMark extends StatelessWidget {
   }
 }
 
-/// Một dòng thống kê: nhãn, thanh tỷ lệ chạy từ 0 lên, và số đếm.
+/// One statistics row: a label, a proportion bar animating up from 0,
+/// and a count.
 class _CountRow extends StatelessWidget {
   const _CountRow({
     required this.action,
@@ -307,10 +312,11 @@ class _CountRow extends StatelessWidget {
   }
 }
 
-/// Nói trước điều người dùng hay thắc mắc: có phải vuốt lại nữa không.
+/// Answers the question users tend to have: will I have to swipe again.
 ///
-/// Đây cũng là chỗ nêu đúng nguyên tắc thiết kế của hệ thống — sau khảo sát,
-/// tín hiệu sở thích đến từ hành vi thật chứ không hỏi thêm.
+/// It is also where the system's design principle is stated — after the
+/// survey, the preference signal comes from real behaviour rather than from
+/// further questions.
 class _NextStepNote extends StatelessWidget {
   const _NextStepNote();
 
