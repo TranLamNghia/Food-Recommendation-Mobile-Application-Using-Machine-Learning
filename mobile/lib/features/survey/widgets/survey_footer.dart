@@ -5,8 +5,10 @@ import 'survey_progress.dart';
 
 /// Vùng chân màn hình — layer `Footer_Backgound` (2:15) trong Figma.
 ///
-/// Đây **không phải** vùng trong suốt: nền là một dải chuyển sắc dọc từ trắng
-/// xuống `#4F4E4E`, cao 264 trên khung 844. Bên trong nó là khối `Introduce`
+/// Nền là một dải chuyển sắc dọc cao 264 trên khung 844: **trong suốt ở mép
+/// trên**, đặc dần xuống `#4F4E4E` ở đáy. Phần trên trong suốt để hạt của
+/// vùng "Chưa biết" (xem `SwipeBurst.bottomOverflow`) trôi xuống bên dưới và
+/// chìm dần vào màu xám, thay vì bị cắt cụt ở mép trên. Bên trong là khối `Introduce`
 /// (1:4) đặt ở toạ độ 48, 68 với khổ 310 × 100 — chỗ đặt thanh tiến độ và
 /// dòng nhắn nhờ người dùng phân loại món.
 class SurveyFooter extends StatelessWidget {
@@ -26,11 +28,18 @@ class SurveyFooter extends StatelessWidget {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.white, AppColors.footerBottom],
+          // Same grey at both ends, only the alpha changes. Over the white
+          // scaffold this blends to exactly the old white → grey ramp, so the
+          // footer looks unchanged wherever nothing sits behind it. Fading
+          // from transparent *white* instead would wash the middle out.
+          colors: [
+            AppColors.footerBottom.withValues(alpha: 0),
+            AppColors.footerBottom,
+          ],
         ),
       ),
       child: LayoutBuilder(

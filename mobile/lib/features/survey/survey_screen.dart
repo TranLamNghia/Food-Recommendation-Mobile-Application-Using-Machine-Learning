@@ -37,6 +37,11 @@ class _SurveyScreenState extends State<SurveyScreen> {
   /// Vùng chồng thẻ chiếm 581 trên 844 chiều cao khung thiết kế.
   static const _deckRatio = 581 / 844;
 
+  /// Share of the footer's height the bottom particle zone reaches under.
+  /// Just under half: particles stay in the footer's see-through upper part
+  /// and are gone before its grey turns solid.
+  static const _burstUnderFooter = 0.45;
+
   bool get _isDone => _cursor >= widget.foods.length;
 
   @override
@@ -88,24 +93,37 @@ class _SurveyScreenState extends State<SurveyScreen> {
   @override
   Widget build(BuildContext context) {
     final height = MediaQuery.sizeOf(context).height;
+    final footerHeight = height * SurveyFooter.heightRatio;
 
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
         children: [
+          // Hạt bay: cùng khung với vùng chồng thẻ nhưng **không bị cắt**, và
+          // nằm dưới cả thẻ lẫn vùng chân. Vùng hạt phía dưới được đẩy xuống
+          // gần nửa chiều cao vùng chân, nên hạt trôi qua phần trong suốt ở
+          // trên của vùng chân rồi chìm vào phần xám đặc bên dưới.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: height * _deckRatio,
+            child: SwipeBurst(
+              signal: _deck.signal,
+              bottomOverflow: footerHeight * _burstUnderFooter,
+            ),
+          ),
           // Vùng chồng thẻ — khung `Card` (5:32) chiếm 581 trên 844 chiều cao.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             height: height * _deckRatio,
-            // Cắt theo vùng này để thẻ đang bay ra trượt xuống dưới vùng chân
-            // màn hình thay vì đè lên, và để hạt không tràn ra ngoài.
+            // Cắt theo vùng này để thẻ đang bay ra biến mất ở mép vùng chân
+            // màn hình thay vì hiện xuyên qua phần trong suốt của nó.
             child: ClipRect(
               child: Stack(
                 children: [
-                  // Hạt bay nằm dưới chồng thẻ để thẻ luôn nổi lên trên.
-                  Positioned.fill(child: SwipeBurst(signal: _deck.signal)),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: _isDone
@@ -125,7 +143,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
             left: 0,
             right: 0,
             bottom: 0,
-            height: height * SurveyFooter.heightRatio,
+            height: footerHeight,
             child: SurveyFooter(done: _cursor, total: widget.foods.length),
           ),
         ],

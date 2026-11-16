@@ -27,9 +27,18 @@ class SwipeSignal {
 /// Cả bốn vùng luôn hiện ở mức rất mờ ngay cả khi chưa vuốt — đó là cách
 /// người dùng biết thẻ này vuốt được bốn hướng mà không cần đọc chú thích.
 class SwipeBurst extends StatefulWidget {
-  const SwipeBurst({super.key, required this.signal});
+  const SwipeBurst({super.key, required this.signal, this.bottomOverflow = 0});
 
   final ValueListenable<SwipeSignal> signal;
+
+  /// How far, in logical pixels, the bottom ("Chưa biết") zone reaches past
+  /// the lower edge of this widget.
+  ///
+  /// The survey footer sits right below the deck and is transparent at its
+  /// top, so pushing the bottom zone down by this much lets its particles
+  /// drift underneath the footer and sink into its grey. The other three
+  /// zones are not affected. The widget must not be clipped for this to show.
+  final double bottomOverflow;
 
   @override
   State<SwipeBurst> createState() => _SwipeBurstState();
@@ -72,6 +81,7 @@ class _SwipeBurstState extends State<SwipeBurst>
             emitters: _emitters,
             time: _time,
             signal: widget.signal,
+            bottomOverflow: widget.bottomOverflow,
           ),
         ),
       ),
@@ -136,6 +146,7 @@ class _BurstPainter extends CustomPainter {
     required this.emitters,
     required this.time,
     required this.signal,
+    required this.bottomOverflow,
   }) : super(repaint: Listenable.merge([time, signal]));
 
   /// Mức sáng nền của một vùng khi người dùng chưa vuốt về phía nó.
@@ -147,6 +158,7 @@ class _BurstPainter extends CustomPainter {
   final List<_Emitter> emitters;
   final AnimationController time;
   final ValueListenable<SwipeSignal> signal;
+  final double bottomOverflow;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -200,7 +212,7 @@ class _BurstPainter extends CustomPainter {
       ),
       SwipeAction.unknown => Rect.fromLTWH(
         band.left * sx,
-        size.height - depth * sy,
+        size.height + bottomOverflow - depth * sy,
         band.width * sx,
         depth * sy,
       ),
@@ -288,10 +300,17 @@ class _BurstPainter extends CustomPainter {
       );
 
       final radius = (1.1 + p.size * 2.3) * (0.7 + 0.9 * intensity);
-      canvas.drawCircle(Offset(design.dx * sx, design.dy * sy), radius, paint);
+      // Only the bottom zone is shifted: its edge is the one the footer covers.
+      final shift = emitter.action == SwipeAction.unknown ? bottomOverflow : 0;
+      canvas.drawCircle(
+        Offset(design.dx * sx, design.dy * sy + shift),
+        radius,
+        paint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(_BurstPainter oldDelegate) => false;
+  bool shouldRepaint(_BurstPainter oldDelegate) =>
+      oldDelegate.bottomOverflow != bottomOverflow;
 }
