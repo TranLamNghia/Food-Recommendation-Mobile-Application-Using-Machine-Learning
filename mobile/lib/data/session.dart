@@ -16,22 +16,24 @@ import 'recommender/preference_profile.dart';
 import 'rules/day_budget.dart';
 import 'rules/dish_screening.dart';
 
-/// Trạng thái dùng chung của cả phiên sử dụng.
+/// The state shared across the whole session.
 ///
-/// Ở bản dựng giao diện này, mọi thứ nằm trong bộ nhớ và biến mất khi đóng
-/// ứng dụng — đúng vai trò của một bản mô phỏng. Khi nối với máy chủ thật,
-/// lớp này giữ nguyên giao diện công khai, chỉ thay phần ruột: [completeSurvey]
-/// gọi `POST /onboarding/survey`, [regeneratePlan] gọi `POST /meal-plans`,
-/// và [logMeal] gọi `POST /diary`.
+/// In this interface build everything lives in memory and disappears when the
+/// app closes — which is exactly what a mock is for. When it is wired to the
+/// real server this class keeps its public surface and only its insides
+/// change: [completeSurvey] calls `POST /onboarding/survey`,
+/// [regeneratePlan] calls `POST /meal-plans`, and [logMeal] calls
+/// `POST /diary`.
 class AppSession extends ChangeNotifier {
   AppSession({math.Random? rng}) : _rng = rng ?? math.Random();
 
   final math.Random _rng;
 
-  /// Hồ sơ sức khỏe khai báo ở luồng mở đầu.
+  /// The health profile filled in during the onboarding flow.
   final HealthProfile profile = HealthProfile();
 
-  /// Kho món đã qua Bộ lọc F1. Bản mock dùng thẳng gói khảo sát.
+  /// The dish catalogue that has passed the F1 filter. The mock uses the
+  /// survey deck directly.
   List<Food> get candidates => MockFoods.surveyDeck;
 
   late final FoodVectorSpace _space = FoodVectorSpace.fromFoods(candidates);
@@ -39,8 +41,9 @@ class AppSession extends ChangeNotifier {
 
   PreferenceProfile? _preference;
 
-  /// Hồ sơ sở thích. Trước khi vuốt thì là hồ sơ rỗng — Giai đoạn 0, mọi món
-  /// cùng điểm và thứ tự do ràng buộc dinh dưỡng quyết định.
+  /// The preference profile. Before any swipe it is the empty profile —
+  /// Stage 0, where every dish scores the same and the ordering is decided by
+  /// the nutrition constraints.
   PreferenceProfile get preference =>
       _preference ?? PreferenceProfile.empty(_space);
 
@@ -112,30 +115,32 @@ class AppSession extends ChangeNotifier {
 
   final List<DiaryEntry> diary = [];
 
-  /// Tỷ lệ thăm dò đang áp dụng. Người dùng không chỉnh được; để ở đây để
-  /// màn hình thực nghiệm đổi được khi cần so sánh hai cấu hình.
+  /// The exploration ratio in force. The user cannot change it; it lives here
+  /// so the experiment screen can change it when two configurations have to
+  /// be compared.
   double explorationRatio = 0.3;
 
-  /// Ràng buộc vi chất ở cấp **ngày** mà Bước 4 phải thỏa.
+  /// The **day**-level micronutrient constraints Step 4 has to satisfy.
   ///
-  /// Trong hệ thống thật, danh sách này ghép từ hai nguồn — không có nguồn
-  /// nào là do lập trình viên tự đặt:
+  /// In the real system this list is assembled from two sources — neither of
+  /// them a number a developer made up:
   ///
-  /// * `condition_rules` với `scope = 'per_day'` và `is_hard = 1`, lọc theo
-  ///   bệnh lý người dùng đã khai. Hiện là bốn dòng: natri ≤ 2000 mg (WHO,
-  ///   áp cho tăng huyết áp và bệnh thận), purin ≤ 400 mg, đạm ≤ 48 g
-  ///   (KDIGO 2024).
-  /// * `rda_reference`, tra theo giới tính và tuổi, cho những mục tiêu người
-  ///   dùng **tự khai**. Hiện là chất xơ ≥ 25 g/ngày với người từ 10 tuổi
-  ///   (WHO 2023).
+  /// * `condition_rules` with `scope = 'per_day'` and `is_hard = 1`, filtered
+  ///   by the conditions the user declared. Currently four rows: sodium
+  ///   ≤ 2000 mg (WHO, applied to hypertension and kidney disease), purine
+  ///   ≤ 400 mg, protein ≤ 48 g (KDIGO 2024).
+  /// * `rda_reference`, looked up by sex and age, for the goals the user
+  ///   **states themselves**. Currently fibre ≥ 25 g/day for anyone aged 10
+  ///   or over (WHO 2023).
   ///
-  /// Mặc định rỗng: không bệnh lý, không mục tiêu thì Bước 4 chạy đúng như
-  /// trước. Bản mock chưa có luồng khai bệnh nên màn hình thực nghiệm gán
-  /// trực tiếp vào đây.
+  /// Empty by default: with no condition and no goal, Step 4 runs exactly as
+  /// it did before. The mock has no condition-declaration flow yet, so the
+  /// experiment screen assigns to this directly.
   ///
-  /// Lưu ý `purine_mg` **không** thi hành được — xem
-  /// `NutrientTarget.valueOf`. Truyền vào vẫn hợp lệ và sẽ hiện ra ở
-  /// `DailyPlan.unenforceableTargets` thay vì bị lặng lẽ coi là đã thỏa.
+  /// Note that `purine_mg` **cannot** be enforced — see
+  /// `NutrientTarget.valueOf`. Passing it in is still valid and it will show
+  /// up in `DailyPlan.unenforceableTargets` instead of being quietly treated
+  /// as satisfied.
   List<NutrientTarget> nutrientTargets = const [];
 
   // ── Account ──────────────────────────────────────────────────────
@@ -264,20 +269,22 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Khởi đầu nguội ───────────────────────────────────────────────
+  // ── Cold start ───────────────────────────────────────────────────
 
-  /// Nhận kết quả phiên vuốt, dựng hồ sơ sở thích rồi sinh thực đơn đầu tiên.
+  /// Takes the swipe session's result, builds the preference profile and then
+  /// generates the first plan.
   void completeSurvey(List<({Food food, SwipeAction action})> swipes) {
     _preference = PreferenceProfile.fromSwipes(space: _space, swipes: swipes);
     regeneratePlan();
   }
 
-  // ── Thực đơn ─────────────────────────────────────────────────────
+  // ── Meal plan ────────────────────────────────────────────────────
 
-  /// Sinh lại thực đơn cho [date], mặc định là ngày đang xem.
+  /// Regenerates the plan for [date], defaulting to the day on screen.
   ///
-  /// Trả về `false` khi hồ sơ sức khỏe chưa đủ dữ liệu để tính hạn mức —
-  /// thiếu giới tính, ngày sinh, chiều cao, cân nặng hoặc mức vận động.
+  /// Returns `false` when the health profile does not hold enough data to
+  /// compute the targets — a missing sex, date of birth, height, weight or
+  /// activity level.
   bool regeneratePlan({DateTime? date}) {
     if (_build(_dateOnly(date ?? _selectedDay)) == null) return false;
     notifyListeners();
@@ -322,7 +329,7 @@ class AppSession extends ChangeNotifier {
     rng: _rng,
   );
 
-  /// Danh sách món thay thế cho một suất, xếp theo điểm giảm dần.
+  /// The replacement dishes for one serving, in descending score order.
   List<Food> alternativesFor(MealPlanItem item) {
     final plan = this.plan;
     final exclude = plan == null
@@ -332,11 +339,12 @@ class AppSession extends ChangeNotifier {
     return _builder().alternativesFor(item, excludeIds: exclude);
   }
 
-  /// Đổi một suất sang món khác.
+  /// Swaps one serving for another dish.
   ///
-  /// Thao tác này sinh ra **hai** tín hiệu huấn luyện cùng lúc: món bị bỏ
-  /// nhận nhãn `plan_replaced` (0,15), món được chọn nhận nhãn `plan_kept`
-  /// (0,70). Đây là nguồn dữ liệu chính sau khi phiên vuốt kết thúc.
+  /// This action produces **two** training signals at once: the dropped dish
+  /// takes the `plan_replaced` label (0.15), the chosen dish takes
+  /// `plan_kept` (0.70). It is the main source of data once the swipe session
+  /// is over.
   void replaceItem(MealPlanItem item, Food replacement) {
     final plan = this.plan;
     if (plan == null) return;
@@ -354,7 +362,8 @@ class AppSession extends ChangeNotifier {
           explorationDelta: item.explorationDelta,
         ),
       );
-      // Suất cũ chỉ giữ lại để ghi nhận tín hiệu, không hiển thị nữa.
+      // The old serving is kept only to record the signal; it is no longer
+      // displayed.
       slot.items.removeAt(index + 1);
       notifyListeners();
       return;
@@ -378,51 +387,54 @@ class AppSession extends ChangeNotifier {
     }
   }
 
-  // ── Hạn mức theo ngày và sàng món ────────────────────────────────
+  // ── The day's allowance, and dish screening ──────────────────────
 
-  /// Bệnh lý người dùng đã khai, ở dạng bộ quy tắc hiểu được.
+  /// The conditions the user declared, as a rule set the code understands.
   List<UserCondition> get userConditions =>
       conditionsFromCodes(profile.conditions);
 
-  /// Món **đã ăn** hôm nay — theo nhật ký.
+  /// The dishes **already eaten** today — from the diary.
   ///
-  /// Nhật ký là nguồn duy nhất của phần đã ăn. Suất mang trạng thái `eaten`
-  /// KHÔNG được cộng thêm: [logMeal] ghi cả hai nơi cùng lúc, nên cộng cả
-  /// hai là đếm hai lần cùng một suất.
+  /// The diary is the single source for the eaten part. A serving carrying
+  /// the `eaten` status is NOT added on top: [logMeal] writes to both places
+  /// at once, so counting both would count the same serving twice.
   List<Food> get eatenToday {
     // The day on screen, which is today unless the week strip moved it.
-    final homNay = _selectedDay;
+    final today = _selectedDay;
     return [
       for (final e in diary)
-        if (e.ateAt.year == homNay.year &&
-            e.ateAt.month == homNay.month &&
-            e.ateAt.day == homNay.day)
+        if (e.ateAt.year == today.year &&
+            e.ateAt.month == today.month &&
+            e.ateAt.day == today.day)
           e.food,
     ];
   }
 
-  /// Món **đang nằm trong thực đơn**, chưa ăn.
+  /// The dishes **in the plan** but not eaten yet.
   ///
-  /// Tách khỏi [eatenToday] chứ không gộp: khi một món không vừa hạn mức,
-  /// người dùng đang chọn giữa *bỏ món đã lên kế hoạch* và *chịu vượt*. Một
-  /// tổng duy nhất làm họ tưởng cả hai phần đều đã cố định.
+  /// Kept apart from [eatenToday] rather than merged: when a dish does not
+  /// fit the allowance, the user is choosing between *dropping something
+  /// already planned* and *going over*. A single total would make them think
+  /// both parts were fixed.
   List<Food> get plannedToday => [
     for (final item in plan?.allItems ?? const <MealPlanItem>[])
       if (item.status == MealItemStatus.planned) item.food,
   ];
 
-  /// Hạn mức theo ngày của hôm nay, đã trừ phần đã dùng.
+  /// Today's allowances, with the used part already subtracted.
   DayBudget get dayBudget => DayBudget.from(
     thresholds: dayThresholdsFor(userConditions),
     eaten: eatenToday,
     planned: plannedToday,
   );
 
-  /// Sàng toàn bộ danh mục theo bệnh lý và hạn mức còn lại.
+  /// Screens the whole catalogue against the conditions and the remaining
+  /// allowance.
   ///
-  /// Tính lại mỗi lần gọi là cố ý: hạn mức phụ thuộc vào việc hôm nay đã ăn
-  /// gì, nên một kết quả được nhớ lại sẽ sai ngay sau lần ghi nhật ký kế
-  /// tiếp — và sai theo hướng nới lỏng.
+  /// Recomputing on every call is deliberate: the allowance depends on what
+  /// has been eaten today, so a remembered result would be wrong immediately
+  /// after the next diary entry — and wrong in the direction of being too
+  /// permissive.
   ScreeningResult get screening => screenDishes(
     foods: candidates,
     conditions: userConditions,
@@ -430,9 +442,9 @@ class AppSession extends ChangeNotifier {
     softRules: softRulesFor(userConditions),
   );
 
-  // ── Nhật ký ──────────────────────────────────────────────────────
+  // ── Diary ────────────────────────────────────────────────────────
 
-  /// Ghi một món đã ăn vào nhật ký.
+  /// Records a dish that was eaten.
   void logMeal({
     required Food food,
     required MealType meal,
@@ -444,8 +456,8 @@ class AppSession extends ChangeNotifier {
       DiaryEntry(food: food, meal: meal, ateAt: ateAt, portion: portion),
     );
 
-    // Đánh dấu suất tương ứng trong thực đơn là đã ăn, nếu có. Ghép theo
-    // khóa tự nhiên (bữa, món) chứ không theo khóa ngoại.
+    // Mark the matching serving in the plan as eaten, if there is one. Joined
+    // on the natural key (meal, dish) rather than on a foreign key.
     final slot = planOn(ateAt)?.slots.where((s) => s.type == meal).firstOrNull;
     if (slot != null) {
       for (var i = 0; i < slot.items.length; i++) {
@@ -465,13 +477,13 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Chấm điểm một món sau khi ăn — nguồn tín hiệu mạnh nhất.
+  /// Rates a dish after eating it — the strongest signal source.
   void rate(DiaryEntry entry, int stars) {
     entry.rating = stars.clamp(1, 5);
     notifyListeners();
   }
 
-  // ── Số liệu tổng hợp ─────────────────────────────────────────────
+  // ── Aggregate figures ────────────────────────────────────────────
 
   List<DiaryEntry> entriesOn(DateTime day) => diary
       .where(
@@ -482,14 +494,15 @@ class AppSession extends ChangeNotifier {
       )
       .toList();
 
-  /// Năng lượng đã nạp trong ngày.
+  /// The energy taken in on one day.
   double consumedKcalOn(DateTime day) =>
       entriesOn(day).fold(0, (sum, e) => sum + e.kcal);
 
-  /// Tỷ lệ tuân thủ thực đơn: bao nhiêu phần suất được gợi ý đã thật sự ăn.
+  /// The plan adherence rate: what share of the suggested servings were
+  /// actually eaten.
   ///
-  /// Đây là chỉ số nghiệm thu quan trọng của đề tài — gợi ý hay đến đâu mà
-  /// người dùng không ăn thì cũng vô nghĩa.
+  /// This is one of the project's key acceptance figures — however good the
+  /// recommendations are, they mean nothing if the user does not eat them.
   double get adherenceRate {
     final plan = todayPlan;
     if (plan == null || plan.allItems.isEmpty) return 0;
@@ -500,22 +513,24 @@ class AppSession extends ChangeNotifier {
     return eaten / plan.allItems.length;
   }
 
-  /// Tổng số tín hiệu đã tích lũy, dùng cho hệ số trộn α giữa hai giai đoạn.
+  /// The total number of signals accumulated, used for the blending factor α
+  /// between the two stages.
   int get signalCount =>
       preference.signalCount +
       diary.length +
       diary.where((e) => e.rating != null).length;
 
-  /// Hệ số trộn α giữa điểm học máy và điểm tương đồng nội dung.
+  /// The blending factor α between the machine learning score and the content
+  /// similarity score.
   ///
   /// ```text
-  ///       ⎧ 0                                nếu n < n_min
-  ///   α = ⎨ (n − n_min) / (n_max − n_min)    nếu n_min ≤ n ≤ n_max
-  ///       ⎩ 1                                nếu n > n_max
+  ///       ⎧ 0                                if n < n_min
+  ///   α = ⎨ (n − n_min) / (n_max − n_min)    if n_min ≤ n ≤ n_max
+  ///       ⎩ 1                                if n > n_max
   /// ```
   ///
-  /// Bản mock chưa có mô hình học máy nên α chỉ dùng để hiển thị tiến độ
-  /// "hệ thống đã hiểu bạn tới đâu" cho người dùng thấy.
+  /// The mock has no machine learning model yet, so α is only used to show
+  /// the user a progress figure for "how well the system understands you".
   double get mlBlendFactor {
     const nMin = 30;
     const nMax = 100;
@@ -526,9 +541,9 @@ class AppSession extends ChangeNotifier {
   }
 }
 
-/// Cấp [AppSession] xuống toàn cây widget và dựng lại phần phụ thuộc khi nó
-/// đổi. Dùng [InheritedNotifier] thay vì thêm một gói quản lý trạng thái —
-/// ứng dụng này chỉ có một nguồn trạng thái duy nhất.
+/// Supplies [AppSession] to the whole widget tree and rebuilds the dependent
+/// parts when it changes. An [InheritedNotifier] rather than another state
+/// management package — this app has only one single source of state.
 class SessionScope extends InheritedNotifier<AppSession> {
   const SessionScope({
     super.key,
@@ -538,7 +553,7 @@ class SessionScope extends InheritedNotifier<AppSession> {
 
   static AppSession of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<SessionScope>();
-    assert(scope != null, 'Không tìm thấy SessionScope phía trên widget này');
+    assert(scope != null, 'No SessionScope found above this widget');
     return scope!.notifier!;
   }
 }
