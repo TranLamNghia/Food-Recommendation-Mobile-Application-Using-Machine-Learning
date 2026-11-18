@@ -130,7 +130,7 @@ class FoodDetailScreen extends StatelessWidget {
                           ),
                         const SizedBox(height: 10),
                         const Text(
-                          'Khối lượng ước lượng, dùng để lên danh sách đi chợ.',
+                          'Khối lượng ước lượng cho một suất.',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textTertiary,

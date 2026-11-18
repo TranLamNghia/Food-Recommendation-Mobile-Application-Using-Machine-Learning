@@ -1,5 +1,4 @@
-/// Market section an ingredient is bought from. The shopping list is grouped
-/// by this so one pass through the market covers it.
+/// Kind of ingredient, shown as an icon beside it on the dish screen.
 enum Aisle {
   produce('Rau củ & trái cây', '🥬'),
   meat('Thịt & trứng', '🥩'),

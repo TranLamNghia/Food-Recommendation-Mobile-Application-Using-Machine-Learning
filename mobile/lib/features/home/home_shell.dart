@@ -6,7 +6,6 @@ import '../account/account_screen.dart';
 import '../diary/diary_screen.dart';
 import '../plan/daily_plan_screen.dart';
 import '../progress/progress_screen.dart';
-import '../shopping/shopping_screen.dart';
 
 /// The main shell, once the profile and the taste survey are done.
 ///
@@ -15,8 +14,8 @@ import '../shopping/shopping_screen.dart';
 /// **progress** change over time. The data from the latter two flows back to
 /// feed the first.
 ///
-/// Two more sit around that loop: **Đi chợ** turns the plan into what to buy,
-/// and **Tôi** holds the answers the plan is built from.
+/// The fourth, **Tôi**, holds the account and the answers the plan is built
+/// from.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -29,7 +28,6 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _tabs = [
     (icon: Icons.restaurant_menu_rounded, label: 'Thực đơn'),
-    (icon: Icons.shopping_basket_outlined, label: 'Đi chợ'),
     (icon: Icons.menu_book_rounded, label: 'Nhật ký'),
     (icon: Icons.insights_rounded, label: 'Tiến trình'),
     (icon: Icons.person_outline_rounded, label: 'Tôi'),
@@ -42,7 +40,6 @@ class _HomeShellState extends State<HomeShell> {
         index: _index,
         children: const [
           DailyPlanScreen(),
-          ShoppingScreen(),
           DiaryScreen(),
           ProgressScreen(),
           AccountScreen(),
