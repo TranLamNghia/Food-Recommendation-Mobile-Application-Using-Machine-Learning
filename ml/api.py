@@ -9,6 +9,7 @@ than any shortage of public endpoints.
 
     POST /predict                     Step 3 — score the catalogue
     POST /plan                        Step 4 — assemble one day's plan
+    POST /survey-deck                 the taste-survey deck of §7.4.1
     POST /profiles/{userId}/rebuild   rebuild the preference vector
     POST /train                       retrain, asynchronously
     GET  /health                      which model is serving
@@ -85,6 +86,12 @@ from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.plan import PlanInputError, build_daily_plan  # noqa: E402
 from ml.rocchio import alpha, stage as stage_for  # noqa: E402
 from ml.serve import load_active_model, rebuild_profile, recommend  # noqa: E402
+from ml.survey import (  # noqa: E402
+    DECK_DEFAULT,
+    DECK_MAX,
+    DECK_MIN,
+    build_deck,
+)
 from ml.time_vn import now_vn  # noqa: E402
 
 KEY_ENV = "ML_INTERNAL_KEY"
@@ -370,6 +377,53 @@ class PlanResponse(BaseModel):
     unenforceableTargets: list[str]
     meetsNutrientTargets: bool
 
+    warnings: list[str]
+    elapsedMs: int
+
+
+class SurveyDeckRequest(BaseModel):
+    """What §7.4.1 needs: who is being asked, and how many foods."""
+
+    userId: str = Field(min_length=1)
+
+    #: The §7.4.1 range. The backend validates it too and answers `400
+    #: VALIDATION_FAILED` before calling here, so a request that reaches this
+    #: service with a bad size is a bug on that side, not a user mistake.
+    size: int = Field(default=DECK_DEFAULT, ge=DECK_MIN, le=DECK_MAX)
+
+
+class SurveyDeckResponse(BaseModel):
+    """The deck, as ids only.
+
+    No name, image or category label: the backend builds everything the user
+    sees from its own tables. Two layers formatting the same food is two
+    places for the Vietnamese label to drift, and this service never renders
+    anything.
+    """
+
+    userId: str
+
+    #: **In the order picked** — the order the app should swipe through. The
+    #: first is the most typical food of the catalogue, the later ones
+    #: progressively more distinctive; see `ml.survey.pick_deck`.
+    foodIds: list[str]
+
+    #: `len(foodIds)`, sent so the caller does not have to count, and
+    #: `minRequired` from §7.4.1 — the number of *opinionated* swipes needed.
+    #: Never larger than the deck: when F1 leaves fewer foods than 20 the
+    #: deck is shorter, and a minimum nobody can reach would lock the user
+    #: out of onboarding entirely.
+    totalItems: int
+    minRequired: int
+
+    nFoodsBeforeF1: int
+    nFoodsAfterF1: int
+    #: Category coverage. A deck covering 3 of 12 categories still works, but
+    #: the vector built from it is lopsided, and that belongs in the log.
+    nCategories: int
+    nCategoriesTotal: int
+
+    featureVersion: str
     warnings: list[str]
     elapsedMs: int
 
@@ -767,6 +821,80 @@ def plan(request: PlanRequest) -> PlanResponse:
                 t.nutrient for t in built.unenforceable_targets
             ],
             meetsNutrientTargets=built.meets_nutrient_targets,
+            warnings=list(result.warnings),
+            elapsedMs=int((time.perf_counter() - started) * 1000),
+        )
+    finally:
+        cn.close()
+
+
+@app.post(
+    "/survey-deck",
+    response_model=SurveyDeckResponse,
+    dependencies=[Depends(check_key)],
+)
+def survey_deck(request: SurveyDeckRequest) -> SurveyDeckResponse:
+    """§7.4.1 — the deck of foods a new user swipes through.
+
+    Why this is here and not in the backend: the deck is drawn by a
+    farthest-point traversal over the **feature space**, the same space Step
+    3 scores in, and the F1 filter decides which foods are even eligible.
+    Both live in this service. A C# copy would be a second implementation of
+    the selection that decides what every new user's preference vector is
+    built from.
+
+    It writes nothing. The session id, the `interactions` rows and the
+    `onboarding_completed_at` stamp all belong to the backend, which owns a
+    user's own data; this service answers "which foods, in which order".
+
+    Status codes:
+
+    * `404 USER_NOT_FOUND`
+    * `422 NO_SCOREABLE_CANDIDATE` when the F1 filter removes every food.
+      Same meaning as in `/predict` and `/plan`: the safety layer says this
+      person may eat none of the catalogue. Not retryable, and not an
+      outage — asking them anyway would be the filter failing open.
+    """
+    started = time.perf_counter()
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE id = %s", (request.userId,))
+            if cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": "USER_NOT_FOUND",
+                        "message": f"No user {request.userId}.",
+                    },
+                )
+
+        result = build_deck(cn, request.userId, size=request.size)
+
+        if not result.food_ids:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "NO_SCOREABLE_CANDIDATE",
+                    "message": (
+                        f"The F1 filter removed all "
+                        f"{result.n_foods_before_f1} active foods for this "
+                        "user, so there is nothing to ask about."
+                    ),
+                },
+            )
+
+        return SurveyDeckResponse(
+            userId=request.userId,
+            foodIds=list(result.food_ids),
+            totalItems=len(result.food_ids),
+            # `min`, not the constant: see the field's own note.
+            minRequired=min(DECK_MIN, len(result.food_ids)),
+            nFoodsBeforeF1=result.n_foods_before_f1,
+            nFoodsAfterF1=result.n_foods_after_f1,
+            nCategories=result.n_categories,
+            nCategoriesTotal=result.n_categories_total,
+            featureVersion=FEATURE_VERSION,
             warnings=list(result.warnings),
             elapsedMs=int((time.perf_counter() - started) * 1000),
         )

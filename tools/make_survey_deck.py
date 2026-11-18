@@ -9,32 +9,12 @@ measured in weeks is **collecting data**, and it needs two things: a deck of
 foods to ask about, and a way to enter the answers into the database. This file
 does the first; `tools/import_swipes.py` does the second.
 
-## How the foods are picked, and why not at random
+## How the foods are picked
 
-Each person only swipes about 30-40 foods, so every swipe has to carry as much
-information as possible. Rocchio builds the preference vector as a signed mean
-of the food vectors, so if the deck clusters in one corner of the feature
-space, every preference vector obtained also sits around that corner — and the
-system cannot tell two people with different tastes apart.
-
-The algorithm is a **farthest-point traversal** (also called greedy k-center):
-each step adds the food whose **minimum distance to the already-picked set is
-largest**. It gives a 2-approximation guarantee for the k-center problem, and
-more importantly for this task: it spreads the foods across the space instead
-of clustering them.
-
-Two adjustments to the plain algorithm:
-
-**Cover every category first.** The first round picks exactly one food from
-each of the 12 categories. Left to itself the algorithm skips the categories
-sitting in the middle of the space (`Cơm`, for instance) and piles up on the
-ones at the edges — while a user needs to be asked about `Cơm` too, because
-that is what they eat every day.
-
-**Start from the food closest to the catalogue's centroid**, not at random. A
-farthest-point traversal depends on its starting point, so a random choice
-yields a different deck on every run, and two people surveyed with two
-different decks have vectors that are harder to compare with each other.
+`ml.survey.pick_deck` — a farthest-point traversal that covers every category
+first. The reasoning, and the reason it is not a random sample, is in that
+module's docstring; it moved there with the algorithm when `POST /survey-deck`
+needed the same choice made the same way.
 
 ## The deck is shared; `--user` makes it personal
 
@@ -55,11 +35,9 @@ subset — see the note in `main`.
 ## A known limitation, printed alongside the deck
 
 The **spice level** dimension is nearly impossible to cover: 294 of the 318
-foods in the catalogue are at spice level 0. The algorithm will pick up all the
-few spicy ones because they sit far away, but the deck still leans heavily
-towards not-spicy — so the preference vector obtained will be **weak in the
-spice dimension**. This is a limitation of the data, not of the algorithm, and
-it has to go into the report rather than being left for the reader to discover.
+foods in the catalogue are at spice level 0, so the preference vector obtained
+is **weak in the spice dimension**. `ml.survey.build_deck` reports the same
+thing to the API caller; see its docstring.
 
 Run:
     python tools/make_survey_deck.py                      # 45 foods, to screen
@@ -78,7 +56,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import sys
 from datetime import date
 from pathlib import Path
@@ -89,6 +66,10 @@ sys.path.insert(0, str(ROOT))
 from ml.db import use_utf8, connect  # noqa: E402
 from ml.f1_filter import allowed_foods  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, Food, load_foods  # noqa: E402
+# `pick_deck` lives in `ml/survey.py` so that this form and the in-app
+# deck of §7.4.1 come from ONE implementation. Re-exported here because
+# `tools/check_ml_e2e.py` imports it from this module.
+from ml.survey import pick_deck  # noqa: E402,F401
 
 SURVEY_DIR = ROOT / "data" / "survey"
 DECK_JSON = SURVEY_DIR / "survey_deck.json"
@@ -102,88 +83,6 @@ CHOICES = {
     "binh_thuong": "neutral",
     "chua_biet": "unknown",
 }
-
-
-def _distance(a: list[float], b: list[float]) -> float:
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
-
-
-def pick_deck(
-    foods: list[Food], space: FeatureSpace, want: int
-) -> list[Food]:
-    """Farthest-point traversal, with category coverage in the first round.
-
-    Returns the foods in **the order they were picked**: the first is the one
-    closest to the catalogue's centroid, the later ones progressively farther.
-    That order is useful when the form has to be shortened — taking the first
-    20 foods is still a well-spread deck.
-    """
-    if want < 1:
-        raise ValueError("the food count must be at least 1")
-    if want > len(foods):
-        raise ValueError(f"only {len(foods)} foods exist, cannot pick {want}")
-
-    vectors = {f.id: space.encode(f) for f in foods}
-
-    # The catalogue's centroid, to have a deterministic starting point.
-    centroid = [
-        sum(vectors[f.id][i] for f in foods) / len(foods)
-        for i in range(space.length)
-    ]
-    by_category: dict[str, list[Food]] = {}
-    for food in foods:
-        by_category.setdefault(food.category, []).append(food)
-
-    picked: list[Food] = []
-    remaining = {f.id: f for f in foods}
-
-    # -- Round 1: one food per category, the one nearest that category's
-    #    centroid.
-    #
-    # The nearest rather than the farthest: the goal in this round is to
-    # REPRESENT the category, not to find an extreme. A category's extreme is
-    # easily an unusual dish, and asking a user about an unusual dish gets
-    # mostly "never eaten" answers — a swipe carrying no taste information at
-    # all.
-    for category in sorted(by_category):
-        group = by_category[category]
-        group_centroid = [
-            sum(vectors[f.id][i] for f in group) / len(group)
-            for i in range(space.length)
-        ]
-        best = min(
-            group,
-            key=lambda f: (_distance(vectors[f.id], group_centroid), f.name),
-        )
-        picked.append(best)
-        remaining.pop(best.id, None)
-        if len(picked) >= want:
-            return picked
-
-    # Re-sort round 1 by distance to the catalogue's centroid, so the first
-    # food on the form is the most "typical" one.
-    picked.sort(key=lambda f: (_distance(vectors[f.id], centroid), f.name))
-
-    # -- Round 2: the farthest-point traversal --
-    nearest = {
-        fid: min(_distance(vectors[fid], vectors[f.id]) for f in picked)
-        for fid in remaining
-    }
-    while len(picked) < want and remaining:
-        # Ties broken by food name, so the result is reproducible.
-        choice = max(
-            remaining,
-            key=lambda fid: (nearest[fid], remaining[fid].name),
-        )
-        food = remaining.pop(choice)
-        picked.append(food)
-        del nearest[choice]
-        for fid in remaining:
-            d = _distance(vectors[fid], vectors[food.id])
-            if d < nearest[fid]:
-                nearest[fid] = d
-
-    return picked
 
 
 def _summary(deck: list[Food], all_foods: list[Food]) -> list[str]:

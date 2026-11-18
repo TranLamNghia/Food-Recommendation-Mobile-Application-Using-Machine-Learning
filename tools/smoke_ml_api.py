@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the ML Service's 5 internal endpoints, against the real
+"""End-to-end test of the ML Service's 6 internal endpoints, against the real
 database.
 
 The counterpart of `tools/smoke_backend.py` for the ML layer, and needed for
@@ -583,6 +583,92 @@ def main(argv: list[str] | None = None) -> int:
     )
     equals("an explorationRatio above the 0.5 cap is refused", status, 422)
 
+    # -- POST /survey-deck - the taste survey's deck (§7.4.1) --
+    #
+    # The deck decides what every new user's preference vector is built
+    # from, so the properties worth checking are the ones that make a deck
+    # worth swiping: the right size, no repeats, spread across categories,
+    # and the same deck twice for the same user.
+    print("\n§8.6  POST /survey-deck")
+    status, body = call("POST", "/survey-deck", {"userId": uid, "size": 30},
+                        key=key)
+    equals("survey-deck returns 200", status, 200)
+    body = body or {}
+    ids = body.get("foodIds") or []
+    equals("the deck has the requested size", len(ids), 30)
+    equals("totalItems agrees with the list", body.get("totalItems"), 30)
+    check(
+        "no food appears twice in one deck",
+        len(ids) == len(set(ids)),
+        f"{len(ids) - len(set(ids))} repeats",
+    )
+    check(
+        "minRequired never exceeds the deck - a minimum nobody can reach "
+        "would lock the user out of onboarding",
+        0 < body.get("minRequired", 0) <= len(ids),
+        f"got {body.get('minRequired')} for {len(ids)} foods",
+    )
+    check(
+        "the deck is drawn from the F1-safe foods only",
+        0 < body.get("nFoodsAfterF1", 0) <= body.get("nFoodsBeforeF1", 0),
+        f"{body.get('nFoodsAfterF1')} of {body.get('nFoodsBeforeF1')}",
+    )
+    check(
+        "it covers more than one category - a deck from one corner of the "
+        "feature space cannot tell two tastes apart",
+        body.get("nCategories", 0) > 1,
+        f"{body.get('nCategories')} of {body.get('nCategoriesTotal')}",
+    )
+    equals("and which feature space", body.get("featureVersion"),
+           FEATURE_VERSION)
+    check(
+        "the spice-coverage limitation is reported on every call, not "
+        "discovered later by the reader",
+        any("spice" in w for w in body.get("warnings", [])),
+        f"got {body.get('warnings')}",
+    )
+    check(
+        "a deck is built inside the backend's 2-second budget",
+        isinstance(body.get("elapsedMs"), int) and body["elapsedMs"] < 2000,
+        f"got {body.get('elapsedMs')} ms",
+    )
+
+    # Deterministic: the traversal starts from the catalogue's centroid and
+    # breaks ties by name, so two people surveyed on two different days are
+    # asked the same questions and their vectors stay comparable.
+    status, again = call("POST", "/survey-deck", {"userId": uid, "size": 30},
+                         key=key)
+    equals("the same user gets the same deck", (again or {}).get("foodIds"),
+           ids)
+
+    # The order is the answer, not an accident: the first food is the most
+    # typical of the catalogue, so a shortened form is still well spread.
+    status, short = call("POST", "/survey-deck", {"userId": uid, "size": 20},
+                         key=key)
+    equals("a smaller deck returns 200", status, 200)
+    equals(
+        "a shorter deck is a PREFIX of the longer one",
+        (short or {}).get("foodIds"),
+        ids[:20],
+    )
+
+    print("\n§8.6  survey-deck - the error cases")
+    status, body = call("POST", "/survey-deck", {"userId": uid})
+    equals("a missing key gives 401", status, 401)
+    status, body = call(
+        "POST", "/survey-deck",
+        {"userId": "00000000-0000-4000-8000-000000000000"}, key=key,
+    )
+    equals("a userId that does not exist gives 404", status, 404)
+    equals("the error code is USER_NOT_FOUND", error_code(body),
+           "USER_NOT_FOUND")
+    status, body = call("POST", "/survey-deck", {"userId": uid, "size": 19},
+                        key=key)
+    equals("a deck smaller than 20 is refused", status, 422)
+    status, body = call("POST", "/survey-deck", {"userId": uid, "size": 51},
+                        key=key)
+    equals("a deck larger than 50 is refused", status, 422)
+
     print("\n§8.2  POST /profiles/{userId}/rebuild")
     status, body = call("POST", f"/profiles/{uid}/rebuild", {}, key=key)
     equals("rebuild returns 200", status, 200)
@@ -714,7 +800,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — the 5 internal endpoints "
+    print(f"{_checks}/{_checks} checks passed — the 6 internal endpoints "
           f"behave per the specification.")
     return 0
 
