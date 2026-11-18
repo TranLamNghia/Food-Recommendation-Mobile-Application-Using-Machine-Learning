@@ -65,6 +65,26 @@ public enum MlFailureKind
     /// </summary>
     InsufficientSignals,
 
+    /// <summary>
+    /// <c>422 PROFILE_REQUIRED</c>, from /plan: this user has no
+    /// <c>health_profiles</c> row, so Step 1 has never run and there is no
+    /// energy target to build a plan against.
+    ///
+    /// <para>Not degradable, and <b>not</b> a server fault: nothing is wrong
+    /// with the ML service, the user simply has to fill in the profile form
+    /// first. It maps to the public <c>409 PROFILE_REQUIRED</c>, which §4
+    /// already defines, and reporting it as "try again later" would have the
+    /// user retry forever on a screen that can never succeed.</para>
+    /// </summary>
+    ProfileRequired,
+
+    /// <summary>
+    /// <c>422 ONBOARDING_REQUIRED</c>, from /plan: the profile exists but
+    /// <c>daily_calories_target</c> is NULL. Not degradable, for the same
+    /// reason as <see cref="ProfileRequired"/>.
+    /// </summary>
+    OnboardingRequired,
+
     /// <summary><c>409 TRAINING_IN_PROGRESS</c>. Not degradable.</summary>
     TrainingInProgress,
 
