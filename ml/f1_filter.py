@@ -444,22 +444,33 @@ def soft_rules(cn, conditions: Sequence[Condition]) -> list[SoftRule]:
 
 #: Which scope has an enforcing layer, and where that layer is.
 #:
-#: `per_meal` is `None` because **nothing enforces it**. The current rule set
-#: has exactly one such rule — diabetes, carbohydrate <= 60 g per meal — and
-#: it affects nothing. Stated as data so that `unenforced_rules` can report
-#: it, rather than leaving it sitting in the database looking active.
+#: `per_meal` was `None` until Step 4 existed in Python: the rule set has
+#: exactly one such rule — diabetes, carbohydrate <= 60 g per meal — and it
+#: was stored, documented as enforced, and applied nowhere. It now points at
+#: `ml/scoring.meal_penalty`, which `ml/menu_builder.MenuBuilder` calls on
+#: each meal's totals inside its objective function. Step 4 is the first
+#: layer that knows a meal's total, which is why no earlier layer could take
+#: it on.
+#:
+#: Kept as data rather than prose so `unenforced_rules` can report a scope
+#: left behind, instead of one sitting in the database looking active.
 ENFORCED_BY: dict[str, str | None] = {
     "per_serving": "ml/scoring.penalty",
+    "per_meal": "ml/scoring.meal_penalty",
     "per_day": "ml/daily_limits.status",
-    "per_meal": None,
 }
 
 
 def unenforced_rules(rules: Sequence[SoftRule]) -> list[SoftRule]:
     """Soft rules whose scope has no enforcing layer.
 
-    This list **must not** be emptied by deleting rules. It empties when, and
-    only when, Step 4 takes on the `per_meal` part.
+    Empty is the correct answer today — all three scopes have an owner. It
+    must stay a real check rather than being deleted as always-empty: a new
+    scope added to `condition_rules` would otherwise be enforced nowhere and
+    nothing would say so.
+
+    It must also never be emptied by deleting rules, only by a layer taking
+    the scope on.
     """
     return [r for r in rules if ENFORCED_BY.get(r.scope) is None]
 
@@ -477,6 +488,9 @@ def soft_rules_by_scope(rules: Sequence[SoftRule]) -> dict[str, list[SoftRule]]:
     it, and it wrongly penalises a large food in a meal that still has room.
     So this splits them, each layer receives only what it can decide, and
     `unenforced_rules` says plainly which part nobody has taken on.
+
+    The `per_meal` list is no longer the dead one: `ml/menu_builder.py` reads
+    it through `ml/scoring.meal_penalty`.
     """
     result: dict[str, list[SoftRule]] = {
         "per_serving": [],
