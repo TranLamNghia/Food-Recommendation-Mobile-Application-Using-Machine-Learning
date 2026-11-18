@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Api.Auth;
 using Api.Data;
 using Api.Http;
+using Api.Ml;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -53,6 +54,37 @@ builder.Services.AddSingleton(jwt);
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseMySql(connection, ServerVersion.AutoDetect(connection)));
 builder.Services.AddScoped<TokenService>();
+
+// ── The ML service client — specification §8 ────────────────────────────
+//
+// Deliberately NOT a startup check. `jwt.SigningKey` above throws when it is
+// missing, because a server issuing tokens signed with the empty string is
+// worse than a server that does not start. The ML key is the opposite case:
+// §8.1 requires the backend to keep building meal plans when the ML service
+// is unreachable, so refusing to start without the key would turn an
+// optional dependency into a required one. A missing key instead makes every
+// call return `MlFailureKind.Disabled`, and `MlClient` logs that once at
+// error level — see the note on `MlOptions`.
+var ml = MlOptions.FromConfiguration(builder.Configuration);
+builder.Services.AddSingleton(ml);
+builder.Services
+    .AddHttpClient<IMlClient, MlClient>(c =>
+    {
+        c.BaseAddress = new Uri(ml.BaseUrl);
+        // Belt as well as braces. `MlClient` enforces the §8.1 budget with a
+        // linked CancellationTokenSource, which is what lets a timeout be
+        // told apart from the caller giving up; this is the backstop for a
+        // response that starts in time and then stalls mid-body, which the
+        // token alone would not interrupt. Slightly longer, so that the
+        // linked token stays the one that normally fires.
+        c.Timeout = TimeSpan.FromMilliseconds(ml.TimeoutMs + 500);
+    })
+    // 2 minutes rather than the 5-minute default: the ML service runs from
+    // `tools/run_ml_service.py` during development and is restarted often,
+    // and a pooled connection to a process that has gone away fails the
+    // first request after every restart.
+    .SetHandlerLifetime(TimeSpan.FromMinutes(2));
+
 
 builder.Services
     .AddControllers(o =>
@@ -174,6 +206,26 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+// Said at startup, not only on the first call that needs it. A deployment
+// that forgot ML_INTERNAL_KEY otherwise looks healthy until somebody asks
+// for a meal plan — and then still looks healthy, because a rule-based plan
+// is a plan.
+if (!ml.Enabled)
+{
+    app.Logger.LogError(
+        "ML_INTERNAL_KEY is not set: the ML service at {BaseUrl} will not be "
+        + "called, and every recommendation will fall back to rule-based "
+        + "scoring (specification §8.1). This server still starts, because "
+        + "§8.1 requires a plan to be produced with the ML layer down.",
+        ml.BaseUrl);
+}
+else
+{
+    app.Logger.LogInformation(
+        "ML service client ready: {BaseUrl}, timeout {Timeout} ms.",
+        ml.BaseUrl, ml.TimeoutMs);
+}
 
 // ── An uncaught error also has to use the §2.5 envelope ─────────────────
 //

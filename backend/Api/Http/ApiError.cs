@@ -73,6 +73,25 @@ public static class ErrorCode
     public const string RuleTooRestrictive = "RULE_TOO_RESTRICTIVE";
     public const string RateLimited = "RATE_LIMITED";
     public const string InternalError = "INTERNAL_ERROR";
+
+    /// <summary>
+    /// <c>503</c>: the ML service could not be reached, so no recommendation
+    /// could be produced. The client shows "try again later".
+    ///
+    /// <para>Its own code rather than <c>INTERNAL_ERROR</c>, because the
+    /// client's answer differs: this one is worth retrying and nothing is
+    /// broken on the user's side, while <c>INTERNAL_ERROR</c> is a bug.
+    /// Specification §4 does not list it — §8.1 assumed the backend would
+    /// quietly fall back to rule-based scoring instead of telling anyone,
+    /// and that assumption was dropped deliberately. The catalogue in §4
+    /// needs a row for it.</para>
+    ///
+    /// <para><b>Not</b> for <c>NO_SCOREABLE_CANDIDATE</c> from the ML
+    /// service. That is the F1 safety layer reporting that this user may eat
+    /// none of the foods, which retrying cannot change; it is
+    /// <see cref="RuleTooRestrictive"/> / <see cref="NoFeasiblePlan"/>.</para>
+    /// </summary>
+    public const string MlUnavailable = "ML_UNAVAILABLE";
 }
 
 /// <summary>Builds an error response in exactly the §2.5 envelope.</summary>
