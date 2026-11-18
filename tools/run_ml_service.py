@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Run the ML Service — the four internal endpoints of `API_SPECIFICATION.md` §8.
+"""Run the ML Service — the internal endpoints of `API_SPECIFICATION.md` §8.
 
 The counterpart of `tools/run_backend.py`, doing the same three things: wire
 `.env` into the process, generate a key if there is none, then start the

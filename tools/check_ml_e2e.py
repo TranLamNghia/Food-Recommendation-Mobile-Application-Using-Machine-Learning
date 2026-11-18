@@ -1590,15 +1590,20 @@ def check_soft_penalty_sql(db: str) -> None:
 
         unenforced = unenforced_rules(rules)
         check(
-            [r.scope for r in unenforced] == ["per_meal"],
-            f"exactly 1 rule has no enforcing layer, got "
+            [r.scope for r in unenforced] == [],
+            f"no rule is left without an enforcing layer, got "
             f"{[r.scope for r in unenforced]}",
         )
+        # The rule that used to be the unenforced one. It is still the only
+        # `per_meal` rule in the set; what changed is that Step 4 now reads
+        # it, so the check moved from "nobody enforces this" to "this is the
+        # rule Step 4 has to honour".
+        per_meal_rules = by_scope["per_meal"]
         check(
-            unenforced
-            and unenforced[0].nutrient == "carbs_g"
-            and unenforced[0].condition == "Đái tháo đường",
-            "the unenforced rule is diabetes' carbohydrate <= 60 g per meal",
+            len(per_meal_rules) == 1
+            and per_meal_rules[0].nutrient == "carbs_g"
+            and per_meal_rules[0].condition == "Đái tháo đường",
+            "the per-meal rule is diabetes' carbohydrate <= 60 g per meal",
         )
 
         # `penalty` is a multiplier: the severe level must have the SMALLER

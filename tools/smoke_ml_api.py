@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the ML Service's 4 internal endpoints, against the real
+"""End-to-end test of the ML Service's 5 internal endpoints, against the real
 database.
 
 The counterpart of `tools/smoke_backend.py` for the ML layer, and needed for
@@ -414,6 +414,175 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # -- POST /profiles/{id}/rebuild --
+    # -- POST /plan — Step 4 --
+    #
+    # The endpoint the backend calls for a day's meal plan. Everything here
+    # is checked against the response alone: a plan that looks like a plan
+    # but repeats a dish, misses a required role, or quietly breaches a
+    # medical threshold is the failure worth a smoke test.
+    print("\n§8.5  POST /plan")
+    status, body = call(
+        "POST", "/plan",
+        {"userId": uid, "planDate": "2026-11-18", "seed": 1},
+        key=key,
+    )
+    equals("plan returns 200", status, 200)
+    body = body or {}
+    meals = body.get("meals") or []
+    equals("a plan has the four meals", len(meals), 4)
+    equals(
+        "in day order",
+        [m["mealType"] for m in meals],
+        ["breakfast", "lunch", "dinner", "snack"],
+    )
+
+    items = [i for m in meals for i in m["items"]]
+    check("the plan has servings", items != [])
+    ids = [i["foodId"] for i in items]
+    check(
+        "no food appears twice in a day",
+        len(ids) == len(set(ids)),
+        f"{len(ids) - len(set(ids))} repeats",
+    )
+    check(
+        "every predictedScore is in [0, 1], the range the column expects",
+        all(0.0 <= i["predictedScore"] <= 1.0 for i in items),
+    )
+    check(
+        "every serving carries a position",
+        all(i["position"] >= 1 for i in items),
+    )
+    check(
+        "an exploitation serving sends NULL, not 0 — `exploration_delta IS "
+        "NOT NULL` is what tells the two groups apart",
+        all(
+            i["explorationDelta"] is None or i["explorationDelta"] > 0
+            for i in items
+        ),
+    )
+
+    # The required roles of each meal, from `MEAL_STRUCTURE`. Spelled out
+    # rather than imported, so this fails if the structure changes without
+    # anyone noticing.
+    required = {
+        "breakfast": {"main"},
+        "lunch": {"main", "side_protein"},
+        "dinner": {"main", "side_veg"},
+        "snack": {"snack"},
+    }
+    for meal in meals:
+        roles = [i["dishRole"] for i in meal["items"]]
+        check(
+            f"{meal['mealType']} has its required roles",
+            required[meal["mealType"]] <= set(roles),
+            f"got {sorted(roles)}",
+        )
+        check(
+            f"{meal['mealType']} has no two servings of the same role",
+            len(roles) == len(set(roles)),
+            f"got {sorted(roles)}",
+        )
+
+    # The commitment made in the thesis proposal, measured on real data.
+    check(
+        "the energy deviation is within 10 %",
+        abs(body.get("calorieDeviationPct", 999)) <= 10,
+        f"got {body.get('calorieDeviationPct')} %",
+    )
+    check("and the flag agrees", body.get("withinTolerance") is True)
+    summed = sum(i["kcal"] for i in items)
+    check(
+        "actualCaloriesKcal is the sum of the servings",
+        abs(summed - body.get("actualCaloriesKcal", 0)) < 1.0,
+        f"got {body.get('actualCaloriesKcal')} against {summed}",
+    )
+    check(
+        "the Step 1 target is echoed back, for the `meal_plans` row to record",
+        body.get("targetCaloriesKcal", 0) > 0,
+    )
+    check(
+        "explorationRatio is inside what `chk_expl_ratio` allows",
+        0.0 <= body.get("explorationRatio", -1) <= 0.5,
+        f"got {body.get('explorationRatio')}",
+    )
+    check(
+        "the plan says which stage scored it",
+        body.get("stage") in ("cold", "content", "hybrid", "ml"),
+        f"got {body.get('stage')!r}",
+    )
+    equals(
+        "and which feature space", body.get("featureVersion"), FEATURE_VERSION
+    )
+    check(
+        "a whole plan is built inside the backend's 2-second budget",
+        isinstance(body.get("elapsedMs"), int) and body["elapsedMs"] < 2000,
+        f"got {body.get('elapsedMs')} ms",
+    )
+
+    # A violated threshold must be reported, never hidden; an unmeasurable
+    # one must not be reported as met.
+    check(
+        "the plan states which day-level thresholds it failed",
+        isinstance(body.get("nutrientViolations"), list),
+    )
+    if body.get("unenforceableTargets"):
+        check(
+            "a plan with an unenforceable threshold does NOT claim its "
+            "targets are met — purine is never checked, so it cannot be "
+            "reported as satisfied",
+            body.get("meetsNutrientTargets") is False,
+        )
+
+    # The same seed has to give the same plan, or no checker could compare
+    # two runs — and `tools/check_step4_parity.py` depends on it.
+    status, again = call(
+        "POST", "/plan",
+        {"userId": uid, "planDate": "2026-11-18", "seed": 1},
+        key=key,
+    )
+    equals("the same request returns 200 again", status, 200)
+    equals(
+        "the same seed gives the same plan",
+        [i["foodId"] for m in (again or {}).get("meals", []) for i in m["items"]],
+        ids,
+    )
+
+    # excludeFoodIds is the one say over the candidate set the backend keeps.
+    dropped = ids[:2]
+    status, without = call(
+        "POST", "/plan",
+        {"userId": uid, "planDate": "2026-11-18", "seed": 1,
+         "excludeFoodIds": dropped},
+        key=key,
+    )
+    equals("a plan with excludeFoodIds returns 200", status, 200)
+    kept = {
+        i["foodId"] for m in (without or {}).get("meals", []) for i in m["items"]
+    }
+    check(
+        "no excluded food comes back in the plan",
+        not (kept & set(dropped)),
+        f"got {sorted(kept & set(dropped))}",
+    )
+
+    print("\n§8.5  plan — the error cases")
+    status, body = call("POST", "/plan", {"userId": uid})
+    equals("a missing key gives 401", status, 401)
+    status, body = call(
+        "POST", "/plan",
+        {"userId": "00000000-0000-4000-8000-000000000000"}, key=key,
+    )
+    equals("a userId that does not exist gives 404", status, 404)
+    equals("the error code is USER_NOT_FOUND", error_code(body), "USER_NOT_FOUND")
+    status, body = call(
+        "POST", "/plan", {"userId": uid, "planDate": "18/11/2026"}, key=key,
+    )
+    equals("a planDate that is not an ISO date gives 400", status, 400)
+    status, body = call(
+        "POST", "/plan", {"userId": uid, "explorationRatio": 0.9}, key=key,
+    )
+    equals("an explorationRatio above the 0.5 cap is refused", status, 422)
+
     print("\n§8.2  POST /profiles/{userId}/rebuild")
     status, body = call("POST", f"/profiles/{uid}/rebuild", {}, key=key)
     equals("rebuild returns 200", status, 200)
@@ -545,7 +714,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — the 4 internal endpoints "
+    print(f"{_checks}/{_checks} checks passed — the 5 internal endpoints "
           f"behave per the specification.")
     return 0
 

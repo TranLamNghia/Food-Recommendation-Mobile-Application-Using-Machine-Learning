@@ -1380,13 +1380,22 @@ def check_soft_penalty() -> None:
     )
     unenforced = unenforced_rules([mild_band, gout, per_meal, per_day])
     check(
-        [rule.scope for rule in unenforced] == ["per_meal"],
-        "only `per_meal` has no enforcing layer — Step 4 has not taken it on",
+        unenforced == [],
+        f"every scope now has an enforcing layer, got "
+        f"{[rule.scope for rule in unenforced]}",
     )
     check(
-        ENFORCED_BY["per_serving"] is not None
-        and ENFORCED_BY["per_day"] is not None,
-        "the other two scopes already have an owner",
+        all(ENFORCED_BY[scope] is not None for scope in ENFORCED_BY),
+        "all three scopes have an owner",
+    )
+    # `per_meal` was the gap: stored in `condition_rules`, documented as
+    # enforced, applied nowhere. Step 4 took it on, so the owner is named
+    # here — the check stays, because a scope added later must not inherit
+    # an owner it does not have.
+    check(
+        ENFORCED_BY["per_meal"] == "ml/scoring.meal_penalty",
+        f"`per_meal` is owned by Step 4's meal penalty, got "
+        f"{ENFORCED_BY['per_meal']!r}",
     )
 
 
