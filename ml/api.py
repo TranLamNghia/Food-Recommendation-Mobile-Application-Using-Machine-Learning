@@ -7,7 +7,7 @@ the two missing seams between the system's three layers, and it blocked
 backend waves 4, 5 and 6 — taste survey, meal plan, recommendations — rather
 than any shortage of public endpoints.
 
-    POST /predict                     Step 3 — score a candidate set
+    POST /predict                     Step 3 — score the catalogue
     POST /profiles/{userId}/rebuild   rebuild the preference vector
     POST /train                       retrain, asynchronously
     GET  /health                      which model is serving
@@ -36,20 +36,29 @@ closes its own. A single global connection produces "Packet sequence number
 wrong" under load — a failure that only appears with concurrent requests,
 which is to say never during manual testing.
 
-## Graceful degradation is a contract, not an accident
+## Degradation happens INSIDE this service, not in the backend
 
-`/predict` returns `503` when no model is `is_active = 1`, and specification
-§8.1 says the backend then **still builds a meal plan** from the rules and
-sets `generationSource = "rule_based"`. But `serve.recommend` goes further:
-it falls back to Stage 1 by itself and still returns content-based scores. So
-`503` here is reserved for the case where **nothing can be scored at all**;
-degradation returns `200` with `stage` and `warnings` so the backend knows
-which layer the scores came from.
+`serve.recommend` falls back by itself: with no active model it drops to
+Stage 1 and still returns content-based scores, as a `200` carrying `stage`
+and `warnings`. So this service answers `503` only when **nothing can be
+scored at all**, and a missing model alone is not that case.
 
-The distinction matters: returning `503` whenever a model is missing would
-make the backend drop Stage 1 as well — dropping the personalisation that
-**does** work — and fall back to ranking by popularity. Measured on the
-simulated set, that is the difference between 0.862 and 0.694 nDCG@5.
+The distinction matters: answering `503` whenever a model is missing would
+make the caller drop Stage 1 as well — dropping the personalisation that
+**does** work. Measured on the simulated set, that is the difference between
+0.862 and 0.694 nDCG@5.
+
+What the backend does when it cannot reach this service at all is a separate
+decision, and it is **not** soft degradation: the backend shows the user an
+error and asks them to try again, rather than quietly serving a plan built
+from the rules alone. Specification §8.1 describes the older, softer
+behaviour; `backend/Api/Ml/MlResult.cs` is where the current rule lives, and
+`db/schema.sql` still accepts `generation_source = 'rule_based'` for it.
+
+The one case the backend must NOT treat as "the ML service is down" is
+`422 NO_SCOREABLE_CANDIDATE`. That answer means the F1 safety layer removed
+every food — retrying cannot help, and scoring the foods anyway is the
+safety layer failing open.
 """
 
 from __future__ import annotations
@@ -139,8 +148,38 @@ class UserFeatures(BaseModel):
 
 
 class PredictRequest(BaseModel):
+    """The `/predict` body.
+
+    ## Why `candidateFoodIds` is optional
+
+    It used to be required, and the backend was expected to assemble a
+    candidate set and ask for scores on it. That put the catalogue behind two
+    gatekeepers: the backend decided which foods were even considered, and
+    this service decided which of those were safe. Two layers choosing foods
+    means two places to disagree about the catalogue, and the disagreement is
+    invisible — a food the backend forgot to send is indistinguishable from a
+    food the F1 filter removed.
+
+    So the default is now **the whole catalogue**: omit `candidateFoodIds`
+    and this service reads every active food itself, applies F1, and scores
+    what remains. The backend keeps exactly one say in the candidate set,
+    `excludeFoodIds`, which is information this service does not have.
+    """
+
     userId: str = Field(min_length=1)
-    candidateFoodIds: list[str] = Field(min_length=1)
+
+    #: Omit it — or send `null` — to score the entire active catalogue, which
+    #: is what the backend does. A list restricts scoring to those foods, for
+    #: debugging and for the command line; an **empty** list is rejected,
+    #: because "score nothing" is never a question worth asking and is far
+    #: more likely to be a bug upstream.
+    candidateFoodIds: list[str] | None = Field(default=None, min_length=1)
+
+    #: The foods already used today, so a plan does not repeat a dish. This
+    #: is the one part of the candidate set the backend knows and this
+    #: service does not.
+    excludeFoodIds: list[str] = Field(default_factory=list)
+
     contextMealType: Literal["breakfast", "lunch", "dinner", "snack"] | None = None
     userFeatures: UserFeatures | None = None
 
@@ -160,7 +199,23 @@ class PredictResponse(BaseModel):
     alpha: float
     generationSource: str
     scores: list[FoodScore]
+
+    #: Candidates that were asked for and came back unscored. Empty when no
+    #: `candidateFoodIds` was sent, because then nothing specific was asked
+    #: for — use the two counts below instead.
     skippedFoodIds: list[str]
+
+    #: How many active foods existed before F1, and how many survived it.
+    #:
+    #: Sent because the backend can no longer work this out for itself: it
+    #: does not assemble the candidate set any more. The pair is what a
+    #: `422 RULE_TOO_RESTRICTIVE` answer to the user is built from — "318
+    #: foods, 2 left" is an explanation, while "no feasible plan" is not. It
+    #: is NOT the per-role breakdown of §7.6 (`foodsRemaining`); Step 4 knows
+    #: the roles, this service does not.
+    nFoodsBeforeF1: int
+    nFoodsAfterF1: int
+
     warnings: list[str]
     elapsedMs: int
 
@@ -370,29 +425,55 @@ def predict(request: PredictRequest) -> PredictResponse:
 
         warnings = _cross_check_features(cn, request.userId, request.userFeatures)
 
-        # `limit` must equal the number of candidates sent. `recommend`
-        # defaults to 20: leaving that would have the backend send 50 foods
-        # and receive 20 scores, with the other 30 treated as if they did not
-        # exist — a silent truncation in the middle of Step 3.
+        # `limit` must never truncate. With a candidate list it equals the
+        # number sent; without one it is `None`, meaning the whole catalogue.
+        # `recommend` defaults to 20, and leaving that would return 20 scores
+        # for 318 foods with the other 298 treated as if they did not exist —
+        # a silent truncation in the middle of Step 3.
         result = recommend(
             cn,
             request.userId,
-            limit=len(request.candidateFoodIds),
+            limit=(
+                None
+                if request.candidateFoodIds is None
+                else len(request.candidateFoodIds)
+            ),
+            exclude_foods=request.excludeFoodIds,
             only_candidates=request.candidateFoodIds,
         )
 
         scored = {c.food.id for c in result.candidates}
-        skipped = [f for f in request.candidateFoodIds if f not in scored]
+        skipped = [
+            f for f in (request.candidateFoodIds or []) if f not in scored
+        ]
 
         if not result.candidates:
+            # Still a `422`, and still NOT something the backend may fall
+            # back from: F1 is the safety layer, and an empty result is it
+            # saying this person may eat none of these foods. Now that the
+            # default is the whole catalogue, the message has to say which
+            # case it is — "all 12 foods you asked about" and "all 318 foods
+            # that exist" lead to very different answers to the user.
+            asked = (
+                f"the {len(request.candidateFoodIds)} foods sent"
+                if request.candidateFoodIds is not None
+                else f"all {result.n_foods_before_f1} active foods"
+            )
+            excluded_today = (
+                ""
+                if not request.excludeFoodIds
+                else (
+                    f" {len(request.excludeFoodIds)} food(s) were also "
+                    "excluded as already used today."
+                )
+            )
             raise HTTPException(
                 status_code=422,
                 detail={
                     "code": "NO_SCOREABLE_CANDIDATE",
                     "message": (
-                        "The F1 filter removed all "
-                        f"{len(request.candidateFoodIds)} foods sent — this "
-                        "user may eat none of them."
+                        f"The F1 filter removed {asked} — this user may eat "
+                        f"none of them.{excluded_today}"
                     ),
                 },
             )
@@ -414,6 +495,8 @@ def predict(request: PredictRequest) -> PredictResponse:
                 for c in result.candidates
             ],
             skippedFoodIds=skipped,
+            nFoodsBeforeF1=result.n_foods_before_f1,
+            nFoodsAfterF1=result.n_foods_after_f1,
             warnings=warnings + list(result.warnings),
             elapsedMs=int((time.perf_counter() - started) * 1000),
         )
