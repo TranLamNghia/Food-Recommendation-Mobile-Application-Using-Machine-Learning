@@ -314,6 +314,60 @@ def main(argv: list[str] | None = None) -> int:
             f"got {[s['scoreMl'] for s in scores][:3]}",
         )
 
+    # -- The default: no candidate list at all --
+    #
+    # This is how the backend calls it. The ML service reads the catalogue
+    # itself, so one layer decides which foods exist: when the backend also
+    # assembled a candidate set, a food it forgot to send and a food F1
+    # removed were indistinguishable.
+    print("\n§8.1  predict — the whole catalogue, with no candidate list")
+    status, body = call("POST", "/predict", {"userId": uid}, key=key)
+    equals("a request with no candidateFoodIds returns 200", status, 200)
+    all_scores = (body or {}).get("scores") or []
+    before = (body or {}).get("nFoodsBeforeF1")
+    after = (body or {}).get("nFoodsAfterF1")
+    check(
+        "nFoodsBeforeF1 and nFoodsAfterF1 are reported — the backend cannot "
+        "work them out itself any more",
+        isinstance(before, int) and isinstance(after, int),
+        f"got {before!r} and {after!r}",
+    )
+    equals("as many scores as foods survived F1", len(all_scores), after)
+    check(
+        "F1 cannot keep more foods than exist",
+        isinstance(before, int) and isinstance(after, int) and after <= before,
+        f"{after} of {before}",
+    )
+    check(
+        "nothing was truncated to `recommend`'s default limit of 20",
+        len(all_scores) == after,
+        f"got {len(all_scores)} scores for {after} safe foods",
+    )
+    equals(
+        "skippedFoodIds is empty when nothing specific was asked for",
+        (body or {}).get("skippedFoodIds"), [],
+    )
+
+    # -- excludeFoodIds: the one say over the candidate set the backend keeps
+    print("\n§8.1  predict — excludeFoodIds")
+    status, body = call(
+        "POST", "/predict", {"userId": uid, "excludeFoodIds": foods}, key=key
+    )
+    equals("a request with excludeFoodIds returns 200", status, 200)
+    kept = {s["foodId"] for s in ((body or {}).get("scores") or [])}
+    scored_before = {s["foodId"] for s in all_scores}
+    check(
+        "no excluded food comes back scored — a plan must not repeat a dish "
+        "already used today",
+        not (kept & set(foods)),
+        f"{sorted(kept & set(foods))} came back anyway",
+    )
+    equals(
+        "exactly the excluded foods are gone, nothing else",
+        len(scored_before) - len(kept),
+        len(scored_before & set(foods)),
+    )
+
     print("\n§8.1  predict — the error cases")
     status, body = call("POST", "/predict",
                         {"userId": uid, "candidateFoodIds": []}, key=key)

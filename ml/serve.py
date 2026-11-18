@@ -245,23 +245,31 @@ def recommend(
     cn,
     user_id: str,
     *,
-    limit: int = 20,
+    limit: int | None = 20,
     exclude_foods: Sequence[str] = (),
     only_candidates: Sequence[str] | None = None,
 ) -> Recommendation:
     """Score and rank candidates for one user.
 
+    `limit` caps how many ranked candidates come back. **`None` means every
+    one of them**, which is what `POST /predict` asks for now that the
+    backend no longer sends a candidate set: this service reads the catalogue
+    itself, so truncating here would hand Step 4 a slice of the foods and no
+    sign that the rest existed. `candidates[:None]` is the whole list, so the
+    slice below needs no special case.
+
     `exclude_foods` are the foods already used today — Step 4 passes them in
     so a plan does not repeat a dish. Excluded here rather than left for
     Step 4 to drop, so that `limit` returns exactly that many usable foods.
 
-    `only_candidates` restricts scoring to that list, for `POST /predict`:
-    the backend already has its own candidate set and only needs scores. **The
-    F1 filter still runs first** and still trims that list — a food the
-    backend sent that this person must not eat receives no score at all,
-    rather than a low one. Running F1 afterwards, or skipping it once a list
-    is supplied, would turn the safety layer into a ranking preference, which
-    is exactly what section 4 of `ML_PIPELINE.md` forbids.
+    `only_candidates` restricts scoring to that list. The backend no longer
+    uses it — see `ml/api.py` — but it stays for the command line and for
+    `tools/check_ml_e2e.py`, which both need to score a known handful. **The
+    F1 filter still runs first** and still trims that list: a food that this
+    person must not eat receives no score at all, rather than a low one.
+    Running F1 afterwards, or skipping it once a list is supplied, would turn
+    the safety layer into a ranking preference, which is exactly what section
+    4 of `ML_PIPELINE.md` forbids.
     """
     foods, _ = load_foods(cn)
     space = FeatureSpace.from_foods(foods)

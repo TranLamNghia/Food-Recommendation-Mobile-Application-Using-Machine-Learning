@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
         "MYSQL_USER",
         "MYSQL_PASSWORD",
         "MYSQL_DATABASE",
+        # The ML service, per specification section 8. Absent, the backend
+        # still starts -- that is deliberate, see MlOptions -- but every
+        # recommendation answers 503 ML_UNAVAILABLE, so forgetting to pass
+        # these two is indistinguishable from the ML service being down.
+        "ML_INTERNAL_KEY",
+        "ML_SERVICE_URL",
     ):
         value = _env.get(name, "")
         if value:
@@ -94,6 +100,15 @@ def main(argv: list[str] | None = None) -> int:
             f"Backend: {args.urls}/api/v1   "
             f"(database {environ.get('MYSQL_DATABASE', 'nutrition_rec')})"
         )
+        if not environ.get("ML_INTERNAL_KEY"):
+            print(
+                "ML_INTERNAL_KEY is not in .env, so the ML service will "
+                "not be called and every recommendation will answer 503 "
+                "ML_UNAVAILABLE."
+                "\nStart the service with:\n"
+                "    python tools/run_ml_service.py",
+                file=sys.stderr,
+            )
 
     return subprocess.call(command, env=environ, cwd=str(ROOT))
 
