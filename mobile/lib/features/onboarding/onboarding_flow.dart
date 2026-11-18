@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_motion.dart';
+import '../../core/widgets/app_card.dart';
 import '../../data/models/health_profile.dart';
 import '../../data/session.dart';
+import '../auth/welcome_screen.dart';
 import 'calculating_screen.dart';
 import 'steps/activity_step.dart';
 import 'steps/birth_year_step.dart';
@@ -76,11 +78,22 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   void _back() {
-    if (_index == 0) return;
+    if (_index == 0) {
+      _exit();
+      return;
+    }
     setState(() {
       _forward = false;
       _index--;
     });
+  }
+
+  /// Backing out of the first question returns to the welcome screen. That
+  /// screen only offers signing in, so the account is left first — otherwise
+  /// the user would be asked to log into an account they are already in.
+  void _exit() {
+    SessionScope.of(context).signOut();
+    Navigator.of(context).pushReplacement(fadeRoute(const WelcomeScreen()));
   }
 
   void _finish() {
@@ -114,7 +127,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         (OnboardingStep.values.indexOf(step) + 1) /
         OnboardingStep.values.length;
 
-    final onBack = _index == 0 ? null : _back;
+    final onBack = _back;
 
     final child = switch (step) {
       OnboardingStep.gender => GenderStep(

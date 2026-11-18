@@ -9,13 +9,14 @@ import 'package:nutrition_app/data/models/health_profile.dart';
 import 'package:nutrition_app/data/models/meal_plan.dart';
 import 'package:nutrition_app/data/models/swipe_action.dart';
 import 'package:nutrition_app/data/session.dart';
-import 'package:nutrition_app/data/shopping/shopping_list.dart';
 import 'package:nutrition_app/features/auth/welcome_screen.dart';
 import 'package:nutrition_app/features/home/home_shell.dart';
+import 'package:nutrition_app/features/onboarding/calculating_screen.dart';
 import 'package:nutrition_app/features/onboarding/onboarding_flow.dart';
 
 AppSession _readySession() {
-  final session = AppSession(rng: math.Random(7));
+  final session = AppSession(rng: math.Random(7))
+    ..signIn(email: 'nghia@example.com', displayName: 'Nghĩa');
   session.profile
     ..gender = Gender.male
     ..birthday = DateTime(DateTime.now().year - 24, 6, 15)
@@ -61,25 +62,52 @@ void main() {
       }
     });
 
-    test('shopping list adds up planned dishes only', () {
+    test('undoing a meal returns it to the plan and keeps the log', () {
       final session = _readySession();
-      final plan = session.plan!;
-      final before = buildShoppingList([plan]);
-      expect(before, isNotEmpty);
+      final slot = session.plan!.slots.first;
+      final food = slot.items.first.food;
 
-      // Each row is the sum of that ingredient over the planned dishes.
-      for (final line in before) {
-        final expected = plan.allItems
-            .expand((i) => MockIngredients.of(i.food.id))
-            .where((ing) => ing.name == line.name)
-            .fold<double>(0, (sum, ing) => sum + ing.grams);
-        expect(line.grams, expected, reason: line.name);
-      }
+      session.logMeal(food: food, meal: slot.type);
+      expect(slot.items.first.status, MealItemStatus.eaten);
+      expect(session.eatenToday, [food]);
 
-      for (final item in [...plan.allItems]) {
-        session.setSkipped(item, true);
-      }
-      expect(buildShoppingList([plan]), isEmpty);
+      final entry = session.diary.single;
+      session.undoMeal(entry);
+
+      expect(slot.items.first.status, MealItemStatus.planned);
+      // Still recorded, but it no longer counts towards the day.
+      expect(session.diary, [entry]);
+      expect(entry.isUndone, isTrue);
+      expect(session.eatenToday, isEmpty);
+      expect(session.entriesOn(DateTime.now()), isEmpty);
+      expect(session.consumedKcalOn(DateTime.now()), 0);
+    });
+
+    test('starting over keeps the account; deleting it does not', () {
+      final session = _readySession();
+      session.updateAccount(phone: '0901234567');
+
+      session.reset();
+      expect(session.plan, isNull);
+      expect(session.profile.gender, isNull);
+      expect(session.accountEmail, 'nghia@example.com');
+      expect(session.phone, '0901234567');
+
+      session.deleteAccount();
+      expect(session.isSignedIn, isFalse);
+      expect(session.displayName, isNull);
+      expect(session.phone, isNull);
+    });
+
+    test('signing out keeps what the account holds', () {
+      final session = _readySession();
+      session.signOut();
+      expect(session.isSignedIn, isFalse);
+      expect(session.todayPlan, isNotNull);
+
+      // Logging in sends no name; the one on the account is kept.
+      session.signIn(email: 'nghia@example.com');
+      expect(session.displayName, 'Nghĩa');
     });
 
     test('a never-again dish stays out of every later plan', () {
@@ -146,7 +174,11 @@ void main() {
         await tester.pumpWidget(_app(AppSession(), const WelcomeScreen()));
         await tester.pumpAndSettle();
 
-        expect(find.text('Bắt đầu'), findsOneWidget);
+        // An account is the only way in: no button skips straight to the
+        // questions.
+        expect(find.text('Đăng ký'), findsOneWidget);
+        expect(find.text('Đăng nhập'), findsOneWidget);
+        expect(find.text('Bắt đầu'), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }
@@ -156,7 +188,7 @@ void main() {
       final session = AppSession();
       await tester.pumpWidget(_app(session, const WelcomeScreen()));
 
-      await tester.tap(find.text('Đã có tài khoản? Đăng nhập'));
+      await tester.tap(find.text('Đăng nhập'));
       await tester.pumpAndSettle();
       expect(find.text('Mừng bạn quay lại'), findsOneWidget);
 
@@ -179,9 +211,7 @@ void main() {
       _viewport(tester, const Size(412, 915));
       final session = AppSession();
       await tester.pumpWidget(_app(session, const WelcomeScreen()));
-      await tester.tap(find.text('Đã có tài khoản? Đăng nhập'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Chưa có tài khoản? Tạo mới'));
+      await tester.tap(find.text('Đăng ký'));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextFormField).at(0), 'Nghĩa');
@@ -191,6 +221,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Mật khẩu cần có cả chữ và số'), findsOneWidget);
       expect(session.isSignedIn, isFalse);
+
+      await tester.enterText(find.byType(TextFormField).at(2), 'MatKhau123');
+      await tester.tap(find.widgetWithText(FilledButton, 'Tạo tài khoản'));
+      await tester.pumpAndSettle();
+      expect(session.displayName, 'Nghĩa');
+      expect(find.byType(OnboardingFlow), findsOneWidget);
+    });
+
+    testWidgets('back on the first question returns to welcome', (
+      tester,
+    ) async {
+      _viewport(tester, const Size(412, 915));
+      final session = AppSession()..signIn(email: 'a@b.vn');
+      await tester.pumpWidget(_app(session, const OnboardingFlow()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WelcomeScreen), findsOneWidget);
+      expect(find.byType(OnboardingFlow), findsNothing);
+      // Welcome only offers signing in, so the account was left first.
+      expect(session.isSignedIn, isFalse);
     });
 
     testWidgets('forgot password confirms without revealing the account', (
@@ -198,7 +251,7 @@ void main() {
     ) async {
       _viewport(tester, const Size(412, 915));
       await tester.pumpWidget(_app(AppSession(), const WelcomeScreen()));
-      await tester.tap(find.text('Đã có tài khoản? Đăng nhập'));
+      await tester.tap(find.text('Đăng nhập'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Quên mật khẩu?'));
       await tester.pumpAndSettle();
@@ -209,6 +262,33 @@ void main() {
       expect(find.text('Kiểm tra hộp thư'), findsOneWidget);
       expect(find.textContaining('Nếu a@b.vn đã đăng ký'), findsOneWidget);
     });
+  });
+
+  testWidgets('the calculating screen stays centred as its lines change', (
+    tester,
+  ) async {
+    _viewport(tester, const Size(412, 915));
+    final session = _readySession();
+    await tester.pumpWidget(
+      _app(session, CalculatingScreen(profile: session.profile)),
+    );
+
+    // Each of the five lines has a different width; none may pull the
+    // spinner off the middle of the screen.
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 600));
+      final spinner = find.byType(CircularProgressIndicator);
+      expect(
+        tester.getCenter(spinner).dx,
+        closeTo(206, 0.01),
+        reason: 'line $i',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    // Let the screen hand over so no timer outlives the test.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
   });
 
   group('home shell', () {
@@ -279,7 +359,67 @@ void main() {
       expect(session.lovedIds, isNot(contains(food.id)));
     });
 
-    testWidgets('shopping tab lists ingredients and ticks them', (
+    testWidgets('diary undo puts the serving back on the plan', (tester) async {
+      _tall(tester);
+      final session = _readySession();
+      await tester.pumpWidget(_app(session, const HomeShell()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Đánh dấu đã ăn').first);
+      await tester.pumpAndSettle();
+      final eaten = session.diary.single.food;
+
+      await tester.tap(find.text('Nhật ký').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Hoàn tác, trả về thực đơn'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Đã trả ${eaten.name} về thực đơn'), findsOneWidget);
+      expect(find.text('Chưa ghi món nào hôm nay'), findsOneWidget);
+      expect(
+        session.plan!.allItems.every((i) => i.status != MealItemStatus.eaten),
+        isTrue,
+      );
+      expect(session.diary, hasLength(1));
+    });
+
+    testWidgets('account settings edit the phone and sign out', (tester) async {
+      _tall(tester);
+      final session = _readySession();
+      await tester.pumpWidget(_app(session, const HomeShell()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Tôi').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('nghia@example.com'));
+      await tester.pumpAndSettle();
+      expect(find.text('Thông tin cá nhân'), findsOneWidget);
+      expect(find.text('Chưa thêm'), findsOneWidget);
+
+      await tester.tap(find.text('Số điện thoại'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), '12345');
+      await tester.tap(find.text('Lưu'));
+      await tester.pumpAndSettle();
+      expect(session.phone, isNull);
+
+      await tester.enterText(find.byType(TextFormField), '0901 234 567');
+      await tester.tap(find.text('Lưu'));
+      await tester.pumpAndSettle();
+      expect(session.phone, '0901 234 567');
+      expect(find.text('0901 234 567'), findsOneWidget);
+
+      await tester.tap(find.text('Đăng xuất'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Đăng xuất'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WelcomeScreen), findsOneWidget);
+      expect(session.isSignedIn, isFalse);
+      // The profile stays with the account.
+      expect(session.todayPlan, isNotNull);
+    });
+
+    testWidgets('starting over asks the questions again, still signed in', (
       tester,
     ) async {
       _tall(tester);
@@ -287,25 +427,16 @@ void main() {
       await tester.pumpWidget(_app(session, const HomeShell()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Đi chợ').last);
+      await tester.tap(find.text('Tôi').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xóa dữ liệu và làm lại từ đầu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xóa hết'));
       await tester.pumpAndSettle();
 
-      final lines = buildShoppingList(session.plansForNext(3));
-      expect(find.text('0 / ${lines.length} thứ đã vào giỏ'), findsOneWidget);
-
-      await tester.tap(find.text(lines.first.name));
-      await tester.pumpAndSettle();
-      expect(session.shoppingTicked, {lines.first.name});
-      expect(find.text('1 / ${lines.length} thứ đã vào giỏ'), findsOneWidget);
-
-      await tester.enterText(find.byType(TextField), 'Nước rửa chén');
-      await tester.tap(find.byTooltip('Thêm vào danh sách'));
-      await tester.pumpAndSettle();
-      expect(session.shoppingExtras, ['Nước rửa chén']);
-      expect(
-        find.text('1 / ${lines.length + 1} thứ đã vào giỏ'),
-        findsOneWidget,
-      );
+      expect(find.byType(OnboardingFlow), findsOneWidget);
+      expect(session.isSignedIn, isTrue);
+      expect(session.plan, isNull);
     });
 
     testWidgets('account tab edits one answer and rebuilds the plan', (
@@ -318,7 +449,8 @@ void main() {
 
       await tester.tap(find.text('Tôi').last);
       await tester.pumpAndSettle();
-      expect(find.text('Dữ liệu đang chỉ nằm trên máy này'), findsOneWidget);
+      expect(find.text('Nghĩa'), findsOneWidget);
+      expect(find.text('nghia@example.com'), findsOneWidget);
       expect(find.text('Câu trả lời của bạn'), findsOneWidget);
 
       final before = session.plan!.targetKcal;
@@ -338,7 +470,7 @@ void main() {
       expect(session.plan!.targetKcal, before);
     });
 
-    testWidgets('all five tabs fit a short screen', (tester) async {
+    testWidgets('all four tabs fit a short screen', (tester) async {
       // 412 wide like the other shell tests: the test font is wider than
       // Afacad, so narrower widths overflow rows that fit on a real device.
       _viewport(tester, const Size(412, 640));
@@ -346,13 +478,8 @@ void main() {
       await tester.pumpWidget(_app(session, const HomeShell()));
       await tester.pumpAndSettle();
 
-      for (final tab in [
-        'Đi chợ',
-        'Nhật ký',
-        'Tiến trình',
-        'Tôi',
-        'Thực đơn',
-      ]) {
+      expect(find.text('Đi chợ'), findsNothing);
+      for (final tab in ['Nhật ký', 'Tiến trình', 'Tôi', 'Thực đơn']) {
         await tester.tap(find.text(tab).last);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: tab);

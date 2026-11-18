@@ -37,6 +37,12 @@ class DiaryEntry {
   /// scoring it, quite unlike a swipe that only guesses from a photo.
   int? rating;
 
+  /// When the user took the entry back, or `null` while it stands. An undone
+  /// entry stays in the log but counts towards nothing.
+  DateTime? undoneAt;
+
+  bool get isUndone => undoneAt != null;
+
   double get kcal => food.kcal * portion;
   double get protein => food.protein * portion;
   double get carb => food.carb * portion;

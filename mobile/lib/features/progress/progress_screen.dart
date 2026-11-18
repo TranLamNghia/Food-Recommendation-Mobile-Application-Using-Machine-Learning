@@ -233,12 +233,13 @@ class _LearningCard extends StatelessWidget {
           const SizedBox(height: 10),
           _Row(
             label: 'Số món đã ghi nhật ký',
-            value: '${session.diary.length}',
+            value: '${session.activeDiary.length}',
           ),
           const SizedBox(height: 10),
           _Row(
             label: 'Số món đã chấm điểm',
-            value: '${session.diary.where((e) => e.rating != null).length}',
+            value:
+                '${session.activeDiary.where((e) => e.rating != null).length}',
           ),
         ],
       ),

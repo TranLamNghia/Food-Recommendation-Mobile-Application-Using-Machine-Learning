@@ -45,7 +45,7 @@ class OnboardingScaffold extends StatelessWidget {
   final String? subtitle;
   final Widget child;
 
-  /// `null` hides the back button — used for the first step.
+  /// `null` hides the back button.
   final VoidCallback? onBack;
 
   final String actionLabel;

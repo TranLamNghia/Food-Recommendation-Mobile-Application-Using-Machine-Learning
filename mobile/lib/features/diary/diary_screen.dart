@@ -252,7 +252,17 @@ class _MealGroup extends StatelessWidget {
             _DiaryTile(
               entry: entry,
               onRate: (stars) => session.rate(entry, stars),
-              onRemove: () => session.removeDiaryEntry(entry),
+              onUndo: () {
+                session.undoMeal(entry);
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    SnackBar(
+                      content: Text('Đã trả ${entry.food.name} về thực đơn'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+              },
             ),
         ],
       ),
@@ -264,12 +274,12 @@ class _DiaryTile extends StatelessWidget {
   const _DiaryTile({
     required this.entry,
     required this.onRate,
-    required this.onRemove,
+    required this.onUndo,
   });
 
   final DiaryEntry entry;
   final ValueChanged<int> onRate;
-  final VoidCallback onRemove;
+  final VoidCallback onUndo;
 
   @override
   Widget build(BuildContext context) {
@@ -315,10 +325,10 @@ class _DiaryTile extends StatelessWidget {
                 ),
               ),
               IconButton(
-                onPressed: onRemove,
-                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: onUndo,
+                icon: const Icon(Icons.undo_rounded, size: 18),
                 color: AppColors.textTertiary,
-                tooltip: 'Xóa khỏi nhật ký',
+                tooltip: 'Hoàn tác, trả về thực đơn',
                 visualDensity: VisualDensity.compact,
               ),
             ],
