@@ -31,6 +31,24 @@ public interface IMlClient
         MlPredictRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// Step 4 — assemble one day's plan.
+    ///
+    /// <para>The answer is <b>not written anywhere</b> by the ML service.
+    /// Persisting it into <c>meal_plans</c> and <c>meal_plan_items</c> is
+    /// this backend's job, and so is the <c>409 MEAL_PLAN_EXISTS</c>
+    /// rule.</para>
+    /// </summary>
+    Task<MlResult<MlPlanResponse>> PlanAsync(
+        MlPlanRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// §7.4.1 — the taste-survey deck for one user, as food ids in the order
+    /// to ask about them.
+    /// </summary>
+    Task<MlResult<MlSurveyDeckResponse>> SurveyDeckAsync(
+        MlSurveyDeckRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Rebuild a user's preference vector (§8.2). Call it after onboarding
     /// finishes, and when <c>featureVersion</c> changes.
     /// </summary>
@@ -128,6 +146,44 @@ public sealed class MlClient : IMlClient
 
         return SendAsync<MlPredictResponse>(
             HttpMethod.Post, "predict", request, needsKey: true, ct);
+    }
+
+    public Task<MlResult<MlPlanResponse>> PlanAsync(
+        MlPlanRequest request, CancellationToken ct = default)
+    {
+        // Refused here rather than at the service's own `422`. The cap is a
+        // database CHECK (`chk_expl_ratio`), so a value above it could not be
+        // written even if a plan came back — and more than half a plan being
+        // trial dishes is no longer a personalised recommendation.
+        if (request.ExplorationRatio is < 0 or > 0.5)
+        {
+            return Task.FromResult(MlResult<MlPlanResponse>.Fail(
+                MlFailureKind.BadRequest, null, "EXPLORATION_OUT_OF_RANGE",
+                $"ExplorationRatio {request.ExplorationRatio} is outside "
+                + "0 to 0.5, the range chk_expl_ratio allows in "
+                + "meal_plans.exploration_ratio."));
+        }
+
+        return SendAsync<MlPlanResponse>(
+            HttpMethod.Post, "plan", request, needsKey: true, ct);
+    }
+
+    public Task<MlResult<MlSurveyDeckResponse>> SurveyDeckAsync(
+        MlSurveyDeckRequest request, CancellationToken ct = default)
+    {
+        // §7.4.1's range, checked on this side so the caller gets a
+        // `400 VALIDATION_FAILED` naming the field instead of a round trip
+        // and FastAPI's own schema error.
+        if (request.Size is < 20 or > 50)
+        {
+            return Task.FromResult(MlResult<MlSurveyDeckResponse>.Fail(
+                MlFailureKind.BadRequest, null, "DECK_SIZE_OUT_OF_RANGE",
+                $"Deck size {request.Size} is outside the 20 to 50 of "
+                + "specification §7.4.1."));
+        }
+
+        return SendAsync<MlSurveyDeckResponse>(
+            HttpMethod.Post, "survey-deck", request, needsKey: true, ct);
     }
 
     public Task<MlResult<MlRebuildResponse>> RebuildProfileAsync(
@@ -337,6 +393,13 @@ public sealed class MlClient : IMlClient
             "DATASET_NOT_FOUND" => MlFailureKind.DatasetNotFound,
             "NO_SCOREABLE_CANDIDATE" => MlFailureKind.NoScoreableCandidate,
             "INSUFFICIENT_SIGNALS" => MlFailureKind.InsufficientSignals,
+            // Both arrive as `422` from /plan, and both mean the user has a
+            // step to complete — not that anything is unavailable. Without
+            // these two rows they would fall through to the status switch
+            // below, become `BadRequest`, and reach the user as
+            // "lỗi máy chủ" when the real answer is "fill in your profile".
+            "PROFILE_REQUIRED" => MlFailureKind.ProfileRequired,
+            "ONBOARDING_REQUIRED" => MlFailureKind.OnboardingRequired,
             "TRAINING_IN_PROGRESS" => MlFailureKind.TrainingInProgress,
             // Numbers rather than the `HttpStatusCode` names: 422 is
             // `UnprocessableEntity` in some .NET versions and

@@ -50,6 +50,36 @@ public static class Enums
     public static readonly string[] Severity = ["mild", "moderate", "severe"];
 
     /// <summary>
+    /// <c>interactions.action</c> — the four answers to one swipe card of
+    /// §7.4. <c>unknown</c> is "chưa từng ăn": stored, but carrying no taste
+    /// information, so it does not count towards <c>minRequired</c>.
+    /// </summary>
+    public static readonly string[] SwipeAction =
+        ["like", "dislike", "neutral", "unknown"];
+
+    /// <summary>
+    /// <c>meal_plan_items.meal_type</c> — the four meals of a day, in the
+    /// order they are eaten. The order matters: a response listing the meals
+    /// is built from this array.
+    /// </summary>
+    public static readonly string[] MealType =
+        ["breakfast", "lunch", "dinner", "snack"];
+
+    /// <summary>
+    /// <c>meal_plan_items.status</c>, the whole ENUM.
+    ///
+    /// <para>Only three of the five may be SET by a client —
+    /// <c>Api.Planning.MealItemStatus.ClientSettable</c> holds that subset,
+    /// and a test asserts it stays a subset of this array. <c>suggested</c>
+    /// is what the backend writes when it generates the plan and
+    /// <c>replaced</c> is what it writes when a dish is swapped; letting a
+    /// client send either would let it rewrite history that the label
+    /// weights of §4.6 are computed from.</para>
+    /// </summary>
+    public static readonly string[] MealItemStatus =
+        ["suggested", "kept", "replaced", "eaten", "skipped"];
+
+    /// <summary>
     /// {field name: list}, built by reflection over the fields above rather
     /// than written out by hand, so the dictionary cannot drift away from
     /// them.

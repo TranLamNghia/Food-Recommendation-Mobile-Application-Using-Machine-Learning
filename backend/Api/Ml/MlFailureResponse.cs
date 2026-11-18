@@ -104,6 +104,29 @@ public static class MlFailureResponse
                     "Không tìm thấy người dùng.",
                     traceId),
 
+            // ── The user has a step to complete first ──
+            //
+            // `409` rather than the `422` the ML service used, because §7.6.1
+            // and §7.6.2 already define the public answer, and §4 tells the
+            // frontend what to do with it: send the user to the profile form.
+            // Reporting either of these as ML_UNAVAILABLE would put the user
+            // on a "try again later" screen that can never succeed.
+            MlFailureKind.ProfileRequired
+                => ApiProblem.Make(
+                    StatusCodes.Status409Conflict,
+                    ErrorCode.ProfileRequired,
+                    "Chưa khai báo hồ sơ sức khỏe, nên chưa tính được hạn "
+                    + "mức năng lượng để dựng thực đơn.",
+                    traceId),
+
+            MlFailureKind.OnboardingRequired
+                => ApiProblem.Make(
+                    StatusCodes.Status409Conflict,
+                    ErrorCode.OnboardingRequired,
+                    "Hồ sơ sức khỏe chưa đủ để tính hạn mức năng lượng. Vui "
+                    + "lòng mở lại phần khai báo hồ sơ và lưu lại.",
+                    traceId),
+
             // ── Everything else is a bug on this side ──
             //
             // `BadRequest` means this backend sent a body the ML service
@@ -136,5 +159,7 @@ public static class MlFailureResponse
     public static bool IsSystemFault(this MlFailure failure)
         => failure.Kind is not (MlFailureKind.NoScoreableCandidate
             or MlFailureKind.InsufficientSignals
+            or MlFailureKind.ProfileRequired
+            or MlFailureKind.OnboardingRequired
             or MlFailureKind.UserNotFound);
 }

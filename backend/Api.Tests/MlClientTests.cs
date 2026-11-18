@@ -596,6 +596,157 @@ public class MlClientTests
         Assert.True(new MlOptions { InternalKey = "k" }.Enabled);
     }
 
+    // ── The guards on the two newer calls ─────────────────────────────
+
+    /// <summary>
+    /// <c>chk_expl_ratio</c> caps <c>meal_plans.exploration_ratio</c> at 0.5,
+    /// so a plan built with more than that could not be written even if one
+    /// came back. Refused before the request, and the proof is that no
+    /// request was made: a round trip spent to be told something this side
+    /// already knows is a round trip out of the 2 s budget.
+    /// </summary>
+    [Theory]
+    [InlineData(0.51)]
+    [InlineData(1.0)]
+    [InlineData(-0.1)]
+    public async Task A_plan_outside_the_exploration_cap_never_leaves_here(
+        double ratio)
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "{}");
+        var client = Build(handler);
+
+        var result = await client.PlanAsync(new MlPlanRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            ExplorationRatio = ratio,
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal(MlFailureKind.BadRequest, result.Failure!.Kind);
+        Assert.Equal("EXPLORATION_OUT_OF_RANGE", result.Failure.Code);
+        Assert.Equal(0, handler.Calls);
+        // NOT degradable: it is a bug on this side, and serving a plan
+        // anyway would hide it for as long as the code lives.
+        Assert.False(result.Failure.IsDegradable);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.3)]
+    [InlineData(0.5)]
+    public async Task A_ratio_inside_the_cap_is_sent(double ratio)
+    {
+        var handler = new StubHandler(
+            HttpStatusCode.ServiceUnavailable, "{}");
+        var client = Build(handler);
+
+        await client.PlanAsync(new MlPlanRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            ExplorationRatio = ratio,
+        });
+
+        Assert.Equal(1, handler.Calls);
+    }
+
+    /// <summary>
+    /// §7.4.1's deck is 20 to 50 foods. Checked here so the caller gets a
+    /// named field back instead of FastAPI's own schema error, which carries
+    /// the library's wording and no <c>error.code</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(19)]
+    [InlineData(51)]
+    [InlineData(0)]
+    public async Task A_deck_size_outside_the_range_never_leaves_here(
+        int size)
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "{}");
+        var client = Build(handler);
+
+        var result = await client.SurveyDeckAsync(new MlSurveyDeckRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            Size = size,
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal(MlFailureKind.BadRequest, result.Failure!.Kind);
+        Assert.Equal("DECK_SIZE_OUT_OF_RANGE", result.Failure.Code);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    /// <summary>
+    /// <c>/plan</c>'s two "complete a step first" codes have to survive the
+    /// trip through <see cref="MlClient"/> as their own kinds. Without the
+    /// mapping they fall through to the status switch, become
+    /// <c>BadRequest</c>, and reach the user as "lỗi máy chủ" when the real
+    /// answer is "khai báo hồ sơ sức khỏe".
+    /// </summary>
+    [Theory]
+    [InlineData("PROFILE_REQUIRED", MlFailureKind.ProfileRequired)]
+    [InlineData("ONBOARDING_REQUIRED", MlFailureKind.OnboardingRequired)]
+    public async Task The_plan_input_errors_keep_their_own_kind(
+        string code, MlFailureKind expected)
+    {
+        var handler = new StubHandler(
+            HttpStatusCode.UnprocessableEntity,
+            Envelope(code, "Step 1 has never run for this user."));
+        var client = Build(handler);
+
+        var result = await client.PlanAsync(new MlPlanRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal(expected, result.Failure!.Kind);
+        Assert.Equal(code, result.Failure.Code);
+        Assert.False(result.Failure.IsDegradable);
+    }
+
+    /// <summary>
+    /// The deck's reply reaches this side with the field names
+    /// <c>ml/api.py</c> sends — the contract is the property names, and a
+    /// rename on either side is a silent null here.
+    /// </summary>
+    [Fact]
+    public async Task The_deck_reply_is_read_field_for_field()
+    {
+        const string body = """
+        {
+          "userId": "00000001-0000-4000-8000-000000000000",
+          "foodIds": ["f1", "f2"],
+          "totalItems": 2,
+          "minRequired": 2,
+          "nFoodsBeforeF1": 318,
+          "nFoodsAfterF1": 204,
+          "nCategories": 11,
+          "nCategoriesTotal": 12,
+          "featureVersion": "v2",
+          "warnings": ["27 of 30 foods in this deck are at spice level 0"],
+          "elapsedMs": 180
+        }
+        """;
+        var client = Build(new StubHandler(HttpStatusCode.OK, body));
+
+        var result = await client.SurveyDeckAsync(new MlSurveyDeckRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            Size = 30,
+        });
+
+        Assert.True(result.Ok);
+        var deck = result.Required;
+        Assert.Equal(["f1", "f2"], deck.FoodIds);
+        Assert.Equal(2, deck.MinRequired);
+        Assert.Equal(318, deck.NFoodsBeforeF1);
+        Assert.Equal(204, deck.NFoodsAfterF1);
+        Assert.Equal(11, deck.NCategories);
+        Assert.Equal("v2", deck.FeatureVersion);
+        Assert.Single(deck.Warnings);
+    }
+
     /// <summary>
     /// The four values <c>db/schema.sql</c> declares for
     /// <c>meal_plans.generation_source</c>, and nothing else: an invalid

@@ -419,6 +419,11 @@ ENUM_CS = {
     "ActivityLevel": ("health_profiles", "activity_level"),
     "Goal": ("health_profiles", "goal"),
     "Severity": ("user_conditions", "severity"),
+    "SwipeAction": ("interactions", "action"),
+    # `meal_type` is the same ENUM in four tables; `meal_plan_items` is the
+    # one the meal-plan endpoints write, so it is the one compared against.
+    "MealType": ("meal_plan_items", "meal_type"),
+    "MealItemStatus": ("meal_plan_items", "status"),
 }
 
 RE_ENUM_ARRAY = re.compile(
