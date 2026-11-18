@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ML Service — the four internal endpoints of `API_SPECIFICATION.md` §8.
+"""ML Service — the internal endpoints of `API_SPECIFICATION.md` §8.
 
 Before this file, `ml/serve.py` was a **Python library**: runnable from the
 command line, but with no way for a C# backend to reach it. That was one of
@@ -8,6 +8,7 @@ backend waves 4, 5 and 6 — taste survey, meal plan, recommendations — rather
 than any shortage of public endpoints.
 
     POST /predict                     Step 3 — score the catalogue
+    POST /plan                        Step 4 — assemble one day's plan
     POST /profiles/{userId}/rebuild   rebuild the preference vector
     POST /train                       retrain, asynchronously
     GET  /health                      which model is serving
@@ -68,6 +69,7 @@ import os
 import sys
 import threading
 import time
+from datetime import date as dt_date
 from pathlib import Path
 from typing import Any, Literal
 
@@ -80,6 +82,7 @@ sys.path.insert(0, str(ROOT))
 
 from ml.db import connect  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
+from ml.plan import PlanInputError, build_daily_plan  # noqa: E402
 from ml.rocchio import alpha, stage as stage_for  # noqa: E402
 from ml.serve import load_active_model, rebuild_profile, recommend  # noqa: E402
 from ml.time_vn import now_vn  # noqa: E402
@@ -255,6 +258,120 @@ class HealthResponse(BaseModel):
     activeModel: HealthModel | None
     featureVersion: str
     reason: str | None = None
+
+
+# ── Step 4 — POST /plan ───────────────────────────────────────────────
+
+
+class PlanRequest(BaseModel):
+    """What the backend has to supply for one day's plan.
+
+    Deliberately short. Everything else — the catalogue, the F1 filter, the
+    preference vector, the per-day thresholds, the energy target — this
+    service reads for itself, for the same reason `/predict` no longer takes
+    a candidate set: two layers deciding the same thing is two places to
+    disagree, and the disagreement is invisible.
+    """
+
+    userId: str = Field(min_length=1)
+
+    #: The day the plan is for. Omitted means today in Asia/Ho_Chi_Minh —
+    #: `meal_plans.plan_date` is a DATE, and the one clock of this system is
+    #: Vietnamese local time.
+    planDate: str | None = None
+
+    #: Foods not to use: what the user has already eaten today, so the plan
+    #: does not repeat a dish.
+    excludeFoodIds: list[str] = Field(default_factory=list)
+
+    #: The 70-30 mechanism's target share. `chk_expl_ratio` caps it at 0.5
+    #: in the database and `MenuBuilder` caps it again, because more than
+    #: half the plan being a trial dish is not a personalised recommendation.
+    explorationRatio: float = Field(default=0.3, ge=0.0, le=0.5)
+
+    #: Fixes the exploration draw, so a checker can compare two runs. A real
+    #: request leaves it out and gets a fresh plan.
+    seed: int | None = None
+
+
+class PlanItemOut(BaseModel):
+    foodId: str
+    foodName: str
+    dishRole: str
+    mealType: str
+    kcal: int
+    predictedScore: float
+    #: `null` is an EXPLOITATION serving, a number is an exploration one —
+    #: exactly what `meal_plan_items.exploration_delta` means, which is why
+    #: there is no `isExploration` flag beside it.
+    explorationDelta: float | None
+    position: int
+
+
+class PlanMealOut(BaseModel):
+    mealType: str
+    targetKcal: float
+    actualKcal: float
+    deviationPct: float
+    items: list[PlanItemOut]
+
+
+class NutrientCheckOut(BaseModel):
+    nutrient: str
+    comparator: str
+    threshold: float
+    actual: float
+    condition: str
+
+
+class PlanResponse(BaseModel):
+    userId: str
+    planDate: str
+
+    #: Step 1's numbers, echoed back. The backend writes them into the
+    #: `meal_plans` row beside the result, so the plan records the target it
+    #: was built against rather than one recomputed later.
+    targetCaloriesKcal: float
+    targetProteinG: float
+    targetCarbsG: float
+    targetFatG: float
+
+    actualCaloriesKcal: float
+    actualProteinG: float
+    actualCarbsG: float
+    actualFatG: float
+    #: What `meal_plans.calorie_deviation_pct` will compute. Sent so the
+    #: caller can check the proposal's 10 % commitment without waiting for
+    #: the row to exist.
+    calorieDeviationPct: float
+    withinTolerance: bool
+
+    totalPreferenceScore: float
+    explorationRatio: float
+    actualExplorationRatio: float
+
+    stage: str
+    alpha: float
+    generationSource: str
+    modelVersion: str | None
+    featureVersion: str
+    nFoodsBeforeF1: int
+    nFoodsAfterF1: int
+
+    meals: list[PlanMealOut]
+
+    #: Day-level thresholds phase 5 could not satisfy. Empty is good; a
+    #: non-empty list must reach the user rather than being hidden behind a
+    #: plan that looks ordinary.
+    nutrientViolations: list[NutrientCheckOut]
+    #: Thresholds on a nutrient the catalogue cannot measure — today only
+    #: `purine_mg`. Kept apart from the violations so an unchecked plan is
+    #: never reported as satisfying them.
+    unenforceableTargets: list[str]
+    meetsNutrientTargets: bool
+
+    warnings: list[str]
+    elapsedMs: int
 
 
 # ── The training job ──────────────────────────────────────────────────
@@ -498,6 +615,159 @@ def predict(request: PredictRequest) -> PredictResponse:
             nFoodsBeforeF1=result.n_foods_before_f1,
             nFoodsAfterF1=result.n_foods_after_f1,
             warnings=warnings + list(result.warnings),
+            elapsedMs=int((time.perf_counter() - started) * 1000),
+        )
+    finally:
+        cn.close()
+
+
+@app.post("/plan", response_model=PlanResponse, dependencies=[Depends(check_key)])
+def plan(request: PlanRequest) -> PlanResponse:
+    """Step 4 — assemble one day's plan.
+
+    Returns the plan; it writes nothing. `meal_plans` has one owner for
+    writes and that is the backend, which holds the `409 MEAL_PLAN_EXISTS`
+    rule and the ownership check that belong with a user's own data.
+
+    The status codes follow §8.1's shape:
+
+    * `404 USER_NOT_FOUND`
+    * `422` with the code from `PlanInputError` — `PROFILE_REQUIRED` when
+      Step 1 has never run for this user, `ONBOARDING_REQUIRED` when the
+      profile exists but carries no energy target. Neither is "the ML
+      service is unavailable", and the backend must not retry them.
+    * `422 NO_SCOREABLE_CANDIDATE` when the F1 filter leaves nothing. Same
+      meaning as in `/predict`: the safety layer removed everything, and
+      scoring the foods anyway would be it failing open.
+    """
+    started = time.perf_counter()
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE id = %s", (request.userId,))
+            if cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": "USER_NOT_FOUND",
+                        "message": f"No user {request.userId}.",
+                    },
+                )
+
+        if request.planDate is None:
+            day = now_vn().date()
+        else:
+            try:
+                day = dt_date.fromisoformat(request.planDate)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "VALIDATION_FAILED",
+                        "message": (
+                            f"planDate {request.planDate!r} is not an "
+                            "ISO date (YYYY-MM-DD)."
+                        ),
+                    },
+                )
+
+        try:
+            result = build_daily_plan(
+                cn,
+                request.userId,
+                plan_date=day,
+                exclude_food_ids=request.excludeFoodIds,
+                exploration_ratio=request.explorationRatio,
+                seed=request.seed,
+            )
+        except PlanInputError as e:
+            # Not a malfunction: the user has not supplied something. The
+            # code is the stable string the backend branches on.
+            raise HTTPException(
+                status_code=422,
+                detail={"code": e.code, "message": e.message},
+            )
+
+        built = result.plan
+        if not built.items:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "NO_SCOREABLE_CANDIDATE",
+                    "message": (
+                        f"The F1 filter left nothing to build a plan from: "
+                        f"{result.n_foods_after_f1} of "
+                        f"{result.n_foods_before_f1} active foods are safe "
+                        f"for this user."
+                    ),
+                },
+            )
+
+        meals = [
+            PlanMealOut(
+                mealType=slot.meal_type,
+                targetKcal=round(slot.target_kcal, 2),
+                actualKcal=round(slot.actual_kcal, 2),
+                deviationPct=round(slot.deviation_pct, 2),
+                items=[
+                    PlanItemOut(
+                        foodId=item.food.id,
+                        foodName=item.food.name,
+                        dishRole=item.food.dish_role,
+                        mealType=slot.meal_type,
+                        kcal=int(item.food.kcal),
+                        predictedScore=round(item.score, 4),
+                        explorationDelta=(
+                            None if item.exploration_delta is None
+                            else round(item.exploration_delta, 3)
+                        ),
+                        position=position,
+                    )
+                    for position, item in enumerate(slot.items, start=1)
+                ],
+            )
+            for slot in built.slots
+        ]
+
+        return PlanResponse(
+            userId=request.userId,
+            planDate=day.isoformat(),
+            targetCaloriesKcal=round(result.targets.kcal, 2),
+            targetProteinG=round(result.targets.protein_g, 2),
+            targetCarbsG=round(result.targets.carb_g, 2),
+            targetFatG=round(result.targets.fat_g, 2),
+            actualCaloriesKcal=round(built.actual_kcal, 2),
+            actualProteinG=round(built.actual_protein, 2),
+            actualCarbsG=round(built.actual_carb, 2),
+            actualFatG=round(built.actual_fat, 2),
+            calorieDeviationPct=round(built.deviation_pct, 2),
+            withinTolerance=built.within_tolerance,
+            totalPreferenceScore=round(built.total_preference_score, 4),
+            explorationRatio=round(built.exploration_ratio, 3),
+            actualExplorationRatio=round(built.actual_exploration_ratio, 3),
+            stage=result.stage,
+            alpha=result.alpha,
+            generationSource=result.generation_source,
+            modelVersion=result.model_version,
+            featureVersion=result.feature_version,
+            nFoodsBeforeF1=result.n_foods_before_f1,
+            nFoodsAfterF1=result.n_foods_after_f1,
+            meals=meals,
+            nutrientViolations=[
+                NutrientCheckOut(
+                    nutrient=target.nutrient,
+                    comparator="gte" if target.is_floor else "lte",
+                    threshold=target.amount,
+                    actual=round(actual, 2),
+                    condition=target.condition,
+                )
+                for target, actual in built.nutrient_violations
+            ],
+            unenforceableTargets=[
+                t.nutrient for t in built.unenforceable_targets
+            ],
+            meetsNutrientTargets=built.meets_nutrient_targets,
+            warnings=list(result.warnings),
             elapsedMs=int((time.perf_counter() - started) * 1000),
         )
     finally:

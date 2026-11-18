@@ -257,6 +257,20 @@ def penalty(
         if current is None or violation.penalty < current.penalty:
             harshest[key] = violation
 
+    return _combine(harshest, missing)
+
+
+def _combine(
+    harshest: Mapping[tuple[str, str], SoftViolation],
+    missing: Sequence[str],
+) -> PenaltyResult:
+    """Multiply the surviving factors, one per (condition, nutrient) group.
+
+    Extracted so that `penalty` and `meal_penalty` cannot drift apart on the
+    combination rule. That rule is not obvious — harshest WITHIN a group,
+    multiply ACROSS groups — and two sodium bands of one condition counted
+    twice give x0.24 where the data means x0.40.
+    """
     factor = 1.0
     for violation in harshest.values():
         factor *= violation.penalty
@@ -269,5 +283,86 @@ def penalty(
                 key=lambda v: (v.penalty, v.condition, v.nutrient),
             )
         ),
-        missing_data=tuple(sorted(missing)),
+        missing_data=tuple(sorted(set(missing))),
     )
+
+
+def meal_penalty(
+    totals: Mapping[str, float],
+    rules: Sequence[SoftRule],
+    *,
+    missing: Mapping[str, int] | None = None,
+) -> PenaltyResult:
+    """The penalty factor for one **meal's** selection — `scope = 'per_meal'`.
+
+    Until Step 4 existed in Python, this scope had no enforcing layer at all:
+    `f1_filter.ENFORCED_BY` mapped `per_meal` to `None`, and the one rule of
+    that kind in the rule set — diabetes, carbohydrate <= 60 g per meal — was
+    stored, documented as enforced, and applied nowhere.
+
+    It cannot be done per food, which is why `penalty` refuses such a rule:
+    `per_meal` is a statement about the meal's TOTAL. Applied per food it
+    misses a meal that goes over while no single dish does, and it penalises
+    a large dish in a meal that still has room. Step 4 is the first layer
+    that knows a meal's total, so this is where the rule can finally be read.
+
+    `totals` is the meal's summed nutrition. `missing` carries, per nutrient,
+    **how many servings had no measurement** — the invariant that a total
+    never travels without its missing count.
+
+    How incomplete data is treated, and why it is not symmetric:
+
+    * A total is a **lower bound** on the truth. If a lower bound already
+      exceeds a ceiling, the violation is certain, so it is penalised even
+      with servings unmeasured.
+    * Anything else — a ceiling not yet exceeded, or a floor not yet reached
+      — is **undecided**: the unmeasured servings could settle it either way.
+      That is recorded in `missing_data` and not penalised, the same choice
+      `penalty` makes. A soft rule is a ranking decision, and ranking a meal
+      down because the catalogue is incomplete penalises the wrong party.
+    """
+    counts = dict(missing or {})
+    harshest: dict[tuple[str, str], SoftViolation] = {}
+    unverified: list[str] = []
+
+    for rule in rules:
+        if rule.scope != "per_meal":
+            raise ValueError(
+                f"`meal_penalty` accepts per_meal rules only, got "
+                f"{rule.scope!r} ({rule.condition} - {rule.nutrient}). "
+                f"per_serving belongs to `penalty`, per_day to "
+                f"ml/daily_limits.py"
+            )
+        if rule.nutrient not in totals:
+            unverified.append(rule.nutrient)
+            continue
+
+        value = float(totals[rule.nutrient])
+        violated = rule.is_violated(value)
+        incomplete = counts.get(rule.nutrient, 0) > 0
+
+        # A ceiling already exceeded by the measured part stays exceeded
+        # whatever the unmeasured servings hold: more of a nutrient cannot
+        # bring a total back under its ceiling. Every other combination is
+        # undecided.
+        certain = violated and (not incomplete or rule.comparator == "lte")
+        if incomplete:
+            unverified.append(rule.nutrient)
+        if not certain:
+            continue
+
+        violation = SoftViolation(
+            condition=rule.condition,
+            nutrient=rule.nutrient,
+            comparator=rule.comparator,
+            threshold=rule.threshold,
+            value=value,
+            penalty=rule.penalty,
+            note=rule.note,
+        )
+        key = (rule.condition, rule.nutrient)
+        current = harshest.get(key)
+        if current is None or violation.penalty < current.penalty:
+            harshest[key] = violation
+
+    return _combine(harshest, unverified)
