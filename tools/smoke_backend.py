@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 9 endpoints of phases 1 and 2, against the real
+"""End-to-end test of the 17 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -28,13 +28,17 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import _env  # noqa: E402
 
 BASE = "http://localhost:5000/api/v1"
+#: Overridden by `--base`, so the suite can be pointed at a backend started
+#: on another port — which is the normal case when something else already
+#: holds 5000.
+_base = BASE
 
 _failures: list[str] = []
 _checks = 0
@@ -42,7 +46,7 @@ _checks = 0
 
 def call(method: str, path: str, body=None, token: str | None = None):
     """Call the API; returns `(HTTP status, JSON-decoded body or None)`."""
-    url = BASE + path
+    url = _base + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     if data is not None:
@@ -126,11 +130,18 @@ def main(argv: list[str] | None = None) -> int:
         "--keep", action="store_true",
         help="do not delete the test account, to inspect it in the database",
     )
+    parser.add_argument(
+        "--base", default=BASE,
+        help="the API root, if the backend is not on the default port",
+    )
     args = parser.parse_args(argv)
+
+    global _base
+    _base = args.base.rstrip("/")
 
     email = f"smoke-{uuid.uuid4().hex[:12]}@example.test"
     password = "MatKhau123"
-    print(f"End-to-end test against {BASE}")
+    print(f"End-to-end test against {_base}")
     print(f"Test account: {email}")
     print("=" * 72)
 
@@ -496,6 +507,395 @@ def main(argv: list[str] | None = None) -> int:
           family[0] >= 2 and family[1] == 0,
           f"{family[0]} links in the chain, {family[1]} still alive")
 
+    # -- 7.4 and 7.6: the taste survey and the meal plan -----------------
+    #
+    # These two groups are the first that need the ML SERVICE as well as the
+    # database, so they are skipped rather than failed when it is not
+    # running. A skipped section says so loudly; a failed one would send
+    # somebody looking for a bug in the backend.
+    print("\n§7.4.1  GET /onboarding/survey")
+    status, deck = call("GET", "/onboarding/survey?size=30", token=token)
+    if status == 503 and error_code(deck) == "ML_UNAVAILABLE":
+        print("  [skip] the ML service is not reachable, so §7.4 and §7.6")
+        print("         cannot be tested. Start it and run this again:")
+        print("           python tools/run_ml_service.py")
+    else:
+        equals("the deck returns 200", status, 200)
+        deck = deck or {}
+        items = deck.get("items") or []
+        session_id = deck.get("sessionId")
+        check("sessionId is a 36-character UUID",
+              isinstance(session_id, str) and len(session_id) == 36,
+              f"got {session_id!r}")
+        equals("totalItems agrees with the list", deck.get("totalItems"),
+               len(items))
+        check("minRequired never exceeds the deck",
+              0 < deck.get("minRequired", 0) <= len(items),
+              f"{deck.get('minRequired')} of {len(items)}")
+        ids = [i["id"] for i in items]
+        check("no food appears twice in the deck",
+              len(ids) == len(set(ids)),
+              f"{len(ids) - len(set(ids))} repeats")
+        check("every card carries what a swipe screen needs",
+              all(i.get("name") and i.get("categoryName")
+                  and i.get("dishRole") and i.get("caloriesKcal") is not None
+                  and i.get("servingSizeG") for i in items))
+        check("dishRole is an ENUM code, not a Vietnamese label — the app "
+              "translates it",
+              all(i["dishRole"] in ("main", "side_protein", "side_veg",
+                                    "soup", "snack", "dessert", "drink")
+                  for i in items),
+              f"got {sorted({i['dishRole'] for i in items})}")
+
+        status, body = call("GET", "/onboarding/survey?size=5", token=token)
+        equals("a deck size below 20 is refused with a named field",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        print("\n§7.4.2  POST /onboarding/survey")
+        # Too few opinionated swipes. `unknown` deliberately does not count,
+        # so three `unknown` on top change nothing.
+        short = [{"foodId": i, "action": "like"} for i in ids[:3]]
+        short += [{"foodId": i, "action": "unknown"} for i in ids[3:6]]
+        status, body = call("POST", "/onboarding/survey",
+                            {"sessionId": session_id, "swipes": short},
+                            token=token)
+        equals("too few opinionated swipes gives 422 ONBOARDING_INSUFFICIENT",
+               (status, error_code(body)), (422, "ONBOARDING_INSUFFICIENT"))
+
+        status, body = call(
+            "POST", "/onboarding/survey",
+            {"sessionId": session_id,
+             "swipes": [{"foodId": ids[0], "action": "like"},
+                        {"foodId": ids[0], "action": "dislike"}]},
+            token=token)
+        equals("the same food twice in one session is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        status, body = call(
+            "POST", "/onboarding/survey",
+            {"sessionId": session_id,
+             "swipes": [{"foodId": "00000000-0000-4000-8000-000000000000",
+                         "action": "like"}]},
+            token=token)
+        equals("a food that does not exist gives 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        status, body = call(
+            "POST", "/onboarding/survey",
+            {"sessionId": "not-a-uuid",
+             "swipes": [{"foodId": ids[0], "action": "like"}]},
+            token=token)
+        equals("a sessionId that is not a UUID is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        # The real session: a mixed set, with more than the minimum of
+        # opinionated swipes.
+        actions = ["like", "dislike", "neutral", "like", "unknown"]
+        swipes = [{"foodId": fid, "action": actions[n % len(actions)]}
+                  for n, fid in enumerate(ids)]
+        opinionated = sum(1 for x in swipes if x["action"] != "unknown")
+        status, done = call("POST", "/onboarding/survey",
+                            {"sessionId": session_id, "swipes": swipes},
+                            token=token)
+        equals("the session is accepted", status, 200)
+        done = done or {}
+        equals("every swipe was recorded",
+               (done.get("recorded") or {}).get("total"), len(swipes))
+        equals("the opinionated ones are counted apart",
+               (done.get("recorded") or {}).get("opinionated"), opinionated)
+        equals("and the skipped ones",
+               (done.get("recorded") or {}).get("skipped"),
+               len(swipes) - opinionated)
+        check("onboardingCompletedAt is stamped",
+              done.get("onboardingCompletedAt") is not None)
+        prof = done.get("preferenceProfile") or {}
+        check("a preference profile now exists",
+              prof.get("stage") in ("cold", "content", "hybrid", "ml")
+              and prof.get("nSignals", 0) > 0,
+              f"got {prof}")
+        check("alpha is inside 0 to 1",
+              0.0 <= prof.get("alpha", -1) <= 1.0,
+              f"got {prof.get('alpha')}")
+        summary = done.get("tasteSummary") or {}
+        check("the closing screen gets a readable summary",
+              isinstance(summary.get("topLikedCategories"), list)
+              and isinstance(summary.get("topLikedTastes"), list),
+              f"got {summary}")
+        check("spiceTolerance is a level or null, never a label",
+              summary.get("spiceTolerance") is None
+              or 0 <= summary["spiceTolerance"] <= 3,
+              f"got {summary.get('spiceTolerance')}")
+
+        rows = sql("SELECT COUNT(*) FROM interactions WHERE user_id = %s",
+                   (uid,))[0][0]
+        equals("the swipes reached `interactions`", rows, len(swipes))
+        rows = sql("SELECT COUNT(*) FROM user_preference_profiles "
+                   "WHERE user_id = %s", (uid,))[0][0]
+        equals("and the vector reached `user_preference_profiles`", rows, 1)
+        stamped = sql("SELECT onboarding_completed_at FROM users "
+                      "WHERE id = %s", (uid,))[0][0]
+        check("the stamp is in the database, not only in the response",
+              stamped is not None)
+
+        # Re-submitting the same session must not add a second copy of every
+        # swipe — it is the retry path when the ML service times out.
+        status, body = call("POST", "/onboarding/survey",
+                            {"sessionId": session_id, "swipes": swipes},
+                            token=token)
+        equals("a second submission gives 409 ONBOARDING_ALREADY_COMPLETED",
+               (status, error_code(body)),
+               (409, "ONBOARDING_ALREADY_COMPLETED"))
+        rows = sql("SELECT COUNT(*) FROM interactions WHERE user_id = %s",
+                   (uid,))[0][0]
+        equals("and stored no extra rows", rows, len(swipes))
+
+        status, body = call("GET", "/onboarding/survey", token=token)
+        equals("the deck is refused once onboarding is done",
+               (status, error_code(body)),
+               (409, "ONBOARDING_ALREADY_COMPLETED"))
+
+        # -- 7.6 the meal plan --
+        print("\n§7.6.2  POST /meal-plans")
+        today = date.today().isoformat()
+        status, plan = call("POST", "/meal-plans", {"planDate": today},
+                            token=token)
+        equals("201 Created", status, 201)
+        plan = plan or {}
+        plan_id = plan.get("id")
+        meals = plan.get("meals") or []
+        equals("the plan has the four meals", len(meals), 4)
+        equals("in the order they are eaten",
+               [m["mealType"] for m in meals],
+               ["breakfast", "lunch", "dinner", "snack"])
+        plan_items = [i for m in meals for i in m["items"]]
+        check("the plan has dishes", plan_items != [])
+        food_ids = [i["food"]["id"] for i in plan_items]
+        check("no dish appears twice in a day",
+              len(food_ids) == len(set(food_ids)),
+              f"{len(food_ids) - len(set(food_ids))} repeats")
+        check("the energy deviation is inside the 10 % commitment",
+              abs(plan.get("calorieDeviationPct") or 999) <= 10,
+              f"got {plan.get('calorieDeviationPct')} %")
+        equals("and withinTolerance agrees", plan.get("withinTolerance"),
+               True)
+        check("the targets of Step 1 are recorded with the plan",
+              (plan.get("targets") or {}).get("caloriesKcal", 0) > 0)
+        check("generationSource is one of the four the column allows",
+              plan.get("generationSource")
+              in ("rule_based", "content_based", "ml", "hybrid"),
+              f"got {plan.get('generationSource')}")
+        check("explorationRatio is inside what chk_expl_ratio allows",
+              0.0 <= float(plan.get("explorationRatio") or 0) <= 0.5,
+              f"got {plan.get('explorationRatio')}")
+        check("every dish starts as 'suggested'",
+              all(i["status"] == "suggested" for i in plan_items),
+              f"got {sorted({i['status'] for i in plan_items})}")
+        check("every dish has a portion in grams",
+              all(i["servingSizeG"] > 0 for i in plan_items))
+        check("an exploitation serving sends NULL, not 0 — that is how the "
+              "70-30 groups are told apart",
+              all(i["explorationDelta"] is None or i["explorationDelta"] > 0
+                  for i in plan_items))
+        check("each meal's target is its share of the day, not the whole day",
+              all(0 < m["targetCaloriesKcal"]
+                  < (plan.get("targets") or {}).get("caloriesKcal", 0)
+                  for m in meals))
+
+        rows = sql("SELECT COUNT(*) FROM meal_plans WHERE user_id = %s",
+                   (uid,))[0][0]
+        equals("the plan reached `meal_plans`", rows, 1)
+        rows = sql("SELECT COUNT(*) FROM meal_plan_items WHERE meal_plan_id "
+                   "= %s", (plan_id,))[0][0]
+        equals("and every dish reached `meal_plan_items`", rows,
+               len(plan_items))
+
+        status, body = call("POST", "/meal-plans", {"planDate": today},
+                            token=token)
+        equals("a second plan for the same day gives 409 MEAL_PLAN_EXISTS",
+               (status, error_code(body)), (409, "MEAL_PLAN_EXISTS"))
+
+        status, body = call(
+            "POST", "/meal-plans",
+            {"planDate": today, "mealTypes": ["lunch"]}, token=token)
+        equals("one meal at a time is refused, because phase 5 repairs the "
+               "whole DAY",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        print("\n§7.6.1  GET /meal-plans")
+        status, same = call("GET", f"/meal-plans?date={today}", token=token)
+        equals("200", status, 200)
+        equals("it is the same plan, not a new one",
+               (same or {}).get("id"), plan_id)
+        check("a stored plan reports no nutrient verdict rather than an "
+              "empty one — nobody checked it for THIS response",
+              (same or {}).get("nutrientViolations") is None,
+              f"got {(same or {}).get('nutrientViolations')!r}")
+
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        status, body = call(
+            f"GET", f"/meal-plans?date={tomorrow}&autoGenerate=false",
+            token=token)
+        equals("with autoGenerate=false a missing day is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        print("\n§7.6.3  GET /meal-plans/{id}")
+        status, byid = call("GET", f"/meal-plans/{plan_id}", token=token)
+        equals("200", status, 200)
+        equals("the same day comes back", (byid or {}).get("planDate"), today)
+        status, body = call(
+            "GET", "/meal-plans/00000000-0000-4000-8000-000000000000",
+            token=token)
+        equals("a plan that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # -- 7.6.4 alternatives --
+        print("\n§7.6.4  GET /meal-plan-items/{id}/alternatives")
+        target_item = next(
+            (i for m in meals for i in m["items"]
+             if m["mealType"] == "lunch"), plan_items[0])
+        item_id = target_item["id"]
+        status, alts = call(
+            f"GET", f"/meal-plan-items/{item_id}/alternatives?limit=5",
+            token=token)
+        equals("200", status, 200)
+        alts = alts or {}
+        options = alts.get("alternatives") or []
+        check("at most the requested number comes back", len(options) <= 5,
+              f"got {len(options)}")
+        equals("the dish being replaced is named",
+               (alts.get("originalItem") or {}).get("id"), item_id)
+        check("every candidate fills the same role — a soup can only be "
+              "replaced by a soup",
+              all(o["food"]["dishRole"]
+                  == (alts.get("originalItem") or {}).get("dishRole")
+                  for o in options),
+              f"roles {sorted({o['food']['dishRole'] for o in options})}")
+        check("no candidate is already in the plan",
+              not ({o["food"]["id"] for o in options} & set(food_ids)))
+        check("every predictedScore is in [0, 1]",
+              all(0.0 <= o["predictedScore"] <= 1.0 for o in options))
+        check("the candidates come back best first",
+              [o["predictedScore"] for o in options]
+              == sorted((o["predictedScore"] for o in options),
+                        reverse=True))
+        check("each one says whether the day would still fit in 10 %",
+              all(isinstance(o["keepsWithinTolerance"], bool)
+                  for o in options))
+
+        status, body = call(
+            f"GET", f"/meal-plan-items/{item_id}/alternatives?limit=31",
+            token=token)
+        equals("a limit above 30 is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        # -- 7.6.5 replace --
+        if options:
+            print("\n§7.6.5  PUT /meal-plan-items/{id}/replace")
+            new_food = options[0]["food"]["id"]
+            before = plan.get("actuals", {}).get("caloriesKcal")
+            status, after = call(
+                "PUT", f"/meal-plan-items/{item_id}/replace",
+                {"newFoodId": new_food}, token=token)
+            equals("200", status, 200)
+            after = after or {}
+            after_items = [i for m in after.get("meals", [])
+                           for i in m["items"]]
+            old_row = next((i for i in after_items if i["id"] == item_id),
+                           None)
+            check("the old dish is now marked 'replaced'",
+                  old_row is not None and old_row["status"] == "replaced",
+                  f"got {old_row and old_row['status']}")
+            check("and records what it became — the signal §4.6 learns from",
+                  old_row is not None
+                  and (old_row.get("replacedByFood") or {}).get("id")
+                  == new_food)
+            check("the new dish is in the plan",
+                  new_food in {i["food"]["id"] for i in after_items})
+            check("the whole plan comes back, because the day's totals moved",
+                  (after.get("actuals") or {}).get("caloriesKcal") is not None
+                  and after.get("calorieDeviationPct") is not None)
+            check("the replaced dish is not counted in the day any more",
+                  (after.get("actuals") or {}).get("caloriesKcal") != before
+                  or options[0]["calorieDeltaKcal"] == 0,
+                  f"{before} -> "
+                  f"{(after.get('actuals') or {}).get('caloriesKcal')}")
+            new_row = next(
+                (i for i in after_items
+                 if i["food"]["id"] == new_food
+                 and i["status"] == "suggested"), None)
+            check("a hand-picked dish is NOT credited to the exploration "
+                  "mechanism",
+                  new_row is not None and new_row["explorationDelta"] is None,
+                  f"got {new_row and new_row['explorationDelta']}")
+
+            status, body = call(
+                "PUT", f"/meal-plan-items/{item_id}/replace",
+                {"newFoodId": new_food}, token=token)
+            equals("replacing an already-replaced dish is refused",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+            status, body = call(
+                "PUT", f"/meal-plan-items/{new_row['id']}/replace",
+                {"newFoodId": "00000000-0000-4000-8000-000000000000"},
+                token=token)
+            equals("a food that does not exist is refused",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+            # -- 7.6.6 status --
+            print("\n§7.6.6  PATCH /meal-plan-items/{id}/status")
+            status, body = call(
+                "PATCH", f"/meal-plan-items/{new_row['id']}/status",
+                {"status": "suggested"}, token=token)
+            equals("a client may not set a status only the system sets",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+            status, kept = call(
+                "PATCH", f"/meal-plan-items/{new_row['id']}/status",
+                {"status": "kept"}, token=token)
+            equals("'kept' is accepted", status, 200)
+            equals("and no diary entry is created for it",
+                   (kept or {}).get("diaryEntryCreated"), False)
+
+            status, ate = call(
+                "PATCH", f"/meal-plan-items/{new_row['id']}/status",
+                {"status": "eaten"}, token=token)
+            equals("'eaten' is accepted", status, 200)
+            ate = ate or {}
+            equals("and writes the diary entry, so the user does not enter "
+                   "the meal twice", ate.get("diaryEntryCreated"), True)
+            diary_id = ate.get("diaryEntryId")
+            check("the diary id comes back as a UUID, not an integer",
+                  isinstance(diary_id, str) and len(diary_id) == 36,
+                  f"got {diary_id!r}")
+
+            status, again2 = call(
+                "PATCH", f"/meal-plan-items/{new_row['id']}/status",
+                {"status": "eaten"}, token=token)
+            equals("marking it eaten twice does not create a second entry",
+                   (again2 or {}).get("diaryEntryCreated"), False)
+            equals("and points at the entry that exists",
+                   (again2 or {}).get("diaryEntryId"), diary_id)
+            rows = sql("SELECT COUNT(*) FROM food_diary WHERE user_id = %s",
+                       (uid,))[0][0]
+            equals("exactly one diary row for one meal eaten once", rows, 1)
+
+        # Regenerating deletes the old plan, which the app should warn about.
+        print("\n§7.6.2  regenerate")
+        status, fresh = call(
+            "POST", "/meal-plans",
+            {"planDate": today, "regenerate": True}, token=token)
+        equals("201 with regenerate=true", status, 201)
+        check("it is a different plan row",
+              (fresh or {}).get("id") != plan_id,
+              f"got {(fresh or {}).get('id')}")
+        rows = sql("SELECT COUNT(*) FROM meal_plans WHERE user_id = %s",
+                   (uid,))[0][0]
+        equals("and the old one is gone — uq_user_date allows only one", rows,
+               1)
+        rows = sql("SELECT COUNT(*) FROM meal_plan_items WHERE meal_plan_id "
+                   "= %s", (plan_id,))[0][0]
+        equals("its dishes went with it (ON DELETE CASCADE)", rows, 0)
+
     # -- Time zone: DATETIMEs written by the backend must match MySQL's NOW()
     #
     # The backend once wrote `DateTime.UtcNow`, 7 hours off from the schema's
@@ -524,8 +924,13 @@ def main(argv: list[str] | None = None) -> int:
 
     sql("UPDATE users SET is_active = 0 WHERE email = %s", (email,))
 
+    # The newest endpoints are in this list too. They are protected because
+    # `ActiveAccountFilter` is global, not because anyone remembered them —
+    # which is the property worth checking, since the two endpoint groups
+    # added in this wave never mention `is_active` anywhere.
     for path in ("/auth/me", "/profile", "/profile/nutrition-targets",
-                 "/profile/conditions"):
+                 "/profile/conditions", "/onboarding/survey",
+                 f"/meal-plans?date={date.today().isoformat()}"):
         status, body = call("GET", path, token=access)
         equals(f"403 ACCOUNT_DISABLED at GET {path}",
                (status, error_code(body)), (403, "ACCOUNT_DISABLED"))
@@ -565,7 +970,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 9 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 17 endpoints behave per the "
           f"specification against the real database.")
     return 0
 
