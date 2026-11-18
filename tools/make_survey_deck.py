@@ -34,7 +34,23 @@ that is what they eat every day.
 **Start from the food closest to the catalogue's centroid**, not at random. A
 farthest-point traversal depends on its starting point, so a random choice
 yields a different deck on every run, and two people surveyed with two
-different decks have vectors that cannot be compared with each other.
+different decks have vectors that are harder to compare with each other.
+
+## The deck is shared; `--user` makes it personal
+
+By default every respondent is asked about the same foods, which is what the
+paragraph above is protecting. `--user` draws the deck from only the foods the
+F1 filter lets that person eat, for the in-app flow where someone has already
+declared their conditions.
+
+Note what that costs, and what it does not. The decks then differ between
+users — but they already did: `tools/import_swipes.py` drops a swipe on a food
+the person must not eat, so the SIGNALS behind two preference vectors were
+never the same set anyway. `--user` moves the removal earlier, from after the
+answer to before the question, and the person stops spending swipes on foods
+the system had already ruled out. What it does not change is the feature
+space: that is always built from the whole catalogue, never from the filtered
+subset — see the note in `main`.
 
 ## A known limitation, printed alongside the deck
 
@@ -48,6 +64,7 @@ it has to go into the report rather than being left for the reader to discover.
 Run:
     python tools/make_survey_deck.py                      # 45 foods, to screen
     python tools/make_survey_deck.py --count 36 --write   # JSON + CSV form
+    python tools/make_survey_deck.py --user <id> --write  # only F1-safe foods
 
 Note on language: the printed form's instructions, its field keys and its CSV
 header stay Vietnamese. They are a contract with the forms already collected in
@@ -70,6 +87,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from ml.db import use_utf8, connect  # noqa: E402
+from ml.f1_filter import allowed_foods  # noqa: E402
 from ml.features import FEATURE_VERSION, FeatureSpace, Food, load_foods  # noqa: E402
 
 SURVEY_DIR = ROOT / "data" / "survey"
@@ -309,10 +327,10 @@ def write_deck_json(deck: list[Food], space: FeatureSpace,
 def main() -> int:
     use_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
-    # 45, NOT 40. A swipe on a food the F1 filter would not let that person eat
-    # is dropped at import time (see the F1 filtering step in
-    # `import_swipes.py`), so someone with hard constraints collects
-    # distinctly fewer signals:
+    # 45, NOT 40 — for the shared PAPER form. A swipe on a food the F1 filter
+    # would not let that person eat is dropped at import time (see the F1
+    # filtering step in `import_swipes.py`), so someone with hard constraints
+    # collects distinctly fewer signals:
     #
     #   deck size   no condition   seafood allergy   gout+hypertension
     #      40         35 ok           27                 27
@@ -326,11 +344,32 @@ def main() -> int:
     # rating the form with a bare command would change the measuring
     # instrument mid-collection, and mixing two deck sizes makes respondents
     # incomparable.
+    #
+    # With `--user` the 5 extra foods are no longer a margin for F1 to eat:
+    # the deck already holds only foods that person may eat, so all 45 survive
+    # the import. 45 is kept anyway, so that a respondent on the paper form
+    # and a user in the app answer the same number of questions.
     parser.add_argument("--count", type=int, default=45,
                         help="the number of foods (default 45)")
     parser.add_argument("--db", default=None)
     parser.add_argument("--write", action="store_true",
                         help="write the JSON and the CSV form")
+    # The in-app path. Without it, the deck is the shared one for the paper
+    # form; with it, the F1 filter runs FIRST and the deck is drawn only from
+    # the foods this person may eat.
+    #
+    # Why that is worth a flag of its own: without it, a gout patient is
+    # asked to rate pork trotters, and `import_swipes.py` then throws that
+    # answer away. The person spent one of about 35 swipes on a food the
+    # system had already decided they must never be served. Filtering here
+    # loses nothing that was not already lost — the swipe was being dropped
+    # either way — and it stops wasting the question.
+    #
+    # It does NOT make the paper form per-person. That form is printed once
+    # and copied, and `--count` below explains why the instrument must not
+    # change mid-collection.
+    parser.add_argument("--user", default=None, metavar="USER_ID",
+                        help="build the deck from this user's F1-safe foods")
     args = parser.parse_args()
 
     cn = connect(args.db)
@@ -341,11 +380,68 @@ def main() -> int:
         with cn.cursor() as cur:
             cur.execute("SELECT name_vi FROM conditions ORDER BY id")
             condition_names = [d["name_vi"] for d in cur.fetchall()]
+
+        # `foods` is the WHOLE catalogue and stays that way; the F1-filtered
+        # subset is a separate list. Reassigning `foods` here would be a bug
+        # with no symptom: `FeatureSpace.from_foods` below derives the
+        # category list and every min/max from whatever it is given, so a
+        # space built from one user's safe foods normalises differently and
+        # may have fewer category dimensions. The vectors written into
+        # `survey_deck.json` would then live in a space of their own —
+        # incompatible with the trained models and with
+        # `mobile/lib/data/recommender/food_vector.dart`, and nothing would
+        # raise. `tools/check_feature_parity.py` exists for this class of
+        # mistake.
+        pool = foods
+        if args.user:
+            with cn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM users WHERE id = %s", (args.user,)
+                )
+                if cur.fetchone() is None:
+                    print(f"No user {args.user}.", file=sys.stderr)
+                    return 2
+            safe = {d["id"] for d in allowed_foods(cn, user_id=args.user)}
+            pool = [f for f in foods if f.id in safe]
     finally:
         cn.close()
 
+    want = args.count
+    if args.user:
+        if not pool:
+            # The same case the ML service answers `422
+            # NO_SCOREABLE_CANDIDATE` for: the safety layer removed
+            # everything. Refused loudly rather than printing an empty form,
+            # because an empty form looks like a tooling bug and would be
+            # reported as one.
+            print(
+                f"The F1 filter removed all {len(foods)} foods for user "
+                f"{args.user} — there is nothing to ask about. Check the "
+                "declared conditions and their severity.",
+                file=sys.stderr,
+            )
+            return 1
+        if len(pool) < want:
+            # Fewer safe foods than the deck size. Shortened rather than
+            # raising out of `pick_deck`, but SAID: this person contributes
+            # fewer signals than the rest, which is exactly what decides
+            # their stage in `ml.rocchio.stage`.
+            print(
+                f"Only {len(pool)} of {len(foods)} foods are safe for this "
+                f"user, fewer than the deck size {want}. Asking about all "
+                f"{len(pool)}.",
+                file=sys.stderr,
+            )
+            want = len(pool)
+        print(
+            f"F1: {len(pool)}/{len(foods)} foods are safe for user "
+            f"{args.user}; the deck is drawn from those."
+        )
+
+    # The space comes from the whole catalogue, the deck from `pool`. See the
+    # note where `pool` is built.
     space = FeatureSpace.from_foods(foods)
-    deck = pick_deck(foods, space, args.count)
+    deck = pick_deck(pool, space, want)
 
     print()
     for line in _summary(deck, foods):
@@ -362,10 +458,45 @@ def main() -> int:
         )
         return 0
 
-    write_deck_json(deck, space, DECK_JSON)
-    write_form(deck, FORM_CSV, condition_names)
-    print(f"\nWrote {DECK_JSON.relative_to(ROOT)}")
-    print(f"Wrote {FORM_CSV.relative_to(ROOT)}")
+    if args.user:
+        # A per-user deck goes into the gitignored directory, NOT over the
+        # shared `survey_deck.json`. Two reasons, and the second is the one
+        # that matters:
+        #
+        # 1. `tools/check_simulation.py` and `tools/gen_taste_vectors.py`
+        #    read `survey_deck.json` as the shared instrument. Overwriting it
+        #    with one person's deck would silently re-point both.
+        # 2. A deck keyed to a user id is MEDICAL DATA. The foods missing
+        #    from it are the foods F1 removed, so the file states by omission
+        #    what that person's conditions are — a diff against the shared
+        #    deck reads out their diagnosis. This is a public repository, and
+        #    `/data/survey/da_dien/` is in `.gitignore` for exactly this kind
+        #    of file.
+        out_dir = SURVEY_DIR / "da_dien"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        deck_json = out_dir / f"survey_deck_{args.user}.json"
+        form_csv = out_dir / f"phieu_khao_sat_{args.user}.csv"
+    else:
+        deck_json = DECK_JSON
+        form_csv = FORM_CSV
+
+    write_deck_json(deck, space, deck_json)
+    write_form(deck, form_csv, condition_names)
+    print(f"\nWrote {deck_json.relative_to(ROOT)}")
+    print(f"Wrote {form_csv.relative_to(ROOT)}")
+
+    if args.user:
+        print(
+            f"\nThis deck holds only the {len(deck)} foods user {args.user} "
+            f"may eat, so the import drops none of the answers:\n"
+            f"    python tools/import_swipes.py --form "
+            f"{form_csv.relative_to(ROOT)}\n"
+            "\nBoth files stay in data/survey/da_dien/, which .gitignore\n"
+            "blocks. WHICH FOODS ARE MISSING from a per-user deck says what\n"
+            "that person's medical conditions are, and this is a public\n"
+            "repository."
+        )
+        return 0
     print(
         "\nCopy the form per respondent into data/survey/da_dien/ then "
         "import:\n"
