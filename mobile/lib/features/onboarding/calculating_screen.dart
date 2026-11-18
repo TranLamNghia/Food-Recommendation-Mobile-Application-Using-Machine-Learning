@@ -77,45 +77,54 @@ class _CalculatingScreenState extends State<CalculatingScreen>
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 40),
-            Text('Đang dựng hạn mức cho bạn', style: text.titleMedium),
-            const Spacer(),
-            RotationTransition(
-              turns: _spin,
-              child: const SizedBox(
-                width: 88,
-                height: 88,
-                child: CircularProgressIndicator(
-                  strokeWidth: 6,
-                  strokeCap: StrokeCap.round,
-                  value: 0.22,
-                  backgroundColor: AppColors.surfaceMuted,
-                  valueColor: AlwaysStoppedAnimation(AppColors.accentInk),
+        // Full width on purpose. A bare Column is only as wide as its widest
+        // child and sits at the left edge, so the whole screen would stand
+        // off-centre and shift sideways each time a longer line scrolls in.
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              Text('Đang dựng hạn mức cho bạn', style: text.titleMedium),
+              const Spacer(),
+              RotationTransition(
+                turns: _spin,
+                child: const SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 6,
+                    strokeCap: StrokeCap.round,
+                    value: 0.22,
+                    backgroundColor: AppColors.surfaceMuted,
+                    valueColor: AlwaysStoppedAnimation(AppColors.accentInk),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 48),
-            // A three-line window: the line just finished faint at the
-            // top, the running line bold in the middle, the coming one faint
-            // below.
-            SizedBox(
-              height: 140,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _Line(text: _lineAt(_index - 1), state: _LineState.done),
-                  const SizedBox(height: 14),
-                  _Line(text: _lineAt(_index), state: _LineState.current),
-                  const SizedBox(height: 14),
-                  _Line(text: _lineAt(_index + 1), state: _LineState.upcoming),
-                ],
+              const SizedBox(height: 48),
+              // A three-line window: the line just finished faint at the
+              // top, the running line bold in the middle, the coming one faint
+              // below.
+              SizedBox(
+                height: 140,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _Line(text: _lineAt(_index - 1), state: _LineState.done),
+                    const SizedBox(height: 14),
+                    _Line(text: _lineAt(_index), state: _LineState.current),
+                    const SizedBox(height: 14),
+                    _Line(
+                      text: _lineAt(_index + 1),
+                      state: _LineState.upcoming,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const Spacer(),
-            const SizedBox(height: 40),
-          ],
+              const Spacer(),
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
@@ -151,15 +160,21 @@ class _Line extends StatelessWidget {
       child: Padding(
         key: ValueKey('$text$state'),
         padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: 'Afacad',
-            fontVariations: [FontVariation('wght', current ? 700 : 400)],
-            fontSize: current ? 21 : 16,
-            height: 1.3,
-            color: current ? AppColors.textPrimary : AppColors.textTertiary,
+        // One line, shrunk if it has to be. A line that wrapped would make
+        // the three-line window taller than its box and nudge the spinner.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Afacad',
+              fontVariations: [FontVariation('wght', current ? 700 : 400)],
+              fontSize: current ? 21 : 16,
+              height: 1.3,
+              color: current ? AppColors.textPrimary : AppColors.textTertiary,
+            ),
           ),
         ),
       ),

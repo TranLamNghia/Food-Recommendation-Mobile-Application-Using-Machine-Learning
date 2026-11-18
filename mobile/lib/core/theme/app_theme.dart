@@ -54,6 +54,24 @@ abstract final class AppTheme {
           ),
         ),
       ),
+      // The quieter twin of the filled button: same size and shape, so the
+      // two can be stacked as a primary and a secondary choice.
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textPrimary,
+          minimumSize: const Size.fromHeight(60),
+          side: const BorderSide(color: AppColors.border, width: 1.5),
+          textStyle: const TextStyle(
+            fontFamily: fontBody,
+            fontSize: 18,
+            fontVariations: [FontVariation('wght', 700)],
+            fontFamilyFallback: _fallback,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+        ),
+      ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.textSecondary,

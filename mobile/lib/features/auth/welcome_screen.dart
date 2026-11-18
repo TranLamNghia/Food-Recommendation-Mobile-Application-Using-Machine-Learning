@@ -9,9 +9,8 @@ import 'auth_screen.dart';
 
 /// First screen of the app: says what it does, then offers the two ways in.
 ///
-/// A new user goes straight into the profile questions **without** an
-/// account — the account is offered later from the "Tôi" tab — so nobody has
-/// to hand over an email before seeing a single dish.
+/// Both ways go through an account. The profile, the learned taste and the
+/// diary are stored under it, so there is no anonymous mode to fall back to.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
@@ -34,15 +33,18 @@ class WelcomeScreen extends StatelessWidget {
     ),
   ];
 
-  Future<void> _logIn(BuildContext context) async {
-    final ok = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AuthScreen(mode: AuthMode.login)),
-    );
+  /// Opens the auth form in [mode], then routes by what the account holds.
+  /// The form lets the user switch between the two modes, so either button
+  /// can end in either outcome.
+  Future<void> _enter(BuildContext context, AuthMode mode) async {
+    final ok = await Navigator.of(context)
+        .push<bool>(MaterialPageRoute(builder: (_) => AuthScreen(mode: mode)));
     if (ok != true || !context.mounted) return;
 
-    // With the real API this is `GET /profile`: an account that already has
-    // one skips the questions. The mock keeps nothing between launches, so
-    // only a profile filled in earlier this session can be picked up.
+    // With the real API this is `GET /auth/me`: an account that already has
+    // a profile reuses it and skips the questions. The mock keeps nothing
+    // between launches, so only a profile filled in earlier this session can
+    // be picked up.
     final hasPlan = SessionScope.of(context).todayPlan != null;
     Navigator.of(context).pushReplacement(
       fadeRoute(hasPlan ? const HomeShell() : const OnboardingFlow()),
@@ -97,8 +99,8 @@ class WelcomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Trả lời vài câu hỏi và vuốt thử 30 món. Phần còn lại để hệ '
-            'thống lo.',
+            'Tạo tài khoản, trả lời vài câu hỏi và vuốt thử 30 món. Phần '
+            'còn lại để hệ thống lo.',
             style: text.bodyLarge,
           ),
           const Spacer(),
@@ -133,17 +135,13 @@ class WelcomeScreen extends StatelessWidget {
             ),
           const Spacer(flex: 2),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(context)
-                    .pushReplacement(fadeRoute(const OnboardingFlow())),
-            child: const Text('Bắt đầu'),
+            onPressed: () => _enter(context, AuthMode.register),
+            child: const Text('Đăng ký'),
           ),
-          const SizedBox(height: 4),
-          Center(
-            child: TextButton(
-              onPressed: () => _logIn(context),
-              child: const Text('Đã có tài khoản? Đăng nhập'),
-            ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            onPressed: () => _enter(context, AuthMode.login),
+            child: const Text('Đăng nhập'),
           ),
         ],
       ),

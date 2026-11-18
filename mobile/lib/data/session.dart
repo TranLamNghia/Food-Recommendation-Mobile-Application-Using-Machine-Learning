@@ -78,7 +78,7 @@ class AppSession extends ChangeNotifier {
   }
 
   /// Plans for [days] consecutive days starting today, building the missing
-  /// ones. Used by the shopping list, which must cover days nobody opened yet.
+  /// ones.
   ///
   /// Does not notify: it is called while building, and the plans it adds do
   /// not change anything already on screen.
@@ -147,25 +147,47 @@ class AppSession extends ChangeNotifier {
 
   String? _accountEmail;
   String? _displayName;
+  String? _phone;
 
-  /// `null` while the user is anonymous: the profile then lives on this
-  /// device only.
+  /// `null` only before signing in. An account is required: the welcome
+  /// screen lets nobody reach the profile questions without one.
   String? get accountEmail => _accountEmail;
   String? get displayName => _displayName;
+  String? get phone => _phone;
   bool get isSignedIn => _accountEmail != null;
 
   /// Mock of `POST /auth/login` and `POST /auth/register`: accepts anything
   /// the form already validated.
+  ///
+  /// Logging in passes no [displayName] and keeps the one already known, the
+  /// way the real account would return it.
   void signIn({required String email, String? displayName}) {
     _accountEmail = email.trim();
-    _displayName = displayName?.trim();
+    if (displayName != null) _displayName = displayName.trim();
     notifyListeners();
   }
 
+  /// Leaves the account but keeps the profile, the plans and the diary: they
+  /// belong to the account, and logging back in finds them again.
   void signOut() {
     _accountEmail = null;
-    _displayName = null;
     notifyListeners();
+  }
+
+  /// Changes the details that have nothing to do with health. An empty
+  /// [phone] removes the number.
+  void updateAccount({String? displayName, String? phone}) {
+    if (displayName != null) _displayName = displayName.trim();
+    if (phone != null) _phone = phone.trim().isEmpty ? null : phone.trim();
+    notifyListeners();
+  }
+
+  /// Removes the account and everything stored under it.
+  void deleteAccount() {
+    _accountEmail = null;
+    _displayName = null;
+    _phone = null;
+    reset();
   }
 
   // ── Saved dishes ─────────────────────────────────────────────────
@@ -195,37 +217,6 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Shopping list ────────────────────────────────────────────────
-
-  /// Names of the shopping rows already in the basket.
-  final Set<String> shoppingTicked = {};
-
-  /// Rows the user typed in, outside any dish.
-  final List<String> shoppingExtras = [];
-
-  void toggleShoppingTick(String name) {
-    if (!shoppingTicked.remove(name)) shoppingTicked.add(name);
-    notifyListeners();
-  }
-
-  void addShoppingExtra(String name) {
-    final clean = name.trim();
-    if (clean.isEmpty || shoppingExtras.contains(clean)) return;
-    shoppingExtras.add(clean);
-    notifyListeners();
-  }
-
-  void removeShoppingExtra(String name) {
-    shoppingExtras.remove(name);
-    shoppingTicked.remove(name);
-    notifyListeners();
-  }
-
-  void clearShoppingTicks() {
-    shoppingTicked.clear();
-    notifyListeners();
-  }
-
   // ── Settings ─────────────────────────────────────────────────────
 
   bool _mealReminders = true;
@@ -244,7 +235,8 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Wipes everything back to a fresh install, account included.
+  /// Wipes the health profile and everything learned or recorded since, so
+  /// the user can answer the questions again. The account itself stays.
   void reset() {
     profile
       ..gender = null
@@ -262,10 +254,6 @@ class AppSession extends ChangeNotifier {
     diary.clear();
     lovedIds.clear();
     neverAgainIds.clear();
-    shoppingTicked.clear();
-    shoppingExtras.clear();
-    _accountEmail = null;
-    _displayName = null;
     notifyListeners();
   }
 
@@ -402,7 +390,7 @@ class AppSession extends ChangeNotifier {
     // The day on screen, which is today unless the week strip moved it.
     final today = _selectedDay;
     return [
-      for (final e in diary)
+      for (final e in activeDiary)
         if (e.ateAt.year == today.year &&
             e.ateAt.month == today.month &&
             e.ateAt.day == today.day)
@@ -472,8 +460,34 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void removeDiaryEntry(DiaryEntry entry) {
-    diary.remove(entry);
+  /// The diary entries that still count: everything not undone.
+  Iterable<DiaryEntry> get activeDiary => diary.where((e) => !e.isUndone);
+
+  /// Takes back "I ate this": the serving returns to the plan as not eaten
+  /// yet, and the entry stops counting towards the day.
+  ///
+  /// The entry is **kept** in [diary] and only marked — the log is a record
+  /// of what the user did, and a mistaken tap is part of that record.
+  void undoMeal(DiaryEntry entry) {
+    if (entry.isUndone) return;
+    entry.undoneAt = DateTime.now();
+
+    // The reverse of the join in [logMeal].
+    final slot = planOn(entry.ateAt)?.slots
+        .where((s) => s.type == entry.meal)
+        .firstOrNull;
+    if (slot != null) {
+      for (var i = 0; i < slot.items.length; i++) {
+        if (slot.items[i].food.id == entry.food.id &&
+            slot.items[i].status == MealItemStatus.eaten) {
+          slot.items[i] = slot.items[i].copyWith(
+            status: MealItemStatus.planned,
+          );
+          break;
+        }
+      }
+    }
+
     notifyListeners();
   }
 
@@ -485,7 +499,7 @@ class AppSession extends ChangeNotifier {
 
   // ── Aggregate figures ────────────────────────────────────────────
 
-  List<DiaryEntry> entriesOn(DateTime day) => diary
+  List<DiaryEntry> entriesOn(DateTime day) => activeDiary
       .where(
         (e) =>
             e.ateAt.year == day.year &&
@@ -517,8 +531,8 @@ class AppSession extends ChangeNotifier {
   /// between the two stages.
   int get signalCount =>
       preference.signalCount +
-      diary.length +
-      diary.where((e) => e.rating != null).length;
+      activeDiary.length +
+      activeDiary.where((e) => e.rating != null).length;
 
   /// The blending factor α between the machine learning score and the content
   /// similarity score.

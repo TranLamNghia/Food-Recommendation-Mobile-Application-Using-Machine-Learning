@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 /// White rounded surface with an optional small grey title — the card the
-/// account, shopping and dish screens are built from.
+/// account and dish screens are built from.
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,

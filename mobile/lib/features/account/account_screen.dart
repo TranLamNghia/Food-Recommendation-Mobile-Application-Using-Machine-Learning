@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../data/session.dart';
-import '../auth/auth_screen.dart';
-import '../auth/welcome_screen.dart';
 import '../onboarding/onboarding_flow.dart';
-import 'change_password_screen.dart';
+import 'account_settings_screen.dart';
 import 'edit_answer_screen.dart';
 import 'saved_dishes_screen.dart';
 
@@ -42,38 +41,24 @@ class AccountScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _auth(BuildContext context, AuthMode mode) => Navigator.of(
-    context,
-  ).push<bool>(MaterialPageRoute(builder: (_) => AuthScreen(mode: mode)));
-
-  Future<void> _confirm(
-    BuildContext context, {
-    required String title,
-    required String body,
-    required String action,
-    required VoidCallback onConfirmed,
-  }) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Thôi'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.dislike),
-            child: Text(action),
-          ),
-        ],
-      ),
+  /// Throws away the profile and what was learned, then asks the questions
+  /// again. For when the user's taste or situation has changed too much for
+  /// editing single answers; the account is untouched.
+  Future<void> _startOver(BuildContext context, AppSession session) async {
+    final ok = await confirmDestructive(
+      context,
+      title: 'Làm lại từ đầu?',
+      body:
+          'Hồ sơ sức khỏe, khẩu vị đã học, thực đơn và nhật ký sẽ bị xóa để '
+          'bạn khai lại. Tài khoản vẫn giữ nguyên. Không hoàn tác được.',
+      action: 'Xóa hết',
     );
-    if (ok == true) onConfirmed();
+    if (!ok || !context.mounted) return;
+
+    Navigator.of(
+      context,
+    ).pushAndRemoveUntil(fadeRoute<void>(const OnboardingFlow()), (_) => false);
+    session.reset();
   }
 
   @override
@@ -97,12 +82,15 @@ class AccountScreen extends StatelessWidget {
           children: [
             Text('Tôi', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 18),
-            _AccountCard(
-              session: session,
-              onRegister: () => _auth(context, AuthMode.register),
-              onLogIn: () => _auth(context, AuthMode.login),
-            ),
-            const SizedBox(height: 14),
+            // Only absent for the instant between signing out and the
+            // welcome screen taking over.
+            if (session.isSignedIn) ...[
+              _AccountCard(
+                session: session,
+                onTap: () => AccountSettingsScreen.open(context),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (energy != null && macro != null) ...[
               AppCard(
                 title: 'Hạn mức mỗi ngày',
@@ -253,30 +241,6 @@ class AccountScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 8, 14, 8),
               child: Column(
                 children: [
-                  if (session.isSignedIn) ...[
-                    AppRow(
-                      icon: Icons.lock_outline_rounded,
-                      label: 'Đổi mật khẩu',
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const ChangePasswordScreen(),
-                        ),
-                      ),
-                    ),
-                    AppRow(
-                      icon: Icons.logout_rounded,
-                      label: 'Đăng xuất',
-                      onTap: () => _confirm(
-                        context,
-                        title: 'Đăng xuất?',
-                        body:
-                            'Hồ sơ và thực đơn vẫn nằm trong tài khoản, bạn '
-                            'đăng nhập lại là thấy.',
-                        action: 'Đăng xuất',
-                        onConfirmed: session.signOut,
-                      ),
-                    ),
-                  ],
                   AppRow(
                     icon: Icons.info_outline_rounded,
                     label: 'Giới thiệu',
@@ -297,21 +261,7 @@ class AccountScreen extends StatelessWidget {
                     icon: Icons.restart_alt_rounded,
                     label: 'Xóa dữ liệu và làm lại từ đầu',
                     destructive: true,
-                    onTap: () => _confirm(
-                      context,
-                      title: 'Làm lại từ đầu?',
-                      body:
-                          'Hồ sơ, khẩu vị đã học, thực đơn và nhật ký trên máy '
-                          'này sẽ bị xóa. Không hoàn tác được.',
-                      action: 'Xóa hết',
-                      onConfirmed: () {
-                        session.reset();
-                        Navigator.of(context).pushAndRemoveUntil(
-                          fadeRoute<void>(const WelcomeScreen()),
-                          (_) => false,
-                        );
-                      },
-                    ),
+                    onTap: () => _startOver(context, session),
                   ),
                 ],
               ),
@@ -323,102 +273,78 @@ class AccountScreen extends StatelessWidget {
   }
 }
 
-/// Signed-in identity, or the nudge to create one.
+/// Who is signed in. Tapping it opens the account settings.
 class _AccountCard extends StatelessWidget {
-  const _AccountCard({
-    required this.session,
-    required this.onRegister,
-    required this.onLogIn,
-  });
+  const _AccountCard({required this.session, required this.onTap});
 
   final AppSession session;
-  final VoidCallback onRegister;
-  final VoidCallback onLogIn;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final email = session.accountEmail;
-
-    if (email == null) {
-      return AppCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Dữ liệu đang chỉ nằm trên máy này',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Tạo tài khoản để hồ sơ, thực đơn và nhật ký theo bạn sang máy '
-              'khác.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRegister,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-              ),
-              child: const Text('Tạo tài khoản'),
-            ),
-            Center(
-              child: TextButton(
-                onPressed: onLogIn,
-                child: const Text('Đã có tài khoản? Đăng nhập'),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+    final email = session.accountEmail ?? '';
     final name = session.displayName;
     final shown = (name == null || name.isEmpty) ? email : name;
 
-    return AppCard(
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: AppColors.ink,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              shown.characters.first.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 22,
-                color: AppColors.accent,
-                fontVariations: [FontVariation('wght', 700)],
-              ),
+    return Semantics(
+      button: true,
+      label: 'Cài đặt tài khoản',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: AppCard(child: _identity(context, shown, email)),
+      ),
+    );
+  }
+
+  Widget _identity(BuildContext context, String shown, String email) {
+    return Row(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: AppColors.ink,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            shown.characters.first.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 22,
+              color: AppColors.accent,
+              fontVariations: [FontVariation('wght', 700)],
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                shown,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              if (shown != email)
                 Text(
-                  shown,
+                  email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                if (shown != email)
-                  Text(
-                    email,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-              ],
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 8),
+        const Icon(
+          Icons.chevron_right_rounded,
+          size: 22,
+          color: AppColors.textTertiary,
+        ),
+      ],
     );
   }
 }
