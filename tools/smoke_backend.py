@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 17 public endpoints built so far, against the real
+"""End-to-end test of the 19 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -551,6 +551,94 @@ def main(argv: list[str] | None = None) -> int:
         equals("a deck size below 20 is refused with a named field",
                (status, error_code(body)), (400, "VALIDATION_FAILED"))
 
+        # -- 7.4 the onboarding filter screen --
+        #
+        # In the app this comes BEFORE the deck: the user declares their
+        # conditions while watching the catalogue narrow, so the thirty cards
+        # drawn afterwards satisfy every one of them. Here the deck call had
+        # to come first, because it is what tells us whether the ML service
+        # is reachable at all.
+        print("\n§7.4  POST /onboarding/candidates/count")
+        status, none_yet = call("POST", "/onboarding/candidates/count",
+                                {"conditions": []}, token=token)
+        equals("200 with nothing declared", status, 200)
+        none_yet = none_yet or {}
+        catalogue = none_yet.get("totalFoods", 0)
+        check("the catalogue is not empty", catalogue > 0,
+              f"got {catalogue}")
+        equals("nothing declared removes nothing",
+               none_yet.get("remainingFoods"), catalogue)
+        equals("and removedFoods says so", none_yet.get("removedFoods"), 0)
+        check("the roles add up to the remainder",
+              sum(none_yet.get("byDishRole", {}).values())
+              == none_yet.get("remainingFoods"),
+              f"{sum(none_yet.get('byDishRole', {}).values())} against "
+              f"{none_yet.get('remainingFoods')}")
+        equals("no required role is empty",
+               none_yet.get("emptyRequiredRoles"), [])
+        equals("and a full survey can be drawn",
+               none_yet.get("enoughForSurvey"), True)
+        check("dishRole keys are ENUM codes, translated by the app",
+              all(r in ("main", "side_protein", "side_veg", "soup",
+                        "snack", "dessert", "drink")
+                  for r in none_yet.get("byDishRole", {})),
+              f"got {sorted(none_yet.get('byDishRole', {}))}")
+
+        # A diet condition is the one kind that really narrows the catalogue:
+        # `require_tag` keeps only the foods carrying the tag.
+        diet = sql(
+            "SELECT c.id FROM conditions c "
+            "JOIN condition_rules cr ON cr.condition_id = c.id "
+            "WHERE cr.rule_type = 'require_tag' AND cr.is_hard = 1 "
+            "LIMIT 1")
+        if diet:
+            status, narrowed = call(
+                "POST", "/onboarding/candidates/count",
+                {"conditions": [{"conditionId": int(diet[0][0]),
+                                 "severity": "severe"}]},
+                token=token)
+            equals("200 with one condition declared", status, 200)
+            narrowed = narrowed or {}
+            check("a require_tag condition really does narrow the catalogue",
+                  0 < narrowed.get("remainingFoods", 0) < catalogue,
+                  f"{catalogue} -> {narrowed.get('remainingFoods')}")
+            equals("and removedFoods is the difference",
+                   narrowed.get("removedFoods"),
+                   catalogue - narrowed.get("remainingFoods", 0))
+            equals("the catalogue total does not move",
+                   narrowed.get("totalFoods"), catalogue)
+
+        # The saved conditions must not leak into the answer. The account has
+        # none at this point, so the check is that declaring something and
+        # then declaring nothing returns to the full catalogue — the screen
+        # has to be able to go backwards.
+        status, back = call("POST", "/onboarding/candidates/count",
+                            {"conditions": []}, token=token)
+        equals("un-ticking everything returns to the whole catalogue",
+               (back or {}).get("remainingFoods"), catalogue)
+
+        status, body = call(
+            "POST", "/onboarding/candidates/count",
+            {"conditions": [{"conditionId": 1, "severity": "mild"},
+                            {"conditionId": 1, "severity": "severe"}]},
+            token=token)
+        equals("the same condition twice is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        status, body = call(
+            "POST", "/onboarding/candidates/count",
+            {"conditions": [{"conditionId": 999999, "severity": "mild"}]},
+            token=token)
+        equals("a condition that does not exist is a named field, not a 500",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        status, body = call(
+            "POST", "/onboarding/candidates/count",
+            {"conditions": [{"conditionId": 1, "severity": "enormous"}]},
+            token=token)
+        equals("an invalid severity is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
         print("\n§7.4.2  POST /onboarding/survey")
         # Too few opinionated swipes. `unknown` deliberately does not count,
         # so three `unknown` on top change nothing.
@@ -879,6 +967,79 @@ def main(argv: list[str] | None = None) -> int:
                        (uid,))[0][0]
             equals("exactly one diary row for one meal eaten once", rows, 1)
 
+        # -- 7.6.2b rebuild one meal of the day --
+        #
+        # The feature §7.6.2's `mealTypes` was asking for, as its own
+        # endpoint. What is being checked is the property that makes it safe
+        # to have: the plan row stays the DAY's row, so the figure in
+        # `calorie_deviation_pct` is still a deviation over a day.
+        print("\n§7.6.2b  POST /meal-plans/{id}/meals/{mealType}")
+        status, day_before = call(
+            "GET", f"/meal-plans/{plan_id}", token=token)
+        before_by_meal = {
+            m["mealType"]: [i["food"]["id"] for i in m["items"]]
+            for m in (day_before or {}).get("meals", [])
+        }
+
+        status, rolled = call(
+            "POST", f"/meal-plans/{plan_id}/meals/snack", token=token)
+        equals("200", status, 200)
+        rolled = rolled or {}
+        equals("it is the SAME plan row, not a new one",
+               rolled.get("id"), plan_id)
+        equals("and still the same day", rolled.get("planDate"),
+               (day_before or {}).get("planDate"))
+        after_by_meal = {
+            m["mealType"]: [i["food"]["id"] for i in m["items"]]
+            for m in rolled.get("meals", [])
+        }
+        for meal in ("breakfast", "lunch", "dinner"):
+            equals(f"{meal} is untouched", after_by_meal.get(meal),
+                   before_by_meal.get(meal))
+        check("the snack really changed — re-rolling a meal that returns the "
+              "same dish would look broken",
+              after_by_meal.get("snack") != before_by_meal.get("snack")
+              or before_by_meal.get("snack") == [],
+              f"{before_by_meal.get('snack')} -> "
+              f"{after_by_meal.get('snack')}")
+        check("the day's energy is recomputed over all four meals",
+              (rolled.get("actuals") or {}).get("caloriesKcal") is not None
+              and rolled.get("calorieDeviationPct") is not None)
+        check("and the deviation is still a figure about a DAY: the target "
+              "did not shrink to one meal's share",
+              (rolled.get("targets") or {}).get("caloriesKcal")
+              == (day_before or {}).get("targets", {}).get("caloriesKcal"))
+        ids_after = [i["food"]["id"] for m in rolled.get("meals", [])
+                     for i in m["items"]
+                     if i["status"] != "replaced"]
+        check("no dish is served twice after the rebuild",
+              len(ids_after) == len(set(ids_after)),
+              f"repeats: {len(ids_after) - len(set(ids_after))}")
+
+        rows = sql("SELECT COUNT(*) FROM meal_plans WHERE user_id = %s",
+                   (uid,))[0][0]
+        equals("there is still exactly one plan for the day", rows, 1)
+
+        status, body = call(
+            "POST", f"/meal-plans/{plan_id}/meals/brunch", token=token)
+        equals("a meal that is not one of the four is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        status, body = call(
+            "POST",
+            "/meal-plans/00000000-0000-4000-8000-000000000000/meals/snack",
+            token=token)
+        equals("a plan that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # The lunch holds the dish marked `eaten` a moment ago. A meal that
+        # has been eaten cannot be re-planned: that dish is in the food diary
+        # and is a preference signal of weight 0.9.
+        status, body = call(
+            "POST", f"/meal-plans/{plan_id}/meals/lunch", token=token)
+        equals("a meal with a dish already eaten cannot be rebuilt",
+               (status, error_code(body)), (409, "VALIDATION_FAILED"))
+
         # Regenerating deletes the old plan, which the app should warn about.
         print("\n§7.6.2  regenerate")
         status, fresh = call(
@@ -940,6 +1101,21 @@ def main(argv: list[str] | None = None) -> int:
     equals("403 for PUT too, not only GET", (status, error_code(body)),
            (403, "ACCOUNT_DISABLED"))
 
+    # The GET loop above cannot reach the two endpoints added last, because
+    # both are POSTs. The plan id below does not exist, deliberately: a 403
+    # for it proves the filter answers BEFORE the action looks anything up,
+    # which is what makes it protection rather than a check the endpoint
+    # happens to do first.
+    missing_plan = "00000000-0000-4000-8000-000000000000"
+    for method, path, payload in (
+        ("POST", "/onboarding/candidates/count", {"conditions": []}),
+        ("POST", f"/meal-plans/{missing_plan}/meals/snack", None),
+        ("POST", "/meal-plans", {"planDate": date.today().isoformat()}),
+    ):
+        status, body = call(method, path, payload, token=access)
+        equals(f"403 ACCOUNT_DISABLED at {method} {path}",
+               (status, error_code(body)), (403, "ACCOUNT_DISABLED"))
+
     # And no more refreshing either — otherwise disabling an account would
     # take effect for at most an hour.
     status, body = call("POST", "/auth/refresh",
@@ -970,7 +1146,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 17 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 19 endpoints behave per the "
           f"specification against the real database.")
     return 0
 

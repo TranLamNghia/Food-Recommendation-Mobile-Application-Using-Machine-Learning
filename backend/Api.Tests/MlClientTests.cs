@@ -706,6 +706,75 @@ public class MlClientTests
     }
 
     /// <summary>
+    /// An empty <c>MealTypes</c> is not "all four": it is a caller that
+    /// worked out a set of meals and got none. Sending it would have the
+    /// service answer <c>400</c> for something this side already knows.
+    /// </summary>
+    [Fact]
+    public async Task An_empty_meal_type_list_never_leaves_here()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "{}");
+        var client = Build(handler);
+
+        var result = await client.PlanAsync(new MlPlanRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            MealTypes = [],
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal(MlFailureKind.BadRequest, result.Failure!.Kind);
+        Assert.Equal("EMPTY_MEAL_TYPES", result.Failure.Code);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    /// <summary>
+    /// <c>null</c> is the whole day, and a named subset is sent as it
+    /// stands. The field is the wire contract, so this also pins the name
+    /// <c>ml/api.py</c> reads.
+    /// </summary>
+    [Fact]
+    public async Task A_named_subset_of_meals_is_sent_as_it_is()
+    {
+        var handler = new StubHandler(
+            HttpStatusCode.ServiceUnavailable, "{}");
+        var client = Build(handler);
+
+        await client.PlanAsync(new MlPlanRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            MealTypes = ["snack"],
+        });
+
+        Assert.Equal(1, handler.Calls);
+        Assert.Contains("\"mealTypes\":[\"snack\"]", handler.LastBody);
+    }
+
+    /// <summary>
+    /// <c>MEAL_PLAN_REQUIRED</c> means this backend asked for a meal of a day
+    /// that has no plan — a bug on this side, not a step the user has to
+    /// complete. It must NOT degrade, and it must not reach the user as
+    /// "try again later".
+    /// </summary>
+    [Fact]
+    public async Task A_meal_of_a_day_with_no_plan_is_a_bug_on_this_side()
+    {
+        var client = Build(new StubHandler(
+            HttpStatusCode.UnprocessableEntity,
+            Envelope("MEAL_PLAN_REQUIRED", "No plan for that date.")));
+
+        var result = await client.PlanAsync(new MlPlanRequest
+        {
+            UserId = "00000001-0000-4000-8000-000000000000",
+            MealTypes = ["snack"],
+        });
+
+        Assert.False(result.Ok);
+        Assert.Equal(MlFailureKind.BadRequest, result.Failure!.Kind);
+        Assert.False(result.Failure.IsDegradable);
+    }
+
+    /// <summary>
     /// The deck's reply reaches this side with the field names
     /// <c>ml/api.py</c> sends — the contract is the property names, and a
     /// rename on either side is a silent null here.

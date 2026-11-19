@@ -1050,6 +1050,210 @@ def check_ml_scores() -> None:
     )
 
 
+# -- 14. Rebuilding one meal of a day ----------------------------------
+
+
+def check_one_meal() -> None:
+    print("14. Rebuilding one meal — the day stays the unit of measurement")
+
+    foods = role_catalogue(per_role=5)
+
+    # A whole day first, to take the other three meals from.
+    whole = build(builder(foods, exploration_ratio=0.0))
+    kept = {
+        slot.meal_type: list(slot.items)
+        for slot in whole.slots
+        if slot.meal_type != "snack"
+    }
+    before_snack = [
+        i.food.id for s in whole.slots if s.meal_type == "snack"
+        for i in s.items
+    ]
+
+    again = builder(foods, exploration_ratio=0.0).build(
+        plan_date=DAY,
+        target_kcal=2000.0,
+        target_protein=100.0,
+        target_carb=250.0,
+        target_fat=66.7,
+        only_meals=["snack"],
+        kept=kept,
+    )
+
+    by_meal = {s.meal_type: s for s in again.slots}
+    check(
+        len(again.slots) == 4,
+        "a rebuilt meal still answers with the whole day's four meals",
+    )
+    for meal, items in kept.items():
+        check(
+            [i.food.id for i in by_meal[meal].items]
+            == [i.food.id for i in items],
+            f"{meal} is untouched when only the snack is rebuilt",
+        )
+    check(
+        [i.food.id for i in by_meal["snack"].items] != [],
+        "the rebuilt meal has servings",
+    )
+
+    # The day's energy includes the kept meals. This is the property the
+    # whole design rests on: assembling one meal against one meal's share
+    # would make `deviation_pct` a deviation from 7.5 % of a target,
+    # reported in the column that states the day's.
+    approx(
+        again.actual_kcal,
+        sum(i.kcal for s in again.slots for i in s.items),
+        "the day's energy counts the kept meals too",
+    )
+    check(
+        again.actual_kcal > by_meal["snack"].actual_kcal,
+        "and is larger than the rebuilt meal on its own",
+    )
+    approx(
+        again.target_kcal, 2000.0,
+        "the target stays the DAY's target, not the meal's share",
+    )
+
+    # No dish may appear twice, across the kept meals and the rebuilt one.
+    ids = [i.food.id for s in again.slots for i in s.items]
+    check(
+        len(ids) == len(set(ids)),
+        "no dish is served twice when one meal is rebuilt",
+    )
+    kept_ids = {i.food.id for items in kept.values() for i in items}
+    check(
+        not (kept_ids & {i.food.id for i in by_meal["snack"].items}),
+        "the rebuilt meal cannot take a dish that is already on the plate",
+    )
+
+    # Rebuilding every meal is the same thing as building the day.
+    all_four = builder(foods, exploration_ratio=0.0).build(
+        plan_date=DAY,
+        target_kcal=2000.0,
+        target_protein=100.0,
+        target_carb=250.0,
+        target_fat=66.7,
+        only_meals=list(MEAL_TYPES),
+    )
+    check(
+        [i.food.id for s in all_four.slots for i in s.items]
+        == [i.food.id for s in whole.slots for i in s.items],
+        "only_meals naming all four builds exactly the day that `None` does",
+    )
+
+    # A kept serving of 1.5 portions has to count as 1.5.
+    heavy_kept = {
+        "breakfast": [
+            PlanItem(food=food("heavy", "main", 400), score=0.5, portion=1.5)
+        ],
+    }
+    heavy = builder(foods, exploration_ratio=0.0).build(
+        plan_date=DAY,
+        target_kcal=2000.0,
+        target_protein=100.0,
+        target_carb=250.0,
+        target_fat=66.7,
+        only_meals=["snack"],
+        kept=heavy_kept,
+    )
+    approx(
+        [s for s in heavy.slots if s.meal_type == "breakfast"][0].actual_kcal,
+        600.0,
+        "a kept serving of 1.5 portions counts 1.5 times its energy",
+    )
+
+    # And a serving this builder picks is always exactly one portion.
+    check(
+        all(i.portion == 1.0 for s in whole.slots for i in s.items),
+        "every serving Step 4 picks is one standard portion",
+    )
+
+    # The arguments that cannot mean anything.
+    raises(
+        lambda: builder(foods).build(
+            plan_date=DAY, target_kcal=2000.0, target_protein=100.0,
+            target_carb=250.0, target_fat=66.7, only_meals=[],
+        ),
+        ValueError,
+        "an empty only_meals is refused, not read as 'the whole day'",
+    )
+    raises(
+        lambda: builder(foods).build(
+            plan_date=DAY, target_kcal=2000.0, target_protein=100.0,
+            target_carb=250.0, target_fat=66.7, only_meals=["brunch"],
+        ),
+        ValueError,
+        "a meal that does not exist is refused",
+    )
+    raises(
+        lambda: builder(foods).build(
+            plan_date=DAY, target_kcal=2000.0, target_protein=100.0,
+            target_carb=250.0, target_fat=66.7,
+            only_meals=["snack"], kept={"snack": []},
+        ),
+        ValueError,
+        "a meal cannot be both rebuilt and kept",
+    )
+
+    # The order of `only_meals` must not change the result: phase 1 walks the
+    # slots in order and phase 3 updates `used` between meals, so a plan that
+    # depended on how the caller typed the list would not be reproducible.
+    forwards = builder(foods, exploration_ratio=0.0).build(
+        plan_date=DAY, target_kcal=2000.0, target_protein=100.0,
+        target_carb=250.0, target_fat=66.7,
+        only_meals=["breakfast", "lunch"],
+        kept={m: list(kept[m]) for m in ("dinner",)},
+    )
+    backwards = builder(foods, exploration_ratio=0.0).build(
+        plan_date=DAY, target_kcal=2000.0, target_protein=100.0,
+        target_carb=250.0, target_fat=66.7,
+        only_meals=["lunch", "breakfast"],
+        kept={m: list(kept[m]) for m in ("dinner",)},
+    )
+    check(
+        [i.food.id for s in forwards.slots for i in s.items]
+        == [i.food.id for s in backwards.slots for i in s.items],
+        "the result depends on WHICH meals are rebuilt, not on their order",
+    )
+
+    # Phase 5 may only move dishes in the meals being rebuilt. A threshold
+    # the kept meals breach on their own is then reported, not repaired —
+    # the honest answer, and the one the response has to carry.
+    # The kept breakfast alone is 1800 mg of sodium against a 1000 mg day
+    # limit, and the only servings phase 5 may touch are in the snack, whose
+    # mildest food carries 1 mg. So the breach cannot be repaired from
+    # there — which is the case worth checking.
+    salty_main_a = food("salty-main-a", "main", 400, sodium=900.0)
+    salty_main_b = food("salty-main-b", "main", 400, sodium=900.0)
+    mild = [
+        food(f"mild-{i}", "snack", 150, sodium=1.0) for i in range(1, 4)
+    ]
+    limited = builder(
+        [salty_main_a, salty_main_b] + mild,
+        exploration_ratio=0.0,
+        nutrient_targets=[NutrientTarget.at_most("sodium_mg", 1000.0, "HA")],
+    ).build(
+        plan_date=DAY, target_kcal=2000.0, target_protein=100.0,
+        target_carb=250.0, target_fat=66.7,
+        only_meals=["snack"],
+        kept={
+            "breakfast": [
+                PlanItem(food=salty_main_a, score=0.5),
+                PlanItem(food=salty_main_b, score=0.5),
+            ],
+        },
+    )
+    check(
+        [t.nutrient for t, _ in limited.nutrient_violations]
+        == ["sodium_mg"],
+        "a threshold the kept meals breach is REPORTED rather than hidden",
+    )
+    check(
+        limited.meets_nutrient_targets is False,
+        "and the plan does not claim its targets are met",
+    )
+
+
 def main() -> int:
     use_utf8()
     print("Step 4 checks — the meal-plan builder, no database needed")
@@ -1068,6 +1272,7 @@ def main() -> int:
         check_plan_row,
         check_alternatives,
         check_ml_scores,
+        check_one_meal,
     ):
         section()
     print("=" * 62)
