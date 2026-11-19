@@ -263,10 +263,45 @@ class PlanItem:
     #: `None` is an exploitation serving. `meal_plan_items.exploration_delta`
     #: holds exactly this, which is why no `is_exploration` column is needed.
     exploration_delta: float | None = None
+    #: Servings on the plate — `meal_plan_items.portion_multiplier`.
+    #:
+    #: Always 1.0 for a serving this builder picks: Step 4 chooses dishes,
+    #: not portions, and every nutrition figure in `Food` is per serving.
+    #: Another value arrives only with a **kept** serving, because §7.6.5
+    #: lets a user replace a dish and ask for a different weight. The day's
+    #: energy then has to count what is served rather than one serving of
+    #: it.
+    portion: float = 1.0
 
     @property
     def is_exploration(self) -> bool:
         return self.exploration_delta is not None
+
+    @property
+    def kcal(self) -> float:
+        return float(self.food.kcal) * self.portion
+
+    @property
+    def protein(self) -> float:
+        return self.food.protein * self.portion
+
+    @property
+    def carb(self) -> float:
+        return self.food.carb * self.portion
+
+    @property
+    def fat(self) -> float:
+        return self.food.fat * self.portion
+
+    def amount_of(self, nutrient: str) -> float | None:
+        """This serving's amount of `nutrient`, or `None` when unmeasured.
+
+        `None` stays `None` rather than becoming 0: a food with no sodium
+        figure is not a food with no sodium, and the callers that sum
+        nutrients decide for themselves what to do with the gap.
+        """
+        value = value_of(self.food, nutrient)
+        return None if value is None else value * self.portion
 
 
 @dataclass
@@ -279,19 +314,19 @@ class MealSlotResult:
 
     @property
     def actual_kcal(self) -> float:
-        return sum(float(i.food.kcal) for i in self.items)
+        return sum(i.kcal for i in self.items)
 
     @property
     def protein(self) -> float:
-        return sum(i.food.protein for i in self.items)
+        return sum(i.protein for i in self.items)
 
     @property
     def carb(self) -> float:
-        return sum(i.food.carb for i in self.items)
+        return sum(i.carb for i in self.items)
 
     @property
     def fat(self) -> float:
-        return sum(i.food.fat for i in self.items)
+        return sum(i.fat for i in self.items)
 
     @property
     def deviation_pct(self) -> float:
@@ -356,7 +391,7 @@ class DailyPlan:
         return sum(i.score for i in self.items)
 
     def total_of(self, nutrient: str) -> float:
-        return sum(value_of(i.food, nutrient) or 0.0 for i in self.items)
+        return sum(i.amount_of(nutrient) or 0.0 for i in self.items)
 
     @property
     def nutrient_violations(self) -> list[tuple[NutrientTarget, float]]:
@@ -534,19 +569,58 @@ class MenuBuilder:
         target_protein: float,
         target_carb: float,
         target_fat: float,
+        only_meals: Sequence[str] | None = None,
+        kept: Mapping[str, Sequence[PlanItem]] | None = None,
     ) -> DailyPlan:
         """The five phases, in order.
 
         `target_kcal` is the whole day's energy target from Step 1 — the TDEE
         adjusted for the goal. Each meal's share follows from
         `MEAL_ENERGY_SHARE`.
+
+        ## Rebuilding one meal of a day
+
+        `only_meals` names the meals to assemble; `kept` carries the servings
+        of the meals that stay. Omit both and the whole day is built, which
+        is the path `tools/check_step4_parity.py` compares against the Dart
+        implementation.
+
+        **The day stays the unit of measurement.** The kept servings are in
+        `picks` from the start, so they count towards the day's energy, every
+        `per_day` nutrient total, `deviation_pct` and `used` — the same
+        numbers the full-day build produces. What changes is only which
+        servings the five phases are allowed to touch. Assembling one meal
+        against one meal's share instead would make `deviation_pct` a
+        deviation from 37.5 % of a target, recorded in the column that
+        reports the day's.
+
+        Two things follow from that, and both are intended:
+
+        * phase 5 may only swap dishes inside `only_meals`, so a day-level
+          threshold the kept meals breach on their own cannot be repaired —
+          it is reported instead, which is the honest answer;
+        * exploration is counted over the servings being built, so
+          regenerating a one-dish meal draws no exploration serving at all
+          (`round(1 * 0.3) == 0`). The 70-30 share is a property of a plan,
+          not of a single serving.
         """
+        mutable = self._mutable_meals(only_meals)
+        fixed = self._fixed_items(kept, mutable)
+
         ratio = min(max(self.exploration_ratio, 0.0), 0.5)
         explore_profile = self._jittered(self.profile)
 
-        slots = self._assign_exploration_slots(ratio)
-        picks: dict[str, list[PlanItem]] = {m: [] for m in MEAL_TYPES}
-        used: set[str] = set()
+        slots = self._assign_exploration_slots(ratio, mutable)
+        picks: dict[str, list[PlanItem]] = {
+            m: list(fixed.get(m, ())) for m in MEAL_TYPES
+        }
+        # The kept dishes are in `used` before phase 1 runs, so a meal being
+        # rebuilt cannot pick a food that is already on the plate in another
+        # meal. Without this the same dish appears twice in one day — the
+        # exact bug the `usedIds` bookkeeping of phase 3 exists to prevent.
+        used: set[str] = {
+            i.food.id for items in picks.values() for i in items
+        }
         warnings: list[str] = list(self._input_warnings())
 
         # ── Phase 1 — greedy over the required servings ──
@@ -563,7 +637,7 @@ class MenuBuilder:
                 continue
 
             meal_target = target_kcal * MEAL_ENERGY_SHARE[slot.meal]
-            already = sum(float(i.food.kcal) for i in picks[slot.meal])
+            already = sum(i.kcal for i in picks[slot.meal])
             # Ported as it stands from `menu_builder.dart:158`: this counts
             # ALL the servings of the meal, not the ones still to fill, so
             # the per-slot target shrinks less than the remaining allowance
@@ -589,10 +663,12 @@ class MenuBuilder:
             )
 
         # ── Phase 2 — top up with optional servings, at the day level ──
-        self._top_up(picks=picks, used=used, target_kcal=target_kcal)
+        self._top_up(
+            picks=picks, used=used, target_kcal=target_kcal, meals=mutable
+        )
 
         # ── Phase 3 — local search inside each meal ──
-        for meal in MEAL_TYPES:
+        for meal in mutable:
             before = {i.food.id for i in picks[meal]}
             share = MEAL_ENERGY_SHARE[meal]
             refined = self._local_search(
@@ -622,7 +698,9 @@ class MenuBuilder:
         # and leaves the day shorter still. `_top_up` only adds a food when
         # it makes the day-level gap smaller, so another pass can never make
         # things worse.
-        self._top_up(picks=picks, used=used, target_kcal=target_kcal)
+        self._top_up(
+            picks=picks, used=used, target_kcal=target_kcal, meals=mutable
+        )
 
         # ── Phase 5 — the day-level nutrient constraints ──
         #
@@ -630,7 +708,9 @@ class MenuBuilder:
         # statement about the whole day's total: it cannot be checked in
         # phase 1, which picks one serving at a time, nor in phase 3, which
         # optimises one meal at a time.
-        self._repair_nutrients(picks=picks, used=used, target_kcal=target_kcal)
+        self._repair_nutrients(
+            picks=picks, used=used, target_kcal=target_kcal, meals=mutable
+        )
 
         slots_out = [
             MealSlotResult(
@@ -652,6 +732,70 @@ class MenuBuilder:
             warnings=tuple(warnings + self._result_warnings(slots_out)),
         )
         return plan
+
+    # -- which meals this build may touch ------------------------------
+
+    def _mutable_meals(
+        self, only_meals: Sequence[str] | None
+    ) -> tuple[str, ...]:
+        """The meals to assemble, in `MEAL_TYPES` order.
+
+        The order is not cosmetic: phase 1 walks the slots in it and phase 3
+        updates `used` between meals, so two runs over the same set in a
+        different order can pick different dishes. Taking the order from
+        `MEAL_TYPES` rather than from the caller's list makes the result
+        depend on the SET of meals, never on how they were typed.
+        """
+        if only_meals is None:
+            return MEAL_TYPES
+
+        wanted = set(only_meals)
+        unknown = sorted(wanted - set(MEAL_TYPES))
+        if unknown:
+            raise ValueError(
+                f"not a meal of this plan: {unknown}. "
+                f"MEAL_TYPES is {list(MEAL_TYPES)}."
+            )
+        if not wanted:
+            raise ValueError(
+                "only_meals is empty: there would be nothing to build. Pass "
+                "None to build the whole day."
+            )
+        return tuple(m for m in MEAL_TYPES if m in wanted)
+
+    def _fixed_items(
+        self,
+        kept: Mapping[str, Sequence[PlanItem]] | None,
+        mutable: tuple[str, ...],
+    ) -> dict[str, list[PlanItem]]:
+        """The servings that stay, validated.
+
+        Refuses a `kept` entry for a meal that is also being rebuilt, rather
+        than silently preferring one of the two. That combination is a caller
+        bug with two plausible readings — "keep these and add more" or
+        "replace these" — and guessing either would show up only as a meal
+        with the wrong number of dishes.
+        """
+        if not kept:
+            return {}
+
+        unknown = sorted(set(kept) - set(MEAL_TYPES))
+        if unknown:
+            raise ValueError(f"not a meal of this plan: {unknown}")
+
+        clash = sorted(set(kept) & set(mutable))
+        if clash:
+            raise ValueError(
+                f"{clash} appear in both only_meals and kept: a meal is "
+                "either rebuilt or kept, not both."
+            )
+
+        # A kept serving in one of `UNUSED_ROLES` is passed through rather
+        # than refused: the row exists in `meal_plan_items`, so a plan
+        # containing it has to remain readable, and it still counts towards
+        # the day's energy. `MEAL_STRUCTURE` simply has no slot that could
+        # have produced it, which is a product question, not a bad input.
+        return {meal: list(items) for meal, items in kept.items()}
 
     # -- warnings ------------------------------------------------------
 
@@ -703,7 +847,9 @@ class MenuBuilder:
 
     # -- phase helpers -------------------------------------------------
 
-    def _assign_exploration_slots(self, ratio: float) -> list[Slot]:
+    def _assign_exploration_slots(
+        self, ratio: float, meals: Sequence[str] = MEAL_TYPES
+    ) -> list[Slot]:
         """Which servings are exploration, counted over the **whole plan**.
 
         The 70-30 split is a property of the plan, which is why
@@ -717,7 +863,7 @@ class MenuBuilder:
         """
         base = [
             (meal, role)
-            for meal in MEAL_TYPES
+            for meal in meals
             for role in MEAL_STRUCTURE[meal].required
         ]
         budget = round(len(base) * ratio)
@@ -778,6 +924,7 @@ class MenuBuilder:
         picks: dict[str, list[PlanItem]],
         used: set[str],
         target_kcal: float,
+        meals: Sequence[str] = MEAL_TYPES,
     ) -> None:
         """Add optional servings one at a time, while each one brings the
         day's energy closer to the target.
@@ -786,16 +933,19 @@ class MenuBuilder:
         about the **plan's** deviation. One meal being light can be made up
         by another, and that is the right behaviour: people do eat a small
         breakfast and a big lunch.
+
+        `meals` restricts where a serving may be ADDED; the energy it is
+        judged against is still the whole day's, kept meals included.
         """
         while True:
             current = sum(
-                float(i.food.kcal) for items in picks.values() for i in items
+                i.kcal for items in picks.values() for i in items
             )
             best_gap = abs(current - target_kcal)
             best_meal: str | None = None
             best_food: Food | None = None
 
-            for meal in MEAL_TYPES:
+            for meal in meals:
                 for role in MEAL_STRUCTURE[meal].optional:
                     # Never two servings of the same role in one meal.
                     if any(i.food.dish_role == role for i in picks[meal]):
@@ -901,16 +1051,16 @@ class MenuBuilder:
         """
         total_score = sum(i.score for i in items) * self._meal_multiplier(items)
 
-        kcal = sum(float(i.food.kcal) for i in items)
+        kcal = sum(i.kcal for i in items)
         energy_term = 0.0 if target_kcal <= 0 else abs(kcal - target_kcal) / target_kcal
 
         def macro_term(actual: float, target: float) -> float:
             return 0.0 if target <= 0 else abs(actual - target) / target
 
         macro_sum = (
-            macro_term(sum(i.food.protein for i in items), target_protein)
-            + macro_term(sum(i.food.carb for i in items), target_carb)
-            + macro_term(sum(i.food.fat for i in items), target_fat)
+            macro_term(sum(i.protein for i in items), target_protein)
+            + macro_term(sum(i.carb for i in items), target_carb)
+            + macro_term(sum(i.fat for i in items), target_fat)
         )
         return (
             total_score
@@ -938,12 +1088,12 @@ class MenuBuilder:
         if not self.per_meal_rules:
             return 1.0
         totals = {
-            nutrient: sum(value_of(i.food, nutrient) or 0.0 for i in items)
+            nutrient: sum(i.amount_of(nutrient) or 0.0 for i in items)
             for nutrient in {r.nutrient for r in self.per_meal_rules}
         }
         missing = {
             nutrient: sum(
-                1 for i in items if value_of(i.food, nutrient) is None
+                1 for i in items if i.amount_of(nutrient) is None
             )
             for nutrient in totals
         }
@@ -952,7 +1102,7 @@ class MenuBuilder:
     def _day_totals(self, picks: Mapping[str, Sequence[PlanItem]]) -> dict[str, float]:
         return {
             nutrient: sum(
-                value_of(i.food, nutrient) or 0.0
+                i.amount_of(nutrient) or 0.0
                 for items in picks.values()
                 for i in items
             )
@@ -965,6 +1115,7 @@ class MenuBuilder:
         picks: dict[str, list[PlanItem]],
         used: set[str],
         target_kcal: float,
+        meals: Sequence[str] = MEAL_TYPES,
     ) -> None:
         """Phase 5 — swap foods until the day-level constraints hold.
 
@@ -989,6 +1140,12 @@ class MenuBuilder:
         Among swaps that improve things equally, the one that **keeps taste
         best** wins: dropping that tie-break was measured to cost 7.1 % of
         the taste-match score instead of 2.1 %.
+
+        `meals` restricts which servings may be swapped. The totals are
+        always the whole day's, so when only one meal is being rebuilt a
+        threshold the other three breach on their own cannot be repaired
+        here. It is then reported in `nutrient_violations` rather than
+        silently left out — the plan says what it could not fix.
         """
         active = [
             t for t in self.nutrient_targets
@@ -1011,7 +1168,7 @@ class MenuBuilder:
                 return
 
             kcal_now = sum(
-                float(i.food.kcal) for items in picks.values() for i in items
+                i.kcal for items in picks.values() for i in items
             )
             deviation_now = (
                 0.0 if target_kcal <= 0
@@ -1025,7 +1182,7 @@ class MenuBuilder:
             best_violation = worst_violation
             best_score = -1.0
 
-            for meal in MEAL_TYPES:
+            for meal in meals:
                 items = picks[meal]
                 for i, item in enumerate(items):
                     current = item.food
