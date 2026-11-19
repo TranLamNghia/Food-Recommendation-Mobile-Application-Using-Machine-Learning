@@ -49,6 +49,13 @@ public interface IMlClient
         MlSurveyDeckRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// §7.4 — how many foods a set of conditions would leave, for the
+    /// onboarding filter screen. Reads nothing saved and writes nothing.
+    /// </summary>
+    Task<MlResult<MlCandidateCountResponse>> CandidateCountAsync(
+        MlCandidateCountRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Rebuild a user's preference vector (§8.2). Call it after onboarding
     /// finishes, and when <c>featureVersion</c> changes.
     /// </summary>
@@ -164,9 +171,27 @@ public sealed class MlClient : IMlClient
                 + "meal_plans.exploration_ratio."));
         }
 
+        // An empty list is not "all four": it is a caller that computed a
+        // set of meals and got none. Refused here rather than sent, because
+        // the service would answer `400` for it and this side already knows.
+        if (request.MealTypes is { Count: 0 })
+        {
+            return Task.FromResult(MlResult<MlPlanResponse>.Fail(
+                MlFailureKind.BadRequest, null, "EMPTY_MEAL_TYPES",
+                "PlanAsync was given an empty MealTypes. Leave it null to "
+                + "build the whole day; an empty list means something "
+                + "upstream selected no meal at all."));
+        }
+
         return SendAsync<MlPlanResponse>(
             HttpMethod.Post, "plan", request, needsKey: true, ct);
     }
+
+    public Task<MlResult<MlCandidateCountResponse>> CandidateCountAsync(
+        MlCandidateCountRequest request, CancellationToken ct = default)
+        => SendAsync<MlCandidateCountResponse>(
+            HttpMethod.Post, "candidates/count", request,
+            needsKey: true, ct);
 
     public Task<MlResult<MlSurveyDeckResponse>> SurveyDeckAsync(
         MlSurveyDeckRequest request, CancellationToken ct = default)
@@ -400,6 +425,13 @@ public sealed class MlClient : IMlClient
             // "lỗi máy chủ" when the real answer is "fill in your profile".
             "PROFILE_REQUIRED" => MlFailureKind.ProfileRequired,
             "ONBOARDING_REQUIRED" => MlFailureKind.OnboardingRequired,
+            // Both mean this backend asked for something impossible rather
+            // than the user missing a step: a meal of a day that has no
+            // plan, or a condition id that does not exist. `BadRequest` is
+            // right — it is a bug on this side, it does not degrade, and it
+            // reaches the client as a 500 with the detail in the log.
+            "MEAL_PLAN_REQUIRED" => MlFailureKind.BadRequest,
+            "CONDITION_NOT_FOUND" => MlFailureKind.BadRequest,
             "TRAINING_IN_PROGRESS" => MlFailureKind.TrainingInProgress,
             // Numbers rather than the `HttpStatusCode` names: 422 is
             // `UnprocessableEntity` in some .NET versions and
