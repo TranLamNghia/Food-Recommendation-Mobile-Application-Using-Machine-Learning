@@ -140,18 +140,21 @@ public sealed class MealPlanController(
                     "Bữa không hợp lệ: " + string.Join(", ", unknown));
             }
 
-            // Refused rather than honoured. The reason is in
-            // `GeneratePlanRequest.MealTypes`: phase 5 of Step 4 repairs the
-            // plan at DAY level, so a single meal has no day to be measured
-            // against, and `calorie_deviation_pct` would then record a
-            // deviation from part of a target as though it were the whole.
+            // One meal at a time has its own endpoint, because it is a
+            // different operation: it rebuilds a meal INSIDE an existing
+            // day, so the day stays the unit the ±10 % and every per-day
+            // threshold are measured over. Creating a plan that contains
+            // only a snack would instead make `calorie_deviation_pct` a
+            // deviation from the whole day's target with one dish against
+            // it — about −92 % for a 150 kcal snack, recorded in the column
+            // Chapter 3 reads.
             if (requested.Distinct().Count() != Enums.MealType.Length)
             {
                 return Invalid(
                     "mealTypes",
-                    "Hiện chỉ sinh được cả bốn bữa cùng lúc, vì hạn mức "
-                    + "năng lượng và các ngưỡng dinh dưỡng được kiểm theo "
-                    + "ngày, không theo từng bữa");
+                    "Sinh cả bốn bữa thì gọi endpoint này; sinh lại một bữa "
+                    + "thì gọi POST /meal-plans/{id}/meals/{mealType}, vì "
+                    + "một bữa chỉ sinh được bên trong thực đơn của ngày");
             }
         }
 
@@ -218,6 +221,161 @@ public sealed class MealPlanController(
         return Ok(await MealPlanMapper.BuildAsync(db, plan, null, ct));
     }
 
+    // ── 7.6.2b Rebuild one meal of a day ─────────────────────────────────
+
+    /// <summary>
+    /// Rebuilds one meal inside an existing plan, keeping the other three.
+    ///
+    /// <para>Not in the specification, and it is what §7.6.2's
+    /// <c>mealTypes</c> was asking for. The difference that matters is where
+    /// the figures are measured: the plan row stays the <b>day's</b> row,
+    /// its target stays the day's target, and <c>actual_*</c> is recomputed
+    /// over all four meals — so <c>calorie_deviation_pct</c> keeps meaning
+    /// what the column means. Exceeding ±10 % is allowed and reported
+    /// (<c>withinTolerance = false</c> plus a log line), not refused: a user
+    /// who wants another snack may have it, and the figure stays
+    /// honest.</para>
+    ///
+    /// <para>A meal with a dish already marked <c>eaten</c> cannot be
+    /// rebuilt. That dish is in the food diary and is a preference signal of
+    /// weight 0.9; replanning around it would mean deleting a record of
+    /// something that happened.</para>
+    /// </summary>
+    [HttpPost("{id}/meals/{mealType}")]
+    public async Task<IActionResult> RegenerateMeal(
+        string id,
+        string mealType,
+        CancellationToken ct = default)
+    {
+        if (UserId is not { } uid)
+        {
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+        }
+
+        if (!Enums.MealType.Contains(mealType))
+        {
+            return Invalid(
+                "mealType",
+                "Bữa không hợp lệ, phải là một trong: "
+                + string.Join(" · ", Enums.MealType));
+        }
+
+        var plan = await db.MealPlans.FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (plan is null)
+        {
+            return Fail(404, ErrorCode.NotFound, "Không tìm thấy thực đơn");
+        }
+        if (plan.UserId != uid)
+        {
+            return Fail(403, ErrorCode.Forbidden,
+                        "Thực đơn này không thuộc tài khoản của bạn");
+        }
+
+        var ofMeal = await db.MealPlanItems
+            .Where(i => i.MealPlanId == plan.Id && i.MealType == mealType)
+            .ToListAsync(ct);
+
+        if (ofMeal.Any(i => i.Status == MealItemStatus.Eaten))
+        {
+            // `409`, not `400`: the request is well formed and the state of
+            // the resource is what refuses it. §4's catalogue has no code
+            // for this case, so it reuses VALIDATION_FAILED with the field
+            // named — which is the only code §2.5 sends `details` with.
+            return ApiProblem.Make(
+                409, ErrorCode.ValidationFailed,
+                "Bữa này đã có món được đánh dấu là đã ăn, nên không sinh "
+                + "lại được",
+                HttpContext.TraceIdentifier,
+                [new ApiError.FieldError
+                {
+                    Field = "mealType",
+                    Message = "Hãy bỏ đánh dấu đã ăn, hoặc đổi từng món "
+                        + "bằng chức năng thay thế món",
+                }]);
+        }
+
+        // The dishes currently in this meal are excluded, so "sinh lại" is
+        // a DIFFERENT meal and not the same one again. Without this the
+        // answer is identical: `_greedy_pick` is deterministic, and a
+        // one-serving meal draws no exploration serving either
+        // (`round(1 * 0.3) == 0`), so the same food wins every time. Forcing
+        // an exploration serving instead would make that meal 100 %
+        // exploration and move a figure Chapter 3 measures.
+        var current = ofMeal
+            .Where(i => i.Status != MealItemStatus.Replaced)
+            .Select(i => i.FoodId)
+            .Distinct()
+            .ToList();
+
+        var asked = await AskPlanAsync(
+            uid, plan.PlanDate,
+            (double?)plan.ExplorationRatio ?? DefaultExplorationRatio,
+            [mealType], ct, alsoExclude: current);
+        if (asked.Problem is not null)
+        {
+            return asked.Problem;
+        }
+        var result = asked.Result!;
+
+        var rebuilt = result.Meals
+            .Where(m => m.MealType == mealType)
+            .SelectMany(m => m.Items)
+            .ToList();
+        if (rebuilt.Count == 0)
+        {
+            // Nothing else fits this meal's roles once the current dishes
+            // are excluded. The old meal is left exactly as it was: an empty
+            // meal would be a worse answer than the one the user already
+            // had, and deleting the rows first and discovering this
+            // afterwards is how a plan ends up with a hole in it.
+            return ApiProblem.Make(
+                409, ErrorCode.NoFeasiblePlan,
+                "Không còn món nào khác phù hợp cho bữa này, nên thực đơn "
+                + "được giữ nguyên",
+                HttpContext.TraceIdentifier);
+        }
+
+        var now = Clock.Now;
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            // The `replaced` rows of this meal stay. They are the record of
+            // a swap the user made, and §4.6 reads them as a rejection of
+            // the old dish — deleting them would erase a training signal
+            // because the meal was re-rolled afterwards.
+            var drop = ofMeal
+                .Where(i => i.Status != MealItemStatus.Replaced)
+                .ToList();
+            db.MealPlanItems.RemoveRange(drop);
+            await db.SaveChangesAsync(ct);
+
+            WriteItems(plan, result, [mealType], now);
+            await db.SaveChangesAsync(ct);
+
+            await MealPlanMapper.RecomputeActualsAsync(db, plan, ct);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        await db.Entry(plan).ReloadAsync(ct);
+
+        var violations = Violations(result);
+        if (plan.CalorieDeviationPct is { } deviation
+            && Math.Abs(deviation) > MealPlanMapper.ToleranceP)
+        {
+            // Allowed, and written down. The user asked for this meal; the
+            // day's figure is what it is, and a plan that quietly reported
+            // itself as within tolerance would be the dishonest option.
+            log.LogInformation(
+                "Plan {PlanId}: {Meal} was rebuilt and the day is now "
+                + "{Deviation} % from its energy target, outside the ±10 % "
+                + "the proposal commits to. The plan is kept and reports "
+                + "withinTolerance = false.",
+                plan.Id, mealType, deviation);
+        }
+
+        return Ok(await MealPlanMapper.BuildAsync(db, plan, violations, ct));
+    }
+
     // ── generation ───────────────────────────────────────────────────────
 
     /// <summary>
@@ -237,49 +395,13 @@ public sealed class MealPlanController(
             double explorationRatio,
             CancellationToken ct)
     {
-        // What the user has already eaten today, so the plan does not suggest
-        // a dish they have had. Only for today's plan in practice, but the
-        // query is the same for any day the diary covers.
-        var eaten = await db.FoodDiary
-            .Where(d => d.UserId == uid && d.AteOn == day)
-            .Select(d => d.FoodId)
-            .Distinct()
-            .ToListAsync(ct);
-
-        var answer = await ml.PlanAsync(
-            new MlPlanRequest
-            {
-                UserId = uid,
-                PlanDate = day.ToString("yyyy-MM-dd"),
-                ExcludeFoodIds = eaten,
-                ExplorationRatio = explorationRatio,
-            },
-            ct);
-        if (!answer.Ok)
+        var asked = await AskPlanAsync(
+            uid, day, explorationRatio, mealTypes: null, ct);
+        if (asked.Problem is not null)
         {
-            return (null, Report(answer.Failure!));
+            return (null, asked.Problem);
         }
-
-        var result = answer.Required;
-
-        foreach (var warning in result.Warnings)
-        {
-            log.LogInformation(
-                "Plan {Day} for {User}: {Warning}", day, uid, warning);
-        }
-        if (result.UnenforceableTargets.Count > 0)
-        {
-            // Error level: a threshold that cannot be measured is a safety
-            // rule nothing enforces. Today that is `purine_mg` for gout —
-            // the catalogue has no figures for it — and the plan says so
-            // rather than reporting the targets as met.
-            log.LogError(
-                "Plan {Day} for {User} has {Count} nutrient threshold(s) on "
-                + "an unmeasurable nutrient, so they were NOT checked: "
-                + "{Targets}",
-                day, uid, result.UnenforceableTargets.Count,
-                string.Join(", ", result.UnenforceableTargets));
-        }
+        var result = asked.Result!;
 
         // `model_id` from the version string. A version that matches no row
         // means the model was deactivated between the plan being scored and
@@ -351,36 +473,7 @@ public sealed class MealPlanController(
             // still one atomic write.
             await db.SaveChangesAsync(ct);
 
-            foreach (var meal in result.Meals)
-            {
-                foreach (var item in meal.Items)
-                {
-                    db.MealPlanItems.Add(new MealPlanItems
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        MealPlanId = plan.Id,
-                        FoodId = item.FoodId,
-                        MealType = meal.MealType,
-                        // One standard serving. Step 4 chooses dishes, not
-                        // portions: `ml/menu_builder.py` scores whole
-                        // servings, and its energy figures are per serving.
-                        // If it ever scales a portion, the energy check below
-                        // is what reports it.
-                        PortionMultiplier = 1.00m,
-                        PredictedScore = Math.Round(
-                            (decimal)item.PredictedScore, 4,
-                            MidpointRounding.AwayFromZero),
-                        Status = MealItemStatus.Suggested,
-                        ExplorationDelta = item.ExplorationDelta is { } d
-                            ? Math.Round((decimal)d, 3,
-                                         MidpointRounding.AwayFromZero)
-                            : null,
-                        Position = (byte)Math.Clamp(item.Position, 0, 255),
-                        CreatedAt = now,
-                    });
-                }
-            }
-
+            WriteItems(plan, result, Enums.MealType, now);
             await db.SaveChangesAsync(ct);
 
             // Totals from the rows just written, not from the ML answer, so
@@ -417,17 +510,7 @@ public sealed class MealPlanController(
         // (null) until it is reloaded.
         await db.Entry(plan).ReloadAsync(ct);
 
-        var violations = result.NutrientViolations
-            .Select(v => new NutrientViolationDto
-            {
-                Nutrient = v.Nutrient,
-                Comparator = v.Comparator,
-                Threshold = Round2(v.Threshold),
-                Actual = Round2(v.Actual),
-                Condition = v.Condition,
-            })
-            .ToList();
-
+        var violations = Violations(result);
         if (violations.Count > 0)
         {
             log.LogWarning(
@@ -442,6 +525,135 @@ public sealed class MealPlanController(
             await MealPlanMapper.BuildAsync(db, plan, violations, ct),
             null);
     }
+
+    /// <summary>
+    /// Asks the ML service for a day, or for some meals of one, and logs
+    /// what the answer says about itself.
+    ///
+    /// <para>Shared by the whole-day build and the one-meal rebuild so that
+    /// the two cannot start reporting different things about the same
+    /// answer — above all the unmeasurable thresholds, which are the line in
+    /// the log that says a safety rule went unchecked.</para>
+    /// </summary>
+    private async Task<(MlPlanResponse? Result, ObjectResult? Problem)>
+        AskPlanAsync(
+            string uid,
+            DateOnly day,
+            double explorationRatio,
+            IReadOnlyList<string>? mealTypes,
+            CancellationToken ct,
+            IReadOnlyCollection<string>? alsoExclude = null)
+    {
+        // What the user has already eaten today, so the plan does not
+        // suggest a dish they have had. Only today's plan in practice, but
+        // the query is the same for any day the diary covers.
+        var eaten = await db.FoodDiary
+            .Where(d => d.UserId == uid && d.AteOn == day)
+            .Select(d => d.FoodId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var exclude = alsoExclude is null
+            ? eaten
+            : eaten.Concat(alsoExclude).Distinct().ToList();
+
+        var answer = await ml.PlanAsync(
+            new MlPlanRequest
+            {
+                UserId = uid,
+                PlanDate = day.ToString("yyyy-MM-dd"),
+                ExcludeFoodIds = exclude,
+                ExplorationRatio = explorationRatio,
+                MealTypes = mealTypes,
+            },
+            ct);
+        if (!answer.Ok)
+        {
+            return (null, Report(answer.Failure!));
+        }
+
+        var result = answer.Required;
+
+        foreach (var warning in result.Warnings)
+        {
+            log.LogInformation(
+                "Plan {Day} for {User}: {Warning}", day, uid, warning);
+        }
+        if (result.UnenforceableTargets.Count > 0)
+        {
+            // Error level: a threshold that cannot be measured is a safety
+            // rule nothing enforces. Today that is `purine_mg` for gout —
+            // the catalogue has no figures for it — and the plan says so
+            // rather than reporting the targets as met.
+            log.LogError(
+                "Plan {Day} for {User} has {Count} nutrient threshold(s) on "
+                + "an unmeasurable nutrient, so they were NOT checked: "
+                + "{Targets}",
+                day, uid, result.UnenforceableTargets.Count,
+                string.Join(", ", result.UnenforceableTargets));
+        }
+
+        return (result, null);
+    }
+
+    /// <summary>
+    /// Adds the <c>meal_plan_items</c> rows for <paramref name="meals"/>.
+    /// Does not save: the caller is inside the transaction that also writes
+    /// the plan's totals.
+    /// </summary>
+    private void WriteItems(
+        MealPlans plan,
+        MlPlanResponse result,
+        IReadOnlyCollection<string> meals,
+        DateTime now)
+    {
+        foreach (var meal in result.Meals.Where(m => meals.Contains(m.MealType)))
+        {
+            foreach (var item in meal.Items)
+            {
+                db.MealPlanItems.Add(new MealPlanItems
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    MealPlanId = plan.Id,
+                    FoodId = item.FoodId,
+                    MealType = meal.MealType,
+                    // Taken from the answer rather than hard-coded to 1.00.
+                    // Step 4 chooses dishes and not portions, so it is 1.00
+                    // for everything it picks; reading the field keeps that
+                    // a fact about the answer instead of an assumption, and
+                    // the energy check in GenerateAsync is what reports a
+                    // disagreement.
+                    PortionMultiplier = Math.Clamp(
+                        Math.Round((decimal)item.Portion, 2,
+                                   MidpointRounding.AwayFromZero),
+                        0.1m, 5m),
+                    PredictedScore = Math.Round(
+                        (decimal)item.PredictedScore, 4,
+                        MidpointRounding.AwayFromZero),
+                    Status = MealItemStatus.Suggested,
+                    ExplorationDelta = item.ExplorationDelta is { } d
+                        ? Math.Round((decimal)d, 3,
+                                     MidpointRounding.AwayFromZero)
+                        : null,
+                    Position = (byte)Math.Clamp(item.Position, 0, 255),
+                    CreatedAt = now,
+                });
+            }
+        }
+    }
+
+    private static List<NutrientViolationDto> Violations(
+        MlPlanResponse result)
+        => result.NutrientViolations
+            .Select(v => new NutrientViolationDto
+            {
+                Nutrient = v.Nutrient,
+                Comparator = v.Comparator,
+                Threshold = Round2(v.Threshold),
+                Actual = Round2(v.Actual),
+                Condition = v.Condition,
+            })
+            .ToList();
 
     private ObjectResult Report(MlFailure failure)
     {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the ML Service's 6 internal endpoints, against the real
+"""End-to-end test of the ML Service's 7 internal endpoints, against the real
 database.
 
 The counterpart of `tools/smoke_backend.py` for the ML layer, and needed for
@@ -583,6 +583,64 @@ def main(argv: list[str] | None = None) -> int:
     )
     equals("an explorationRatio above the 0.5 cap is refused", status, 422)
 
+    # -- mealTypes: rebuilding some meals of a day --
+    #
+    # A subset needs a stored plan to rebuild inside, and this checker never
+    # writes one: `meal_plans` belongs to the backend. So the subset case is
+    # checked by the answer it must give without one, which is the answer
+    # that keeps a day-level figure from being computed against a single
+    # meal.
+    print("\n§8.5  plan — mealTypes")
+    status, body = call(
+        "POST", "/plan",
+        {"userId": uid, "planDate": "2026-11-18",
+         "mealTypes": ["breakfast", "lunch", "dinner", "snack"]},
+        key=key,
+    )
+    equals("all four meals is the same request as omitting mealTypes",
+           status, 200)
+    equals(
+        "and still answers with four meals",
+        len((body or {}).get("meals", [])),
+        4,
+    )
+    check(
+        "every serving is one standard portion — Step 4 picks dishes, not "
+        "portions",
+        all(i["portion"] == 1.0
+            for m in (body or {}).get("meals", []) for i in m["items"]),
+    )
+    summed = sum(
+        i["kcal"] for m in (body or {}).get("meals", []) for i in m["items"]
+    )
+    check(
+        "a serving's kcal includes its portion, so the servings add up to "
+        "the day",
+        abs(summed - (body or {}).get("actualCaloriesKcal", 0)) < 1.0,
+        f"{summed} against {(body or {}).get('actualCaloriesKcal')}",
+    )
+
+    status, body = call(
+        "POST", "/plan",
+        {"userId": uid, "planDate": "2026-11-18", "mealTypes": ["snack"]},
+        key=key,
+    )
+    equals("one meal with no stored plan for that day gives 422", status, 422)
+    equals("the error code is MEAL_PLAN_REQUIRED", error_code(body),
+           "MEAL_PLAN_REQUIRED")
+
+    status, body = call(
+        "POST", "/plan", {"userId": uid, "mealTypes": []}, key=key,
+    )
+    equals("an empty mealTypes is refused, not read as 'all four'",
+           status, 400)
+    equals("with VALIDATION_FAILED", error_code(body), "VALIDATION_FAILED")
+
+    status, body = call(
+        "POST", "/plan", {"userId": uid, "mealTypes": ["brunch"]}, key=key,
+    )
+    equals("a meal that is not one of the four is refused", status, 400)
+
     # -- POST /survey-deck - the taste survey's deck (§7.4.1) --
     #
     # The deck decides what every new user's preference vector is built
@@ -668,6 +726,117 @@ def main(argv: list[str] | None = None) -> int:
     status, body = call("POST", "/survey-deck", {"userId": uid, "size": 51},
                         key=key)
     equals("a deck larger than 50 is refused", status, 422)
+
+    # -- POST /candidates/count - the onboarding filter screen (§7.4) --
+    #
+    # What the screen calls after every answer. The properties worth
+    # checking are the ones that make the number trustworthy: it never
+    # grows when a condition is added, it counts the HARD rules only, and it
+    # ignores whatever the user has already saved.
+    print("\n§8.7  POST /candidates/count")
+    status, body = call("POST", "/candidates/count", {"conditions": []},
+                        key=key)
+    equals("count returns 200", status, 200)
+    body = body or {}
+    total = body.get("nFoodsTotal")
+    check(
+        "with nothing declared, nothing is removed",
+        total == body.get("nFoods") and total > 0,
+        f"{total} -> {body.get('nFoods')}",
+    )
+    check(
+        "the roles add up to the total",
+        sum(body.get("byRole", {}).values()) == body.get("nFoods"),
+        f"{sum(body.get('byRole', {}).values())} against {body.get('nFoods')}",
+    )
+    equals("no required role is empty", body.get("emptyRequiredRoles"), [])
+    equals("and a full deck can be drawn", body.get("enoughForDeck"), True)
+
+    # Every condition in the catalogue, one at a time. Two invariants hold
+    # for all of them, and the second is the one that matters: a soft rule
+    # must NOT narrow this count, because the plan can still contain the
+    # food it penalises.
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute(
+                "SELECT c.id, c.name_vi, "
+                "       SUM(cr.is_hard = 1 AND cr.rule_type IN "
+                "           ('exclude_tag','require_tag')) AS hard_tag_rules "
+                "FROM conditions c "
+                "LEFT JOIN condition_rules cr "
+                "       ON cr.condition_id = c.id "
+                "GROUP BY c.id, c.name_vi ORDER BY c.id"
+            )
+            rows = cur.fetchall()
+    finally:
+        cn.close()
+
+    narrowed = 0
+    for row in rows:
+        cid, name = int(row["id"]), row["name_vi"]
+        hard_tag_rules = row["hard_tag_rules"]
+        status, one = call(
+            "POST", "/candidates/count",
+            {"conditions": [{"conditionId": cid,
+                             "severity": "severe"}]},
+            key=key,
+        )
+        if status != 200:
+            check(f"counting for condition {cid} returns 200", False,
+                  f"got {status}")
+            continue
+        left = (one or {}).get("nFoods", -1)
+        check(
+            f"declaring {name} never ADDS foods",
+            left <= total,
+            f"{total} -> {left}",
+        )
+        if int(hard_tag_rules or 0) == 0:
+            check(
+                f"{name} has no hard tag rule, so it removes nothing — a "
+                "soft limit lowers a score, it does not ban a dish",
+                left == total,
+                f"{total} -> {left}",
+            )
+        else:
+            narrowed += 1
+            check(
+                f"{name} has a hard tag rule and the response says whether "
+                "it removed anything",
+                isinstance((one or {}).get("warnings"), list),
+            )
+    check(
+        "at least one condition really does narrow the catalogue, or this "
+        "whole section would be vacuous",
+        narrowed > 0,
+        f"{narrowed} conditions have hard tag rules",
+    )
+
+    print("\n§8.7  candidates/count - the error cases")
+    status, body = call("POST", "/candidates/count", {"conditions": []})
+    equals("a missing key gives 401", status, 401)
+    status, body = call(
+        "POST", "/candidates/count",
+        {"conditions": [{"conditionId": 1, "severity": "enormous"}]},
+        key=key,
+    )
+    equals("an unknown severity gives 400", status, 400)
+    status, body = call(
+        "POST", "/candidates/count",
+        {"conditions": [{"conditionId": 999999, "severity": "mild"}]},
+        key=key,
+    )
+    equals("a condition that does not exist gives 404", status, 404)
+    equals("the error code is CONDITION_NOT_FOUND", error_code(body),
+           "CONDITION_NOT_FOUND")
+    status, body = call(
+        "POST", "/candidates/count",
+        {"userId": "00000000-0000-4000-8000-000000000000",
+         "conditions": []},
+        key=key,
+    )
+    equals("a userId that does not exist gives 404", status, 404)
 
     print("\n§8.2  POST /profiles/{userId}/rebuild")
     status, body = call("POST", f"/profiles/{uid}/rebuild", {}, key=key)
@@ -800,7 +969,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — the 6 internal endpoints "
+    print(f"{_checks}/{_checks} checks passed — the 7 internal endpoints "
           f"behave per the specification.")
     return 0
 

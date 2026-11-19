@@ -48,6 +48,23 @@ public sealed record MlPlanRequest
     /// request leaves it null and gets a fresh plan.
     /// </summary>
     public int? Seed { get; init; }
+
+    /// <summary>
+    /// Which meals to assemble. <c>null</c>, or all four, builds the whole
+    /// day.
+    ///
+    /// <para>A subset rebuilds those meals <b>inside the plan already stored
+    /// for that date</b> and keeps the rest — §7.6's "sinh lại một bữa". The
+    /// ML service reads the kept servings from the database itself, so they
+    /// are not sent here; it needs them to count the day's energy and every
+    /// per-day threshold, which is what keeps
+    /// <c>calorie_deviation_pct</c> a figure about a day.</para>
+    ///
+    /// <para>Without a stored plan for that date the answer is
+    /// <c>MEAL_PLAN_REQUIRED</c>. This backend checks the plan exists first,
+    /// so seeing that code means a bug on this side.</para>
+    /// </summary>
+    public IReadOnlyList<string>? MealTypes { get; init; }
 }
 
 /// <summary>One serving of the plan — one row of <c>meal_plan_items</c>.</summary>
@@ -71,7 +88,24 @@ public sealed record MlPlanItem
     public string DishRole { get; init; } = string.Empty;
 
     public string MealType { get; init; } = string.Empty;
-    public int Kcal { get; init; }
+
+    /// <summary>
+    /// This serving's energy, <b>portion included</b>, so a meal's items add
+    /// up to its <c>ActualKcal</c>. A <c>double</c> and not an <c>int</c>:
+    /// a portion of 1.5 makes it fractional, and nine servings each rounded
+    /// to a whole kcal would no longer sum to the total they are checked
+    /// against.
+    /// </summary>
+    public double Kcal { get; init; }
+
+    /// <summary>
+    /// Servings on the plate, for <c>meal_plan_items.portion_multiplier</c>.
+    /// Always 1.0 for a serving Step 4 picked — it chooses dishes, not
+    /// portions. Another value belongs to a kept serving of a partly
+    /// rebuilt day, because §7.6.5 lets a user ask for a different weight.
+    /// </summary>
+    public double Portion { get; init; } = 1.0;
+
     public double PredictedScore { get; init; }
 
     /// <summary>
@@ -210,6 +244,68 @@ public sealed record MlPlanResponse
     public IReadOnlyList<string> UnenforceableTargets { get; init; } = [];
 
     public bool MeetsNutrientTargets { get; init; }
+
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+    public int ElapsedMs { get; init; }
+}
+
+/// <summary>One condition ticked on the onboarding filter screen.</summary>
+public sealed record MlCondition
+{
+    public required int ConditionId { get; init; }
+
+    /// <summary>
+    /// <c>mild</c> · <c>moderate</c> · <c>severe</c>. A rule applies only
+    /// from its own <c>severity_min</c> upwards, so the same condition
+    /// removes different foods at different severities.
+    /// </summary>
+    public string Severity { get; init; } = "moderate";
+}
+
+/// <summary>
+/// §7.4 — how many foods would be left if these conditions were declared.
+///
+/// <para>Hypothetical on purpose: nothing is saved, and the ML service does
+/// not read <c>user_conditions</c>. That is what the filter screen needs —
+/// it asks the question while the user is still answering.</para>
+/// </summary>
+public sealed record MlCandidateCountRequest
+{
+    /// <summary>
+    /// Optional, and it only widens the food <b>scope</b> so the user's own
+    /// private foods become visible. The conditions applied are always the
+    /// ones sent.
+    /// </summary>
+    public string? UserId { get; init; }
+
+    public IReadOnlyList<MlCondition> Conditions { get; init; } = [];
+}
+
+/// <summary>What the filter screen shows after one answer.</summary>
+public sealed record MlCandidateCountResponse
+{
+    public int NFoodsTotal { get; init; }
+    public int NFoods { get; init; }
+
+    /// <summary>
+    /// The remainder by <c>dish_role</c>. Reported, never used to refuse
+    /// anything: the filtering goes by the hard safety rules alone. It is
+    /// here because the total is not the number that binds — 102 foods with
+    /// 2 of them in the <c>side_protein</c> role still builds a lunch, with
+    /// no alternative left to offer and nothing for the 70-30 mechanism to
+    /// draw.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> ByRole { get; init; }
+        = new Dictionary<string, int>();
+
+    /// <summary>
+    /// Required roles of the meal structure with nothing left in them.
+    /// Non-empty means no plan can be assembled at all, whatever the total.
+    /// </summary>
+    public IReadOnlyList<string> EmptyRequiredRoles { get; init; } = [];
+
+    public bool EnoughForDeck { get; init; }
+    public int DeckSize { get; init; }
 
     public IReadOnlyList<string> Warnings { get; init; } = [];
     public int ElapsedMs { get; init; }

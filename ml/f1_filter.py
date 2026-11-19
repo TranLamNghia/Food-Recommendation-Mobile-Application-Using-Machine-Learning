@@ -193,6 +193,7 @@ def allowed_foods(
     user_id: str | None = None,
     conditions: Sequence[Condition] = (),
     public_only: bool = False,
+    use_saved_conditions: bool = True,
 ) -> list[dict[str, Any]]:
     """The set of foods **safe** for this user, with every hard rule applied.
 
@@ -207,8 +208,16 @@ def allowed_foods(
     training set for the global model: a private food's nutrition figures are
     self-declared, and letting them into a shared model harms every other
     user.
+
+    `use_saved_conditions=False` turns off the lookup above and nothing else:
+    an empty `conditions` then means **no restriction at all**, instead of
+    "whatever this user has declared". The onboarding filter screen of §7.4
+    needs that distinction — it asks "how many foods would be left if I
+    declared these?", and the answer for an empty list has to be the whole
+    catalogue even for a user who has conditions on file. The food scope
+    still follows `user_id`, so the user's own foods stay visible.
     """
-    if not conditions and user_id is not None:
+    if not conditions and user_id is not None and use_saved_conditions:
         conditions = conditions_for_user(cn, user_id)
 
     scope = (

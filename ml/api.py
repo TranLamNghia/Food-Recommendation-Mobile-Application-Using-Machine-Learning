@@ -10,6 +10,7 @@ than any shortage of public endpoints.
     POST /predict                     Step 3 — score the catalogue
     POST /plan                        Step 4 — assemble one day's plan
     POST /survey-deck                 the taste-survey deck of §7.4.1
+    POST /candidates/count            how many foods a condition set leaves
     POST /profiles/{userId}/rebuild   rebuild the preference vector
     POST /train                       retrain, asynchronously
     GET  /health                      which model is serving
@@ -82,6 +83,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from ml.db import connect  # noqa: E402
+from ml.f1_filter import (  # noqa: E402
+    SEVERITY_ORDER,
+    Condition,
+)
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.plan import PlanInputError, build_daily_plan  # noqa: E402
 from ml.rocchio import alpha, stage as stage_for  # noqa: E402
@@ -91,6 +96,7 @@ from ml.survey import (  # noqa: E402
     DECK_MAX,
     DECK_MIN,
     build_deck,
+    candidate_counts,
 )
 from ml.time_vn import now_vn  # noqa: E402
 
@@ -300,13 +306,38 @@ class PlanRequest(BaseModel):
     #: request leaves it out and gets a fresh plan.
     seed: int | None = None
 
+    #: Which meals to assemble. Omitted, or all four, builds the whole day.
+    #:
+    #: A subset rebuilds those meals **inside the plan already stored for
+    #: that date** and keeps the rest, which is what §7.6's "sinh lại một
+    #: bữa" needs. The day stays the unit of measurement: the kept servings
+    #: count towards the day's energy and every `per_day` threshold, so
+    #: `calorieDeviationPct` keeps meaning what the column means. Without a
+    #: stored plan for that date there is no day to measure, and the answer
+    #: is `MEAL_PLAN_REQUIRED`.
+    mealTypes: list[str] | None = None
+
 
 class PlanItemOut(BaseModel):
     foodId: str
     foodName: str
     dishRole: str
     mealType: str
-    kcal: int
+
+    #: This serving's energy, **portion included** — so the items of a meal
+    #: add up to its `actualKcal` and the day's items to
+    #: `actualCaloriesKcal`. A float rather than an int because a portion of
+    #: 1.5 makes the figure fractional, and nine servings each rounded to a
+    #: whole kcal would no longer sum to the total they are checked against.
+    kcal: float
+
+    #: Servings on the plate — `meal_plan_items.portion_multiplier`.
+    #: Always 1.0 for a serving this service picked: Step 4 chooses dishes,
+    #: not portions. Another value belongs to a **kept** serving of a plan
+    #: being partly rebuilt, because §7.6.5 lets a user ask for a different
+    #: weight.
+    portion: float
+
     predictedScore: float
     #: `null` is an EXPLOITATION serving, a number is an exploration one —
     #: exactly what `meal_plan_items.exploration_delta` means, which is why
@@ -424,6 +455,52 @@ class SurveyDeckResponse(BaseModel):
     nCategoriesTotal: int
 
     featureVersion: str
+    warnings: list[str]
+    elapsedMs: int
+
+
+class ConditionIn(BaseModel):
+    """One condition the user has ticked on the filter screen.
+
+    Hypothetical: nothing is saved, and `user_conditions` is not read. That
+    is the point of the screen — it answers "what would be left if I declared
+    this?" while the user is still deciding.
+    """
+
+    conditionId: int = Field(ge=1)
+
+    #: `mild` · `moderate` · `severe`. A rule applies only from its
+    #: `severity_min` upwards, so the same condition removes different foods
+    #: at different severities.
+    severity: str = Field(default="moderate")
+
+
+class CandidateCountRequest(BaseModel):
+    #: Optional. It only widens the food SCOPE — the user's own private
+    #: foods become visible. The conditions applied are the ones sent, never
+    #: the ones on file.
+    userId: str | None = None
+    conditions: list[ConditionIn] = Field(default_factory=list)
+
+
+class CandidateCountResponse(BaseModel):
+    nFoodsTotal: int
+    nFoods: int
+
+    #: The remainder by `dish_role`. Reported, not enforced: filtering goes
+    #: by the hard rules alone. It is here because the total is not the
+    #: number that binds — 102 foods with 2 of them in the `side_protein`
+    #: role still builds a lunch, with no alternative left to offer.
+    byRole: dict[str, int]
+
+    #: Required roles of `MEAL_STRUCTURE` with nothing left in them.
+    #: Non-empty means no plan can be assembled at all.
+    emptyRequiredRoles: list[str]
+
+    #: Whether a full-size survey deck can still be drawn.
+    enoughForDeck: bool
+    deckSize: int
+
     warnings: list[str]
     elapsedMs: int
 
@@ -693,6 +770,12 @@ def plan(request: PlanRequest) -> PlanResponse:
     * `422 NO_SCOREABLE_CANDIDATE` when the F1 filter leaves nothing. Same
       meaning as in `/predict`: the safety layer removed everything, and
       scoring the foods anyway would be it failing open.
+    * `422 MEAL_PLAN_REQUIRED` when `mealTypes` names a subset but no plan
+      is stored for that date. The backend checks the plan exists before it
+      calls here, so this one reaching a client means a bug on that side —
+      which is why it is not in §4's catalogue and maps to a `500` there.
+    * `400 VALIDATION_FAILED` for a `mealTypes` that is empty or names
+      something that is not one of the four meals.
     """
     started = time.perf_counter()
     cn = connect(None)
@@ -733,12 +816,17 @@ def plan(request: PlanRequest) -> PlanResponse:
                 exclude_food_ids=request.excludeFoodIds,
                 exploration_ratio=request.explorationRatio,
                 seed=request.seed,
+                meal_types=request.mealTypes,
             )
         except PlanInputError as e:
-            # Not a malfunction: the user has not supplied something. The
-            # code is the stable string the backend branches on.
+            # Not a malfunction: something the request depends on is not
+            # there. The code is the stable string the backend branches on,
+            # and the status says whose problem it is — `400` when the
+            # REQUEST is wrong (a meal name that is not one of the four),
+            # `422` when the request is fine but the user's data is not
+            # ready (no health profile, no plan for that day).
             raise HTTPException(
-                status_code=422,
+                status_code=400 if e.code == "VALIDATION_FAILED" else 422,
                 detail={"code": e.code, "message": e.message},
             )
 
@@ -769,7 +857,8 @@ def plan(request: PlanRequest) -> PlanResponse:
                         foodName=item.food.name,
                         dishRole=item.food.dish_role,
                         mealType=slot.meal_type,
-                        kcal=int(item.food.kcal),
+                        kcal=round(item.kcal, 2),
+                        portion=round(item.portion, 2),
                         predictedScore=round(item.score, 4),
                         explorationDelta=(
                             None if item.exploration_delta is None
@@ -822,6 +911,113 @@ def plan(request: PlanRequest) -> PlanResponse:
             ],
             meetsNutrientTargets=built.meets_nutrient_targets,
             warnings=list(result.warnings),
+            elapsedMs=int((time.perf_counter() - started) * 1000),
+        )
+    finally:
+        cn.close()
+
+
+@app.post(
+    "/candidates/count",
+    response_model=CandidateCountResponse,
+    dependencies=[Depends(check_key)],
+)
+def candidates_count(
+    request: CandidateCountRequest,
+) -> CandidateCountResponse:
+    """§7.4 — how many foods are left after the conditions ticked so far.
+
+    What the onboarding filter screen calls after every answer, so the user
+    watches the catalogue narrow: 318 → 228 → 116. It writes nothing and
+    reads no saved condition; the set is whatever the request carries.
+
+    Only **hard** rules narrow the count, because only they decide whether a
+    food is eligible. A soft rule lowers a food's score and leaves it in the
+    plan, so counting it here would tell the user a dish is gone while the
+    plan can still contain it. Four of the thirteen conditions therefore
+    remove nothing at all — hypertension, diabetes, kidney disease and
+    dyslipidaemia are entirely soft or per-day — and the response says so in
+    `warnings` rather than leaving the user to wonder why the number did not
+    move.
+
+    Status codes:
+
+    * `400 VALIDATION_FAILED` — an unknown severity.
+    * `404 USER_NOT_FOUND`, `404 CONDITION_NOT_FOUND`.
+    """
+    started = time.perf_counter()
+    cn = connect(None)
+    try:
+        bad = [c.severity for c in request.conditions
+               if c.severity not in SEVERITY_ORDER]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "VALIDATION_FAILED",
+                    "message": (
+                        f"severity {bad} is not one of "
+                        f"{list(SEVERITY_ORDER)}."
+                    ),
+                },
+            )
+
+        if request.userId is not None:
+            with cn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM users WHERE id = %s", (request.userId,)
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail={
+                            "code": "USER_NOT_FOUND",
+                            "message": f"No user {request.userId}.",
+                        },
+                    )
+
+        ids = [c.conditionId for c in request.conditions]
+        if ids:
+            with cn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM conditions WHERE id IN ("
+                    + ", ".join(["%s"] * len(ids))
+                    + ")",
+                    tuple(ids),
+                )
+                known = {int(r["id"]) for r in cur.fetchall()}
+            missing = sorted(set(ids) - known)
+            if missing:
+                # Refused rather than ignored. A condition id this service
+                # does not know would otherwise be silently dropped, and the
+                # screen would show a number for a filter the user did not
+                # ask for — on the screen whose whole job is to be exact
+                # about what has been excluded.
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": "CONDITION_NOT_FOUND",
+                        "message": f"No condition with id {missing}.",
+                    },
+                )
+
+        counts = candidate_counts(
+            cn,
+            conditions=[
+                Condition(c.conditionId, c.severity)
+                for c in request.conditions
+            ],
+            user_id=request.userId,
+        )
+
+        return CandidateCountResponse(
+            nFoodsTotal=counts.n_foods_total,
+            nFoods=counts.n_foods,
+            byRole=dict(sorted(counts.by_role.items())),
+            emptyRequiredRoles=list(counts.empty_required_roles),
+            enoughForDeck=counts.enough_for_deck,
+            deckSize=DECK_DEFAULT,
+            warnings=list(counts.warnings),
             elapsedMs=int((time.perf_counter() - started) * 1000),
         )
     finally:

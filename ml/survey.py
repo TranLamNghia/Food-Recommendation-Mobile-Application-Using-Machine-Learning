@@ -5,8 +5,9 @@ Specification §7.4.1 calls for "maximum diversity": a pack of 20 to 50 foods,
 already past the F1 filter, chosen so that every swipe carries as much
 information as possible.
 
-    pick_deck    the pure algorithm: foods, a feature space, a count
-    build_deck   the database wiring, for one user
+    pick_deck         the pure algorithm: foods, a feature space, a count
+    build_deck        the database wiring, for one user
+    candidate_counts  how many foods a set of conditions would leave
 
 ## Why this file exists at all
 
@@ -77,8 +78,9 @@ import math
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from ml.f1_filter import allowed_foods
+from ml.f1_filter import Condition, allowed_foods
 from ml.features import FeatureSpace, Food, load_foods
+from ml.menu_builder import MEAL_STRUCTURE
 
 #: The deck size range of §7.4.1, and its default. The lower bound is also
 #: what `minRequired` is measured against: fewer than 20 opinionated swipes
@@ -86,6 +88,131 @@ from ml.features import FeatureSpace, Food, load_foods
 DECK_MIN = 20
 DECK_MAX = 50
 DECK_DEFAULT = 30
+
+
+#: The roles a day's plan cannot be assembled without — the `required` of
+#: every meal in `MEAL_STRUCTURE`, deduplicated. Derived rather than written
+#: out, so adding a required role to a meal cannot leave this list behind.
+REQUIRED_ROLES: tuple[str, ...] = tuple(sorted({
+    role for shape in MEAL_STRUCTURE.values() for role in shape.required
+}))
+
+
+@dataclass(frozen=True)
+class CandidateCounts:
+    """What a set of declared conditions would leave to choose from.
+
+    This is the answer the onboarding filter screen shows while the user is
+    still answering: "318 → 228 → 116". Nothing is written, and the
+    conditions are **hypothetical** — they have not been saved yet, which is
+    the whole point of the screen.
+    """
+
+    #: Active foods visible to this user, before any condition applies.
+    n_foods_total: int
+    #: What is left after the hard rules of the conditions supplied.
+    n_foods: int
+
+    #: The remainder broken down by `dish_role`.
+    #:
+    #: Reported, and deliberately **not** used to refuse anything: the
+    #: filtering itself goes by the hard rules alone. The breakdown is here
+    #: because the total is not the number that binds. A pool of 102 foods
+    #: with 2 dishes in the `side_protein` role still builds a lunch, but
+    #: there is no choice left in it — the 70-30 exploration has nowhere to
+    #: go, and if the user has already eaten those two today, Step 4 answers
+    #: `NO_FEASIBLE_PLAN`. The screen can warn; this function only counts.
+    by_role: dict[str, int]
+
+    #: Required roles of `MEAL_STRUCTURE` that the remainder has none of.
+    #: Non-empty means no plan can be assembled at all, whatever the total.
+    empty_required_roles: tuple[str, ...]
+
+    #: Whether a full-size deck can still be drawn.
+    enough_for_deck: bool
+
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+def candidate_counts(
+    cn,
+    *,
+    conditions: Sequence[Condition] = (),
+    user_id: str | None = None,
+) -> CandidateCounts:
+    """How many foods the hard rules of `conditions` would leave.
+
+    `conditions` is what the user has ticked **so far** on the filter screen,
+    not what is stored for them. An empty list therefore means no restriction
+    at all, which is why `allowed_foods` is called with
+    `use_saved_conditions=False`: with the default, an empty list for a user
+    who already has conditions on file would silently answer with those
+    instead, and the first screen of the flow would show a filtered number
+    as if it were the catalogue.
+
+    Only **hard** rules narrow this count — `exclude_tag`, `require_tag` and
+    hard per-serving limits, which is exactly what F1 removes. The soft rules
+    (a penalty on salty dishes for hypertension, for one) do not: they lower
+    a food's score and leave it eligible, so counting them here would promise
+    the user that a food is gone when the plan can still contain it.
+
+    Two things this count cannot tell the user, and both are reported next to
+    it rather than left to be discovered: a condition whose tag is on no food
+    removes nothing (`Không dung nạp lactose` is in that state today), and a
+    condition that has only soft or per-day rules removes nothing by design
+    (hypertension, diabetes, kidney disease, dyslipidaemia).
+    """
+    visible = allowed_foods(
+        cn, user_id=user_id, use_saved_conditions=False
+    )
+    remaining = allowed_foods(
+        cn,
+        user_id=user_id,
+        conditions=conditions,
+        use_saved_conditions=False,
+    )
+
+    by_role: dict[str, int] = {}
+    for row in remaining:
+        role = row["dish_role"]
+        by_role[role] = by_role.get(role, 0) + 1
+
+    empty = tuple(r for r in REQUIRED_ROLES if by_role.get(r, 0) == 0)
+
+    warnings: list[str] = []
+    if len(remaining) == len(visible) and conditions:
+        warnings.append(
+            f"The {len(conditions)} condition(s) declared remove no food at "
+            "all. Either their rules are soft or per-day — which narrow a "
+            "score, not the catalogue — or the tag they exclude is on no "
+            "food yet."
+        )
+    if empty:
+        warnings.append(
+            "No food is left in the role(s) "
+            + ", ".join(empty)
+            + ", so no plan can be assembled: MEAL_STRUCTURE needs one of "
+            "each for the meals that require it."
+        )
+    thin = sorted(
+        r for r in REQUIRED_ROLES if 0 < by_role.get(r, 0) <= 2
+    )
+    if thin:
+        warnings.append(
+            "Only one or two foods remain in the role(s) "
+            + ", ".join(thin)
+            + ": a plan can still be built, but with no alternative to "
+            "offer and nothing for the exploration mechanism to draw."
+        )
+
+    return CandidateCounts(
+        n_foods_total=len(visible),
+        n_foods=len(remaining),
+        by_role=by_role,
+        empty_required_roles=empty,
+        enough_for_deck=len(remaining) >= DECK_DEFAULT,
+        warnings=tuple(warnings),
+    )
 
 
 def distance(a: Sequence[float], b: Sequence[float]) -> float:
