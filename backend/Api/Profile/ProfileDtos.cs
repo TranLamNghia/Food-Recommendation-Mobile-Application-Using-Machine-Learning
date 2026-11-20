@@ -80,6 +80,41 @@ public static class Enums
         ["suggested", "kept", "replaced", "eaten", "skipped"];
 
     /// <summary>
+    /// <c>conditions.condition_type</c> — what kind of thing the user
+    /// declared. The F1 filter treats all four the same way (a hard rule is
+    /// a hard rule); the type exists so the app can group the list on the
+    /// declaration screen.
+    /// </summary>
+    public static readonly string[] ConditionType =
+        ["disease", "allergy", "intolerance", "diet"];
+
+    /// <summary>
+    /// <c>tags.tag_type</c>. No <c>taste</c> value: salty and sweet became
+    /// measured vector dimensions computed from <c>sodium_mg</c> and
+    /// <c>sugar_g</c>, and sour and bitter are not published by any source
+    /// this project uses — so the whole group was dropped rather than mixing
+    /// hand-written labels in among measurements.
+    /// </summary>
+    public static readonly string[] TagType =
+        ["allergen", "diet", "nutrition"];
+
+    /// <summary>
+    /// <c>foods.dish_role</c> — what part of a meal a dish plays, which is
+    /// what makes two dishes interchangeable. <c>MEAL_STRUCTURE</c> in
+    /// <c>ml/menu_builder.py</c> fills a meal by role, and
+    /// <c>Api.Planning.MealStructure</c> mirrors which roles belong to which
+    /// meal.
+    ///
+    /// <para><c>dessert</c> and <c>drink</c> are in the column and in no
+    /// meal: 46 of the 318 foods carry them, and no meal has a slot that
+    /// could hold one. That is an open product question, not an oversight —
+    /// <c>DailyPlan.warnings</c> reports it on every plan.</para>
+    /// </summary>
+    public static readonly string[] DishRole =
+        ["main", "side_protein", "side_veg", "soup", "snack", "dessert",
+         "drink"];
+
+    /// <summary>
     /// {field name: list}, built by reflection over the fields above rather
     /// than written out by hand, so the dictionary cannot drift away from
     /// them.
