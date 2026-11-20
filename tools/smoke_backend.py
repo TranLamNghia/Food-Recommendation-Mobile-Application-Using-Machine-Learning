@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 19 public endpoints built so far, against the real
+"""End-to-end test of the 24 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -513,6 +513,68 @@ def main(argv: list[str] | None = None) -> int:
     # database, so they are skipped rather than failed when it is not
     # running. A skipped section says so loudly; a failed one would send
     # somebody looking for a bug in the backend.
+    # -- 7.3 the lookup dictionaries --
+    #
+    # Public (no token), and the reason they exist now: the onboarding
+    # filter screen takes conditionIds and had no endpoint to get them from.
+    print("\n§7.3  GET /conditions · /food-categories · /tags")
+    status, conditions = call("GET", "/conditions")
+    equals("the condition dictionary is public - no token", status, 200)
+    conditions = conditions or []
+    check("it is not empty", len(conditions) > 0, f"got {len(conditions)}")
+    check(
+        "every row carries what the declaration screen needs",
+        all(c.get("id") and c.get("nameVi") and c.get("conditionType")
+            for c in conditions),
+    )
+    check(
+        "conditionType is an ENUM code, translated by the app",
+        all(c["conditionType"] in
+            ("disease", "allergy", "intolerance", "diet")
+            for c in conditions),
+        f"got {sorted({c['conditionType'] for c in conditions})}",
+    )
+    check(
+        "the ids are what POST /onboarding/candidates/count takes",
+        all(isinstance(c["id"], int) and c["id"] > 0 for c in conditions),
+    )
+
+    status, diets = call("GET", "/conditions?type=diet")
+    equals("filtering by type returns 200", status, 200)
+    check(
+        "and really filters",
+        diets and all(c["conditionType"] == "diet" for c in diets)
+        and len(diets) < len(conditions),
+        f"{len(diets or [])} of {len(conditions)}",
+    )
+    status, body = call("GET", "/conditions?type=nope")
+    equals("an invalid type is refused with a named field",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    status, categories = call("GET", "/food-categories")
+    equals("the category list is public", status, 200)
+    check(
+        "every category has an id and a Vietnamese name",
+        categories and all(c.get("id") and c.get("name") for c in categories),
+        f"got {len(categories or [])}",
+    )
+
+    status, tags = call("GET", "/tags")
+    equals("the tag dictionary is public", status, 200)
+    check(
+        "every tag has a type the schema declares",
+        tags and all(t["tagType"] in ("allergen", "diet", "nutrition")
+                     for t in tags),
+    )
+    check(
+        "there is no `taste` tag type - salty and sweet are measured "
+        "dimensions, not hand-written labels",
+        all(t["tagType"] != "taste" for t in (tags or [])),
+    )
+    status, body = call("GET", "/tags?type=nope")
+    equals("an invalid tag type is refused",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
     print("\n§7.4.1  GET /onboarding/survey")
     status, deck = call("GET", "/onboarding/survey?size=30", token=token)
     if status == 503 and error_code(deck) == "ML_UNAVAILABLE":
@@ -741,6 +803,186 @@ def main(argv: list[str] | None = None) -> int:
         equals("the deck is refused once onboarding is done",
                (status, error_code(body)),
                (409, "ONBOARDING_ALREADY_COMPLETED"))
+
+        # -- 7.5 the food catalogue --
+        #
+        # Both endpoints ask the ML service which dishes are safe, so they
+        # are in this block. The browse list's own rule is the one worth
+        # checking: a page that cannot say which dish is unsafe must not
+        # pretend to be filtered.
+        print("\n§7.5.1  GET /foods")
+        status, page1 = call("GET", "/foods?pageSize=10", token=token)
+        equals("200", status, 200)
+        page1 = page1 or {}
+        equals("the page holds what was asked for",
+               len(page1.get("items", [])), 10)
+        equals("page is echoed back", page1.get("page"), 1)
+        check("totalItems counts the whole catalogue",
+              page1.get("totalItems", 0) > 10,
+              f"got {page1.get('totalItems')}")
+        check(
+            "totalPages is the ceiling, not the floor",
+            page1.get("totalPages")
+            == -(-page1.get("totalItems", 0) // 10),
+            f"got {page1.get('totalPages')} for "
+            f"{page1.get('totalItems')} items",
+        )
+        check(
+            "with excludeUnsafe defaulting to true, every row is safe",
+            all(i["isSafeForUser"] for i in page1.get("items", [])),
+        )
+        check(
+            "every row carries what a list tile needs",
+            all(i.get("name") and i.get("categoryName") and i.get("dishRole")
+                and i.get("caloriesKcal") is not None and i.get("servingSizeG")
+                for i in page1.get("items", [])),
+        )
+
+        status, page2 = call("GET", "/foods?pageSize=10&page=2", token=token)
+        equals("page 2 returns 200", status, 200)
+        check(
+            "page 2 shares no row with page 1 - an unstable sort would hide "
+            "a food from every page",
+            not ({i["id"] for i in page1.get("items", [])}
+                 & {i["id"] for i in (page2 or {}).get("items", [])}),
+        )
+
+        status, soups = call(
+            "GET", "/foods?dishRole=soup&pageSize=100", token=token)
+        check(
+            "dishRole really filters",
+            soups and all(i["dishRole"] == "soup"
+                          for i in soups.get("items", [])),
+        )
+
+        status, lunch = call(
+            "GET", "/foods?mealType=lunch&pageSize=100", token=token)
+        equals(
+            "mealType returns exactly the roles a lunch can hold",
+            sorted({i["dishRole"] for i in (lunch or {}).get("items", [])}),
+            ["main", "side_protein", "soup"],
+        )
+
+        status, light = call(
+            "GET", "/foods?maxCalories=100&pageSize=100", token=token)
+        check(
+            "maxCalories is a ceiling per serving",
+            light and all(i["caloriesKcal"] <= 100
+                          for i in light.get("items", [])),
+        )
+
+        for query, label in (
+            ("page=0", "page 0"),
+            ("pageSize=200", "pageSize above the cap"),
+            ("dishRole=nope", "an invalid dishRole"),
+            ("mealType=brunch", "an invalid mealType"),
+            ("maxCalories=0", "a maxCalories of 0"),
+        ):
+            status, body = call(
+                "GET", f"/foods?{query}", token=token)
+            equals(f"{label} is refused",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        print("\n§7.5.2  GET /foods/{id}")
+        sample = page1["items"][0]["id"]
+        status, detail = call("GET", f"/foods/{sample}", token=token)
+        equals("200", status, 200)
+        detail = detail or {}
+        equals("it is the food asked for", detail.get("id"), sample)
+        check("the category comes back as an object with a name",
+              (detail.get("category") or {}).get("name"))
+        check("nutrition carries the three macros and the serving weight",
+              all((detail.get("nutrition") or {}).get(k) is not None
+                  for k in ("servingSizeG", "caloriesKcal", "proteinG",
+                            "carbsG", "fatG")))
+        # A real 0 is a valid measurement — a savoury dish has 0 g of sugar
+        # — so "every value is above 0" is the wrong assertion and was one
+        # here at first. What has to hold is the other direction: a column
+        # that is NULL in the database arrives as null and not as 0. The F1
+        # filter EXCLUDES an unmeasured food at a per-serving threshold, so
+        # a 0 would say the opposite of what the filter concluded.
+        gap = sql(
+            "SELECT n.food_id FROM food_nutrition n "
+            "JOIN foods f ON f.id = n.food_id "
+            "WHERE f.is_active = 1 AND f.owner_id IS NULL "
+            "  AND n.purine_mg IS NULL LIMIT 1")
+        if gap:
+            status, unmeasured = call(
+                "GET", f"/foods/{gap[0][0]}", token=token)
+            equals("a food with an unmeasured nutrient returns 200",
+                   status, 200)
+            equals(
+                "and that nutrient comes back null, not 0",
+                (unmeasured or {}).get("nutrition", {}).get("purineMg"),
+                None,
+            )
+        equals("a safe food has no warnings", detail.get("warnings"), [])
+        equals("and says so", detail.get("isSafeForUser"), True)
+        equals("myFeedback is null before any rating",
+               detail.get("myFeedback"), None)
+
+        status, body = call(
+            "GET", "/foods/00000000-0000-4000-8000-000000000000", token=token)
+        equals("a food that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # Declaring a condition has to change both endpoints at once.
+        allergy = next(
+            (c for c in conditions
+             if c["conditionType"] == "allergy"), None)
+        if allergy:
+            status, _ = call(
+                "PUT", "/profile/conditions",
+                {"conditions": [{"conditionId": allergy["id"],
+                                 "severity": "severe"}]},
+                token=token)
+            equals("declaring an allergy returns 200", status, 200)
+
+            status, filtered = call(
+                "GET", "/foods?pageSize=100", token=token)
+            status, everything = call(
+                "GET", "/foods?pageSize=100&excludeUnsafe=false", token=token)
+            check(
+                "excludeUnsafe=true now returns fewer foods than the whole "
+                "catalogue",
+                (filtered or {}).get("totalItems", 0)
+                < (everything or {}).get("totalItems", 0),
+                f"{(filtered or {}).get('totalItems')} against "
+                f"{(everything or {}).get('totalItems')}",
+            )
+            flagged = [i for i in (everything or {}).get("items", [])
+                       if not i["isSafeForUser"]]
+            check(
+                "and excludeUnsafe=false shows them flagged instead of "
+                "hiding them - a user may still look a dish up",
+                flagged != [],
+                "no row was flagged unsafe",
+            )
+
+            if flagged:
+                status, unsafe_detail = call(
+                    "GET", f"/foods/{flagged[0]['id']}", token=token)
+                equals("the detail of an unsafe food returns 200", status, 200)
+                unsafe_detail = unsafe_detail or {}
+                equals("it says the food is not safe",
+                       unsafe_detail.get("isSafeForUser"), False)
+                warnings = unsafe_detail.get("warnings") or []
+                check("and gives at least one warning", warnings != [])
+                check(
+                    "every warning has a Vietnamese sentence and names the "
+                    "condition",
+                    all(w.get("message") and w.get("conditionName")
+                        for w in warnings),
+                )
+                check(
+                    "and points at a condition id the app can act on",
+                    all(w.get("conditionId") for w in warnings),
+                    f"got {[w.get('conditionId') for w in warnings]}",
+                )
+
+            # Put the account back, so the later sections see a clean user.
+            call("PUT", "/profile/conditions", {"conditions": []},
+                 token=token)
 
         # -- 7.6 the meal plan --
         print("\n§7.6.2  POST /meal-plans")
@@ -1146,7 +1388,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 19 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 24 endpoints behave per the "
           f"specification against the real database.")
     return 0
 
