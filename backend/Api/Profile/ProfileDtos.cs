@@ -149,8 +149,20 @@ public sealed class InEnumAttribute : ValidationAttribute
         _allowed = values;
     }
 
+    /// <summary>
+    /// Null passes. Whether a field may be omitted is <c>[Required]</c>'s
+    /// question, not this one's — which is how <c>[Range]</c>,
+    /// <c>[StringLength]</c> and the rest of the built-in attributes behave,
+    /// and the only way an optional ENUM field can exist at all.
+    ///
+    /// <para>Before this, every use happened to sit next to a
+    /// <c>[Required]</c>, so null never reached here. The first optional one
+    /// — <c>ConditionChoiceDto.Severity</c>, declared <c>string?</c> — was
+    /// refused for being absent, with an error message listing the three
+    /// values it could have been.</para>
+    /// </summary>
     public override bool IsValid(object? value)
-        => value is string s && _allowed.Contains(s);
+        => value is null || (value is string s && _allowed.Contains(s));
 
     public override string FormatErrorMessage(string name)
         => "Giá trị không nằm trong danh sách cho phép: "
