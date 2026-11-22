@@ -11,6 +11,7 @@ than any shortage of public endpoints.
     POST /plan                        Step 4 — assemble one day's plan
     POST /survey-deck                 the taste-survey deck of §7.4.1
     POST /candidates/count            how many foods a condition set leaves
+    POST /foods/safety                which foods F1 excludes for a user, and why
     POST /profiles/{userId}/rebuild   rebuild the preference vector
     POST /train                       retrain, asynchronously
     GET  /health                      which model is serving
@@ -86,6 +87,8 @@ from ml.db import connect  # noqa: E402
 from ml.f1_filter import (  # noqa: E402
     SEVERITY_ORDER,
     Condition,
+    allowed_foods,
+    exclusion_reasons,
 )
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.plan import PlanInputError, build_daily_plan  # noqa: E402
@@ -505,6 +508,84 @@ class CandidateCountResponse(BaseModel):
     elapsedMs: int
 
 
+class FoodSafetyRequest(BaseModel):
+    """Which user, and which foods to judge."""
+
+    userId: str = Field(min_length=1)
+
+    #: Omitted means **every active food** this user can see. A list narrows
+    #: it, for a detail screen asking about one dish.
+    foodIds: list[str] | None = None
+
+
+class ExclusionReasonOut(BaseModel):
+    """One hard rule a food violates.
+
+    The parts, not a sentence. The Vietnamese prose a user reads is composed
+    by the backend from these fields — the same split as everywhere else: the
+    ML service sends codes and numbers, the layer that talks to the user
+    writes the words.
+    """
+
+    ruleType: str
+    #: `conditions.name_vi` — Vietnamese, because it is data, and it is the
+    #: one field here the user sees as it stands.
+    condition: str
+    severityMin: str
+
+    #: Set for an `exclude_tag` rule: the tag that excluded the food.
+    tag: str | None = None
+
+    #: Set for a `nutrient_limit` rule.
+    nutrient: str | None = None
+    comparator: str | None = None
+    threshold: float | None = None
+    #: The food's own measurement. `None` means **no data**, not zero — and
+    #: at a per-serving threshold, no data is itself the reason for
+    #: exclusion, because the food cannot be shown to be safe.
+    value: float | None = None
+
+    #: `True` when the food was excluded for a MISSING measurement rather
+    #: than for exceeding one. The two need different words on screen:
+    #: "vượt ngưỡng" against "chưa có số liệu".
+    missingData: bool
+
+    #: How well-founded the threshold is, and whether it may be quoted as a
+    #: sourced recommendation.
+    evidenceLevel: str
+    citable: bool
+    note: str = ""
+
+
+class FoodSafetyOut(BaseModel):
+    foodId: str
+    #: Every rule the food violates, not just the first. Fixing one does not
+    #: make the dish acceptable, so the user has to see them all.
+    reasons: list[ExclusionReasonOut]
+
+
+class FoodSafetyResponse(BaseModel):
+    userId: str
+
+    #: Of the foods asked about, the ones this user may eat.
+    safeFoodIds: list[str]
+    #: The rest, each with every rule it breaks. `safeFoodIds` and `unsafe`
+    #: together are the asked-about set, minus any id that is inactive or
+    #: belongs to another user.
+    unsafe: list[FoodSafetyOut]
+
+    nFoodsBeforeF1: int
+    nFoodsAfterF1: int
+
+    #: Ids that were asked about and are not in either list: inactive,
+    #: deleted, or another user's private food. Reported rather than silently
+    #: dropped — a detail screen asking about one food needs to know the
+    #: difference between "unsafe" and "not there".
+    unknownFoodIds: list[str]
+
+    elapsedMs: int
+
+
 # ── The training job ──────────────────────────────────────────────────
 
 
@@ -911,6 +992,112 @@ def plan(request: PlanRequest) -> PlanResponse:
             ],
             meetsNutrientTargets=built.meets_nutrient_targets,
             warnings=list(result.warnings),
+            elapsedMs=int((time.perf_counter() - started) * 1000),
+        )
+    finally:
+        cn.close()
+
+
+@app.post(
+    "/foods/safety",
+    response_model=FoodSafetyResponse,
+    dependencies=[Depends(check_key)],
+)
+def foods_safety(request: FoodSafetyRequest) -> FoodSafetyResponse:
+    """§7.5 — which foods this user may not eat, and under which rule.
+
+    The browse screen needs two different things from F1 and this answers
+    both: `excludeUnsafe=true` drops the unsafe foods, and
+    `excludeUnsafe=false` shows them with a warning. The detail screen needs
+    the warning itself.
+
+    Why it is here rather than computed by the backend: `exclusion_reasons`
+    rebuilds the same three rule clauses `allowed_foods` filters by, and
+    `cross_check_f1` exists to catch the two drifting apart. A third
+    implementation in C# would be the one nothing compares.
+
+    Status codes: `404 USER_NOT_FOUND`.
+    """
+    started = time.perf_counter()
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE id = %s", (request.userId,))
+            if cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": "USER_NOT_FOUND",
+                        "message": f"No user {request.userId}.",
+                    },
+                )
+
+        # The two calls take the SAME parameters, which is what their own
+        # docstrings require: pass them differently and the pair describes
+        # two different food sets.
+        safe = allowed_foods(cn, user_id=request.userId)
+        reasons = exclusion_reasons(cn, user_id=request.userId)
+
+        safe_ids = {row["id"] for row in safe}
+        # Every food this user can see at all, so an id that is in neither
+        # list can be reported as unknown rather than guessed at.
+        visible = {
+            row["id"]
+            for row in allowed_foods(
+                cn, user_id=request.userId, use_saved_conditions=False
+            )
+        }
+
+        asked = (
+            list(visible) if request.foodIds is None
+            else list(dict.fromkeys(request.foodIds))
+        )
+
+        out_safe: list[str] = []
+        out_unsafe: list[FoodSafetyOut] = []
+        unknown: list[str] = []
+        for food_id in asked:
+            if food_id not in visible:
+                unknown.append(food_id)
+            elif food_id in safe_ids:
+                out_safe.append(food_id)
+            else:
+                out_unsafe.append(
+                    FoodSafetyOut(
+                        foodId=food_id,
+                        reasons=[
+                            ExclusionReasonOut(
+                                ruleType=r.rule_type,
+                                condition=r.condition,
+                                severityMin=r.severity_min,
+                                tag=r.tag,
+                                nutrient=r.nutrient,
+                                comparator=r.comparator,
+                                threshold=r.threshold,
+                                value=r.value,
+                                missingData=r.missing_data,
+                                evidenceLevel=r.evidence_level,
+                                citable=r.is_citable,
+                                note=r.note or "",
+                            )
+                            for r in reasons.get(food_id, ())
+                        ],
+                    )
+                )
+
+        # Sorted, so two calls for the same user answer in the same order and
+        # a client can compare them.
+        out_safe.sort()
+        out_unsafe.sort(key=lambda u: u.foodId)
+        unknown.sort()
+
+        return FoodSafetyResponse(
+            userId=request.userId,
+            safeFoodIds=out_safe,
+            unsafe=out_unsafe,
+            nFoodsBeforeF1=len(visible),
+            nFoodsAfterF1=len(safe_ids),
+            unknownFoodIds=unknown,
             elapsedMs=int((time.perf_counter() - started) * 1000),
         )
     finally:

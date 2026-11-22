@@ -249,6 +249,97 @@ public sealed record MlPlanResponse
     public int ElapsedMs { get; init; }
 }
 
+/// <summary>§7.5 — which foods a user may not eat, and under which rule.</summary>
+public sealed record MlFoodSafetyRequest
+{
+    public required string UserId { get; init; }
+
+    /// <summary>
+    /// <c>null</c> asks about every active food this user can see. A list
+    /// narrows it, for a detail screen asking about one dish.
+    /// </summary>
+    public IReadOnlyList<string>? FoodIds { get; init; }
+}
+
+/// <summary>
+/// One hard rule a food violates — the parts, not a sentence.
+///
+/// <para>The Vietnamese prose the user reads is composed on this side, from
+/// these fields. The ML service sends codes, names and numbers; the layer
+/// that talks to the user writes the words. <see cref="Condition"/> is the
+/// exception and is already Vietnamese, because it is
+/// <c>conditions.name_vi</c> — data, not prose.</para>
+/// </summary>
+public sealed record MlExclusionReason
+{
+    /// <summary><c>exclude_tag</c> · <c>require_tag</c> · <c>nutrient_limit</c>.</summary>
+    public string RuleType { get; init; } = string.Empty;
+
+    public string Condition { get; init; } = string.Empty;
+    public string SeverityMin { get; init; } = string.Empty;
+
+    /// <summary>The tag that excluded it, for a tag rule.</summary>
+    public string? Tag { get; init; }
+
+    public string? Nutrient { get; init; }
+    public string? Comparator { get; init; }
+    public double? Threshold { get; init; }
+
+    /// <summary>
+    /// The food's own measurement. <c>null</c> means <b>no data</b>, not
+    /// zero — and at a per-serving threshold, no data is itself the reason
+    /// for exclusion, because the food cannot be shown to be safe.
+    /// </summary>
+    public double? Value { get; init; }
+
+    /// <summary>
+    /// <c>true</c> when the food was excluded for a MISSING measurement
+    /// rather than for exceeding one. The two need different words on
+    /// screen: "vượt ngưỡng" against "chưa có số liệu".
+    /// </summary>
+    public bool MissingData { get; init; }
+
+    public string EvidenceLevel { get; init; } = string.Empty;
+
+    /// <summary>Whether the threshold may be quoted as a sourced figure.</summary>
+    public bool Citable { get; init; }
+
+    public string Note { get; init; } = string.Empty;
+}
+
+/// <summary>One unsafe food, with every rule it breaks.</summary>
+public sealed record MlFoodSafetyItem
+{
+    public string FoodId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// All of them, not the first. Fixing one rule does not make the dish
+    /// acceptable, so the user has to see them all.
+    /// </summary>
+    public IReadOnlyList<MlExclusionReason> Reasons { get; init; } = [];
+}
+
+/// <inheritdoc cref="MlFoodSafetyRequest"/>
+public sealed record MlFoodSafetyResponse
+{
+    public string UserId { get; init; } = string.Empty;
+
+    public IReadOnlyList<string> SafeFoodIds { get; init; } = [];
+    public IReadOnlyList<MlFoodSafetyItem> Unsafe { get; init; } = [];
+
+    public int NFoodsBeforeF1 { get; init; }
+    public int NFoodsAfterF1 { get; init; }
+
+    /// <summary>
+    /// Ids asked about that are in neither list: inactive, deleted, or
+    /// another user's private food. A detail screen needs the difference
+    /// between "unsafe" and "not there".
+    /// </summary>
+    public IReadOnlyList<string> UnknownFoodIds { get; init; } = [];
+
+    public int ElapsedMs { get; init; }
+}
+
 /// <summary>One condition ticked on the onboarding filter screen.</summary>
 public sealed record MlCondition
 {

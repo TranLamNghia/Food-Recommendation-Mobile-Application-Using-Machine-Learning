@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 19 public endpoints built so far, against the real
+"""End-to-end test of the 31 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -513,6 +513,68 @@ def main(argv: list[str] | None = None) -> int:
     # database, so they are skipped rather than failed when it is not
     # running. A skipped section says so loudly; a failed one would send
     # somebody looking for a bug in the backend.
+    # -- 7.3 the lookup dictionaries --
+    #
+    # Public (no token), and the reason they exist now: the onboarding
+    # filter screen takes conditionIds and had no endpoint to get them from.
+    print("\n§7.3  GET /conditions · /food-categories · /tags")
+    status, conditions = call("GET", "/conditions")
+    equals("the condition dictionary is public - no token", status, 200)
+    conditions = conditions or []
+    check("it is not empty", len(conditions) > 0, f"got {len(conditions)}")
+    check(
+        "every row carries what the declaration screen needs",
+        all(c.get("id") and c.get("nameVi") and c.get("conditionType")
+            for c in conditions),
+    )
+    check(
+        "conditionType is an ENUM code, translated by the app",
+        all(c["conditionType"] in
+            ("disease", "allergy", "intolerance", "diet")
+            for c in conditions),
+        f"got {sorted({c['conditionType'] for c in conditions})}",
+    )
+    check(
+        "the ids are what POST /onboarding/candidates/count takes",
+        all(isinstance(c["id"], int) and c["id"] > 0 for c in conditions),
+    )
+
+    status, diets = call("GET", "/conditions?type=diet")
+    equals("filtering by type returns 200", status, 200)
+    check(
+        "and really filters",
+        diets and all(c["conditionType"] == "diet" for c in diets)
+        and len(diets) < len(conditions),
+        f"{len(diets or [])} of {len(conditions)}",
+    )
+    status, body = call("GET", "/conditions?type=nope")
+    equals("an invalid type is refused with a named field",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    status, categories = call("GET", "/food-categories")
+    equals("the category list is public", status, 200)
+    check(
+        "every category has an id and a Vietnamese name",
+        categories and all(c.get("id") and c.get("name") for c in categories),
+        f"got {len(categories or [])}",
+    )
+
+    status, tags = call("GET", "/tags")
+    equals("the tag dictionary is public", status, 200)
+    check(
+        "every tag has a type the schema declares",
+        tags and all(t["tagType"] in ("allergen", "diet", "nutrition")
+                     for t in tags),
+    )
+    check(
+        "there is no `taste` tag type - salty and sweet are measured "
+        "dimensions, not hand-written labels",
+        all(t["tagType"] != "taste" for t in (tags or [])),
+    )
+    status, body = call("GET", "/tags?type=nope")
+    equals("an invalid tag type is refused",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
     print("\n§7.4.1  GET /onboarding/survey")
     status, deck = call("GET", "/onboarding/survey?size=30", token=token)
     if status == 503 and error_code(deck) == "ML_UNAVAILABLE":
@@ -741,6 +803,186 @@ def main(argv: list[str] | None = None) -> int:
         equals("the deck is refused once onboarding is done",
                (status, error_code(body)),
                (409, "ONBOARDING_ALREADY_COMPLETED"))
+
+        # -- 7.5 the food catalogue --
+        #
+        # Both endpoints ask the ML service which dishes are safe, so they
+        # are in this block. The browse list's own rule is the one worth
+        # checking: a page that cannot say which dish is unsafe must not
+        # pretend to be filtered.
+        print("\n§7.5.1  GET /foods")
+        status, page1 = call("GET", "/foods?pageSize=10", token=token)
+        equals("200", status, 200)
+        page1 = page1 or {}
+        equals("the page holds what was asked for",
+               len(page1.get("items", [])), 10)
+        equals("page is echoed back", page1.get("page"), 1)
+        check("totalItems counts the whole catalogue",
+              page1.get("totalItems", 0) > 10,
+              f"got {page1.get('totalItems')}")
+        check(
+            "totalPages is the ceiling, not the floor",
+            page1.get("totalPages")
+            == -(-page1.get("totalItems", 0) // 10),
+            f"got {page1.get('totalPages')} for "
+            f"{page1.get('totalItems')} items",
+        )
+        check(
+            "with excludeUnsafe defaulting to true, every row is safe",
+            all(i["isSafeForUser"] for i in page1.get("items", [])),
+        )
+        check(
+            "every row carries what a list tile needs",
+            all(i.get("name") and i.get("categoryName") and i.get("dishRole")
+                and i.get("caloriesKcal") is not None and i.get("servingSizeG")
+                for i in page1.get("items", [])),
+        )
+
+        status, page2 = call("GET", "/foods?pageSize=10&page=2", token=token)
+        equals("page 2 returns 200", status, 200)
+        check(
+            "page 2 shares no row with page 1 - an unstable sort would hide "
+            "a food from every page",
+            not ({i["id"] for i in page1.get("items", [])}
+                 & {i["id"] for i in (page2 or {}).get("items", [])}),
+        )
+
+        status, soups = call(
+            "GET", "/foods?dishRole=soup&pageSize=100", token=token)
+        check(
+            "dishRole really filters",
+            soups and all(i["dishRole"] == "soup"
+                          for i in soups.get("items", [])),
+        )
+
+        status, lunch = call(
+            "GET", "/foods?mealType=lunch&pageSize=100", token=token)
+        equals(
+            "mealType returns exactly the roles a lunch can hold",
+            sorted({i["dishRole"] for i in (lunch or {}).get("items", [])}),
+            ["main", "side_protein", "soup"],
+        )
+
+        status, light = call(
+            "GET", "/foods?maxCalories=100&pageSize=100", token=token)
+        check(
+            "maxCalories is a ceiling per serving",
+            light and all(i["caloriesKcal"] <= 100
+                          for i in light.get("items", [])),
+        )
+
+        for query, label in (
+            ("page=0", "page 0"),
+            ("pageSize=200", "pageSize above the cap"),
+            ("dishRole=nope", "an invalid dishRole"),
+            ("mealType=brunch", "an invalid mealType"),
+            ("maxCalories=0", "a maxCalories of 0"),
+        ):
+            status, body = call(
+                "GET", f"/foods?{query}", token=token)
+            equals(f"{label} is refused",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        print("\n§7.5.2  GET /foods/{id}")
+        sample = page1["items"][0]["id"]
+        status, detail = call("GET", f"/foods/{sample}", token=token)
+        equals("200", status, 200)
+        detail = detail or {}
+        equals("it is the food asked for", detail.get("id"), sample)
+        check("the category comes back as an object with a name",
+              (detail.get("category") or {}).get("name"))
+        check("nutrition carries the three macros and the serving weight",
+              all((detail.get("nutrition") or {}).get(k) is not None
+                  for k in ("servingSizeG", "caloriesKcal", "proteinG",
+                            "carbsG", "fatG")))
+        # A real 0 is a valid measurement — a savoury dish has 0 g of sugar
+        # — so "every value is above 0" is the wrong assertion and was one
+        # here at first. What has to hold is the other direction: a column
+        # that is NULL in the database arrives as null and not as 0. The F1
+        # filter EXCLUDES an unmeasured food at a per-serving threshold, so
+        # a 0 would say the opposite of what the filter concluded.
+        gap = sql(
+            "SELECT n.food_id FROM food_nutrition n "
+            "JOIN foods f ON f.id = n.food_id "
+            "WHERE f.is_active = 1 AND f.owner_id IS NULL "
+            "  AND n.purine_mg IS NULL LIMIT 1")
+        if gap:
+            status, unmeasured = call(
+                "GET", f"/foods/{gap[0][0]}", token=token)
+            equals("a food with an unmeasured nutrient returns 200",
+                   status, 200)
+            equals(
+                "and that nutrient comes back null, not 0",
+                (unmeasured or {}).get("nutrition", {}).get("purineMg"),
+                None,
+            )
+        equals("a safe food has no warnings", detail.get("warnings"), [])
+        equals("and says so", detail.get("isSafeForUser"), True)
+        equals("myFeedback is null before any rating",
+               detail.get("myFeedback"), None)
+
+        status, body = call(
+            "GET", "/foods/00000000-0000-4000-8000-000000000000", token=token)
+        equals("a food that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # Declaring a condition has to change both endpoints at once.
+        allergy = next(
+            (c for c in conditions
+             if c["conditionType"] == "allergy"), None)
+        if allergy:
+            status, _ = call(
+                "PUT", "/profile/conditions",
+                {"conditions": [{"conditionId": allergy["id"],
+                                 "severity": "severe"}]},
+                token=token)
+            equals("declaring an allergy returns 200", status, 200)
+
+            status, filtered = call(
+                "GET", "/foods?pageSize=100", token=token)
+            status, everything = call(
+                "GET", "/foods?pageSize=100&excludeUnsafe=false", token=token)
+            check(
+                "excludeUnsafe=true now returns fewer foods than the whole "
+                "catalogue",
+                (filtered or {}).get("totalItems", 0)
+                < (everything or {}).get("totalItems", 0),
+                f"{(filtered or {}).get('totalItems')} against "
+                f"{(everything or {}).get('totalItems')}",
+            )
+            flagged = [i for i in (everything or {}).get("items", [])
+                       if not i["isSafeForUser"]]
+            check(
+                "and excludeUnsafe=false shows them flagged instead of "
+                "hiding them - a user may still look a dish up",
+                flagged != [],
+                "no row was flagged unsafe",
+            )
+
+            if flagged:
+                status, unsafe_detail = call(
+                    "GET", f"/foods/{flagged[0]['id']}", token=token)
+                equals("the detail of an unsafe food returns 200", status, 200)
+                unsafe_detail = unsafe_detail or {}
+                equals("it says the food is not safe",
+                       unsafe_detail.get("isSafeForUser"), False)
+                warnings = unsafe_detail.get("warnings") or []
+                check("and gives at least one warning", warnings != [])
+                check(
+                    "every warning has a Vietnamese sentence and names the "
+                    "condition",
+                    all(w.get("message") and w.get("conditionName")
+                        for w in warnings),
+                )
+                check(
+                    "and points at a condition id the app can act on",
+                    all(w.get("conditionId") for w in warnings),
+                    f"got {[w.get('conditionId') for w in warnings]}",
+                )
+
+            # Put the account back, so the later sections see a clean user.
+            call("PUT", "/profile/conditions", {"conditions": []},
+                 token=token)
 
         # -- 7.6 the meal plan --
         print("\n§7.6.2  POST /meal-plans")
@@ -1040,6 +1282,486 @@ def main(argv: list[str] | None = None) -> int:
         equals("a meal with a dish already eaten cannot be rebuilt",
                (status, error_code(body)), (409, "VALIDATION_FAILED"))
 
+        # -- 7.7 the food diary, and 7.8 the ratings --
+        #
+        # Inside the ML-dependent section because both rest on a plan: the
+        # undo of §7.7.4 hands a dish back to it, and the first condition of
+        # §7.8.1 is that the dish was suggested at all. One diary row exists
+        # at this point, written by the `eaten` of §7.6.6 above.
+        #
+        # `plan` is the response from when the plan was first generated, and
+        # since then §7.6.5 replaced a dish and §7.6.2b rewrote a whole meal.
+        # Its item ids and food ids are stale, so read the plan as it stands.
+        status, plan_now = call("GET", f"/meal-plans?date={today}",
+                                token=token)
+        equals("the plan as it stands now reads back", status, 200)
+        plan_now = plan_now or {}
+
+        print("\n§7.7.1  GET /food-diary")
+        status, diary = call(
+            "GET", f"/food-diary?from={today}&to={today}", token=token)
+        equals("200", status, 200)
+        diary = diary or {}
+        days = diary.get("days") or []
+        equals("one day has entries", len(days), 1)
+        entries = (days[0] if days else {}).get("entries") or []
+        equals("and it holds the one dish marked eaten", len(entries), 1)
+        planned_entry = entries[0] if entries else {}
+        equals("which came from the plan", planned_entry.get("fromMealPlan"),
+               True)
+        equals("has not been rated yet", planned_entry.get("hasFeedback"),
+               False)
+        equals("so it can still be corrected or taken back",
+               planned_entry.get("editable"), True)
+        check("the portion is reported in grams",
+              (planned_entry.get("servingSizeG") or 0) > 0,
+              f"got {planned_entry.get('servingSizeG')}")
+        check("and the energy of that portion, not of one serving",
+              (planned_entry.get("actualCaloriesKcal") or 0) > 0,
+              f"got {planned_entry.get('actualCaloriesKcal')}")
+        equals("the day's total matches its entries",
+               (days[0] if days else {}).get("totalCaloriesKcal"),
+               planned_entry.get("actualCaloriesKcal"))
+
+        for query, label in (
+                ("", "no from and no to"),
+                (f"?from={today}", "a from with no to"),
+                (f"?from={today}&to=2099-12-31", "a range over 90 days"),
+                (f"?from={today}&to=2000-01-01", "a to before the from"),
+                (f"?from={today}&to={today}&mealType=brunch",
+                 "a meal that does not exist")):
+            status, body = call("GET", f"/food-diary{query}", token=token)
+            equals(f"400 VALIDATION_FAILED for {label}",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        eaten_meal = planned_entry.get("mealType")
+        status, filtered = call(
+            "GET", f"/food-diary?from={today}&to={today}"
+                   f"&mealType={eaten_meal}", token=token)
+        equals("filtering by the meal it was eaten at keeps it",
+               len(((filtered or {}).get("days") or [{}])[0]
+                   .get("entries") or []), 1)
+        other_meal = next(m for m in ("breakfast", "lunch", "dinner", "snack")
+                          if m != eaten_meal)
+        status, filtered = call(
+            "GET", f"/food-diary?from={today}&to={today}"
+                   f"&mealType={other_meal}", token=token)
+        equals("filtering by another meal leaves nothing",
+               len((filtered or {}).get("days") or []), 0)
+
+        # -- 7.7.2 record something eaten --
+        print("\n§7.7.2  POST /food-diary")
+        status, catalogue = call(
+            "GET", "/foods?excludeUnsafe=false&pageSize=100", token=token)
+        in_plan = {i["food"]["id"] for m in (plan_now.get("meals") or [])
+                   for i in m["items"]}
+        outside = next(
+            (f for f in (catalogue or {}).get("items") or []
+             if f["id"] not in in_plan), None)
+        check("the catalogue has a dish that is not in today's plan",
+              outside is not None)
+
+        status, added = call(
+            "POST", "/food-diary",
+            {"foodId": outside["id"], "ateOn": today, "mealType": "snack",
+             "servingSizeG": 100}, token=token)
+        equals("201 for a dish bought outside the plan", status, 201)
+        added = added or {}
+        equals("and it is NOT marked as coming from the plan",
+               added.get("fromMealPlan"), False)
+        own_entry_id = added.get("id")
+
+        status, body = call(
+            "POST", "/food-diary",
+            {"foodId": outside["id"], "ateOn": today, "mealType": "snack"},
+            token=token)
+        equals("the same dish twice in one meal is 409, because §8.4 "
+               "joins on those four columns",
+               (status, error_code(body)), (409, "VALIDATION_FAILED"))
+
+        status, body = call(
+            "POST", "/food-diary",
+            {"foodId": outside["id"], "ateOn": "2099-01-01",
+             "mealType": "snack"}, token=token)
+        equals("a day that has not come yet is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        status, body = call(
+            "POST", "/food-diary",
+            {"foodId": "00000000-0000-4000-8000-000000000000",
+             "ateOn": today, "mealType": "snack"}, token=token)
+        equals("a dish that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        status, body = call(
+            "POST", "/food-diary",
+            {"foodId": outside["id"], "ateOn": today, "mealType": "dinner",
+             "servingSizeG": 1}, token=token)
+        equals("1 gram is under chk_diary_portion's tenth of a serving",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        # The property of §7.7.2 that matters most: the diary does NOT apply
+        # the F1 filter. A user records what they actually ate, including a
+        # dish their own condition makes unsafe — refusing it would make the
+        # diary a record of what the system approves of rather than of what
+        # happened, and would lose the 0.9-weight label with it.
+        #
+        # §7.5 cleared the account's conditions so that the plan section saw
+        # a clean user, so the allergy is declared again here and cleared
+        # again afterwards. Without it nothing in the catalogue is unsafe and
+        # there is no way to show the property at all.
+        allergy_again = next(
+            (c for c in conditions if c["conditionType"] == "allergy"), None)
+        check("there is an allergy to declare", allergy_again is not None)
+        call("PUT", "/profile/conditions",
+             {"conditions": [{"conditionId": allergy_again["id"],
+                              "severity": "severe"}]}, token=token)
+        status, flagged_page = call(
+            "GET", "/foods?excludeUnsafe=false&pageSize=100", token=token)
+        unsafe = next(
+            (f for f in (flagged_page or {}).get("items") or []
+             if not f.get("isSafeForUser") and f["id"] != outside["id"]),
+            None)
+        check("declaring it makes some dish unsafe", unsafe is not None,
+              "nothing was flagged, so the property cannot be shown")
+        status, recorded = call(
+            "POST", "/food-diary",
+            {"foodId": unsafe["id"], "ateOn": today,
+             "mealType": "breakfast"}, token=token)
+        equals("a dish that F1 excludes is still recorded — the diary is "
+               "not filtered", status, 201)
+        equals("and §7.5 would have hidden that same dish",
+               unsafe.get("isSafeForUser"), False)
+        sql("DELETE FROM food_diary WHERE id = %s",
+            ((recorded or {}).get("id"),))
+        call("PUT", "/profile/conditions", {"conditions": []}, token=token)
+
+        # -- 7.7.3 correct a line --
+        print("\n§7.7.3  PUT /food-diary/{id}")
+        status, edited = call(
+            "PUT", f"/food-diary/{own_entry_id}",
+            {"servingSizeG": 50}, token=token)
+        equals("200 when only the portion is sent", status, 200)
+        check("the portion came down",
+              (edited or {}).get("servingSizeG", 999)
+              < added.get("servingSizeG", 0),
+              f"{added.get('servingSizeG')} -> "
+              f"{(edited or {}).get('servingSizeG')}")
+        check("and so did the energy",
+              (edited or {}).get("actualCaloriesKcal", 1e9)
+              < added.get("actualCaloriesKcal", 0))
+
+        different = next(f["id"] for f in (catalogue or {}).get("items") or []
+                         if f["id"] != outside["id"])
+        status, body = call(
+            "PUT", f"/food-diary/{own_entry_id}",
+            {"foodId": different}, token=token)
+        equals("the dish of a line cannot be swapped — a rating would "
+               "follow it across",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        status, body = call(
+            "PUT", f"/food-diary/{own_entry_id}",
+            {"ateOn": "2026-01-01"}, token=token)
+        equals("nor can the day, whose plan and limits are different ones",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        status, body = call(
+            "PUT", "/food-diary/00000000-0000-4000-8000-000000000000",
+            {"servingSizeG": 100}, token=token)
+        equals("a line that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # -- 7.7.5 the day against its limits --
+        print("\n§7.7.5  GET /food-diary/summary")
+        status, summary = call(
+            "GET", f"/food-diary/summary?date={today}", token=token)
+        equals("200", status, 200)
+        summary = summary or {}
+
+        # The trap this endpoint exists to avoid. Step 1 already has three
+        # implementations held in parity; the summary must READ the limits the
+        # day was planned against, not work them out again.
+        equals("the targets are the plan's own snapshot, not a fresh "
+               "calculation",
+               (summary.get("targets") or {}).get("caloriesKcal"),
+               (plan_now.get("targets") or {}).get("caloriesKcal"))
+        for macro in ("proteinG", "carbsG", "fatG"):
+            equals(f"and the same for {macro}",
+                   (summary.get("targets") or {}).get(macro),
+                   (plan_now.get("targets") or {}).get(macro))
+
+        status, after_edit = call(
+            "GET", f"/food-diary?from={today}&to={today}", token=token)
+        all_entries = [e for d in ((after_edit or {}).get("days") or [])
+                       for e in d["entries"]]
+        equals("consumed is the sum of the day's entries",
+               (summary.get("consumed") or {}).get("caloriesKcal"),
+               round(sum(e["actualCaloriesKcal"] for e in all_entries), 2))
+
+        by_meal = summary.get("byMeal") or []
+        equals("byMeal covers all four meals in the order of the day",
+               [m["mealType"] for m in by_meal],
+               ["breakfast", "lunch", "dinner", "snack"])
+        equals("and its energy adds up to what was consumed",
+               round(sum(m["caloriesKcal"] for m in by_meal), 2),
+               (summary.get("consumed") or {}).get("caloriesKcal"))
+        day_target = (summary.get("targets") or {}).get("caloriesKcal") or 0
+        check("the four meal targets add up to the day's, give or take "
+              "rounding",
+              abs(sum(m["targetCaloriesKcal"] for m in by_meal)
+                  - day_target) <= 2,
+              f"{sum(m['targetCaloriesKcal'] for m in by_meal)} vs "
+              f"{day_target}")
+
+        remaining = summary.get("remaining") or {}
+        equals("remaining is the target less what was eaten",
+               remaining.get("caloriesKcal"),
+               round(day_target
+                     - ((summary.get("consumed") or {})
+                        .get("caloriesKcal") or 0), 2))
+
+        for micro in summary.get("micronutrients") or []:
+            check(f"{micro['nutrient']} has a Vietnamese name, not a column "
+                  "name",
+                  micro["nameVi"] != micro["nutrient"],
+                  f"got {micro['nameVi']!r}")
+            check(f"{micro['nutrient']} has a unit", bool(micro["unit"]))
+            check(f"{micro['nutrient']}'s percentage matches its two "
+                  "figures",
+                  micro["rda"] <= 0
+                  or abs(micro["pct"]
+                         - round(100 * micro["consumed"] / micro["rda"], 1))
+                  <= 0.1,
+                  f"{micro['consumed']}/{micro['rda']} != {micro['pct']}%")
+        check("no macronutrient appears among the micronutrients, which "
+              "would send the same figure twice",
+              not ({m["nutrient"] for m in
+                    summary.get("micronutrients") or []}
+                   & {"calories_kcal", "protein_g", "carbs_g", "fat_g"}))
+
+        compliance = summary.get("planCompliance") or {}
+        plan_items = sum(
+            len(m["items"]) for m in (plan_now.get("meals") or []))
+        check("suggestedItems counts every dish of the plan, as §8.4 "
+              "does",
+              compliance.get("suggestedItems", 0) >= plan_items,
+              f"{compliance.get('suggestedItems')} vs {plan_items} seen "
+              "in the response")
+        check("eatenItems never exceeds what was suggested",
+              compliance.get("eatenItems", 0)
+              <= compliance.get("suggestedItems", 0))
+        check("and the percentage agrees with the two counts",
+              compliance.get("suggestedItems") == 0
+              or abs((compliance.get("compliancePct") or 0)
+                     - round(100 * compliance["eatenItems"]
+                             / compliance["suggestedItems"], 2)) <= 0.01,
+              f"{compliance}")
+
+        status, body = call("GET", "/food-diary/summary", token=token)
+        equals("a summary with no date is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        # An account with no health profile has no limits to be measured
+        # against — the same 409 §7.2.3 gives, and the same screen to send
+        # the user to.
+        status, spare = call("POST", "/auth/login",
+                             {"email": f"fits-{email}",
+                              "password": "Aa1" + "b" * 69})
+        spare_token = (spare or {}).get("accessToken")
+        if spare_token:
+            status, body = call(
+                "GET", f"/food-diary/summary?date={today}",
+                token=spare_token)
+            equals("409 PROFILE_REQUIRED without a health profile",
+                   (status, error_code(body)), (409, "PROFILE_REQUIRED"))
+            status, body = call(
+                "DELETE", f"/food-diary/{own_entry_id}", token=spare_token)
+            equals("403 FORBIDDEN deleting someone else's line",
+                   (status, error_code(body)), (403, "FORBIDDEN"))
+            status, body = call(
+                "PUT", f"/food-diary/{own_entry_id}",
+                {"servingSizeG": 100}, token=spare_token)
+            equals("403 FORBIDDEN editing someone else's line",
+                   (status, error_code(body)), (403, "FORBIDDEN"))
+
+        # -- 7.8.1 the two conditions --
+        print("\n§7.8.1  POST /feedbacks")
+        eaten_food = (planned_entry.get("food") or {}).get("id")
+        never_suggested = next(
+            f["id"] for f in (catalogue or {}).get("items") or []
+            if f["id"] not in in_plan and f["id"] != outside["id"])
+        status, body = call(
+            "POST", "/feedbacks", {"foodId": never_suggested, "rating": 5},
+            token=token)
+        equals("a dish never suggested cannot be rated — condition ①",
+               (status, error_code(body)), (409, "FEEDBACK_NOT_ALLOWED"))
+
+        not_eaten = next(
+            (i["food"]["id"] for m in (plan_now.get("meals") or [])
+             for i in m["items"] if i["food"]["id"] != eaten_food), None)
+        if not_eaten:
+            status, body = call(
+                "POST", "/feedbacks", {"foodId": not_eaten, "rating": 4},
+                token=token)
+            equals("a dish suggested but not eaten cannot be rated — "
+                   "condition ②",
+                   (status, error_code(body)), (409, "FEEDBACK_NOT_ALLOWED"))
+
+        status, body = call(
+            "POST", "/feedbacks", {"foodId": outside["id"], "rating": 4},
+            token=token)
+        equals("a dish eaten but never suggested cannot be rated either",
+               (status, error_code(body)), (409, "FEEDBACK_NOT_ALLOWED"))
+
+        status, body = call(
+            "POST", "/feedbacks",
+            {"foodId": "00000000-0000-4000-8000-000000000000", "rating": 4},
+            token=token)
+        equals("a dish that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        for rating in (0, 6):
+            status, body = call(
+                "POST", "/feedbacks",
+                {"foodId": eaten_food, "rating": rating}, token=token)
+            equals(f"{rating} stars is outside chk_rating",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        status, body = call(
+            "POST", "/feedbacks",
+            {"foodId": eaten_food, "rating": 3, "comment": "x" * 1001},
+            token=token)
+        equals("a comment over 1000 characters is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+        status, rated = call(
+            "POST", "/feedbacks",
+            {"foodId": eaten_food, "rating": 5, "comment": "Ngon"},
+            token=token)
+        equals("201 for the dish that was both suggested and eaten", status,
+               201)
+        rated = rated or {}
+        equals("the response names the dish", rated.get("foodId"),
+               eaten_food)
+        equals("and reports that the preference vector was rebuilt from it",
+               rated.get("profileUpdated"), True)
+
+        # Taste changes, and §7.8.1 says so: a second rating is a new row,
+        # not an overwrite. `idx_user_food_time` is what makes the latest one
+        # cheap to find, and the dataset step takes the latest as of its own
+        # cut-off.
+        status, again3 = call(
+            "POST", "/feedbacks",
+            {"foodId": eaten_food, "rating": 2, "comment": "Ăn lại "
+             "thấy dở"}, token=token)
+        equals("201 rating the same dish a second time", status, 201)
+        check("it is a new row, not an overwrite",
+              (again3 or {}).get("id") != rated.get("id"))
+        rows = sql("SELECT COUNT(*) FROM feedbacks WHERE user_id = %s AND "
+                   "food_id = %s", (uid, eaten_food))[0][0]
+        equals("so both ratings are kept", rows, 2)
+
+        # -- the lock --
+        #
+        # A rating is the system's most trusted label, and §7.8.1 requires a
+        # diary line behind it. Once rated, the line that could be that
+        # evidence stops being editable: "I have not eaten this" and "it was
+        # worth five stars" cannot both be true.
+        print("\n§7.7.3/§7.7.4  a rated line is locked")
+        status, locked_view = call(
+            "GET", f"/food-diary?from={today}&to={today}", token=token)
+        rated_line = next(
+            (e for d in ((locked_view or {}).get("days") or [])
+             for e in d["entries"]
+             if e["food"]["id"] == eaten_food), None)
+        check("the rated line is still in the diary", rated_line is not None)
+        equals("it reports the rating", (rated_line or {}).get("hasFeedback"),
+               True)
+        equals("and reports that it can no longer be changed",
+               (rated_line or {}).get("editable"), False)
+
+        status, body = call(
+            "DELETE", f"/food-diary/{(rated_line or {}).get('id')}",
+            token=token)
+        equals("409 deleting a rated line",
+               (status, error_code(body)), (409, "VALIDATION_FAILED"))
+        status, body = call(
+            "PUT", f"/food-diary/{(rated_line or {}).get('id')}",
+            {"servingSizeG": 120}, token=token)
+        equals("409 editing one too — otherwise the rating could be moved "
+               "to another dish",
+               (status, error_code(body)), (409, "VALIDATION_FAILED"))
+
+        # -- 7.7.4 the two deletes --
+        #
+        # A line the user typed in is removed. A line that exists only
+        # because they tapped "eaten" on a planned dish is UNDONE: the dish
+        # goes back to the plan as `suggested` and shows up on the plan
+        # screen again. Only something that never happened can be taken
+        # away.
+        print("\n§7.7.4  DELETE /food-diary/{id}")
+        status, _ = call("DELETE", f"/food-diary/{own_entry_id}",
+                         token=token)
+        equals("204 deleting the line the user typed in", status, 204)
+        rows = sql("SELECT COUNT(*) FROM food_diary WHERE id = %s",
+                   (own_entry_id,))[0][0]
+        equals("and it is gone", rows, 0)
+
+        undo_item = next(
+            (i for m in (plan_now.get("meals") or []) for i in m["items"]
+             if i["food"]["id"] != eaten_food), None)
+        if undo_item:
+            status, marked = call(
+                "PATCH", f"/meal-plan-items/{undo_item['id']}/status",
+                {"status": "eaten"}, token=token)
+            equals("a second planned dish is marked eaten", status, 200)
+            undo_entry = (marked or {}).get("diaryEntryId")
+            status, _ = call("DELETE", f"/food-diary/{undo_entry}",
+                             token=token)
+            equals("204 taking that tap back", status, 204)
+            rows = sql("SELECT status FROM meal_plan_items WHERE id = %s",
+                       (undo_item["id"],))
+            equals("and the dish is back on the plan as 'suggested', not "
+                   "deleted", rows and rows[0][0], "suggested")
+            rows = sql("SELECT COUNT(*) FROM food_diary WHERE id = %s",
+                       (undo_entry,))[0][0]
+            equals("while the diary line it came from is gone", rows, 0)
+
+        # -- 7.8.2 my ratings --
+        print("\n§7.8.2  GET /feedbacks")
+        status, mine = call("GET", "/feedbacks", token=token)
+        equals("200", status, 200)
+        mine = mine or {}
+        equals("both ratings are listed", mine.get("totalItems"), 2)
+        equals("one page of them", mine.get("totalPages"), 1)
+        items = mine.get("items") or []
+        equals("newest first, so the latest opinion is on top",
+               items and items[0].get("rating"), 2)
+        check("each row carries the dish it is about",
+              all((i.get("food") or {}).get("name") for i in items))
+
+        status, one = call(
+            "GET", f"/feedbacks?foodId={eaten_food}", token=token)
+        equals("filtering by dish finds both of them",
+               (one or {}).get("totalItems"), 2)
+        status, none_of = call(
+            "GET", f"/feedbacks?foodId={never_suggested}", token=token)
+        equals("and finds none for a dish never rated",
+               (none_of or {}).get("totalItems"), 0)
+
+        status, p1 = call("GET", "/feedbacks?page=1&pageSize=1", token=token)
+        status, p2 = call("GET", "/feedbacks?page=2&pageSize=1", token=token)
+        equals("two pages of one", (p1 or {}).get("totalPages"), 2)
+        check("and the two pages hold different ratings",
+              ((p1 or {}).get("items") or [{}])[0].get("id")
+              != ((p2 or {}).get("items") or [{}])[0].get("id"))
+
+        for query, label in (("?page=0", "page 0"),
+                             ("?pageSize=0", "pageSize 0"),
+                             ("?pageSize=500", "pageSize 500")):
+            status, body = call("GET", f"/feedbacks{query}",
+                                token=token)
+            equals(f"400 VALIDATION_FAILED for {label}",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
         # Regenerating deletes the old plan, which the app should warn about.
         print("\n§7.6.2  regenerate")
         status, fresh = call(
@@ -1091,7 +1813,11 @@ def main(argv: list[str] | None = None) -> int:
     # added in this wave never mention `is_active` anywhere.
     for path in ("/auth/me", "/profile", "/profile/nutrition-targets",
                  "/profile/conditions", "/onboarding/survey",
-                 f"/meal-plans?date={date.today().isoformat()}"):
+                 f"/meal-plans?date={date.today().isoformat()}",
+                 "/foods", "/feedbacks",
+                 f"/food-diary?from={date.today().isoformat()}"
+                 f"&to={date.today().isoformat()}",
+                 f"/food-diary/summary?date={date.today().isoformat()}"):
         status, body = call("GET", path, token=access)
         equals(f"403 ACCOUNT_DISABLED at GET {path}",
                (status, error_code(body)), (403, "ACCOUNT_DISABLED"))
@@ -1111,6 +1837,12 @@ def main(argv: list[str] | None = None) -> int:
         ("POST", "/onboarding/candidates/count", {"conditions": []}),
         ("POST", f"/meal-plans/{missing_plan}/meals/snack", None),
         ("POST", "/meal-plans", {"planDate": date.today().isoformat()}),
+        ("POST", "/food-diary",
+         {"foodId": missing_plan, "ateOn": date.today().isoformat(),
+          "mealType": "snack"}),
+        ("PUT", f"/food-diary/{missing_plan}", {"servingSizeG": 100}),
+        ("DELETE", f"/food-diary/{missing_plan}", None),
+        ("POST", "/feedbacks", {"foodId": missing_plan, "rating": 5}),
     ):
         status, body = call(method, path, payload, token=access)
         equals(f"403 ACCOUNT_DISABLED at {method} {path}",
@@ -1146,7 +1878,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 19 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 31 endpoints behave per the "
           f"specification against the real database.")
     return 0
 

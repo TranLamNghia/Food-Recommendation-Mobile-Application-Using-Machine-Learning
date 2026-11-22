@@ -26,6 +26,7 @@ names asserted below are **data** — they are what `db/schema.sql` and
 from __future__ import annotations
 
 import random
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -1254,6 +1255,70 @@ def check_one_meal() -> None:
     )
 
 
+# -- 15. The C# mirror of the meal structure ---------------------------
+
+#: `backend/Api/Planning/MealStructure.cs` keeps the role sets of each meal so
+#: that §7.5.1's `mealType` filter can be answered in SQL. The arrays are
+#: matched by the same declaration shape `tools/gen_entities.py` matches in
+#: `Api.Profile.Enums`, and for the same reason: a copy nothing compares is a
+#: copy that drifts.
+MEAL_STRUCTURE_CS = ROOT / "backend" / "Api" / "Planning" / "MealStructure.cs"
+
+#: Spelled as a name so the stripping code above holds no escape sequences.
+NEWLINE = chr(10)
+
+RE_CS_ARRAY = re.compile(
+    r"public static readonly string\[\]\s+(\w+)\s*=\s*\[(.*?)\]\s*;", re.S)
+
+
+def check_csharp_mirror() -> None:
+    print("15. The C# mirror of MEAL_STRUCTURE")
+
+    if not MEAL_STRUCTURE_CS.exists():
+        check(False, f"{MEAL_STRUCTURE_CS} does not exist")
+        return
+
+    # Documentation lines are stripped first. The class's own XML
+    # comment spells out the declaration shape it has to keep —
+    # `string[] Name = [ ... ]` — and without this the audit matched that
+    # example and reported a meal called `Name`.
+    source = MEAL_STRUCTURE_CS.read_text(encoding="utf-8")
+    text = NEWLINE.join(
+        line for line in source.split(NEWLINE)
+        if not line.lstrip().startswith("///")
+    )
+    on_disk = {
+        m.group(1).lower(): re.findall(r'"([^"]*)"', m.group(2))
+        for m in RE_CS_ARRAY.finditer(text)
+    }
+
+    check(
+        set(on_disk) == set(MEAL_TYPES),
+        f"MealStructure.cs declares {sorted(on_disk)}, the four meals are "
+        f"{sorted(MEAL_TYPES)}",
+    )
+
+    for meal in MEAL_TYPES:
+        shape = MEAL_STRUCTURE[meal]
+        expected = list(shape.required) + list(shape.optional)
+        actual = on_disk.get(meal)
+        check(
+            actual == expected,
+            f"MealStructure.{meal.capitalize()} = {actual}, but "
+            f"MEAL_STRUCTURE[{meal!r}] required+optional = {expected}",
+        )
+
+    # Every role named on the C# side has to be a real `dish_role`, or the
+    # SQL filter silently matches nothing.
+    named = {role for roles in on_disk.values() for role in roles}
+    unknown = sorted(named - set(SCHEMA_ROLES))
+    check(
+        not unknown,
+        f"MealStructure.cs names roles that are not in the dish_role ENUM: "
+        f"{unknown}",
+    )
+
+
 def main() -> int:
     use_utf8()
     print("Step 4 checks — the meal-plan builder, no database needed")
@@ -1273,6 +1338,7 @@ def main() -> int:
         check_alternatives,
         check_ml_scores,
         check_one_meal,
+        check_csharp_mirror,
     ):
         section()
     print("=" * 62)

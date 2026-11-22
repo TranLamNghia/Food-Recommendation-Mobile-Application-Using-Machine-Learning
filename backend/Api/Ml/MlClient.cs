@@ -56,6 +56,14 @@ public interface IMlClient
         MlCandidateCountRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// §7.5 — which of these foods the F1 filter excludes for this user, and
+    /// under which rule. Cheaper than <see cref="PredictAsync"/> when only
+    /// safety is wanted: nothing is scored and no model is loaded.
+    /// </summary>
+    Task<MlResult<MlFoodSafetyResponse>> FoodSafetyAsync(
+        MlFoodSafetyRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Rebuild a user's preference vector (§8.2). Call it after onboarding
     /// finishes, and when <c>featureVersion</c> changes.
     /// </summary>
@@ -192,6 +200,22 @@ public sealed class MlClient : IMlClient
         => SendAsync<MlCandidateCountResponse>(
             HttpMethod.Post, "candidates/count", request,
             needsKey: true, ct);
+
+    public Task<MlResult<MlFoodSafetyResponse>> FoodSafetyAsync(
+        MlFoodSafetyRequest request, CancellationToken ct = default)
+    {
+        // An empty list is not "all foods": it is a caller that worked out a
+        // set and got none. Answered here rather than sent, because the
+        // right answer needs no round trip at all.
+        if (request.FoodIds is { Count: 0 })
+        {
+            return Task.FromResult(MlResult<MlFoodSafetyResponse>.Success(
+                new MlFoodSafetyResponse { UserId = request.UserId }));
+        }
+
+        return SendAsync<MlFoodSafetyResponse>(
+            HttpMethod.Post, "foods/safety", request, needsKey: true, ct);
+    }
 
     public Task<MlResult<MlSurveyDeckResponse>> SurveyDeckAsync(
         MlSurveyDeckRequest request, CancellationToken ct = default)

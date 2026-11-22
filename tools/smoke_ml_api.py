@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the ML Service's 7 internal endpoints, against the real
+"""End-to-end test of the ML Service's 8 internal endpoints, against the real
 database.
 
 The counterpart of `tools/smoke_backend.py` for the ML layer, and needed for
@@ -838,6 +838,100 @@ def main(argv: list[str] | None = None) -> int:
     )
     equals("a userId that does not exist gives 404", status, 404)
 
+    # -- POST /foods/safety - which foods F1 excludes, and why (\u00a77.5) --
+    #
+    # The browse list and the detail screen both rest on this. What is
+    # checked is that the two halves agree: a food is safe or it has
+    # reasons, never both and never neither, and the reasons say enough for
+    # a sentence to be written from them.
+    print("\n\u00a78.8  POST /foods/safety")
+    status, body = call("POST", "/foods/safety", {"userId": uid}, key=key)
+    equals("safety returns 200", status, 200)
+    body = body or {}
+    safe = body.get("safeFoodIds") or []
+    unsafe = body.get("unsafe") or []
+    equals(
+        "safe + unsafe is the whole visible catalogue",
+        len(safe) + len(unsafe),
+        body.get("nFoodsBeforeF1"),
+    )
+    equals("and the safe count agrees with nFoodsAfterF1",
+           len(safe), body.get("nFoodsAfterF1"))
+    check(
+        "no food is both safe and unsafe",
+        not (set(safe) & {u["foodId"] for u in unsafe}),
+    )
+    check(
+        "every unsafe food carries at least one reason - a dish excluded "
+        "with no rule to point at could not be explained to the user",
+        all(u["reasons"] for u in unsafe),
+        f"{sum(1 for u in unsafe if not u['reasons'])} without a reason",
+    )
+    reasons = [r for u in unsafe for r in u["reasons"]]
+    check(
+        "every reason names the rule and the condition",
+        all(r["ruleType"] and r["condition"] for r in reasons),
+    )
+    check(
+        "every rule type is one the schema declares",
+        all(r["ruleType"] in ("exclude_tag", "require_tag", "nutrient_limit")
+            for r in reasons),
+        f"got {sorted({r['ruleType'] for r in reasons})}",
+    )
+    check(
+        "a tag rule names the tag, a nutrient rule names the nutrient - the "
+        "sentence cannot be written without them",
+        all(
+            (r["tag"] if r["ruleType"].endswith("_tag") else r["nutrient"])
+            for r in reasons
+        ),
+    )
+    check(
+        "a missing measurement is reported as missing, not as 0 - F1 "
+        "excludes an unmeasured food because it cannot be shown to be safe",
+        all(r["value"] is None for r in reasons if r["missingData"]),
+    )
+    check(
+        "the answer is sorted, so two calls can be compared",
+        safe == sorted(safe)
+        and [u["foodId"] for u in unsafe] == sorted(
+            u["foodId"] for u in unsafe),
+    )
+    check(
+        "safety is answered inside the backend's 2-second budget",
+        isinstance(body.get("elapsedMs"), int) and body["elapsedMs"] < 2000,
+        f"got {body.get('elapsedMs')} ms",
+    )
+
+    # Asking about specific foods answers about those and no others.
+    asked = (safe[:3] + [u["foodId"] for u in unsafe[:2]]
+             + ["00000000-0000-4000-8000-000000000000"])
+    status, narrow = call(
+        "POST", "/foods/safety", {"userId": uid, "foodIds": asked}, key=key)
+    equals("a narrowed request returns 200", status, 200)
+    narrow = narrow or {}
+    answered = set(narrow.get("safeFoodIds", [])) | {
+        u["foodId"] for u in narrow.get("unsafe", [])
+    } | set(narrow.get("unknownFoodIds", []))
+    equals("every id asked about is accounted for", answered, set(asked))
+    check(
+        "an id that is not in the catalogue comes back as unknown, not as "
+        "unsafe - a detail screen needs the difference",
+        narrow.get("unknownFoodIds") == [
+            "00000000-0000-4000-8000-000000000000"],
+        f"got {narrow.get('unknownFoodIds')}",
+    )
+
+    print("\n\u00a78.8  foods/safety - the error cases")
+    status, body = call("POST", "/foods/safety", {"userId": uid})
+    equals("a missing key gives 401", status, 401)
+    status, body = call(
+        "POST", "/foods/safety",
+        {"userId": "00000000-0000-4000-8000-000000000000"}, key=key)
+    equals("a userId that does not exist gives 404", status, 404)
+    equals("the error code is USER_NOT_FOUND", error_code(body),
+           "USER_NOT_FOUND")
+
     print("\n§8.2  POST /profiles/{userId}/rebuild")
     status, body = call("POST", f"/profiles/{uid}/rebuild", {}, key=key)
     equals("rebuild returns 200", status, 200)
@@ -969,7 +1063,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — the 7 internal endpoints "
+    print(f"{_checks}/{_checks} checks passed — the 8 internal endpoints "
           f"behave per the specification.")
     return 0
 

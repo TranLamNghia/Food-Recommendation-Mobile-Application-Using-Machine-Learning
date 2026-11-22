@@ -424,6 +424,9 @@ ENUM_CS = {
     # one the meal-plan endpoints write, so it is the one compared against.
     "MealType": ("meal_plan_items", "meal_type"),
     "MealItemStatus": ("meal_plan_items", "status"),
+    "ConditionType": ("conditions", "condition_type"),
+    "TagType": ("tags", "tag_type"),
+    "DishRole": ("foods", "dish_role"),
 }
 
 RE_ENUM_ARRAY = re.compile(
