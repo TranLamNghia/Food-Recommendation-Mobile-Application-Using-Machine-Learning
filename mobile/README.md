@@ -1,17 +1,66 @@
 # nutrition_app
 
-Ứng dụng khuyến nghị thực đơn dinh dưỡng cá nhân hóa
+Ứng dụng khuyến nghị thực đơn dinh dưỡng cá nhân hóa — phần giao diện Flutter.
 
-## Getting Started
+## Hai chế độ, và cách phân biệt mã
 
-This project is a starting point for a Flutter application.
+App chạy được ở **hai chế độ**, và đó là chủ ý:
 
-A few resources to get you started if this is your first Flutter project:
+| Chế độ | Dữ liệu từ đâu | Dùng khi nào |
+|---|---|---|
+| **Trực tuyến** | backend ASP.NET Core → MySQL → ML service | chạy thật |
+| **Ngoại tuyến** | thuật toán bản Dart + dữ liệu giả, ngay trên máy | không có server: demo, bảo vệ, chạy test |
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Chế độ ngoại tuyến **không phải mã chết**. `test/step1_parity_test.dart` và
+`test/step4_parity_test.dart` so từng con số của bản Dart với bản Python, nên
+nó là một trong ba bản cài đặt của thuật toán được giữ ngang bằng — và là cái
+phao cho hôm bảo vệ nếu máy không ra được mạng.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Quy ước nhãn
+
+Mỗi tệp hoặc mỗi phương thức thuộc **logic nội bộ** mở đầu bằng **một dòng**:
+
+```dart
+// OFFLINE: the Dart copy of step 4, held in parity with ml/menu_builder.py.
+```
+
+Mã gọi server được dán nhãn đối xứng, để ở những tệp có cả hai thì nhìn là thấy:
+
+```dart
+// ONLINE: POST /auth/login — specification §7.1.2.
+```
+
+Liệt kê toàn bộ vùng ngoại tuyến bằng một câu lệnh:
+
+```bash
+grep -rn "// OFFLINE:" mobile/lib
+grep -rn "// ONLINE:"  mobile/lib
+```
+
+Quy tắc: `data/recommender/`, `data/rules/` và `data/mock/` là **ngoại tuyến
+toàn bộ** — nhãn đặt ở đầu tệp. `data/api/` là **trực tuyến toàn bộ**.
+`data/session.dart` có cả hai, nên nhãn đặt trên từng phương thức.
+
+## Chạy
+
+```bash
+flutter pub get
+flutter test                  # 156 test
+flutter run                   # mặc định: chế độ ngoại tuyến
+```
+
+Trỏ vào server thật bằng biến môi trường lúc biên dịch:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5055/api/v1
+```
+
+`10.0.2.2` là địa chỉ máy chủ nhìn từ máy ảo Android — `localhost` trong máy
+ảo là chính nó. Không truyền `API_BASE_URL` thì app ở chế độ ngoại tuyến.
+
+Khởi động hai service phía sau:
+
+```bash
+python tools/run_ml_service.py
+python tools/run_backend.py
+```

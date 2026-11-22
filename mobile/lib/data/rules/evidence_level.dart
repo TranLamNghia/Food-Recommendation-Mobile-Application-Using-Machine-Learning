@@ -1,3 +1,4 @@
+// OFFLINE: the evidence grade a local rule carries.
 /// How much a nutrition threshold can be trusted — the
 /// `condition_rules.evidence_level` column.
 ///

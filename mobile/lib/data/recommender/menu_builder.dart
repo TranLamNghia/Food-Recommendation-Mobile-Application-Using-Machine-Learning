@@ -1,3 +1,4 @@
+// OFFLINE: the Dart copy of step 4, held in parity with ml/menu_builder.py.
 import 'dart:math' as math;
 
 import '../models/food.dart';

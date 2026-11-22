@@ -1,3 +1,4 @@
+// OFFLINE: the Rocchio preference vector computed on the device.
 import 'dart:math' as math;
 
 import '../models/food.dart';

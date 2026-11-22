@@ -1,3 +1,4 @@
+// OFFLINE: one F1 rule as the device understands it.
 import '../models/food.dart';
 import 'day_budget.dart';
 import 'evidence_level.dart';

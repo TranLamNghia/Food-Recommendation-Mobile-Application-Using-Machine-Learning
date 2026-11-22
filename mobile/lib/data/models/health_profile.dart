@@ -97,6 +97,7 @@ class HealthProfile {
   /// comparison that stops comparing without anyone noticing.
   DateTime? today;
 
+  // OFFLINE: the age step 1 needs; online, §7.2.1 sends it.
   int? get age {
     final b = birthday;
     if (b == null) return null;
@@ -108,6 +109,7 @@ class HealthProfile {
     return years;
   }
 
+  // OFFLINE: online, §7.2.1 sends `bmi` and `bmiCategory`.
   /// The body mass index.
   double? get bmi {
     final h = heightCm;
@@ -117,6 +119,7 @@ class HealthProfile {
     return w / (m * m);
   }
 
+  // OFFLINE: step 1's BMR, held in parity with ml/limits.py.
   /// The basal metabolic rate, by the Mifflin-St Jeor formula.
   double? get bmr {
     final h = heightCm;
@@ -128,6 +131,7 @@ class HealthProfile {
     return g == Gender.male ? base + 5 : base - 161;
   }
 
+  // OFFLINE: step 1's TDEE; online, §7.2.3 sends `tdeeKcal`.
   /// The total daily energy expenditure.
   double? get tdee {
     final b = bmr;
@@ -136,6 +140,7 @@ class HealthProfile {
     return b * act.factor;
   }
 
+  // OFFLINE: step 1's energy limit; online, §7.2.3 sends it.
   /// The energy target for the goal.
   ///
   /// Losing weight subtracts 500 kcal but **never goes below the BMR** — the
@@ -180,6 +185,7 @@ class HealthProfile {
   ///
   /// 4 kcal/g for protein and carbohydrate, 9 kcal/g for fat — the Atwater
   /// factors.
+  // OFFLINE: online, §7.2.3's `macroTargets` is the answer.
   ({double protein, double carb, double fat})? get macroTarget {
     final e = energyTarget;
     if (e == null) return null;
