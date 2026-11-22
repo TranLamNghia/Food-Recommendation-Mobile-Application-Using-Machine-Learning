@@ -13,6 +13,11 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Gói Dart thuần, không cần cấu hình nền tảng nào. Chọn nó thay cho dio vì
+  # tầng mạng của app chỉ cần GET/POST/PUT/PATCH/DELETE kèm một header, và
+  # `http.Client` còn là thứ test thay thế được bằng một client giả.
+  http: ^1.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
