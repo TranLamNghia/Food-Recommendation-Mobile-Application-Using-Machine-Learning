@@ -70,11 +70,33 @@ class HealthProfile {
   HealthGoal? goal;
   ActivityLevel? activity;
 
-  /// The selected condition codes, looked up in the `conditions` table.
+  /// The selected condition codes, matched against `conditions.code`.
   final Set<String> conditions = {};
 
   /// The allergy codes and the mandatory diets.
   final Set<String> allergies = {};
+
+  /// The marker for "none of the above".
+  ///
+  /// It is not a row in `conditions` and must never be sent to the server.
+  /// It lives here rather than in the screen that draws the option, because
+  /// the layer that sends the declarations is the one that has to strip it.
+  static const String noneCode = '__none__';
+
+  /// How bad each declared condition is, keyed by code:
+  /// `mild` - `moderate` - `severe`.
+  ///
+  /// Only diseases are asked. Of the fifteen rows in `condition_rules`, two
+  /// are above `mild` - gout excludes high-purine dishes from `moderate` up,
+  /// and hypertension tightens its sodium limit at `severe` - while every
+  /// allergy, intolerance and diet rule applies from `mild`, so asking about
+  /// those would be a question with no consequence.
+  final Map<String, String> severities = {};
+
+  /// The column's own default, used for a condition that was never asked.
+  static const String defaultSeverity = 'moderate';
+
+  String severityOf(String code) => severities[code] ?? defaultSeverity;
 
   /// The date treated as "today" when computing the age. `null` means use
   /// [DateTime.now].

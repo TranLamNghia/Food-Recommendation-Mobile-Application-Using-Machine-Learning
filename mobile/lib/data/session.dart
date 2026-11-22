@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import 'api/api_client.dart';
 import 'api/api_config.dart';
+import 'api/failure.dart';
 import 'api/auth_api.dart';
 import 'api/profile_api.dart';
 import 'mock/mock_foods.dart';
@@ -279,7 +280,57 @@ class AppSession extends ChangeNotifier {
     // One round trip, not two: §7.2.2 recomputes step 1 as it saves and
     // sends the targets back with the profile.
     (await api.save(profile)).targets.applyTo(profile);
+    await _saveConditions(api);
     notifyListeners();
+  }
+
+  // ONLINE: §7.3.1 to learn the ids, then §7.2.5 to declare.
+  //
+  // The app ships its own curated list of questions — its own icons, its own
+  // wording, its own order — keyed by `conditions.code`. The ids come from
+  // the dictionary at run time, because `conditions.id` is `AUTO_INCREMENT`
+  // and follows the seed's insert order: a hard-coded `2` would be
+  // hypertension on this database and something else on the next, and would
+  // declare the wrong illness without any error.
+  //
+  // **A code the dictionary does not know stops the save.** Dropping it
+  // quietly is the one thing that must not happen here: these declarations
+  // are what the F1 filter removes dishes by, so a silently lost allergy is
+  // a dish the user is allergic to, recommended to them, with nothing
+  // reporting it.
+  Future<void> _saveConditions(ProfileApi api) async {
+    final declared = {...profile.conditions, ...profile.allergies}
+      ..remove(HealthProfile.noneCode);
+    if (declared.isEmpty) {
+      // Still sent: §7.2.5 replaces the whole set, so an empty list is how
+      // "I have none" and "I no longer have the one I declared" are stored.
+      await api.saveConditions(const []);
+      return;
+    }
+
+    final catalogue = await api.conditionCatalogue();
+    final idOf = {for (final c in catalogue) c.code: c.id};
+
+    final unknown = declared.where((c) => !idOf.containsKey(c)).toList();
+    if (unknown.isNotEmpty) {
+      throw ApiFailure(
+        code: ApiFailure.unexpectedShape,
+        message:
+            'Không lưu được khai báo sức khỏe: máy chủ không biết '
+            '${unknown.join(", ")}. Hãy cập nhật ứng dụng rồi thử lại.',
+      );
+    }
+
+    await api.saveConditions([
+      for (final code in declared)
+        DeclaredCondition(
+          conditionId: idOf[code]!,
+          code: code,
+          nameVi: '',
+          conditionType: '',
+          severity: profile.severityOf(code),
+        ),
+    ]);
   }
 
   /// Leaves the account but keeps the profile, the plans and the diary: they
@@ -366,7 +417,8 @@ class AppSession extends ChangeNotifier {
       ..goal = null
       ..activity = null
       ..conditions.clear()
-      ..allergies.clear();
+      ..allergies.clear()
+      ..severities.clear();
     _preference = null;
     _plans.clear();
     _selectedDay = _dateOnly(DateTime.now());

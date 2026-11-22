@@ -13,6 +13,7 @@ import 'auth_api.dart';
 class ConditionOption {
   const ConditionOption({
     required this.id,
+    required this.code,
     required this.nameVi,
     required this.conditionType,
     this.description,
@@ -21,12 +22,18 @@ class ConditionOption {
   factory ConditionOption.fromJson(Map<String, dynamic> json) =>
       ConditionOption(
         id: (json['id'] as num).toInt(),
+        code: json['code'] as String,
         nameVi: json['nameVi'] as String,
         conditionType: json['conditionType'] as String,
         description: json['description'] as String?,
       );
 
   final int id;
+
+  /// `conditions.code` - the stable key, and the one the app's own curated
+  /// list is written in. [id] is `AUTO_INCREMENT`, so it is whatever the seed
+  /// order made it and cannot be hard-coded here.
+  final String code;
 
   /// Already Vietnamese in the database, so it is shown as it arrives.
   final String nameVi;
@@ -45,6 +52,7 @@ class ConditionOption {
 class DeclaredCondition {
   const DeclaredCondition({
     required this.conditionId,
+    this.code = '',
     required this.nameVi,
     required this.conditionType,
     this.severity,
@@ -54,6 +62,7 @@ class DeclaredCondition {
   factory DeclaredCondition.fromJson(Map<String, dynamic> json) =>
       DeclaredCondition(
         conditionId: (json['conditionId'] as num).toInt(),
+        code: json['code'] as String? ?? '',
         nameVi: json['nameVi'] as String? ?? '',
         conditionType: json['conditionType'] as String? ?? '',
         severity: json['severity'] as String?,
@@ -61,6 +70,11 @@ class DeclaredCondition {
       );
 
   final int conditionId;
+
+  /// `conditions.code`, so the app can recognise what came back without
+  /// carrying a table of ids.
+  final String code;
+
   final String nameVi;
   final String conditionType;
 

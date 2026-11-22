@@ -430,6 +430,16 @@ def main(argv: list[str] | None = None) -> int:
     check("returns 2 conditions with nameVi looked up from the conditions table",
           isinstance(body, list) and len(body) == 2
           and all(x.get("nameVi") for x in body), str(body)[:120])
+    # The code comes back too, so the app can recognise what it declared
+    # without carrying a table of ids.
+    check("each declared condition carries its code",
+          isinstance(body, list) and all(x.get("code") for x in body),
+          str([x.get("code") for x in (body or [])]))
+    by_id = {x["conditionId"]: x for x in (body or [])}
+    check("and the severity that was sent",
+          by_id.get(2, {}).get("severity") == "mild"
+          and by_id.get(6, {}).get("severity") == "severe",
+          str({k: v.get("severity") for k, v in by_id.items()}))
 
     status, body = call("PUT", "/profile/conditions", {"conditions": [
         {"conditionId": 2, "severity": "mild"},
@@ -577,6 +587,23 @@ def main(argv: list[str] | None = None) -> int:
         "the ids are what POST /onboarding/candidates/count takes",
         all(isinstance(c["id"], int) and c["id"] > 0 for c in conditions),
     )
+
+    # The stable key, added by migration 008. `id` is AUTO_INCREMENT and
+    # follows the seed's insert order, so a client cannot hard-code it: the
+    # same number means a different illness on a database built in another
+    # order. The app ships its own curated question list keyed by `code` and
+    # looks the ids up here.
+    codes = [c.get("code") for c in conditions]
+    check("every condition carries a code", all(codes), f"got {codes}")
+    check("and the codes are unique", len(set(codes)) == len(codes))
+    check(
+        "the code is the one the app and §7.5.2's example use",
+        "hypertension" in codes,
+        f"got {sorted(c for c in codes if c)}",
+    )
+    # The allergy the app's list used to be missing while F1 had a working
+    # rule for it over 20 dishes.
+    check("soy allergy is declarable", "allergy_soy" in codes)
 
     status, diets = call("GET", "/conditions?type=diet")
     equals("filtering by type returns 200", status, 200)
@@ -1017,6 +1044,21 @@ def main(argv: list[str] | None = None) -> int:
                     "and points at a condition id the app can act on",
                     all(w.get("conditionId") for w in warnings),
                     f"got {[w.get('conditionId') for w in warnings]}",
+                )
+                # The field §7.5.2's own example shows. Before migration 008
+                # there was no `conditions.code`, so the id went out in its
+                # place and the specification said one thing while the API
+                # said another.
+                check(
+                    "and the conditionCode the specification promises",
+                    all(w.get("conditionCode") for w in warnings),
+                    f"got {[w.get('conditionCode') for w in warnings]}",
+                )
+                check(
+                    "which is a code, not a number",
+                    all(isinstance(w.get("conditionCode"), str)
+                        and not w["conditionCode"].isdigit()
+                        for w in warnings),
                 )
 
             # Put the account back, so the later sections see a clean user.
@@ -1772,8 +1814,20 @@ def main(argv: list[str] | None = None) -> int:
         equals("both ratings are listed", mine.get("totalItems"), 2)
         equals("one page of them", mine.get("totalPages"), 1)
         items = mine.get("items") or []
-        equals("newest first, so the latest opinion is on top",
-               items and items[0].get("rating"), 2)
+        # Not "the 2-star one is on top". `feedbacks.created_at` is a
+        # DATETIME, so it stores whole seconds — and these two ratings were
+        # sent within one second of each other, which means the data simply
+        # does not record which came later. Asserting an order the column
+        # cannot express is a check that passes or fails on timing.
+        #
+        # What the endpoint does promise, and what the app shows, is that the
+        # list runs newest to oldest. That is checkable.
+        stamps = [i.get("createdAt") for i in items]
+        check("the list runs newest to oldest",
+              stamps == sorted(stamps, reverse=True), str(stamps))
+        check("and both ratings are in it",
+              {i.get("rating") for i in items} == {5, 2},
+              str([i.get("rating") for i in items]))
         check("each row carries the dish it is about",
               all((i.get("food") or {}).get("name") for i in items))
 
