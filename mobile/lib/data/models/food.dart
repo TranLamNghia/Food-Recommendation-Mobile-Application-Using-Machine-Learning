@@ -1,5 +1,46 @@
 import 'package:flutter/material.dart';
 
+/// The role a dish plays in a meal — the `foods.dish_role` column.
+///
+/// Note on language: `code` is the value the database and the API use and is
+/// never translated; `label` is shown on screen, so it is Vietnamese. The
+/// words match the ones `db/schema.sql` uses to explain the column —
+/// a Vietnamese meal without a *món mặn* is not a meal, which is why
+/// `side_protein` and `side_veg` are two roles and not one.
+///
+/// [dessert] and [drink] are in the ENUM and are **not** in
+/// `MEAL_STRUCTURE`, so step 4 never picks them: 46 of the 318 dishes in the
+/// catalogue can be looked up and eaten but never suggested. That is a gap in
+/// the data, recorded in `DOC_DEVIATIONS.md`, not something this enum should
+/// paper over by leaving them out.
+enum DishRole {
+  main('main', 'Món chính'),
+  sideProtein('side_protein', 'Món mặn'),
+  sideVeg('side_veg', 'Món rau'),
+  soup('soup', 'Món canh'),
+  dessert('dessert', 'Tráng miệng'),
+  drink('drink', 'Đồ uống'),
+  snack('snack', 'Món ăn nhẹ');
+
+  const DishRole(this.code, this.label);
+
+  final String code;
+  final String label;
+
+  /// The role for a `dish_role` string, or `null` for one this app does not
+  /// know. A new value in the database ENUM arrives here as `null` rather
+  /// than as a crash, and [labelOf] then shows the raw code — ugly on
+  /// screen, which is how it gets noticed.
+  static DishRole? tryParse(String? code) {
+    for (final r in values) {
+      if (r.code == code) return r;
+    }
+    return null;
+  }
+
+  static String labelOf(String? code) => tryParse(code)?.label ?? (code ?? '');
+}
+
 /// A dish — mirrors the main columns of the `foods` + `food_nutrition`
 /// tables.
 ///
@@ -36,6 +77,11 @@ class Food {
   final String category;
 
   /// The role in a meal — the `foods.dish_role` column.
+  ///
+  /// Kept as the raw string rather than as a [DishRole]: step 4's Dart copy
+  /// compares it against `MEAL_STRUCTURE`'s own strings, and a value the app
+  /// does not recognise has to survive the round trip rather than be dropped
+  /// on the way in. Use [DishRole.labelOf] to show it.
   final String dishRole;
 
   /// Spice level 0–3 — the `foods.spice_level` column.

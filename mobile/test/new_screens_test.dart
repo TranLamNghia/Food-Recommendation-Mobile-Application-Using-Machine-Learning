@@ -74,7 +74,7 @@ void main() {
       final entry = session.diary.single;
       session.undoMeal(entry);
 
-      expect(slot.items.first.status, MealItemStatus.planned);
+      expect(slot.items.first.status, MealItemStatus.suggested);
       // Still recorded, but it no longer counts towards the day.
       expect(session.diary, [entry]);
       expect(entry.isUndone, isTrue);

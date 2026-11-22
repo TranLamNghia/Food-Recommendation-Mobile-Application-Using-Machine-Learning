@@ -31,7 +31,17 @@ enum MealType {
 /// sample weight; see the label mapping table in `DATABASE_DESIGN.md` §7.4.
 enum MealItemStatus {
   /// Just generated, the user has not touched it.
-  planned('planned', 'Chờ ăn'),
+  ///
+  /// Named `suggested`, not `planned`: the column is
+  /// `ENUM('suggested','kept','replaced','eaten','skipped')` and MySQL would
+  /// refuse the string `planned` outright. The two names drifted apart while
+  /// this app had no server to send anything to.
+  suggested('suggested', 'Chờ ăn'),
+
+  /// The user looked at it and decided to keep it, before eating it — a
+  /// signal of its own, weight 0.6 in §4.6, and the one value that was
+  /// missing here entirely.
+  kept('kept', 'Đã giữ'),
 
   /// The user kept it and ate it — a strong signal.
   eaten('eaten', 'Đã ăn'),
@@ -55,7 +65,7 @@ class MealPlanItem {
     required this.food,
     required this.score,
     this.explorationDelta,
-    this.status = MealItemStatus.planned,
+    this.status = MealItemStatus.suggested,
   });
 
   final Food food;
