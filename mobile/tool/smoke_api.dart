@@ -56,6 +56,16 @@ Future<void> main() async {
   check('every one is an allergy', allergies.every((c) => c.isAllergy));
   check('the ids are ints, not UUIDs',
       allergies.every((c) => c.id > 0));
+  // The stable key. `id` is AUTO_INCREMENT, so the app keys its own curated
+  // question list by `code` and looks the ids up here.
+  check('every one carries a code',
+      allergies.every((c) => c.code.isNotEmpty),
+      allergies.map((c) => c.code).join(' '));
+  check('and the codes are unique',
+      allergies.map((c) => c.code).toSet().length == allergies.length);
+  check('soy allergy is declarable',
+      allergies.any((c) => c.code == 'allergy_soy'),
+      allergies.map((c) => c.code).join(' '));
   check('the names are already Vietnamese',
       allergies.every((c) => c.nameVi.trim().isNotEmpty),
       allergies.first.nameVi);
@@ -178,8 +188,15 @@ Future<void> main() async {
   check('the answer is a bare array of what is now declared',
       declared.length == 1 && declared.single.conditionId == seafood.id,
       '${declared.length} rows');
+  final readBack = (await profiles.conditions()).single;
   check('and it reads back the same way',
-      (await profiles.conditions()).single.conditionId == seafood.id);
+      readBack.conditionId == seafood.id);
+  check('with its code, so the app recognises it without a table of ids',
+      readBack.code == seafood.code, readBack.code);
+  // What the severity question is for: `condition_rules.severity_min` reads
+  // this, and hypertension tightens its sodium limit at `severe`.
+  check('and the severity that was sent, not the column default',
+      readBack.severity == 'severe', '${readBack.severity}');
 
   print('\n§7.2.5  a condition the app has not asked the severity of');
   // `user_conditions.severity` is NOT NULL DEFAULT 'moderate' and §7.2.5

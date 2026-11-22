@@ -226,6 +226,9 @@ void main() {
         if (request.url.path.endsWith('/auth/me')) {
           return _json({..._user, 'hasHealthProfile': false});
         }
+        if (request.url.path.endsWith('/profile/conditions')) {
+          return _json(const <dynamic>[]);
+        }
         if (request.method == 'PUT') {
           return _json({
             'profile': {'gender': 'male', 'age': 22, 'bmi': 23.15},
@@ -293,6 +296,9 @@ void main() {
       final calls = <String>[];
       Map<String, dynamic>? sent;
       final session = _online((request) async {
+        if (request.url.path.endsWith('/profile/conditions')) {
+          return _json(const <dynamic>[]);
+        }
         if (request.method == 'PUT') {
           sent = jsonDecode(request.body) as Map<String, dynamic>;
           return _json({
@@ -306,11 +312,182 @@ void main() {
 
       await session.saveProfile();
 
-      // One round trip. §7.2.2 recomputes step 1 as it saves, so asking
-              // §7.2.3 again would be asking a question already answered.
-      expect(calls, ['PUT /api/v1/profile']);
+      // §7.2.2 recomputes step 1 as it saves, so §7.2.3 is never asked
+      // again. The declarations follow in their own call, and with none
+      // declared it is still sent: §7.2.5 replaces the whole set, so an
+      // empty list is how "I have none" is stored.
+      expect(calls, [
+        'PUT /api/v1/profile',
+        'PUT /api/v1/profile/conditions',
+      ]);
       expect(sent!['dateOfBirth'], '2004-11-04');
       expect(session.profile.proteinPct, 20, reason: 'the server decides');
+    });
+  });
+
+  group('§7.2.5 the declarations, matched by code', () {
+    /// The ids come from §7.3.1 at run time. `conditions.id` is
+    /// `AUTO_INCREMENT` and follows the seed's insert order, so a hard-coded
+    /// id would be hypertension on one database and something else on the
+    /// next — declaring the wrong illness with no error anywhere.
+    final catalogue = [
+      {
+        'id': 2,
+        'code': 'hypertension',
+        'nameVi': 'Tăng huyết áp',
+        'conditionType': 'disease',
+      },
+      {
+        'id': 5,
+        'code': 'gout',
+        'nameVi': 'Gút',
+        'conditionType': 'disease',
+      },
+      {
+        'id': 9,
+        'code': 'allergy_soy',
+        'nameVi': 'Dị ứng đậu nành',
+        'conditionType': 'allergy',
+      },
+    ];
+
+    AppSession sessionWith({
+      required List<String> conditions,
+      required List<String> allergies,
+      Map<String, String> severities = const {},
+      List<String>? calls,
+      void Function(Object body)? onDeclare,
+    }) {
+      final session = _online((request) async {
+        if (request.url.path.endsWith('/profile/conditions')) {
+          if (request.method == 'PUT') {
+            onDeclare?.call(jsonDecode(request.body) as Object);
+          }
+          return _json(const <dynamic>[]);
+        }
+        if (request.url.path.endsWith('/conditions')) {
+          return _json(catalogue);
+        }
+        if (request.method == 'PUT') {
+          return _json({
+            'profile': const {'gender': 'male'},
+            'nutritionTargets': _targets,
+          });
+        }
+        return _json(_targets);
+      }, calls: calls);
+      _filled(session.profile);
+      session.profile.conditions.addAll(conditions);
+      session.profile.allergies.addAll(allergies);
+      session.profile.severities.addAll(severities);
+      return session;
+    }
+
+    test('each code becomes the id this database gave it', () async {
+      Object? body;
+      final session = sessionWith(
+        conditions: ['hypertension'],
+        allergies: ['allergy_soy'],
+        onDeclare: (b) => body = b,
+      );
+
+      await session.saveProfile();
+
+      final sent = ((body as Map)['conditions'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(
+        sent.map((c) => c['conditionId']).toSet(),
+        {2, 9},
+      );
+    });
+
+    /// The severity the user picked has to be the severity that is sent, or
+    /// the question was for nothing: `condition_rules.severity_min` is what
+    /// reads it, and hypertension tightens its sodium limit at `severe`.
+    test('the severity the user picked is the severity sent', () async {
+      Object? body;
+      final session = sessionWith(
+        conditions: ['hypertension', 'gout'],
+        allergies: const [],
+        severities: const {'hypertension': 'severe'},
+        onDeclare: (b) => body = b,
+      );
+
+      await session.saveProfile();
+
+      final sent = {
+        for (final c in ((body as Map)['conditions'] as List)
+            .cast<Map<String, dynamic>>())
+          c['conditionId'] as int: c['severity'] as String,
+      };
+      expect(sent[2], 'severe', reason: 'hypertension, as picked');
+      // Gout was declared without touching the control, so it carries the
+      // column's own default rather than a number this app invented.
+      expect(sent[5], 'moderate');
+    });
+
+    /// "Tôi không có bệnh lý nào" is a marker, not a row in `conditions`.
+    test('the none-of-the-above marker is never sent', () async {
+      Object? body;
+      final session = sessionWith(
+        conditions: [HealthProfile.noneCode],
+        allergies: [HealthProfile.noneCode],
+        onDeclare: (b) => body = b,
+      );
+
+      await session.saveProfile();
+
+      expect((body as Map)['conditions'], isEmpty);
+    });
+
+    /// The one thing that must not happen quietly. These declarations are
+    /// what F1 removes dishes by, so a dropped allergy is a dish the user is
+    /// allergic to, recommended to them, with nothing reporting it.
+    test('a code the server does not know stops the save', () async {
+      final session = sessionWith(
+        conditions: const [],
+        allergies: ['allergy_unicorn'],
+      );
+
+      await expectLater(
+        session.saveProfile(),
+        throwsA(
+          isA<ApiFailure>().having(
+            (f) => f.message,
+            'message',
+            contains('allergy_unicorn'),
+          ),
+        ),
+      );
+    });
+
+    /// With nothing declared there is nothing to look up, so §7.3.1 is not
+    /// fetched at all — but §7.2.5 still goes out, because it replaces the
+    /// whole set and that is how a cleared declaration is stored.
+    test('nothing declared still clears the set, without a lookup', () async {
+      final calls = <String>[];
+      final session = sessionWith(
+        conditions: const [],
+        allergies: const [],
+        calls: calls,
+      );
+
+      await session.saveProfile();
+
+      expect(calls, [
+        'PUT /api/v1/profile',
+        'PUT /api/v1/profile/conditions',
+      ]);
+    });
+
+    test('offline, none of this reaches a network', () async {
+      final session = AppSession();
+      _filled(session.profile);
+      session.profile.conditions.add('hypertension');
+
+      await session.saveProfile();
+
+      expect(session.isOnline, isFalse);
     });
   });
 

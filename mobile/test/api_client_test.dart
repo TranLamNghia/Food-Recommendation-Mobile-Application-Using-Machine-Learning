@@ -766,6 +766,7 @@ void main() {
         return json([
           {
             'id': 6,
+            'code': 'allergy_seafood',
             'nameVi': 'Dị ứng hải sản',
             'conditionType': 'allergy',
             'description': null,
@@ -780,6 +781,9 @@ void main() {
 
       expect(authorization, isNull);
       expect(options.single.id, 6);
+      // The code is what the app matches its own list against; the id is
+      // whatever this database's insert order made it.
+      expect(options.single.code, 'allergy_seafood');
       expect(options.single.isAllergy, isTrue);
       expect(options.single.isDiet, isFalse);
     });
