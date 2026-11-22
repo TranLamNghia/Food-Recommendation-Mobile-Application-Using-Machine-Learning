@@ -135,6 +135,13 @@ public sealed class FoodWarningDto
     /// </summary>
     public uint? ConditionId { get; init; }
 
+    /// <summary>
+    /// <c>conditions.code</c> — the stable one, and the field §7.5.2's
+    /// example actually shows. <c>conditionId</c> stays alongside it because
+    /// writing a declaration back takes the id.
+    /// </summary>
+    public string? ConditionCode { get; init; }
+
     /// <summary>Vietnamese, from <c>conditions.name_vi</c>.</summary>
     public string ConditionName { get; init; } = string.Empty;
 

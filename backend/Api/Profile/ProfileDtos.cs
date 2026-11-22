@@ -238,6 +238,11 @@ public sealed class UpsertProfileRequest
 public sealed class UserConditionDto
 {
     public uint ConditionId { get; init; }
+
+    /// <summary><c>conditions.code</c>, so a client can recognise a
+    /// declared condition without carrying a table of ids.</summary>
+    public string Code { get; init; } = string.Empty;
+
     public string NameVi { get; init; } = string.Empty;
     public string ConditionType { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;

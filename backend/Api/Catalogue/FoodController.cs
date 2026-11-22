@@ -273,14 +273,20 @@ public sealed class FoodController(
         // The condition names come back from the ML service as
         // `conditions.name_vi`; the ids are looked up here so the app can act
         // on a warning — open the declaration screen at the right row.
-        var conditionIds = await db.Conditions
-            .ToDictionaryAsync(c => c.NameVi, c => c.Id, ct);
+        var byName = await db.Conditions
+            .ToDictionaryAsync(c => c.NameVi, c => new { c.Id, c.Code }, ct);
 
         var warnings = (unsafeEntry?.Reasons ?? [])
             .Select(r => new FoodWarningDto
             {
-                ConditionId = conditionIds.TryGetValue(r.Condition, out var cid)
-                    ? cid
+                ConditionId = byName.TryGetValue(r.Condition, out var c)
+                    ? c.Id
+                    : null,
+                // The code §7.5.2's example shows. Added by migration 008;
+                // until then there was no `conditions.code` and the id went
+                // out in its place.
+                ConditionCode = byName.TryGetValue(r.Condition, out var cc)
+                    ? cc.Code
                     : null,
                 ConditionName = r.Condition,
                 RuleType = r.RuleType,

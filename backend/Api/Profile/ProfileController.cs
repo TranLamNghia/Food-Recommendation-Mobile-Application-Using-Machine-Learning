@@ -334,6 +334,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                   (uc, c) => new UserConditionDto
                   {
                       ConditionId = c.Id,
+                      Code = c.Code,
                       NameVi = c.NameVi,
                       ConditionType = c.ConditionType,
                       Severity = uc.Severity,
