@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Generate the C# entity classes from `db/schema.sql`, and audit them.
 
-Why generate them. Twenty-four tables, 226 columns. Typing each property by
+Why generate them. Twenty-four tables, 227 columns. Typing each property by
 hand means a column with the wrong name or the wrong nullability causes no
 compile error — it causes a runtime `MySqlException`, at an endpoint nobody may
 call for weeks. Generating from the schema file itself removes that whole class

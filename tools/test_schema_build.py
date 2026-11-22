@@ -57,9 +57,10 @@ SANDBOX = "nutrition_rec_buildtest"
 EXPECTED = {
     "tables": 24,
     "fk_columns": 32,
-    # 007 added health_profiles.target_weight_kg and its chk_target_weight.
+    # 007 added health_profiles.target_weight_kg and its chk_target_weight;
+    # 008 added conditions.code.
     "checks": 19,
-    "columns": 226,
+    "columns": 227,
 }
 
 LOOKUP_ROWS = {

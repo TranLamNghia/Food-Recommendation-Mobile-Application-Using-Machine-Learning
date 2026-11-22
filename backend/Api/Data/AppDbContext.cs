@@ -77,6 +77,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.ToTable("conditions");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Code).HasColumnName("code");
             e.Property(x => x.NameVi).HasColumnName("name_vi");
             e.Property(x => x.ConditionType).HasColumnName("condition_type");
             e.Property(x => x.Description).HasColumnName("description");

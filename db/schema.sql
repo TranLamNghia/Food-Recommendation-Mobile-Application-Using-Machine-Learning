@@ -67,6 +67,21 @@ CREATE TABLE users (
 -- Từ điển bệnh lý / dị ứng / chế độ ăn. Bảng cha của condition_rules.
 CREATE TABLE conditions (
     id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    -- Mã bền, dùng để NỐI HỆ THỐNG; `id` dùng để nối bảng.
+    --
+    -- `id` là khóa thay thế tự tăng, nên thứ tự chèn của `seed.sql` quyết
+    -- định giá trị: app hard-code `conditionId: 2` sẽ đúng trên một CSDL và
+    -- sai trên CSDL khác mà không báo gì — vẫn khai một bệnh, chỉ là bệnh
+    -- khác, rồi Bộ lọc F1 loại nhầm nhóm món.
+    --
+    -- Vốn từ này đã có sẵn và đang chạy: `conditionCode: "hypertension"` là
+    -- hình dạng API 7.5.2 hứa, và `mobile/lib/data/mock/mock_rules.dart`
+    -- khóa toàn bộ quy tắc F1 bản ngoại tuyến theo đúng các chuỗi này.
+    --
+    -- Xem `db/migrations/applied/008_condition_code.sql`.
+    code           VARCHAR(40)  NOT NULL UNIQUE,
+
     name_vi        VARCHAR(100) NOT NULL UNIQUE,
     condition_type ENUM('disease','allergy','intolerance','diet') NOT NULL,
     description    VARCHAR(255) NULL
