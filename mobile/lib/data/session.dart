@@ -2,6 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import 'api/api_client.dart';
+import 'api/api_config.dart';
+import 'api/auth_api.dart';
+import 'api/profile_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
@@ -25,9 +29,32 @@ import 'rules/dish_screening.dart';
 /// [regeneratePlan] calls `POST /meal-plans`, and [logMeal] calls
 /// `POST /diary`.
 class AppSession extends ChangeNotifier {
-  AppSession({math.Random? rng}) : _rng = rng ?? math.Random();
+  /// [api] is for tests, which pass a client backed by a fake transport.
+  /// Left out, the mode is whatever `--dart-define=API_BASE_URL` said at
+  /// compile time — and with no address, offline.
+  AppSession({math.Random? rng, ApiClient? api})
+    : _rng = rng ?? math.Random(),
+      _client = api ?? (ApiConfig.isOnline ? ApiClient() : null) {
+    final client = _client;
+    if (client != null) {
+      _auth = AuthApi(client);
+      _profiles = ProfileApi(client);
+    }
+  }
 
   final math.Random _rng;
+
+  // ── Which of the two modes ───────────────────────────────────────
+
+  final ApiClient? _client;
+  AuthApi? _auth;
+  ProfileApi? _profiles;
+
+  /// Whether there is a server behind this session.
+  ///
+  /// Every method that can do both says which it is doing with a
+  /// `// ONLINE:` or `// OFFLINE:` line — see `mobile/README.md`.
+  bool get isOnline => _auth != null;
 
   /// The health profile filled in during the onboarding flow.
   final HealthProfile profile = HealthProfile();
@@ -156,14 +183,102 @@ class AppSession extends ChangeNotifier {
   String? get phone => _phone;
   bool get isSignedIn => _accountEmail != null;
 
-  /// Mock of `POST /auth/login` and `POST /auth/register`: accepts anything
-  /// the form already validated.
-  ///
-  /// Logging in passes no [displayName] and keeps the one already known, the
-  /// way the real account would return it.
+  /// `null` until the taste survey has been accepted — §7.1.4's
+  /// `onboardingCompletedAt`. It decides whether the app opens on the survey
+  /// or on the plan.
+  DateTime? _onboardingCompletedAt;
+  DateTime? get onboardingCompletedAt => _onboardingCompletedAt;
+  bool get hasFinishedOnboarding => _onboardingCompletedAt != null;
+
+  // OFFLINE: accepts anything the form already validated, with no server to
+  // ask. Logging in passes no [displayName] and keeps the one already known,
+  // the way the real account would return it.
   void signIn({required String email, String? displayName}) {
     _accountEmail = email.trim();
     if (displayName != null) _displayName = displayName.trim();
+    notifyListeners();
+  }
+
+  // ONLINE: POST /auth/register — specification §7.1.1.
+  //
+  // Throws [ApiFailure]; the screen shows `message` and branches on `code`
+  // (`EMAIL_ALREADY_EXISTS` is the one worth its own wording).
+  Future<void> register({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final auth = _auth;
+    if (auth == null) {
+      signIn(email: email, displayName: displayName);
+      return;
+    }
+    final session = await auth.register(
+      email: email,
+      password: password,
+      displayName: displayName,
+    );
+    _accountEmail = session.account.email;
+    _displayName = session.account.displayName;
+    _onboardingCompletedAt = session.account.onboardingCompletedAt;
+    notifyListeners();
+  }
+
+  // ONLINE: POST /auth/login — specification §7.1.2.
+  //
+  // A returning user keeps the profile they already filled in: after signing
+  // in this reads it back from the server rather than asking the questions
+  // again. That is the point of having an account at all.
+  Future<void> logIn({
+    required String email,
+    required String password,
+  }) async {
+    final auth = _auth;
+    if (auth == null) {
+      signIn(email: email);
+      return;
+    }
+    final session = await auth.logIn(email: email, password: password);
+    _accountEmail = session.account.email;
+    _displayName = session.account.displayName;
+    _onboardingCompletedAt = session.account.onboardingCompletedAt;
+    await _pullProfile();
+    notifyListeners();
+  }
+
+  // ONLINE: GET /auth/me, then §7.2.1 and §7.2.3 if there is a profile.
+  //
+  // The two lookups are what makes logging in different from registering.
+  // `GET /auth/me` is asked first because only it reports
+  // `hasHealthProfile`: §7.1.1 and §7.1.2 leave that field out, and reading
+  // §7.2.1 without it would mean treating its `404 NOT_FOUND` as control
+  // flow.
+  Future<void> _pullProfile() async {
+    final auth = _auth;
+    final api = _profiles;
+    if (auth == null || api == null) return;
+
+    final me = await auth.me();
+    _onboardingCompletedAt = me.onboardingCompletedAt;
+    if (me.hasHealthProfile != true) return;
+
+    (await api.read()).applyTo(profile);
+    // The server's own step 1 output, which overwrites the default
+    // 15 / 60 / 25 split so the offline arithmetic agrees with it.
+    (await api.targets()).applyTo(profile);
+  }
+
+  // ONLINE: PUT /profile — specification §7.2.2.
+  //
+  // Called when the onboarding questions are done. The `calculating` screen
+  // runs this behind its animation, which until now stood in for exactly
+  // this round trip.
+  Future<void> saveProfile() async {
+    final api = _profiles;
+    if (api == null) return;
+    // One round trip, not two: §7.2.2 recomputes step 1 as it saves and
+    // sends the targets back with the profile.
+    (await api.save(profile)).targets.applyTo(profile);
     notifyListeners();
   }
 
@@ -171,6 +286,10 @@ class AppSession extends ChangeNotifier {
   /// belong to the account, and logging back in finds them again.
   void signOut() {
     _accountEmail = null;
+    _onboardingCompletedAt = null;
+    // The tokens go with the account, or the next request would still be
+    // authenticated as the user who just signed out.
+    _auth?.logOut();
     notifyListeners();
   }
 
@@ -362,8 +481,8 @@ class AppSession extends ChangeNotifier {
   /// skipped one back. A weak training signal: the reason may have nothing to
   /// do with taste.
   void setSkipped(MealPlanItem item, bool skipped) {
-    final from = skipped ? MealItemStatus.planned : MealItemStatus.skipped;
-    final to = skipped ? MealItemStatus.skipped : MealItemStatus.planned;
+    final from = skipped ? MealItemStatus.suggested : MealItemStatus.skipped;
+    final to = skipped ? MealItemStatus.skipped : MealItemStatus.suggested;
     if (item.status != from) return;
 
     for (final slot in plan?.slots ?? const <MealSlot>[]) {
@@ -406,7 +525,7 @@ class AppSession extends ChangeNotifier {
   /// both parts were fixed.
   List<Food> get plannedToday => [
     for (final item in plan?.allItems ?? const <MealPlanItem>[])
-      if (item.status == MealItemStatus.planned) item.food,
+      if (item.status == MealItemStatus.suggested) item.food,
   ];
 
   /// Today's allowances, with the used part already subtracted.
@@ -450,7 +569,7 @@ class AppSession extends ChangeNotifier {
     if (slot != null) {
       for (var i = 0; i < slot.items.length; i++) {
         if (slot.items[i].food.id == food.id &&
-            slot.items[i].status == MealItemStatus.planned) {
+            slot.items[i].status == MealItemStatus.suggested) {
           slot.items[i] = slot.items[i].copyWith(status: MealItemStatus.eaten);
           break;
         }
@@ -481,7 +600,7 @@ class AppSession extends ChangeNotifier {
         if (slot.items[i].food.id == entry.food.id &&
             slot.items[i].status == MealItemStatus.eaten) {
           slot.items[i] = slot.items[i].copyWith(
-            status: MealItemStatus.planned,
+            status: MealItemStatus.suggested,
           );
           break;
         }

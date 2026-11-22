@@ -51,6 +51,15 @@ abstract final class AppColors {
   static const textTertiary = Color(0xFFB4B5BA);
   static const textOnDark = white;
 
+  // ── Something went wrong ─────────────────────────────────────────
+  //
+  // The same red as [dislike], under a name that says what it means. Showing
+  // a failure is now part of what the app does — the thesis chose a screen
+  // that explains itself over an app that crashes — so the colour for it
+  // needs a name of its own rather than borrowing the one the swipe deck
+  // uses for "không thích".
+  static const danger = Color(0xFFC62828);
+
   // ── The four swipe directions ────────────────────────────────────
   //
   // The `burst*` colours are the original ones from the `Left` / `Right` /
