@@ -205,6 +205,26 @@ public sealed class UpsertProfileRequest
            ErrorMessage = "Cân nặng phải trong khoảng 20 đến 300 kg")]
     public decimal? WeightKg { get; set; }
 
+    /// <summary>
+    /// The weight the user is aiming for — <b>optional</b>, because only
+    /// <c>lose_weight</c> and <c>gain_weight</c> have anything to aim at.
+    ///
+    /// <para>It does <b>not</b> enter Step 1. The energy limit comes from the
+    /// weight the user has now, adjusted by the goal; computing a TDEE from a
+    /// weight they do not have yet would hand them the limits of a body that
+    /// does not exist, and the further off the target the more dangerous
+    /// that gets. The column is there so the app can say how far there is to
+    /// go — see <c>db/migrations/applied/007_target_weight.sql</c>.</para>
+    ///
+    /// <para>Omitting it on a <c>PUT</c> clears it, which is what a PUT
+    /// means and what the app relies on when the goal changes to
+    /// <c>maintain</c>.</para>
+    /// </summary>
+    [Range(typeof(decimal), "20", "300",
+           ParseLimitsInInvariantCulture = true,
+           ErrorMessage = "Cân nặng mục tiêu phải trong khoảng 20 đến 300 kg")]
+    public decimal? TargetWeightKg { get; set; }
+
     [Required(ErrorMessage = "Thiếu mức vận động")]
     [InEnum(nameof(Enums.ActivityLevel))]
     public string ActivityLevel { get; set; } = string.Empty;
@@ -232,6 +252,10 @@ public sealed class ProfileResponse
     public int Age { get; init; }
     public decimal HeightCm { get; init; }
     public decimal WeightKg { get; init; }
+
+    /// <summary><c>null</c> when the goal needs no target.</summary>
+    public decimal? TargetWeightKg { get; init; }
+
     public decimal Bmi { get; init; }
     public string BmiCategory { get; init; } = string.Empty;
     public string ActivityLevel { get; init; } = string.Empty;

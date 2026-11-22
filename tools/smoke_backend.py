@@ -370,6 +370,45 @@ def main(argv: list[str] | None = None) -> int:
     status, body = call("GET", "/profile", token=token)
     equals("GET /profile 200", status, 200)
     equals("conditions is an empty array", body and body.get("conditions"), [])
+    equals("targetWeightKg is null for a 'maintain' goal",
+           (body or {}).get("targetWeightKg"), None)
+
+    # -- 7.2.2 the target weight, added by migration 007 -------------------
+    #
+    # The app asks for it, shows it, and used to lose it on restart: there
+    # was no column and no field for it. It takes no part in Step 1 — the
+    # energy limit comes from the weight the user has NOW — so the checks
+    # below are both halves of that: it survives the round trip, AND it moves
+    # nothing.
+    print("\n7.2.2  the target weight")
+    losing = dict(profile, goal="lose_weight", targetWeightKg=62.5)
+    status, body = call("PUT", "/profile", losing, token=token)
+    equals("200 with a target weight", status, 200)
+    equals("it comes straight back",
+           float((body or {})["profile"]["targetWeightKg"]), 62.5)
+    status, body = call("GET", "/profile", token=token)
+    equals("and it is stored, not just echoed",
+           float((body or {})["targetWeightKg"]), 62.5)
+
+    status, body = call("GET", "/profile/nutrition-targets", token=token)
+    bmr_with_target = (body or {}).get("bmrKcal")
+    equals("the BMR did NOT move — the target is not an input to step 1",
+           bmr_with_target, 1655)
+
+    for bad, label in ((19.9, "under 20 kg"), (300.1, "over 300 kg")):
+        status, body = call("PUT", "/profile",
+                            dict(losing, targetWeightKg=bad), token=token)
+        equals(f"a target {label} is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    # A PUT replaces the whole profile, so leaving the field out clears it.
+    # That is how the app drops the target when the goal stops needing one.
+    status, body = call("PUT", "/profile", profile, token=token)
+    equals("omitting it clears it, because PUT replaces the profile",
+           (body or {})["profile"].get("targetWeightKg"), None)
+    status, body = call("GET", "/profile", token=token)
+    equals("and the clearing was stored too",
+           (body or {}).get("targetWeightKg"), None)
     status, body = call("GET", "/profile/nutrition-targets", token=token)
     equals("GET nutrition-targets 200", status, 200)
     equals("bmrKcal is still 1655", body and body.get("bmrKcal"), 1655)

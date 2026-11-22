@@ -551,11 +551,10 @@ void main() {
       expect(body!['goal'], 'maintain');
     });
 
-    /// The app asks for a target weight and the server has nowhere to put
-    /// it: `health_profiles` has no such column and no endpoint carries one.
-    /// It stays on the device, and this test is what stops someone adding it
-    /// to the request body and wondering why the server ignores it.
-    test('the target weight is not sent, because there is no column for it',
+    /// The app used to ask for a target weight and then lose it: no column,
+    /// no endpoint field, gone on restart. Migration 007 gave it a home, so
+    /// now it goes with the rest.
+    test('the target weight is sent, now that there is a column for it',
         () async {
       Map<String, dynamic>? body;
       final client = clientFor((request) async {
@@ -576,8 +575,59 @@ void main() {
 
       await ProfileApi(client).save(profile);
 
+      expect(body!['targetWeightKg'], 50);
+      expect(body!.keys, hasLength(7));
+    });
+
+    /// A PUT replaces the whole profile, so leaving the field out is how the
+    /// target gets cleared — which is what has to happen when the goal
+    /// changes to one with nothing to aim at.
+    test('and left out entirely when the goal has no target', () async {
+      Map<String, dynamic>? body;
+      final client = clientFor((request) async {
+        body = jsonDecode(request.body) as Map<String, dynamic>;
+        return json(const {
+          'profile': {'gender': 'male'},
+          'nutritionTargets': <String, dynamic>{},
+        });
+      });
+      final profile = HealthProfile()
+        ..gender = Gender.male
+        ..birthday = DateTime(2004, 11, 4)
+        ..heightCm = 172
+        ..weightKg = 68.5
+        ..activity = ActivityLevel.moderate
+        ..goal = HealthGoal.maintain;
+
+      await ProfileApi(client).save(profile);
+
       expect(body!.containsKey('targetWeightKg'), isFalse);
       expect(body!.keys, hasLength(6));
+    });
+
+    test('and it comes back on the profile the server sends', () {
+      final profile = HealthProfile()..targetWeightKg = 99;
+
+      ServerProfile.fromJson({
+        'gender': 'female',
+        'weightKg': 54.0,
+        'targetWeightKg': 50.0,
+      }).applyTo(profile);
+
+      expect(profile.targetWeightKg, 50.0);
+      expect(profile.weightDelta, -4.0);
+    });
+
+    /// The server clearing it has to reach the app, or a goal changed to
+    /// `maintain` would leave a stale target on screen for ever.
+    test('a server that cleared it clears it here too', () {
+      final profile = HealthProfile()..targetWeightKg = 60;
+
+      ServerProfile.fromJson({'gender': 'male', 'weightKg': 68.5}).applyTo(
+        profile,
+      );
+
+      expect(profile.targetWeightKg, isNull);
     });
 
     test('an incomplete profile is not sent at all', () async {
@@ -622,7 +672,9 @@ void main() {
       expect(profile.birthday, DateTime(1999, 7, 2));
       expect(profile.activity, ActivityLevel.light);
       expect(profile.goal, HealthGoal.loseWeight);
-      expect(profile.targetWeightKg, 60, reason: 'the device keeps its own');
+      // The payload above carries no target, and a PUT-shaped profile means
+      // "no target" rather than "unchanged" — so the stale 60 goes.
+      expect(profile.targetWeightKg, isNull);
     });
 
     /// `other` is in the database ENUM and has no screen. It must not be

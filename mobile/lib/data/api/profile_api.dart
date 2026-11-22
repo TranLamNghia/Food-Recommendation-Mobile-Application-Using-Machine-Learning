@@ -97,6 +97,7 @@ class ServerProfile {
     required this.dateOfBirth,
     required this.heightCm,
     required this.weightKg,
+    this.targetWeightKg,
     required this.activityLevel,
     required this.goal,
     this.age,
@@ -112,6 +113,7 @@ class ServerProfile {
         : null,
     heightCm: _num(json['heightCm']),
     weightKg: _num(json['weightKg']),
+    targetWeightKg: _num(json['targetWeightKg']),
     activityLevel: json['activityLevel'] as String?,
     goal: json['goal'] as String?,
     age: json['age'] is num ? (json['age'] as num).toInt() : null,
@@ -129,6 +131,7 @@ class ServerProfile {
   final DateTime? dateOfBirth;
   final double? heightCm;
   final double? weightKg;
+  final double? targetWeightKg;
   final String? activityLevel;
   final String? goal;
   final int? age;
@@ -138,17 +141,20 @@ class ServerProfile {
 
   /// Fills a [HealthProfile] from the server's answer.
   ///
-  /// Only the fields the server stores. **`targetWeightKg` is not among
-  /// them** — `health_profiles` has no such column and no endpoint carries
-  /// it, so that one number is the app's own and stays on the device. It is
-  /// used for the "còn bao nhiêu kg nữa" line and for nothing the server
-  /// computes.
+  /// `targetWeightKg` is among them since migration 007: it used to be the
+  /// one thing the app asked for and then lost on restart, because no column
+  /// and no endpoint carried it. It still takes no part in Step 1 — the
+  /// energy limit comes from the weight the user has now — so it arrives
+  /// here as data to show, not as an input to anything.
   void applyTo(HealthProfile profile) {
     profile
       ..gender = _genderOf(gender)
       ..birthday = dateOfBirth
       ..heightCm = heightCm
       ..weightKg = weightKg
+      // Assigned straight through, null included: the server clearing the
+      // target because the goal no longer needs one has to reach the app.
+      ..targetWeightKg = targetWeightKg
       ..activity = activityLevel == null
           ? profile.activity
           : _activityOf(activityLevel!)
@@ -227,6 +233,10 @@ class ProfileApi {
         'dateOfBirth': _date(birthday),
         'heightCm': height,
         'weightKg': weight,
+        // Left out when there is none, which is how §7.2.2 clears it: a PUT
+        // replaces the whole profile. `maintain` and `healthy_eating` have
+        // nothing to aim at, so the app never asks and never sends.
+        'targetWeightKg': ?profile.targetWeightKg,
         'activityLevel': activity.code,
         'goal': goal.code,
       },

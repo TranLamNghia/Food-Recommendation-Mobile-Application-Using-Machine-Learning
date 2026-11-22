@@ -241,8 +241,8 @@ public class InEnumTests
 }
 
 /// <summary>
-/// The <c>decimal</c> fields with a range, and the rounding that let bad
-/// values through.
+/// The three <c>decimal</c> fields with a range, and the rounding that let
+/// bad values through.
 ///
 /// <para><c>[Range(20, 300)]</c> picks <c>RangeAttribute(int, int)</c>, which
 /// converts the value to <c>int</c> before comparing. A weight of
@@ -251,20 +251,23 @@ public class InEnumTests
 /// a message naming the field. The bounds are typed <c>decimal</c> now, and
 /// these tests are what stop the integer form coming back.</para>
 ///
-/// <para>Found by driving the real server from the Flutter app's own
-/// client: a height of <c>49.6</c> cm answered <c>500</c>.</para>
+/// <para>It was a bug in <c>heightCm</c> and <c>weightKg</c> before
+/// <c>targetWeightKg</c> existed; it was found by driving the real server
+/// from the Flutter app's own client.</para>
 /// </summary>
 public class ProfileRangeTests
 {
     private static UpsertProfileRequest Request(
         decimal heightCm = 172m,
-        decimal weightKg = 68.5m)
+        decimal weightKg = 68.5m,
+        decimal? targetWeightKg = null)
         => new()
         {
             Gender = "male",
             DateOfBirth = new DateOnly(2004, 11, 4),
             HeightCm = heightCm,
             WeightKg = weightKg,
+            TargetWeightKg = targetWeightKg,
             ActivityLevel = "moderate",
             Goal = "maintain",
         };
@@ -283,29 +286,44 @@ public class ProfileRangeTests
     /// bound the database enforces.
     /// </summary>
     [Theory]
-    [InlineData(49.6, 68.5)]
-    [InlineData(250.4, 68.5)]
-    [InlineData(172, 19.6)]
-    [InlineData(172, 300.4)]
+    [InlineData(49.6, 68.5, null)]
+    [InlineData(250.4, 68.5, null)]
+    [InlineData(172, 19.6, null)]
+    [InlineData(172, 300.4, null)]
+    [InlineData(172, 68.5, 19.6)]
+    [InlineData(172, 68.5, 300.4)]
     public void A_fraction_outside_the_bound_is_refused_here_not_by_mysql(
-        double heightCm, double weightKg)
+        double heightCm, double weightKg, double? targetWeightKg)
     {
-        var problems = Validate(
-            Request((decimal)heightCm, (decimal)weightKg));
+        var problems = Validate(Request(
+            (decimal)heightCm,
+            (decimal)weightKg,
+            targetWeightKg is null ? null : (decimal)targetWeightKg));
 
         Assert.NotEmpty(problems);
     }
 
     [Theory]
-    [InlineData(50, 20)]
-    [InlineData(250, 300)]
-    [InlineData(172.5, 68.5)]
+    [InlineData(50, 20, 20)]
+    [InlineData(250, 300, 300)]
+    [InlineData(172.5, 68.5, 62.5)]
     public void And_the_bounds_themselves_are_still_allowed(
-        double heightCm, double weightKg)
+        double heightCm, double weightKg, double targetWeightKg)
     {
-        var problems = Validate(
-            Request((decimal)heightCm, (decimal)weightKg));
+        var problems = Validate(Request(
+            (decimal)heightCm, (decimal)weightKg, (decimal)targetWeightKg));
 
         Assert.Empty(problems);
+    }
+
+    /// <summary>
+    /// Only <c>lose_weight</c> and <c>gain_weight</c> have anything to aim
+    /// at, so the field is optional — and omitting it on a <c>PUT</c> is how
+    /// the target gets cleared.
+    /// </summary>
+    [Fact]
+    public void No_target_weight_at_all_is_valid()
+    {
+        Assert.Empty(Validate(Request()));
     }
 }

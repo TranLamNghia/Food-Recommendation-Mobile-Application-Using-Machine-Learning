@@ -118,6 +118,24 @@ Future<void> main() async {
   check('and the BMI', saved.profile.bmi != null, '${saved.profile.bmi}');
   check('and the targets in the same answer, so no second call is needed',
       saved.targets.caloriesKcal > 0, '${saved.targets.caloriesKcal}');
+  check('the target weight survived the round trip',
+      saved.profile.targetWeightKg == 65, '${saved.profile.targetWeightKg}');
+
+  // It must move nothing: the energy limit comes from the weight the user
+  // has now. If a target weight ever reaches the formula, this is where it
+  // shows up.
+  final withTarget = (await profiles.targets()).caloriesKcal;
+  profile.targetWeightKg = 55;
+  final moved = (await profiles.save(profile)).targets.caloriesKcal;
+  check('and changing it moves no limit at all', withTarget == moved,
+      '$withTarget vs $moved');
+
+  profile.targetWeightKg = null;
+  final cleared = await profiles.save(profile);
+  check('leaving it out clears it, because a PUT replaces the profile',
+      cleared.profile.targetWeightKg == null,
+      '${cleared.profile.targetWeightKg}');
+  profile.targetWeightKg = 65;
 
   print('\n§7.2.3  the targets the server computed');
   final targets = await profiles.targets();
