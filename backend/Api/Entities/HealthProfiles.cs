@@ -21,6 +21,7 @@ public class HealthProfiles
     public DateOnly DateOfBirth { get; set; }
     public decimal HeightCm { get; set; }
     public decimal WeightKg { get; set; }
+    public decimal? TargetWeightKg { get; set; }
     public decimal? Bmi { get; set; }  // computed by the database — read only
     public string ActivityLevel { get; set; } = string.Empty;
     public string Goal { get; set; } = string.Empty;

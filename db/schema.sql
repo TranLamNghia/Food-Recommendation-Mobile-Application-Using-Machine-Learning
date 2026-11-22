@@ -287,6 +287,21 @@ CREATE TABLE health_profiles (
     date_of_birth         DATE         NOT NULL,
     height_cm             DECIMAL(5,2) NOT NULL,
     weight_kg             DECIMAL(5,2) NOT NULL,
+
+    -- Cân nặng người dùng MUỐN đạt. Dữ liệu người dùng khai, KHÔNG phải đầu
+    -- vào của Bước 1: hạn mức năng lượng đi từ `weight_kg` hiện tại qua
+    -- Mifflin-St Jeor rồi cộng/trừ 500 kcal theo `goal`. Tính TDEE theo cân
+    -- nặng mục tiêu sẽ cho hạn mức của một cơ thể chưa tồn tại, và càng xa
+    -- đích thì càng nguy hiểm.
+    --
+    -- Cho NULL vì chỉ `lose_weight` và `gain_weight` cần tới nó; `maintain`
+    -- và `healthy_eating` không có đích nào để nhắm nên app không hỏi. NOT
+    -- NULL sẽ buộc bịa một con số cho hai nửa còn lại.
+    --
+    -- Dùng cho dòng "còn bao nhiêu kg nữa" và cho theo dõi tiến độ cùng
+    -- `body_logs`. Xem `db/migrations/applied/007_target_weight.sql`.
+    target_weight_kg      DECIMAL(5,2) NULL,
+
     -- Thuộc tính DẪN XUẤT, không phải dữ liệu lưu trữ. Dùng VIRTUAL nên
     -- MySQL không ghi byte nào xuống đĩa, chỉ tính lúc đọc — do đó không có
     -- dư thừa lưu trữ và không vi phạm chuẩn 3. Trong ERD vẽ bằng nét đứt.
@@ -332,6 +347,11 @@ CREATE TABLE health_profiles (
     -- chk_height chặn luôn lỗi chia cho 0 ở cột bmi
     CONSTRAINT chk_height    CHECK (height_cm BETWEEN 50 AND 250),
     CONSTRAINT chk_weight    CHECK (weight_kg BETWEEN 20 AND 300),
+    -- Cùng khoảng với chk_weight, vì nó cũng là một cân nặng. KHÔNG đối
+    -- chiếu với `goal`: ràng buộc kiểu "giảm cân thì mục tiêu phải nhỏ hơn
+    -- cân hiện tại" sẽ chặn người đã giảm quá đích khi họ sửa cân nặng.
+    CONSTRAINT chk_target_weight CHECK (target_weight_kg IS NULL
+                                        OR target_weight_kg BETWEEN 20 AND 300),
     CONSTRAINT chk_macro_sum CHECK (target_protein_pct + target_carbs_pct
                                     + target_fat_pct = 100),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

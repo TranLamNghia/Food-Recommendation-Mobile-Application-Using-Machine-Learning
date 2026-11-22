@@ -165,6 +165,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.DateOfBirth).HasColumnName("date_of_birth");
             e.Property(x => x.HeightCm).HasColumnName("height_cm");
             e.Property(x => x.WeightKg).HasColumnName("weight_kg");
+            e.Property(x => x.TargetWeightKg).HasColumnName("target_weight_kg");
             e.Property(x => x.Bmi).HasColumnName("bmi");
             e.Property(x => x.Bmi).ValueGeneratedOnAddOrUpdate();
             e.Property(x => x.ActivityLevel).HasColumnName("activity_level");
