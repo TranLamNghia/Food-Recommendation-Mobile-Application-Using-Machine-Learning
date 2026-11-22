@@ -239,3 +239,73 @@ public class InEnumTests
         Assert.Equal(3, problems.Count);
     }
 }
+
+/// <summary>
+/// The <c>decimal</c> fields with a range, and the rounding that let bad
+/// values through.
+///
+/// <para><c>[Range(20, 300)]</c> picks <c>RangeAttribute(int, int)</c>, which
+/// converts the value to <c>int</c> before comparing. A weight of
+/// <c>19.6</c> became <c>20</c> and passed — then <c>chk_weight</c> in MySQL
+/// refused the insert, and the user got <c>500 INTERNAL_ERROR</c> instead of
+/// a message naming the field. The bounds are typed <c>decimal</c> now, and
+/// these tests are what stop the integer form coming back.</para>
+///
+/// <para>Found by driving the real server from the Flutter app's own
+/// client: a height of <c>49.6</c> cm answered <c>500</c>.</para>
+/// </summary>
+public class ProfileRangeTests
+{
+    private static UpsertProfileRequest Request(
+        decimal heightCm = 172m,
+        decimal weightKg = 68.5m)
+        => new()
+        {
+            Gender = "male",
+            DateOfBirth = new DateOnly(2004, 11, 4),
+            HeightCm = heightCm,
+            WeightKg = weightKg,
+            ActivityLevel = "moderate",
+            Goal = "maintain",
+        };
+
+    private static List<ValidationResult> Validate(object instance)
+    {
+        var results = new List<ValidationResult>();
+        Validator.TryValidateObject(
+            instance, new ValidationContext(instance), results,
+            validateAllProperties: true);
+        return results;
+    }
+
+    /// <summary>
+    /// The exact values that used to slip through, one tenth inside the
+    /// bound the database enforces.
+    /// </summary>
+    [Theory]
+    [InlineData(49.6, 68.5)]
+    [InlineData(250.4, 68.5)]
+    [InlineData(172, 19.6)]
+    [InlineData(172, 300.4)]
+    public void A_fraction_outside_the_bound_is_refused_here_not_by_mysql(
+        double heightCm, double weightKg)
+    {
+        var problems = Validate(
+            Request((decimal)heightCm, (decimal)weightKg));
+
+        Assert.NotEmpty(problems);
+    }
+
+    [Theory]
+    [InlineData(50, 20)]
+    [InlineData(250, 300)]
+    [InlineData(172.5, 68.5)]
+    public void And_the_bounds_themselves_are_still_allowed(
+        double heightCm, double weightKg)
+    {
+        var problems = Validate(
+            Request((decimal)heightCm, (decimal)weightKg));
+
+        Assert.Empty(problems);
+    }
+}

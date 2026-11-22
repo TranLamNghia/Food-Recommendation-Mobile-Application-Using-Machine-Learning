@@ -184,11 +184,25 @@ public sealed class UpsertProfileRequest
     // last line of defence, while this layer is the only place that can tell
     // the user *which field* is wrong — a `MySqlException` cannot.
     [Required(ErrorMessage = "Thiếu chiều cao")]
-    [Range(50, 250, ErrorMessage = "Chiều cao phải trong khoảng 50 đến 250 cm")]
+    // The bounds are typed `decimal`, not written as the integer literals
+    // `20` and `300`.
+    //
+    // `[Range(20, 300)]` picks `RangeAttribute(int, int)`, which converts the
+    // value to `int` before comparing — so `19.6` became `20` and PASSED,
+    // then `chk_weight` in MySQL refused the insert and the user got a
+    // `500 INTERNAL_ERROR` instead of a message naming the field. Same for
+    // `49.6` cm against `[Range(50, 250)]`. Found by driving the real server
+    // from the app's own client; the three columns here are the only
+    // `decimal` ones with a range.
+    [Range(typeof(decimal), "50", "250",
+           ParseLimitsInInvariantCulture = true,
+           ErrorMessage = "Chiều cao phải trong khoảng 50 đến 250 cm")]
     public decimal? HeightCm { get; set; }
 
     [Required(ErrorMessage = "Thiếu cân nặng")]
-    [Range(20, 300, ErrorMessage = "Cân nặng phải trong khoảng 20 đến 300 kg")]
+    [Range(typeof(decimal), "20", "300",
+           ParseLimitsInInvariantCulture = true,
+           ErrorMessage = "Cân nặng phải trong khoảng 20 đến 300 kg")]
     public decimal? WeightKg { get; set; }
 
     [Required(ErrorMessage = "Thiếu mức vận động")]
