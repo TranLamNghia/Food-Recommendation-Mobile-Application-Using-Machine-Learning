@@ -175,13 +175,11 @@ class AppSession extends ChangeNotifier {
 
   String? _accountEmail;
   String? _displayName;
-  String? _phone;
 
   /// `null` only before signing in. An account is required: the welcome
   /// screen lets nobody reach the profile questions without one.
   String? get accountEmail => _accountEmail;
   String? get displayName => _displayName;
-  String? get phone => _phone;
   bool get isSignedIn => _accountEmail != null;
 
   /// `null` until the taste survey has been accepted — §7.1.4's
@@ -344,11 +342,24 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Changes the details that have nothing to do with health. An empty
-  /// [phone] removes the number.
-  void updateAccount({String? displayName, String? phone}) {
-    if (displayName != null) _displayName = displayName.trim();
-    if (phone != null) _phone = phone.trim().isEmpty ? null : phone.trim();
+  // ONLINE: PUT /auth/me — the display name, and nothing else.
+  //
+  // There used to be a phone number here too. It had no column in `users`
+  // and no endpoint, so it was typed, shown, and gone on the next launch —
+  // and neither of the two apps this one is modelled on asks for one.
+  //
+  // OFFLINE: kept in memory, like everything else.
+  Future<void> updateAccount({required String displayName}) async {
+    final auth = _auth;
+    if (auth == null) {
+      _displayName = displayName.trim();
+      notifyListeners();
+      return;
+    }
+    final account = await auth.updateDisplayName(displayName);
+    // The server's own answer, not the typed text: it trimmed it, and it is
+    // the authority on what is now stored.
+    _displayName = account.displayName;
     notifyListeners();
   }
 
@@ -356,7 +367,6 @@ class AppSession extends ChangeNotifier {
   void deleteAccount() {
     _accountEmail = null;
     _displayName = null;
-    _phone = null;
     reset();
   }
 

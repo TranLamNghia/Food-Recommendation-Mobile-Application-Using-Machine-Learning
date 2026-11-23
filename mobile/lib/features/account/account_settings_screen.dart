@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import '../../data/api/failure.dart';
 import '../../data/session.dart';
 import '../auth/auth_screen.dart';
 import '../auth/welcome_screen.dart';
 import 'change_password_screen.dart';
 
 /// Everything about the account that has nothing to do with health: the
-/// display name, the phone number, the password, signing out and deleting.
+/// display name, the password, signing out and deleting.
 ///
 /// Kept apart from the answers on the "Tôi" tab on purpose. Changing an
 /// answer there recalculates the plan; nothing on this screen does.
@@ -31,21 +32,17 @@ class AccountSettingsScreen extends StatelessWidget {
       validator: AuthRules.displayName,
       textCapitalization: TextCapitalization.words,
     );
-    if (value != null) session.updateAccount(displayName: value);
-  }
-
-  Future<void> _editPhone(BuildContext context, AppSession session) async {
-    final value = await _EditFieldScreen.open(
-      context,
-      title: 'Số điện thoại',
-      hint: 'Không bắt buộc. Để trống rồi lưu nếu bạn muốn gỡ số đã thêm.',
-      label: 'Số điện thoại',
-      icon: Icons.phone_outlined,
-      initial: session.phone ?? '',
-      validator: AuthRules.phone,
-      keyboardType: TextInputType.phone,
-    );
-    if (value != null) session.updateAccount(phone: value);
+    if (value == null) return;
+    try {
+      await session.updateAccount(displayName: value);
+    } on ApiFailure catch (failure) {
+      if (!context.mounted) return;
+      // The server refused the new name. Say so where the user is rather
+      // than leaving the old one on screen with no explanation.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(failure.message)),
+      );
+    }
   }
 
   /// Leaves the main shell for the welcome screen, then runs [leave]. In that
@@ -85,12 +82,6 @@ class AccountSettingsScreen extends StatelessWidget {
                     label: 'Tên hiển thị',
                     value: (name == null || name.isEmpty) ? 'Chưa đặt' : name,
                     onTap: () => _editName(context, session),
-                  ),
-                  AppRow(
-                    icon: Icons.phone_outlined,
-                    label: 'Số điện thoại',
-                    value: session.phone ?? 'Chưa thêm',
-                    onTap: () => _editPhone(context, session),
                   ),
                   // Not tappable, so it has no chevron; the inset stands in
                   // for one and keeps the three values on the same edge.

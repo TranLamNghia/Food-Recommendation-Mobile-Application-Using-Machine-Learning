@@ -34,14 +34,6 @@ abstract final class AuthRules {
     return null;
   }
 
-  /// Optional: empty passes. Otherwise a Vietnamese mobile number, written
-  /// with a leading 0 or +84; spaces are ignored.
-  static String? phone(String? v) {
-    final s = (v ?? '').replaceAll(' ', '');
-    if (s.isEmpty) return null;
-    final valid = RegExp(r'^(0|\+84)\d{9}$').hasMatch(s);
-    return valid ? null : 'Số điện thoại gồm 10 chữ số, bắt đầu bằng 0';
-  }
 }
 
 /// Log in or create an account, on one screen with a switch between the two.

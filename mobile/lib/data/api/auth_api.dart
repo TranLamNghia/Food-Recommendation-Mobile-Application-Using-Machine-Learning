@@ -109,6 +109,19 @@ class AuthApi {
     return parsed(() => Account.fromJson(json));
   }
 
+  /// Renames the account. Answers with the same body as [me], so the
+  /// caller sees the result without a second call.
+  ///
+  /// Not in §6's list of seven: the specification has no endpoint that edits
+  /// the account's own details, and the app has a screen that does.
+  Future<Account> updateDisplayName(String displayName) async {
+    final json = await _client.put(
+      '/auth/me',
+      body: {'displayName': displayName.trim()},
+    );
+    return parsed(() => Account.fromJson(json));
+  }
+
   void logOut() => _client.clearTokens();
 
   AuthSession _store(AuthSession session) {
