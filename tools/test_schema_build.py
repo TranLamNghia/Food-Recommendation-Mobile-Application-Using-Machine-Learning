@@ -55,10 +55,13 @@ SANDBOX = "nutrition_rec_buildtest"
 # unintended schema change usually moves exactly one number — printed, that is
 # very easy to read past.
 EXPECTED = {
-    "tables": 24,
-    "fk_columns": 32,
-    "checks": 18,
-    "columns": 225,
+    # 009 added user_food_marks, with two foreign keys.
+    "tables": 25,
+    "fk_columns": 34,
+    # 007 added health_profiles.target_weight_kg and its chk_target_weight;
+    # 008 added conditions.code; 009 added user_food_marks (4 columns).
+    "checks": 19,
+    "columns": 231,
 }
 
 LOOKUP_ROWS = {

@@ -1,3 +1,4 @@
+// OFFLINE: stand-in ingredient lines, used when there is no server.
 import '../models/ingredient.dart';
 
 typedef _I = IngredientLine;

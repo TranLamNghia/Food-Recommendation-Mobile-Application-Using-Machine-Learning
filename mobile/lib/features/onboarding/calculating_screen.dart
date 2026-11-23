@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
+import '../../data/api/failure.dart';
 import '../../data/models/health_profile.dart';
+import '../../data/session.dart';
 import '../survey/survey_intro_screen.dart';
 
 /// The target-calculation screen, shown once the profile is complete.
@@ -43,17 +45,56 @@ class _CalculatingScreenState extends State<CalculatingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat();
+  }
+
+  bool _started = false;
+
+  /// The sequence starts here rather than in [initState], because it reads
+  /// the session out of the widget tree: `dependOnInheritedWidgetOfExactType`
+  /// is not allowed during `initState`, and Flutter asserts rather than
+  /// returning something wrong.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
     _advance();
   }
 
+  /// What the server refused, if it did. The animation finishes either way;
+  /// this decides what comes after it.
+  ApiFailure? _failure;
+
   Future<void> _advance() async {
+    // ONLINE: PUT /profile — §7.2.2 — started now and awaited at the end, so
+    // the five lines and the round trip overlap instead of queueing. The
+    // animation was written as a stand-in for exactly this call; now it is
+    // the time the call is given to finish.
+    //
+    // OFFLINE: there is nothing to save, and `saveProfile` returns at once.
+    final session = SessionScope.of(context);
+    final saving = session.saveProfile().then<ApiFailure?>((_) => null).onError(
+      (ApiFailure failure, _) => failure,
+    );
+
     for (var i = 1; i < _lines.length; i++) {
       await Future.delayed(_perLine);
       if (!mounted) return;
       setState(() => _index = i);
     }
     await Future.delayed(_perLine);
+
+    final failure = await saving;
     if (!mounted) return;
+
+    if (failure != null) {
+      // The profile is the one thing the rest of the app cannot do without:
+      // no limits means no plan, and no plan means nothing to show. So this
+      // stops here and offers to try again rather than walking the user into
+      // a survey whose answers would have nowhere to go.
+      setState(() => _failure = failure);
+      return;
+    }
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -65,6 +106,14 @@ class _CalculatingScreenState extends State<CalculatingScreen>
     );
   }
 
+  Future<void> _retry() async {
+    setState(() {
+      _failure = null;
+      _index = 0;
+    });
+    await _advance();
+  }
+
   @override
   void dispose() {
     _spin.dispose();
@@ -74,6 +123,10 @@ class _CalculatingScreenState extends State<CalculatingScreen>
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+
+    if (_failure case final failure?) {
+      return _CouldNotBuild(failure: failure, onRetry: _retry);
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -174,6 +227,69 @@ class _Line extends StatelessWidget {
               fontSize: current ? 21 : 16,
               height: 1.3,
               color: current ? AppColors.textPrimary : AppColors.textTertiary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The screen the thesis chose over a crash.
+///
+/// It says what happened, in the server's own words, and offers the one
+/// action that can help. `isRetryable` decides whether "thử lại" is honest:
+/// a timeout or an unreachable server may work a moment later, while
+/// `VALIDATION_FAILED` will not until something changes.
+class _CouldNotBuild extends StatelessWidget {
+  const _CouldNotBuild({required this.failure, required this.onRetry});
+
+  final ApiFailure failure;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.cloud_off_outlined,
+                  size: 48,
+                  color: AppColors.danger,
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Chưa dựng được hạn mức',
+                  style: text.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  failure.message,
+                  style: text.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                if (failure.isRetryable)
+                  FilledButton(
+                    onPressed: () => onRetry(),
+                    child: const Text('Thử lại'),
+                  )
+                else
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Quay lại sửa thông tin'),
+                  ),
+              ],
             ),
           ),
         ),

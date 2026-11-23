@@ -1,3 +1,4 @@
+// OFFLINE: the stand-in dish catalogue, used when there is no server.
 import 'package:flutter/material.dart';
 
 import '../models/food.dart';

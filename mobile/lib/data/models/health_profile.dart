@@ -70,11 +70,33 @@ class HealthProfile {
   HealthGoal? goal;
   ActivityLevel? activity;
 
-  /// The selected condition codes, looked up in the `conditions` table.
+  /// The selected condition codes, matched against `conditions.code`.
   final Set<String> conditions = {};
 
   /// The allergy codes and the mandatory diets.
   final Set<String> allergies = {};
+
+  /// The marker for "none of the above".
+  ///
+  /// It is not a row in `conditions` and must never be sent to the server.
+  /// It lives here rather than in the screen that draws the option, because
+  /// the layer that sends the declarations is the one that has to strip it.
+  static const String noneCode = '__none__';
+
+  /// How bad each declared condition is, keyed by code:
+  /// `mild` - `moderate` - `severe`.
+  ///
+  /// Only diseases are asked. Of the fifteen rows in `condition_rules`, two
+  /// are above `mild` - gout excludes high-purine dishes from `moderate` up,
+  /// and hypertension tightens its sodium limit at `severe` - while every
+  /// allergy, intolerance and diet rule applies from `mild`, so asking about
+  /// those would be a question with no consequence.
+  final Map<String, String> severities = {};
+
+  /// The column's own default, used for a condition that was never asked.
+  static const String defaultSeverity = 'moderate';
+
+  String severityOf(String code) => severities[code] ?? defaultSeverity;
 
   /// The date treated as "today" when computing the age. `null` means use
   /// [DateTime.now].
@@ -97,6 +119,15 @@ class HealthProfile {
   /// comparison that stops comparing without anyone noticing.
   DateTime? today;
 
+  /// Whether every field step 1 needs has an answer.
+  ///
+  /// The six that feed the formula, which is the same set
+  /// `PUT /profile` requires. Written against [energyTarget] rather than by
+  /// listing the fields again, so the two can never disagree: if the targets
+  /// can be computed, the profile is complete by definition.
+  bool get isComplete => energyTarget != null;
+
+  // OFFLINE: the age step 1 needs; online, §7.2.1 sends it.
   int? get age {
     final b = birthday;
     if (b == null) return null;
@@ -108,6 +139,7 @@ class HealthProfile {
     return years;
   }
 
+  // OFFLINE: online, §7.2.1 sends `bmi` and `bmiCategory`.
   /// The body mass index.
   double? get bmi {
     final h = heightCm;
@@ -117,6 +149,7 @@ class HealthProfile {
     return w / (m * m);
   }
 
+  // OFFLINE: step 1's BMR, held in parity with ml/limits.py.
   /// The basal metabolic rate, by the Mifflin-St Jeor formula.
   double? get bmr {
     final h = heightCm;
@@ -128,6 +161,7 @@ class HealthProfile {
     return g == Gender.male ? base + 5 : base - 161;
   }
 
+  // OFFLINE: step 1's TDEE; online, §7.2.3 sends `tdeeKcal`.
   /// The total daily energy expenditure.
   double? get tdee {
     final b = bmr;
@@ -136,6 +170,7 @@ class HealthProfile {
     return b * act.factor;
   }
 
+  // OFFLINE: step 1's energy limit; online, §7.2.3 sends it.
   /// The energy target for the goal.
   ///
   /// Losing weight subtracts 500 kcal but **never goes below the BMR** — the
@@ -180,6 +215,7 @@ class HealthProfile {
   ///
   /// 4 kcal/g for protein and carbohydrate, 9 kcal/g for fat — the Atwater
   /// factors.
+  // OFFLINE: online, §7.2.3's `macroTargets` is the answer.
   ({double protein, double carb, double fat})? get macroTarget {
     final e = energyTarget;
     if (e == null) return null;

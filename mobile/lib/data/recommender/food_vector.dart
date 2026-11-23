@@ -1,3 +1,4 @@
+// OFFLINE: builds the dish feature space on the device — step 3 input.
 import 'dart:math' as math;
 
 import '../models/food.dart';

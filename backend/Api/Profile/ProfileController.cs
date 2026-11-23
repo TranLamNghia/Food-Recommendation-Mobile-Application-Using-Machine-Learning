@@ -116,6 +116,10 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         profile.DateOfBirth = dateOfBirth;
         profile.HeightCm = req.HeightCm!.Value;
         profile.WeightKg = req.WeightKg!.Value;
+        // Assigned straight through, including a null: §7.2.2 replaces the
+        // whole profile, so leaving the field out clears the target. That is
+        // what the app does when the goal changes to one that has none.
+        profile.TargetWeightKg = req.TargetWeightKg;
         profile.ActivityLevel = req.ActivityLevel;
         profile.Goal = req.Goal;
         profile.UpdatedAt = Clock.Now;
@@ -312,6 +316,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
             Age = NutritionTargets.Age(h.DateOfBirth, today),
             HeightCm = h.HeightCm,
             WeightKg = h.WeightKg,
+            TargetWeightKg = h.TargetWeightKg,
             Bmi = bmi,
             BmiCategory = NutritionTargets.BmiCategory(bmi),
             ActivityLevel = h.ActivityLevel,
@@ -329,6 +334,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
                   (uc, c) => new UserConditionDto
                   {
                       ConditionId = c.Id,
+                      Code = c.Code,
                       NameVi = c.NameVi,
                       ConditionType = c.ConditionType,
                       Severity = uc.Severity,

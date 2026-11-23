@@ -72,6 +72,7 @@ public sealed class LookupController(AppDbContext db) : ControllerBase
             .Select(c => new ConditionDto
             {
                 Id = c.Id,
+                Code = c.Code,
                 NameVi = c.NameVi,
                 ConditionType = c.ConditionType,
                 Description = c.Description,
@@ -137,6 +138,18 @@ public sealed class ConditionDto
     /// <c>PUT /profile/conditions</c> both take.
     /// </summary>
     public uint Id { get; init; }
+
+    /// <summary>
+    /// <c>conditions.code</c> - stable across databases, unlike [Id].
+    ///
+    /// <para>This is what a client matches its own list against. The app
+    /// ships a curated set of questions, with its own icons and wording,
+    /// and uses this to find each one's id. Hard-coding the id would work
+    /// on one database and silently mean a different condition on
+    /// another, because <c>id</c> is <c>AUTO_INCREMENT</c> and follows
+    /// the seed's insert order.</para>
+    /// </summary>
+    public string Code { get; init; } = string.Empty;
 
     /// <summary>Vietnamese, as <c>name_vi</c> stores it.</summary>
     public string NameVi { get; init; } = string.Empty;

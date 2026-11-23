@@ -74,7 +74,7 @@ void main() {
       final entry = session.diary.single;
       session.undoMeal(entry);
 
-      expect(slot.items.first.status, MealItemStatus.planned);
+      expect(slot.items.first.status, MealItemStatus.suggested);
       // Still recorded, but it no longer counts towards the day.
       expect(session.diary, [entry]);
       expect(entry.isUndone, isTrue);
@@ -85,18 +85,16 @@ void main() {
 
     test('starting over keeps the account; deleting it does not', () {
       final session = _readySession();
-      session.updateAccount(phone: '0901234567');
 
       session.reset();
       expect(session.plan, isNull);
       expect(session.profile.gender, isNull);
       expect(session.accountEmail, 'nghia@example.com');
-      expect(session.phone, '0901234567');
+      expect(session.displayName, 'Nghĩa');
 
       session.deleteAccount();
       expect(session.isSignedIn, isFalse);
       expect(session.displayName, isNull);
-      expect(session.phone, isNull);
     });
 
     test('signing out keeps what the account holds', () {
@@ -348,15 +346,66 @@ void main() {
       expect(find.text('Trong một suất'), findsOneWidget);
       expect(find.text('Nguyên liệu cho một suất'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Yêu thích món này'));
+      await tester.tap(find.byTooltip('Lưu món này'));
       await tester.pumpAndSettle();
       expect(session.lovedIds, contains(food.id));
 
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(session.neverAgainIds, contains(food.id));
-      // Banning a dish un-hearts it: the two verdicts contradict.
+      // Blocking a dish un-bookmarks it: `user_food_marks` holds one row per
+      // (user, food), and the two verdicts contradict each other.
       expect(session.lovedIds, isNot(contains(food.id)));
+
+      // The dish is on today's plate, so the screen asks what to do with
+      // that serving instead of deciding. Nothing has happened to the plan
+      // while the question is open.
+      expect(find.text('Món này vẫn trong thực đơn hôm nay'), findsOneWidget);
+      expect(session.plannedTodayItem(food), isNotNull);
+      await tester.tap(find.text('Giữ nguyên'));
+      await tester.pumpAndSettle();
+      expect(
+        session.plannedTodayItem(food),
+        isNotNull,
+        reason: 'keeping the serving must leave the plan exactly as it was',
+      );
+    });
+
+    /// The other branch of the same question, and the one that moves a
+    /// number: dropping the serving lowers the day's energy and puts nothing
+    /// in its place.
+    testWidgets('blocking a dish can drop its serving, with nothing put back',
+        (tester) async {
+      _tall(tester);
+      final session = _readySession();
+      await tester.pumpWidget(_app(session, const HomeShell()));
+      await tester.pumpAndSettle();
+
+      final item = session.plan!.allItems.first;
+      final food = item.food;
+      final before = session.plan!.onPlateKcal;
+      final generated = session.plan!.actualKcal;
+
+      await tester.tap(find.text(food.name).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bỏ suất đó'));
+      await tester.pumpAndSettle();
+
+      final plan = session.plan!;
+      expect(session.plannedTodayItem(food), isNull);
+      expect(plan.onPlateKcal, closeTo(before - food.kcal, 0.001));
+      expect(
+        plan.actualKcal,
+        closeTo(generated, 0.001),
+        reason: 'the plan AS GENERATED does not move — it is what the ±10 % '
+            'commitment is measured on, and a day could otherwise pass by '
+            'having enough dishes dropped',
+      );
+      expect(plan.skippedItems, hasLength(1));
+      // No replacement appeared: the user has to ask for one.
+      expect(plan.allItems.length, session.plan!.allItems.length);
     });
 
     testWidgets('diary undo puts the serving back on the plan', (tester) async {
@@ -383,7 +432,7 @@ void main() {
       expect(session.diary, hasLength(1));
     });
 
-    testWidgets('account settings edit the phone and sign out', (tester) async {
+    testWidgets('account settings rename and sign out', (tester) async {
       _tall(tester);
       final session = _readySession();
       await tester.pumpWidget(_app(session, const HomeShell()));
@@ -394,20 +443,22 @@ void main() {
       await tester.tap(find.text('nghia@example.com'));
       await tester.pumpAndSettle();
       expect(find.text('Thông tin cá nhân'), findsOneWidget);
-      expect(find.text('Chưa thêm'), findsOneWidget);
 
-      await tester.tap(find.text('Số điện thoại'));
+      // The phone number used to be edited here. It had no column and no
+      // endpoint, so it was typed and lost; the display name is the one
+      // detail of the account the server actually keeps.
+      await tester.tap(find.text('Tên hiển thị'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField), '12345');
+      await tester.enterText(find.byType(TextFormField), 'N');
       await tester.tap(find.text('Lưu'));
       await tester.pumpAndSettle();
-      expect(session.phone, isNull);
+      expect(session.displayName, 'Nghĩa', reason: 'one letter is refused');
 
-      await tester.enterText(find.byType(TextFormField), '0901 234 567');
+      await tester.enterText(find.byType(TextFormField), 'Lâm Nghĩa');
       await tester.tap(find.text('Lưu'));
       await tester.pumpAndSettle();
-      expect(session.phone, '0901 234 567');
-      expect(find.text('0901 234 567'), findsOneWidget);
+      expect(session.displayName, 'Lâm Nghĩa');
+      expect(find.text('Lâm Nghĩa'), findsOneWidget);
 
       await tester.tap(find.text('Đăng xuất'));
       await tester.pumpAndSettle();
@@ -417,26 +468,6 @@ void main() {
       expect(session.isSignedIn, isFalse);
       // The profile stays with the account.
       expect(session.todayPlan, isNotNull);
-    });
-
-    testWidgets('starting over asks the questions again, still signed in', (
-      tester,
-    ) async {
-      _tall(tester);
-      final session = _readySession();
-      await tester.pumpWidget(_app(session, const HomeShell()));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Tôi').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Xóa dữ liệu và làm lại từ đầu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Xóa hết'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(OnboardingFlow), findsOneWidget);
-      expect(session.isSignedIn, isTrue);
-      expect(session.plan, isNull);
     });
 
     testWidgets('account tab edits one answer and rebuilds the plan', (

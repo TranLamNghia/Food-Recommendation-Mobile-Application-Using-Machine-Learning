@@ -1,3 +1,4 @@
+// OFFLINE: the Dart copy of the F1 filter — step 2 on the device.
 import '../mock/mock_rules.dart';
 import '../models/food.dart';
 import 'condition_rule.dart';

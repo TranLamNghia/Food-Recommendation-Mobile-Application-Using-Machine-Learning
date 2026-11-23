@@ -17,25 +17,25 @@ USE nutrition_rec;
 
 
 -- ── 1. conditions ─────────────────────────────────────────────────────────
-INSERT INTO conditions (name_vi, condition_type, description) VALUES
-('Đái tháo đường',         'disease',     'Cần hạn chế đường và tinh bột hấp thu nhanh'),
-('Tăng huyết áp',          'disease',     'Cần hạn chế natri'),
-('Bệnh thận',              'disease',     'Cần hạn chế đạm và natri'),
-('Rối loạn mỡ máu',        'disease',     'Cần hạn chế cholesterol và chất béo bão hòa'),
-('Gút',                    'disease',     'Cần hạn chế purin'),
-('Dị ứng hải sản',         'allergy',     NULL),
-('Dị ứng đậu phộng',       'allergy',     NULL),
-('Dị ứng trứng',           'allergy',     NULL),
+INSERT INTO conditions (code, name_vi, condition_type, description) VALUES
+('diabetes',            'Đái tháo đường',         'disease',     'Cần hạn chế đường và tinh bột hấp thu nhanh'),
+('hypertension',        'Tăng huyết áp',          'disease',     'Cần hạn chế natri'),
+('kidney_disease',      'Bệnh thận',              'disease',     'Cần hạn chế đạm và natri'),
+('dyslipidemia',        'Rối loạn mỡ máu',        'disease',     'Cần hạn chế cholesterol và chất béo bão hòa'),
+('gout',                'Gút',                    'disease',     'Cần hạn chế purin'),
+('allergy_seafood',     'Dị ứng hải sản',         'allergy',     NULL),
+('allergy_peanut',      'Dị ứng đậu phộng',       'allergy',     NULL),
+('allergy_egg',         'Dị ứng trứng',           'allergy',     NULL),
 -- Nhãn `Có đậu nành` tồn tại từ đầu và gắn cho 13 món, nhưng trước đây không
 -- bệnh nào dùng tới nó: 6 nhãn dị nguyên mà chỉ 5 bệnh. Người dị ứng đậu nành
 -- vì vậy không khai được, và Bộ lọc F1 không loại gì cho họ — trong khi đậu
 -- nành là một trong các dị nguyên phổ biến nhất. Phát hiện khi chạy
 -- `tools/check_f1.py`.
-('Dị ứng đậu nành',        'allergy',     NULL),
-('Không dung nạp lactose', 'intolerance', NULL),
-('Không dung nạp gluten',  'intolerance', NULL),
-('Ăn chay',                'diet',        'Không ăn thịt, có thể dùng trứng và sữa'),
-('Ăn thuần chay',          'diet',        'Không dùng mọi sản phẩm từ động vật');
+('allergy_soy',         'Dị ứng đậu nành',        'allergy',     NULL),
+('lactose_intolerance', 'Không dung nạp lactose', 'intolerance', NULL),
+('gluten_intolerance',  'Không dung nạp gluten',  'intolerance', NULL),
+('vegetarian',          'Ăn chay',                'diet',        'Không ăn thịt, có thể dùng trứng và sữa'),
+('vegan',               'Ăn thuần chay',          'diet',        'Không dùng mọi sản phẩm từ động vật');
 
 
 -- ── 2. tags ───────────────────────────────────────────────────────────────

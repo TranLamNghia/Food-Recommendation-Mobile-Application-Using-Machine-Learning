@@ -1,3 +1,4 @@
+// OFFLINE: per-day nutrient limits checked on the device.
 import '../models/food.dart';
 
 /// One micronutrient constraint at the **DAY** level.

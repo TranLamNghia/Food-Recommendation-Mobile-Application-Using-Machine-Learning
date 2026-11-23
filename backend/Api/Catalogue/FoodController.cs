@@ -1,8 +1,10 @@
 using Api.Data;
+using Api.Entities;
 using Api.Http;
 using Api.Ml;
 using Api.Planning;
 using Api.Profile;
+using Api.Time;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +58,30 @@ public sealed class FoodController(
 
     private string? UserId => User.FindFirst("sub")?.Value;
 
+    /// <summary>
+    /// The foods this user may <b>eat</b>, out of a safety answer.
+    ///
+    /// <para>Not simply <c>SafeFoodIds</c>. Since the F1 filter also subtracts
+    /// the dishes the user asked not to be suggested, a dish whose only
+    /// reason is <c>userChoice</c> comes back "unsafe" while being perfectly
+    /// safe to eat. These two endpoints are about health — one hides dishes,
+    /// the other prints a warning — so they have to look past that reason, or
+    /// blocking a dish would delete it from search and the screen that
+    /// unblocks it is the one it disappeared from.</para>
+    /// </summary>
+    private static HashSet<string> EdibleIds(MlFoodSafetyResponse answer)
+    {
+        var ids = answer.SafeFoodIds.ToHashSet();
+        foreach (var entry in answer.Unsafe)
+        {
+            if (entry.Reasons.Count > 0 && entry.Reasons.All(r => r.UserChoice))
+            {
+                ids.Add(entry.FoodId);
+            }
+        }
+        return ids;
+    }
+
     // ── 7.5.1 Search and browse ──────────────────────────────────────────
 
     [HttpGet]
@@ -65,6 +91,7 @@ public sealed class FoodController(
         [FromQuery] string? mealType,
         [FromQuery] string? dishRole,
         [FromQuery] decimal? maxCalories,
+        [FromQuery] string? mark = null,
         [FromQuery] bool excludeUnsafe = true,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = DefaultPageSize,
@@ -102,6 +129,13 @@ public sealed class FoodController(
         {
             return Invalid("maxCalories", "Trần năng lượng phải lớn hơn 0");
         }
+        if (mark is not null && !Enums.MarkKind.Contains(mark))
+        {
+            return Invalid(
+                "mark",
+                "Dấu món không hợp lệ, phải là một trong: "
+                + string.Join(" · ", Enums.MarkKind));
+        }
 
         var safety = await ml.FoodSafetyAsync(
             new MlFoodSafetyRequest { UserId = uid }, ct);
@@ -109,7 +143,7 @@ public sealed class FoodController(
         {
             return Report(failure);
         }
-        var safeIds = safety.Required.SafeFoodIds.ToHashSet();
+        var safeIds = EdibleIds(safety.Required);
 
         var rows = db.Foods
             .Where(f => f.IsActive
@@ -145,6 +179,14 @@ public sealed class FoodController(
             // about meals. A List has only the LINQ overload.
             var roles = MealStructure.For(mealType).ToList();
             rows = rows.Where(f => roles.Contains(f.DishRole));
+        }
+        if (mark is not null)
+        {
+            // `EXISTS`, not a join: a food has at most one mark, and a join
+            // would still have to be left-outer for the unfiltered case, so
+            // the two shapes would differ for no gain.
+            rows = rows.Where(f => db.UserFoodMarks.Any(
+                m => m.UserId == uid && m.FoodId == f.Id && m.Kind == mark));
         }
         if (excludeUnsafe)
         {
@@ -193,6 +235,14 @@ public sealed class FoodController(
                 CaloriesKcal = x.CaloriesKcal,
                 ServingSizeG = x.ServingSizeG,
                 IsSafeForUser = safeIds.Contains(x.Id),
+                // A correlated subquery rather than a second round trip: at
+                // most 100 rows come back, and the mark has to arrive with
+                // the row or the bookmark draws itself empty for a moment on
+                // a list the user has already saved from.
+                Mark = db.UserFoodMarks
+                    .Where(m => m.UserId == uid && m.FoodId == x.Id)
+                    .Select(m => m.Kind)
+                    .FirstOrDefault(),
             })
             .ToListAsync(ct);
 
@@ -255,7 +305,12 @@ public sealed class FoodController(
 
         var answer = safety.Required;
         var unsafeEntry = answer.Unsafe.FirstOrDefault(u => u.FoodId == id);
-        var isSafe = answer.SafeFoodIds.Contains(id);
+        var isSafe = EdibleIds(answer).Contains(id);
+
+        var mark = await db.UserFoodMarks
+            .Where(m => m.UserId == uid && m.FoodId == id)
+            .Select(m => m.Kind)
+            .FirstOrDefaultAsync(ct);
 
         var tags = await db.FoodTags
             .Where(ft => ft.FoodId == id)
@@ -273,14 +328,24 @@ public sealed class FoodController(
         // The condition names come back from the ML service as
         // `conditions.name_vi`; the ids are looked up here so the app can act
         // on a warning — open the declaration screen at the right row.
-        var conditionIds = await db.Conditions
-            .ToDictionaryAsync(c => c.NameVi, c => c.Id, ct);
+        var byName = await db.Conditions
+            .ToDictionaryAsync(c => c.NameVi, c => new { c.Id, c.Code }, ct);
 
         var warnings = (unsafeEntry?.Reasons ?? [])
+            // The user's own block is not a warning. It reaches the screen as
+            // `mark` instead, so the switch can be drawn on without the page
+            // also claiming a health reason that does not exist.
+            .Where(r => !r.UserChoice)
             .Select(r => new FoodWarningDto
             {
-                ConditionId = conditionIds.TryGetValue(r.Condition, out var cid)
-                    ? cid
+                ConditionId = byName.TryGetValue(r.Condition, out var c)
+                    ? c.Id
+                    : null,
+                // The code §7.5.2's example shows. Added by migration 008;
+                // until then there was no `conditions.code` and the id went
+                // out in its place.
+                ConditionCode = byName.TryGetValue(r.Condition, out var cc)
+                    ? cc.Code
                     : null,
                 ConditionName = r.Condition,
                 RuleType = r.RuleType,
@@ -339,9 +404,183 @@ public sealed class FoodController(
             },
             Tags = tags,
             IsSafeForUser = isSafe,
+            Mark = mark,
             Warnings = warnings,
             MyFeedback = mine,
         });
+    }
+
+    // ── Bookmark a dish, or ask for it not to be suggested ───────────────
+
+    /// <summary>
+    /// Sets or clears this user's mark on a food.
+    ///
+    /// <para><b>Not in §6's list of seven.</b> The specification has no place
+    /// for an opinion about a dish the user has never eaten: §7.8.1 requires
+    /// a feedback's food to have been in one of their plans <b>and</b> in
+    /// their diary, deliberately, so a rating always rests on a meal. The
+    /// bookmark and the "không gợi ý món này nữa" switch are both opinions
+    /// about a dish that may never have been cooked, so they need a table and
+    /// an endpoint of their own.</para>
+    ///
+    /// <para><b>Idempotent.</b> Sending the same <c>kind</c> twice answers
+    /// <c>200</c> twice with the same body; the toggle in the app is free to
+    /// re-send rather than track what it already sent.</para>
+    ///
+    /// <para><b>The two marks are exclusive.</b> One row per (user, food), so
+    /// bookmarking a blocked dish unblocks it and vice versa — "saved to try"
+    /// and "never suggest this" cannot both be true.</para>
+    ///
+    /// <para>Status codes: <c>404 NOT_FOUND</c> for a dish this user cannot
+    /// see, <c>409 BLOCK_WOULD_EMPTY_MEAL</c> when blocking it would leave a
+    /// meal with nothing to put in a role it needs, and
+    /// <c>503 ML_UNAVAILABLE</c> when that last question cannot be
+    /// answered.</para>
+    /// </summary>
+    [HttpPut("{id}/mark")]
+    public async Task<IActionResult> SetMark(
+        string id,
+        [FromBody] FoodMarkRequest? body,
+        CancellationToken ct = default)
+    {
+        if (UserId is not { } uid)
+        {
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+        }
+
+        var kind = body?.Kind;
+
+        var food = await db.Foods
+            .Where(f => f.Id == id
+                        && f.IsActive
+                        && (f.OwnerId == null || f.OwnerId == uid))
+            .Select(f => new { f.Id, f.DishRole })
+            .FirstOrDefaultAsync(ct);
+        if (food is null)
+        {
+            return Fail(404, ErrorCode.NotFound, "Không tìm thấy món ăn");
+        }
+
+        if (kind == "blocked")
+        {
+            var refusal = await WouldEmptyAMeal(uid, food.Id, food.DishRole, ct);
+            if (refusal is not null)
+            {
+                return refusal;
+            }
+        }
+
+        var existing = await db.UserFoodMarks
+            .FirstOrDefaultAsync(m => m.UserId == uid && m.FoodId == id, ct);
+
+        if (kind is null)
+        {
+            if (existing is not null)
+            {
+                db.UserFoodMarks.Remove(existing);
+                await db.SaveChangesAsync(ct);
+            }
+            return Ok(new FoodMarkResponse { FoodId = id, Kind = null });
+        }
+
+        if (existing is null)
+        {
+            existing = new UserFoodMarks
+            {
+                UserId = uid,
+                FoodId = id,
+                Kind = kind,
+                CreatedAt = Clock.Now,
+            };
+            db.UserFoodMarks.Add(existing);
+            await db.SaveChangesAsync(ct);
+        }
+        else if (existing.Kind != kind)
+        {
+            existing.Kind = kind;
+            // The timestamp moves with the kind. It records when the mark now
+            // showing was made, and a block carrying the date the user
+            // bookmarked the dish would be a false record of a decision they
+            // reversed.
+            existing.CreatedAt = Clock.Now;
+            await db.SaveChangesAsync(ct);
+        }
+
+        return Ok(new FoodMarkResponse
+        {
+            FoodId = id,
+            Kind = existing.Kind,
+            MarkedAt = existing.CreatedAt,
+        });
+    }
+
+    /// <summary>
+    /// Whether blocking <paramref name="foodId"/> would leave a meal unable
+    /// to be assembled — and the refusal to send back if so.
+    ///
+    /// <para>Blocking a dish can only empty <b>its own</b> role, so the
+    /// question is narrow: is this the last dish left in a role that some
+    /// meal requires? The count of what is left comes from the ML service,
+    /// which owns the F1 filter and has already subtracted the dishes this
+    /// user blocked before; this method only groups that answer by a column
+    /// of its own table.</para>
+    ///
+    /// <para>A dish F1 already excludes is never refused. It is not in the
+    /// pool, so blocking it removes nothing — and refusing would tell the
+    /// user they cannot reject a dish the system was never going to offer
+    /// them.</para>
+    ///
+    /// <para>The threshold is <b>zero left</b>, not "few left". That is the
+    /// decided behaviour: blocking a dish the user has not eaten costs them
+    /// that dish for the day and nothing replaces it automatically — a
+    /// thinner day is theirs to choose. A day with no <c>main</c> at all is
+    /// not a thinner day; it is a plan that cannot be built.</para>
+    /// </summary>
+    private async Task<ObjectResult?> WouldEmptyAMeal(
+        string uid, string foodId, string dishRole, CancellationToken ct)
+    {
+        var meals = MealStructure.MealsRequiring(dishRole);
+        if (meals.Length == 0)
+        {
+            // `soup`, `dessert` and `drink`: no meal is assembled around
+            // them, so none can be emptied by losing one.
+            return null;
+        }
+
+        var safety = await ml.FoodSafetyAsync(
+            new MlFoodSafetyRequest { UserId = uid }, ct);
+        if (safety.Failure is { } failure)
+        {
+            return Report(failure);
+        }
+
+        var pool = safety.Required.SafeFoodIds.ToHashSet();
+        if (!pool.Contains(foodId))
+        {
+            return null;
+        }
+
+        // The role's ids first, then the intersection in memory. The other
+        // way round — sending the pool into the query — puts a couple of
+        // hundred UUIDs into an `IN` list to answer a question about one
+        // role, which holds well under two hundred foods of the 318.
+        var inRole = await db.Foods
+            .Where(f => f.IsActive
+                        && f.DishRole == dishRole
+                        && f.Id != foodId
+                        && (f.OwnerId == null || f.OwnerId == uid))
+            .Select(f => f.Id)
+            .ToListAsync(ct);
+        if (inRole.Any(pool.Contains))
+        {
+            return null;
+        }
+
+        return Fail(
+            409, ErrorCode.BlockWouldEmptyMeal,
+            $"Đây là món cuối cùng còn lại cho {MealLabels.Join(meals)}. "
+            + "Bỏ gợi ý món này thì không dựng được thực đơn. Hãy khai báo "
+            + "lại tình trạng sức khỏe, hoặc bỏ chặn một món khác cùng loại.");
     }
 
     private ObjectResult Report(MlFailure failure)

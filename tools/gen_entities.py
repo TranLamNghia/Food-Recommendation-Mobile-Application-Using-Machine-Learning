@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Generate the C# entity classes from `db/schema.sql`, and audit them.
 
-Why generate them. Twenty-four tables, 225 columns. Typing each property by
+Why generate them. Twenty-five tables, 231 columns. Typing each property by
 hand means a column with the wrong name or the wrong nullability causes no
 compile error — it causes a runtime `MySqlException`, at an endpoint nobody may
 call for weeks. Generating from the schema file itself removes that whole class
@@ -427,6 +427,7 @@ ENUM_CS = {
     "ConditionType": ("conditions", "condition_type"),
     "TagType": ("tags", "tag_type"),
     "DishRole": ("foods", "dish_role"),
+    "MarkKind": ("user_food_marks", "kind"),
 }
 
 RE_ENUM_ARRAY = re.compile(

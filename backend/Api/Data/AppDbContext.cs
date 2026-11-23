@@ -49,6 +49,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<MealPlans> MealPlans => Set<MealPlans>();
     public DbSet<Recommendations> Recommendations => Set<Recommendations>();
     public DbSet<FoodDiary> FoodDiary => Set<FoodDiary>();
+    public DbSet<UserFoodMarks> UserFoodMarks => Set<UserFoodMarks>();
     public DbSet<Feedbacks> Feedbacks => Set<Feedbacks>();
     public DbSet<MlTrainingSamples> MlTrainingSamples => Set<MlTrainingSamples>();
     public DbSet<MlEvaluations> MlEvaluations => Set<MlEvaluations>();
@@ -77,6 +78,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.ToTable("conditions");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.Code).HasColumnName("code");
             e.Property(x => x.NameVi).HasColumnName("name_vi");
             e.Property(x => x.ConditionType).HasColumnName("condition_type");
             e.Property(x => x.Description).HasColumnName("description");
@@ -165,6 +167,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.DateOfBirth).HasColumnName("date_of_birth");
             e.Property(x => x.HeightCm).HasColumnName("height_cm");
             e.Property(x => x.WeightKg).HasColumnName("weight_kg");
+            e.Property(x => x.TargetWeightKg).HasColumnName("target_weight_kg");
             e.Property(x => x.Bmi).HasColumnName("bmi");
             e.Property(x => x.Bmi).ValueGeneratedOnAddOrUpdate();
             e.Property(x => x.ActivityLevel).HasColumnName("activity_level");
@@ -331,6 +334,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.AteOn).HasColumnName("ate_on");
             e.Property(x => x.MealType).HasColumnName("meal_type");
             e.Property(x => x.PortionMultiplier).HasColumnName("portion_multiplier");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+        b.Entity<UserFoodMarks>(e =>
+        {
+            e.ToTable("user_food_marks");
+            e.HasKey(x => new { x.UserId, x.FoodId });
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.FoodId).HasColumnName("food_id");
+            e.Property(x => x.Kind).HasColumnName("kind");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
         });
         b.Entity<Feedbacks>(e =>

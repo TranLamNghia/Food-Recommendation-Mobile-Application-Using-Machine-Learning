@@ -1,3 +1,4 @@
+// OFFLINE: the Dart copy of step 1, held in parity with ml/limits.py.
 import '../models/food.dart';
 import 'evidence_level.dart';
 

@@ -2,6 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import 'api/api_client.dart';
+import 'api/api_config.dart';
+import 'api/failure.dart';
+import 'api/auth_api.dart';
+import 'api/food_api.dart';
+import 'api/profile_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
@@ -25,9 +31,34 @@ import 'rules/dish_screening.dart';
 /// [regeneratePlan] calls `POST /meal-plans`, and [logMeal] calls
 /// `POST /diary`.
 class AppSession extends ChangeNotifier {
-  AppSession({math.Random? rng}) : _rng = rng ?? math.Random();
+  /// [api] is for tests, which pass a client backed by a fake transport.
+  /// Left out, the mode is whatever `--dart-define=API_BASE_URL` said at
+  /// compile time — and with no address, offline.
+  AppSession({math.Random? rng, ApiClient? api})
+    : _rng = rng ?? math.Random(),
+      _client = api ?? (ApiConfig.isOnline ? ApiClient() : null) {
+    final client = _client;
+    if (client != null) {
+      _auth = AuthApi(client);
+      _profiles = ProfileApi(client);
+      _foods = FoodApi(client);
+    }
+  }
 
   final math.Random _rng;
+
+  // ── Which of the two modes ───────────────────────────────────────
+
+  final ApiClient? _client;
+  AuthApi? _auth;
+  ProfileApi? _profiles;
+  FoodApi? _foods;
+
+  /// Whether there is a server behind this session.
+  ///
+  /// Every method that can do both says which it is doing with a
+  /// `// ONLINE:` or `// OFFLINE:` line — see `mobile/README.md`.
+  bool get isOnline => _auth != null;
 
   /// The health profile filled in during the onboarding flow.
   final HealthProfile profile = HealthProfile();
@@ -147,38 +178,195 @@ class AppSession extends ChangeNotifier {
 
   String? _accountEmail;
   String? _displayName;
-  String? _phone;
 
   /// `null` only before signing in. An account is required: the welcome
   /// screen lets nobody reach the profile questions without one.
   String? get accountEmail => _accountEmail;
   String? get displayName => _displayName;
-  String? get phone => _phone;
   bool get isSignedIn => _accountEmail != null;
 
-  /// Mock of `POST /auth/login` and `POST /auth/register`: accepts anything
-  /// the form already validated.
-  ///
-  /// Logging in passes no [displayName] and keeps the one already known, the
-  /// way the real account would return it.
+  /// `null` until the taste survey has been accepted — §7.1.4's
+  /// `onboardingCompletedAt`. It decides whether the app opens on the survey
+  /// or on the plan.
+  DateTime? _onboardingCompletedAt;
+  DateTime? get onboardingCompletedAt => _onboardingCompletedAt;
+  bool get hasFinishedOnboarding => _onboardingCompletedAt != null;
+
+  // OFFLINE: accepts anything the form already validated, with no server to
+  // ask. Logging in passes no [displayName] and keeps the one already known,
+  // the way the real account would return it.
   void signIn({required String email, String? displayName}) {
     _accountEmail = email.trim();
     if (displayName != null) _displayName = displayName.trim();
     notifyListeners();
   }
 
+  // ONLINE: POST /auth/register — specification §7.1.1.
+  //
+  // Throws [ApiFailure]; the screen shows `message` and branches on `code`
+  // (`EMAIL_ALREADY_EXISTS` is the one worth its own wording).
+  Future<void> register({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final auth = _auth;
+    if (auth == null) {
+      signIn(email: email, displayName: displayName);
+      return;
+    }
+    final session = await auth.register(
+      email: email,
+      password: password,
+      displayName: displayName,
+    );
+    _accountEmail = session.account.email;
+    _displayName = session.account.displayName;
+    _onboardingCompletedAt = session.account.onboardingCompletedAt;
+    notifyListeners();
+  }
+
+  // ONLINE: POST /auth/login — specification §7.1.2.
+  //
+  // A returning user keeps the profile they already filled in: after signing
+  // in this reads it back from the server rather than asking the questions
+  // again. That is the point of having an account at all.
+  Future<void> logIn({
+    required String email,
+    required String password,
+  }) async {
+    final auth = _auth;
+    if (auth == null) {
+      signIn(email: email);
+      return;
+    }
+    final session = await auth.logIn(email: email, password: password);
+    _accountEmail = session.account.email;
+    _displayName = session.account.displayName;
+    _onboardingCompletedAt = session.account.onboardingCompletedAt;
+    await _pullProfile();
+    notifyListeners();
+  }
+
+  // ONLINE: GET /auth/me, then §7.2.1 and §7.2.3 if there is a profile.
+  //
+  // The two lookups are what makes logging in different from registering.
+  // `GET /auth/me` is asked first because only it reports
+  // `hasHealthProfile`: §7.1.1 and §7.1.2 leave that field out, and reading
+  // §7.2.1 without it would mean treating its `404 NOT_FOUND` as control
+  // flow.
+  Future<void> _pullProfile() async {
+    final auth = _auth;
+    final api = _profiles;
+    if (auth == null || api == null) return;
+
+    final me = await auth.me();
+    _onboardingCompletedAt = me.onboardingCompletedAt;
+    // Before the `hasHealthProfile` return below: the marks belong to the
+    // account, not to the profile, so a user who signed up and bookmarked a
+    // dish before answering the questions still has them.
+    await _pullMarks();
+    if (me.hasHealthProfile != true) return;
+
+    (await api.read()).applyTo(profile);
+    // The server's own step 1 output, which overwrites the default
+    // 15 / 60 / 25 split so the offline arithmetic agrees with it.
+    (await api.targets()).applyTo(profile);
+  }
+
+  // ONLINE: PUT /profile — specification §7.2.2.
+  //
+  // Called when the onboarding questions are done. The `calculating` screen
+  // runs this behind its animation, which until now stood in for exactly
+  // this round trip.
+  Future<void> saveProfile() async {
+    final api = _profiles;
+    if (api == null) return;
+    // One round trip, not two: §7.2.2 recomputes step 1 as it saves and
+    // sends the targets back with the profile.
+    (await api.save(profile)).targets.applyTo(profile);
+    await _saveConditions(api);
+    notifyListeners();
+  }
+
+  // ONLINE: §7.3.1 to learn the ids, then §7.2.5 to declare.
+  //
+  // The app ships its own curated list of questions — its own icons, its own
+  // wording, its own order — keyed by `conditions.code`. The ids come from
+  // the dictionary at run time, because `conditions.id` is `AUTO_INCREMENT`
+  // and follows the seed's insert order: a hard-coded `2` would be
+  // hypertension on this database and something else on the next, and would
+  // declare the wrong illness without any error.
+  //
+  // **A code the dictionary does not know stops the save.** Dropping it
+  // quietly is the one thing that must not happen here: these declarations
+  // are what the F1 filter removes dishes by, so a silently lost allergy is
+  // a dish the user is allergic to, recommended to them, with nothing
+  // reporting it.
+  Future<void> _saveConditions(ProfileApi api) async {
+    final declared = {...profile.conditions, ...profile.allergies}
+      ..remove(HealthProfile.noneCode);
+    if (declared.isEmpty) {
+      // Still sent: §7.2.5 replaces the whole set, so an empty list is how
+      // "I have none" and "I no longer have the one I declared" are stored.
+      await api.saveConditions(const []);
+      return;
+    }
+
+    final catalogue = await api.conditionCatalogue();
+    final idOf = {for (final c in catalogue) c.code: c.id};
+
+    final unknown = declared.where((c) => !idOf.containsKey(c)).toList();
+    if (unknown.isNotEmpty) {
+      throw ApiFailure(
+        code: ApiFailure.unexpectedShape,
+        message:
+            'Không lưu được khai báo sức khỏe: máy chủ không biết '
+            '${unknown.join(", ")}. Hãy cập nhật ứng dụng rồi thử lại.',
+      );
+    }
+
+    await api.saveConditions([
+      for (final code in declared)
+        DeclaredCondition(
+          conditionId: idOf[code]!,
+          code: code,
+          nameVi: '',
+          conditionType: '',
+          severity: profile.severityOf(code),
+        ),
+    ]);
+  }
+
   /// Leaves the account but keeps the profile, the plans and the diary: they
   /// belong to the account, and logging back in finds them again.
   void signOut() {
     _accountEmail = null;
+    _onboardingCompletedAt = null;
+    // The tokens go with the account, or the next request would still be
+    // authenticated as the user who just signed out.
+    _auth?.logOut();
     notifyListeners();
   }
 
-  /// Changes the details that have nothing to do with health. An empty
-  /// [phone] removes the number.
-  void updateAccount({String? displayName, String? phone}) {
-    if (displayName != null) _displayName = displayName.trim();
-    if (phone != null) _phone = phone.trim().isEmpty ? null : phone.trim();
+  // ONLINE: PUT /auth/me — the display name, and nothing else.
+  //
+  // There used to be a phone number here too. It had no column in `users`
+  // and no endpoint, so it was typed, shown, and gone on the next launch —
+  // and neither of the two apps this one is modelled on asks for one.
+  //
+  // OFFLINE: kept in memory, like everything else.
+  Future<void> updateAccount({required String displayName}) async {
+    final auth = _auth;
+    if (auth == null) {
+      _displayName = displayName.trim();
+      notifyListeners();
+      return;
+    }
+    final account = await auth.updateDisplayName(displayName);
+    // The server's own answer, not the typed text: it trimmed it, and it is
+    // the authority on what is now stored.
+    _displayName = account.displayName;
     notifyListeners();
   }
 
@@ -186,35 +374,89 @@ class AppSession extends ChangeNotifier {
   void deleteAccount() {
     _accountEmail = null;
     _displayName = null;
-    _phone = null;
     reset();
   }
 
   // ── Saved dishes ─────────────────────────────────────────────────
+  //
+  // One set each, and the two are kept exclusive on this side as well,
+  // because `user_food_marks` has one row per (user, food): "saved to try"
+  // and "never suggest this" contradict each other, so setting one clears
+  // the other. Online these two sets are a cache of that table; offline they
+  // are the whole store.
 
-  /// Dishes the user hearted.
+  /// Dishes the user bookmarked.
+  ///
+  /// Affects nothing that gets computed — not the plan, not the score. It is
+  /// a list the user keeps. Said plainly because the icon used to be a heart,
+  /// which promised the system was learning from it.
   final Set<String> lovedIds = {};
 
   /// Dishes the user never wants suggested again. Removed from the candidate
   /// pool before a plan is built, so no score can bring them back.
   final Set<String> neverAgainIds = {};
 
-  void toggleLoved(Food food) {
-    if (!lovedIds.remove(food.id)) {
-      lovedIds.add(food.id);
-      neverAgainIds.remove(food.id);
+  // ONLINE: PUT /foods/{id}/mark.
+  //
+  // OFFLINE: the two sets above are the store.
+  //
+  // The server answers with the state it now holds, and that answer is what
+  // is applied — not what was asked for. The two differ exactly when the
+  // other mark had to go, which is the case a local toggle would get wrong.
+  Future<void> toggleLoved(Food food) async {
+    final wanted = lovedIds.contains(food.id) ? null : FoodMark.loved;
+    await _applyMark(food, wanted);
+  }
+
+  /// Blocks or unblocks a dish.
+  ///
+  /// Throws [ApiFailure] with [ApiFailure.blockWouldEmptyMeal] when this is
+  /// the last dish left in a role some meal needs. Nothing is changed in that
+  /// case, here or on the server, so the caller's switch has to go back.
+  ///
+  /// **It does not touch today's plan.** Blocking a dish that is already on
+  /// the plate leaves it there, and the screen offers to drop or replace it
+  /// as a separate action the user can see. The alternative — quietly
+  /// skipping or regenerating — would change the day's energy figure from
+  /// under a user who only answered a question about future plans.
+  Future<void> setNeverAgain(Food food, bool value) async {
+    await _applyMark(food, value ? FoodMark.blocked : null);
+  }
+
+  Future<void> _applyMark(Food food, String? wanted) async {
+    final api = _foods;
+    final applied = api == null
+        ? wanted
+        : (await api.setMark(food.id, wanted)).kind;
+
+    lovedIds.remove(food.id);
+    neverAgainIds.remove(food.id);
+    switch (applied) {
+      case FoodMark.loved:
+        lovedIds.add(food.id);
+      case FoodMark.blocked:
+        neverAgainIds.add(food.id);
     }
     notifyListeners();
   }
 
-  void setNeverAgain(Food food, bool value) {
-    if (value) {
-      neverAgainIds.add(food.id);
-      lovedIds.remove(food.id);
-    } else {
-      neverAgainIds.remove(food.id);
-    }
-    notifyListeners();
+  // ONLINE: GET /foods?mark=… twice, once per list.
+  //
+  // Read at sign-in rather than when a saved-dishes screen opens: the
+  // bookmark is drawn on every dish tile and in the plan, so a list that
+  // arrived only on that screen would have every heart empty until the user
+  // visited it.
+  Future<void> _pullMarks() async {
+    final api = _foods;
+    if (api == null) return;
+    final loved = await api.markedIds(FoodMark.loved);
+    final blocked = await api.markedIds(FoodMark.blocked);
+    lovedIds
+      ..clear()
+      ..addAll(loved);
+    neverAgainIds
+      ..clear()
+      ..addAll(blocked);
   }
 
   // ── Settings ─────────────────────────────────────────────────────
@@ -247,7 +489,8 @@ class AppSession extends ChangeNotifier {
       ..goal = null
       ..activity = null
       ..conditions.clear()
-      ..allergies.clear();
+      ..allergies.clear()
+      ..severities.clear();
     _preference = null;
     _plans.clear();
     _selectedDay = _dateOnly(DateTime.now());
@@ -362,8 +605,8 @@ class AppSession extends ChangeNotifier {
   /// skipped one back. A weak training signal: the reason may have nothing to
   /// do with taste.
   void setSkipped(MealPlanItem item, bool skipped) {
-    final from = skipped ? MealItemStatus.planned : MealItemStatus.skipped;
-    final to = skipped ? MealItemStatus.skipped : MealItemStatus.planned;
+    final from = skipped ? MealItemStatus.suggested : MealItemStatus.skipped;
+    final to = skipped ? MealItemStatus.skipped : MealItemStatus.suggested;
     if (item.status != from) return;
 
     for (final slot in plan?.slots ?? const <MealSlot>[]) {
@@ -406,8 +649,25 @@ class AppSession extends ChangeNotifier {
   /// both parts were fixed.
   List<Food> get plannedToday => [
     for (final item in plan?.allItems ?? const <MealPlanItem>[])
-      if (item.status == MealItemStatus.planned) item.food,
+      if (item.status == MealItemStatus.suggested) item.food,
   ];
+
+  /// The serving of [food] still on the plate for the day on screen, or
+  /// `null` if there is none.
+  ///
+  /// `suggested` only: an `eaten` serving is already in the diary and cannot
+  /// be taken back off the day, and a `skipped` one is off it already. Used
+  /// by the detail screen to ask what to do with a serving of a dish the
+  /// user has just blocked, rather than deciding for them.
+  MealPlanItem? plannedTodayItem(Food food) {
+    for (final item in plan?.allItems ?? const <MealPlanItem>[]) {
+      if (item.food.id == food.id &&
+          item.status == MealItemStatus.suggested) {
+        return item;
+      }
+    }
+    return null;
+  }
 
   /// Today's allowances, with the used part already subtracted.
   DayBudget get dayBudget => DayBudget.from(
@@ -450,7 +710,7 @@ class AppSession extends ChangeNotifier {
     if (slot != null) {
       for (var i = 0; i < slot.items.length; i++) {
         if (slot.items[i].food.id == food.id &&
-            slot.items[i].status == MealItemStatus.planned) {
+            slot.items[i].status == MealItemStatus.suggested) {
           slot.items[i] = slot.items[i].copyWith(status: MealItemStatus.eaten);
           break;
         }
@@ -481,7 +741,7 @@ class AppSession extends ChangeNotifier {
         if (slot.items[i].food.id == entry.food.id &&
             slot.items[i].status == MealItemStatus.eaten) {
           slot.items[i] = slot.items[i].copyWith(
-            status: MealItemStatus.planned,
+            status: MealItemStatus.suggested,
           );
           break;
         }

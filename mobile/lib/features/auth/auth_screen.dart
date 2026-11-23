@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/api/failure.dart';
 import '../../data/session.dart';
 import 'forgot_password_screen.dart';
 
@@ -33,14 +34,6 @@ abstract final class AuthRules {
     return null;
   }
 
-  /// Optional: empty passes. Otherwise a Vietnamese mobile number, written
-  /// with a leading 0 or +84; spaces are ignored.
-  static String? phone(String? v) {
-    final s = (v ?? '').replaceAll(' ', '');
-    if (s.isEmpty) return null;
-    final valid = RegExp(r'^(0|\+84)\d{9}$').hasMatch(s);
-    return valid ? null : 'Số điện thoại gồm 10 chữ số, bắt đầu bằng 0';
-  }
 }
 
 /// Log in or create an account, on one screen with a switch between the two.
@@ -75,17 +68,64 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
+  /// What the server refused, shown above the form. `null` while nothing has
+  /// gone wrong, which is the only state the offline build ever reaches.
+  String? _problem;
+
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
 
-    setState(() => _busy = true);
-    // Stands in for the network round trip.
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+    setState(() {
+      _busy = true;
+      _problem = null;
+    });
 
-    SessionScope.of(
-      context,
-    ).signIn(email: _email.text, displayName: _registering ? _name.text : null);
+    final session = SessionScope.of(context);
+    try {
+      if (session.isOnline) {
+        // ONLINE: §7.1.1 or §7.1.2.
+        if (_registering) {
+          await session.register(
+            email: _email.text,
+            password: _password.text,
+            displayName: _name.text,
+          );
+        } else {
+          await session.logIn(
+            email: _email.text,
+            password: _password.text,
+          );
+        }
+      } else {
+        // OFFLINE: no server to ask, so the form's own validation is the
+        // whole check. The delay is what the round trip would have cost, and
+        // it is kept so the button behaves the same in both modes.
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+        session.signIn(
+          email: _email.text,
+          displayName: _registering ? _name.text : null,
+        );
+      }
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        // `message` is Vietnamese prose written by the server and is shown
+        // as it is. The two codes below are the ones worth a word of our
+        // own, because the user can act on them.
+        _problem = switch (failure.code) {
+          ApiFailure.emailAlreadyExists =>
+            'Email này đã có tài khoản. Hãy đăng nhập thay vì đăng ký.',
+          ApiFailure.invalidCredentials =>
+            'Email hoặc mật khẩu không đúng.',
+          _ => failure.message,
+        };
+      });
+      return;
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pop(true);
   }
 
@@ -177,6 +217,29 @@ class _AuthScreenState extends State<AuthScreen> {
               else
                 const SizedBox(height: 20),
               const SizedBox(height: 4),
+              if (_problem case final problem?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 18,
+                        color: AppColors.danger,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          problem,
+                          style: text.bodySmall?.copyWith(
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               FilledButton(
                 onPressed: _busy ? null : _submit,
                 child: _busy

@@ -272,9 +272,19 @@ public sealed record MlFoodSafetyRequest
 /// </summary>
 public sealed record MlExclusionReason
 {
-    /// <summary><c>exclude_tag</c> · <c>require_tag</c> · <c>nutrient_limit</c>.</summary>
+    /// <summary>
+    /// <c>exclude_tag</c> · <c>require_tag</c> · <c>nutrient_limit</c> — or
+    /// <c>user_blocked</c>, which is not a value of
+    /// <c>condition_rules.rule_type</c> at all: it is the user's own
+    /// "do not suggest this", and it arrives with
+    /// <see cref="Condition"/> empty.
+    /// </summary>
     public string RuleType { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Empty for <c>user_blocked</c>. There is no condition behind that one,
+    /// and naming one would blame the user's own decision on a medical rule.
+    /// </summary>
     public string Condition { get; init; } = string.Empty;
     public string SeverityMin { get; init; } = string.Empty;
 
@@ -305,6 +315,26 @@ public sealed record MlExclusionReason
     public bool Citable { get; init; }
 
     public string Note { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>user_blocked</c> · <c>tag</c> · <c>serving_threshold</c> ·
+    /// <c>missing_data</c> — the class of reason, so a caller can group them
+    /// without reading the fields above.
+    /// </summary>
+    public string Kind { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>true</c> when the <b>user</b> excluded this dish, not a rule.
+    ///
+    /// <para><b>Read this before treating an unsafe food as unsafe.</b> A
+    /// dish whose only reason is this one is perfectly safe to eat: the user
+    /// asked for it not to be <i>suggested</i>. §7.5.1's
+    /// <c>excludeUnsafe</c> and §7.5.2's <c>isSafeForUser</c> are about
+    /// health, so they must look past it — otherwise a dish the user blocked
+    /// would disappear from search, and the one way back would be a screen
+    /// they can no longer reach.</para>
+    /// </summary>
+    public bool UserChoice { get; init; }
 }
 
 /// <summary>One unsafe food, with every rule it breaks.</summary>

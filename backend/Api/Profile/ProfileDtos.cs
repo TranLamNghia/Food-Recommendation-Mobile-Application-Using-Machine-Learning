@@ -115,6 +115,19 @@ public static class Enums
          "drink"];
 
     /// <summary>
+    /// <c>user_food_marks.kind</c> — the mark a user puts on a dish from the
+    /// food detail screen.
+    ///
+    /// <para>The two are <b>not</b> opposites of one degree.
+    /// <c>loved</c> is a bookmark and changes no recommendation;
+    /// <c>blocked</c> is a hard rule read in Step 2 beside the F1 filter. An
+    /// opinion ("I dislike this") is already a score — a left swipe, or one
+    /// star; this is an instruction ("do not suggest it"), which a score
+    /// cannot keep.</para>
+    /// </summary>
+    public static readonly string[] MarkKind = ["loved", "blocked"];
+
+    /// <summary>
     /// {field name: list}, built by reflection over the fields above rather
     /// than written out by hand, so the dictionary cannot drift away from
     /// them.
@@ -184,12 +197,46 @@ public sealed class UpsertProfileRequest
     // last line of defence, while this layer is the only place that can tell
     // the user *which field* is wrong — a `MySqlException` cannot.
     [Required(ErrorMessage = "Thiếu chiều cao")]
-    [Range(50, 250, ErrorMessage = "Chiều cao phải trong khoảng 50 đến 250 cm")]
+    // The bounds are typed `decimal`, not written as the integer literals
+    // `20` and `300`.
+    //
+    // `[Range(20, 300)]` picks `RangeAttribute(int, int)`, which converts the
+    // value to `int` before comparing — so `19.6` became `20` and PASSED,
+    // then `chk_weight` in MySQL refused the insert and the user got a
+    // `500 INTERNAL_ERROR` instead of a message naming the field. Same for
+    // `49.6` cm against `[Range(50, 250)]`. Found by driving the real server
+    // from the app's own client; the three columns here are the only
+    // `decimal` ones with a range.
+    [Range(typeof(decimal), "50", "250",
+           ParseLimitsInInvariantCulture = true,
+           ErrorMessage = "Chiều cao phải trong khoảng 50 đến 250 cm")]
     public decimal? HeightCm { get; set; }
 
     [Required(ErrorMessage = "Thiếu cân nặng")]
-    [Range(20, 300, ErrorMessage = "Cân nặng phải trong khoảng 20 đến 300 kg")]
+    [Range(typeof(decimal), "20", "300",
+           ParseLimitsInInvariantCulture = true,
+           ErrorMessage = "Cân nặng phải trong khoảng 20 đến 300 kg")]
     public decimal? WeightKg { get; set; }
+
+    /// <summary>
+    /// The weight the user is aiming for — <b>optional</b>, because only
+    /// <c>lose_weight</c> and <c>gain_weight</c> have anything to aim at.
+    ///
+    /// <para>It does <b>not</b> enter Step 1. The energy limit comes from the
+    /// weight the user has now, adjusted by the goal; computing a TDEE from a
+    /// weight they do not have yet would hand them the limits of a body that
+    /// does not exist, and the further off the target the more dangerous
+    /// that gets. The column is there so the app can say how far there is to
+    /// go — see <c>db/migrations/applied/007_target_weight.sql</c>.</para>
+    ///
+    /// <para>Omitting it on a <c>PUT</c> clears it, which is what a PUT
+    /// means and what the app relies on when the goal changes to
+    /// <c>maintain</c>.</para>
+    /// </summary>
+    [Range(typeof(decimal), "20", "300",
+           ParseLimitsInInvariantCulture = true,
+           ErrorMessage = "Cân nặng mục tiêu phải trong khoảng 20 đến 300 kg")]
+    public decimal? TargetWeightKg { get; set; }
 
     [Required(ErrorMessage = "Thiếu mức vận động")]
     [InEnum(nameof(Enums.ActivityLevel))]
@@ -204,6 +251,11 @@ public sealed class UpsertProfileRequest
 public sealed class UserConditionDto
 {
     public uint ConditionId { get; init; }
+
+    /// <summary><c>conditions.code</c>, so a client can recognise a
+    /// declared condition without carrying a table of ids.</summary>
+    public string Code { get; init; } = string.Empty;
+
     public string NameVi { get; init; } = string.Empty;
     public string ConditionType { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;
@@ -218,6 +270,10 @@ public sealed class ProfileResponse
     public int Age { get; init; }
     public decimal HeightCm { get; init; }
     public decimal WeightKg { get; init; }
+
+    /// <summary><c>null</c> when the goal needs no target.</summary>
+    public decimal? TargetWeightKg { get; init; }
+
     public decimal Bmi { get; init; }
     public string BmiCategory { get; init; } = string.Empty;
     public string ActivityLevel { get; init; } = string.Empty;

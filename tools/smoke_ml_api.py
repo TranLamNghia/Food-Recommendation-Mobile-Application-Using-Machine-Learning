@@ -869,12 +869,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     reasons = [r for u in unsafe for r in u["reasons"]]
     check(
-        "every reason names the rule and the condition",
-        all(r["ruleType"] and r["condition"] for r in reasons),
+        "every reason names the rule, and every medical one names its "
+        "condition - a block has none to name",
+        all(r["ruleType"] for r in reasons)
+        and all(r["condition"] for r in reasons if not r["userChoice"]),
     )
     check(
-        "every rule type is one the schema declares",
-        all(r["ruleType"] in ("exclude_tag", "require_tag", "nutrient_limit")
+        "every rule type is one the schema declares, or the user's own block",
+        all(r["ruleType"] in ("exclude_tag", "require_tag", "nutrient_limit",
+                              "user_blocked")
             for r in reasons),
         f"got {sorted({r['ruleType'] for r in reasons})}",
     )
@@ -884,7 +887,12 @@ def main(argv: list[str] | None = None) -> int:
         all(
             (r["tag"] if r["ruleType"].endswith("_tag") else r["nutrient"])
             for r in reasons
+            if not r["userChoice"]
         ),
+    )
+    check(
+        "`kind` and `userChoice` agree with each other",
+        all(r["userChoice"] == (r["kind"] == "user_blocked") for r in reasons),
     )
     check(
         "a missing measurement is reported as missing, not as 0 - F1 "
@@ -921,6 +929,88 @@ def main(argv: list[str] | None = None) -> int:
             "00000000-0000-4000-8000-000000000000"],
         f"got {narrow.get('unknownFoodIds')}",
     )
+
+    # -- A dish the user blocked is unsafe, and NOT unknown --
+    #
+    # The one exclusion that comes from no rule. It is checked through the
+    # endpoint rather than against the filter alone because the mistake it
+    # guards against lives here: this endpoint also asks for "every food the
+    # user can see", and if that call subtracted blocks too, a blocked dish
+    # would be reported as `unknownFoodIds` - "no such food" about a dish the
+    # same response holds a reason for.
+    print("\n§8.8  foods/safety - a dish the user blocked")
+    blocked_dish = safe[0]
+    status, before_scores = call("POST", "/predict", {"userId": uid}, key=key)
+    equals("scoring before the block returns 200", status, 200)
+    n_before_f1 = (before_scores or {}).get("nFoodsAfterF1")
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO user_food_marks (user_id, food_id, kind) "
+                "VALUES (%s, %s, 'blocked')",
+                (uid, blocked_dish),
+            )
+        cn.commit()
+
+        status, blocked_body = call(
+            "POST", "/foods/safety",
+            {"userId": uid, "foodIds": [blocked_dish]}, key=key)
+        equals("the request returns 200", status, 200)
+        blocked_body = blocked_body or {}
+        equals(
+            "the dish is no longer safe",
+            blocked_body.get("safeFoodIds"), [])
+        equals(
+            "and it is NOT unknown - it is a dish the user can unblock",
+            blocked_body.get("unknownFoodIds"), [])
+        blocked_unsafe = blocked_body.get("unsafe") or []
+        equals("it comes back with reasons", len(blocked_unsafe), 1)
+        mine = [r for r in (blocked_unsafe[0]["reasons"] if blocked_unsafe
+                            else []) if r["userChoice"]]
+        equals("exactly one of them is the user's own", len(mine), 1)
+        if mine:
+            equals("its kind is user_blocked", mine[0]["kind"], "user_blocked")
+            equals("its ruleType matches", mine[0]["ruleType"], "user_blocked")
+            equals(
+                "no condition is attributed to it - that would blame the "
+                "user's choice on a medical rule",
+                (mine[0]["condition"], mine[0]["severityMin"]), ("", ""))
+            check(
+                "and it cannot be quoted as a sourced recommendation",
+                mine[0]["citable"] is False,
+            )
+        status, scored = call("POST", "/predict", {"userId": uid}, key=key)
+        equals("scoring still returns 200", status, 200)
+        scored = scored or {}
+        check(
+            "the blocked dish is not scored either - F1 runs before scoring, "
+            "so no score can bring it back",
+            blocked_dish not in {
+                s["foodId"] for s in (scored.get("scores") or [])
+            },
+            f"{len(scored.get('scores') or [])} foods scored",
+        )
+        equals(
+            "and F1 now leaves one food fewer than it did",
+            scored.get("nFoodsAfterF1"),
+            None if n_before_f1 is None else n_before_f1 - 1)
+    finally:
+        with cn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM user_food_marks "
+                "WHERE user_id = %s AND food_id = %s",
+                (uid, blocked_dish),
+            )
+        cn.commit()
+        cn.close()
+
+    status, restored = call(
+        "POST", "/foods/safety",
+        {"userId": uid, "foodIds": [blocked_dish]}, key=key)
+    equals(
+        "unblocking makes it safe again, and leaves the database as it was",
+        (restored or {}).get("safeFoodIds"), [blocked_dish])
 
     print("\n\u00a78.8  foods/safety - the error cases")
     status, body = call("POST", "/foods/safety", {"userId": uid})

@@ -1,3 +1,4 @@
+// OFFLINE: stand-in F1 rules, used when there is no server.
 import '../models/food.dart';
 import '../rules/condition_rule.dart';
 import '../rules/day_budget.dart';

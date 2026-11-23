@@ -1,3 +1,4 @@
+// OFFLINE: explains a local score in words; the server sends its own.
 import '../models/food.dart';
 import 'food_vector.dart';
 import 'preference_profile.dart';

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 31 public endpoints built so far, against the real
+"""End-to-end test of the 32 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -370,6 +370,45 @@ def main(argv: list[str] | None = None) -> int:
     status, body = call("GET", "/profile", token=token)
     equals("GET /profile 200", status, 200)
     equals("conditions is an empty array", body and body.get("conditions"), [])
+    equals("targetWeightKg is null for a 'maintain' goal",
+           (body or {}).get("targetWeightKg"), None)
+
+    # -- 7.2.2 the target weight, added by migration 007 -------------------
+    #
+    # The app asks for it, shows it, and used to lose it on restart: there
+    # was no column and no field for it. It takes no part in Step 1 — the
+    # energy limit comes from the weight the user has NOW — so the checks
+    # below are both halves of that: it survives the round trip, AND it moves
+    # nothing.
+    print("\n7.2.2  the target weight")
+    losing = dict(profile, goal="lose_weight", targetWeightKg=62.5)
+    status, body = call("PUT", "/profile", losing, token=token)
+    equals("200 with a target weight", status, 200)
+    equals("it comes straight back",
+           float((body or {})["profile"]["targetWeightKg"]), 62.5)
+    status, body = call("GET", "/profile", token=token)
+    equals("and it is stored, not just echoed",
+           float((body or {})["targetWeightKg"]), 62.5)
+
+    status, body = call("GET", "/profile/nutrition-targets", token=token)
+    bmr_with_target = (body or {}).get("bmrKcal")
+    equals("the BMR did NOT move — the target is not an input to step 1",
+           bmr_with_target, 1655)
+
+    for bad, label in ((19.9, "under 20 kg"), (300.1, "over 300 kg")):
+        status, body = call("PUT", "/profile",
+                            dict(losing, targetWeightKg=bad), token=token)
+        equals(f"a target {label} is refused",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    # A PUT replaces the whole profile, so leaving the field out clears it.
+    # That is how the app drops the target when the goal stops needing one.
+    status, body = call("PUT", "/profile", profile, token=token)
+    equals("omitting it clears it, because PUT replaces the profile",
+           (body or {})["profile"].get("targetWeightKg"), None)
+    status, body = call("GET", "/profile", token=token)
+    equals("and the clearing was stored too",
+           (body or {}).get("targetWeightKg"), None)
     status, body = call("GET", "/profile/nutrition-targets", token=token)
     equals("GET nutrition-targets 200", status, 200)
     equals("bmrKcal is still 1655", body and body.get("bmrKcal"), 1655)
@@ -377,6 +416,44 @@ def main(argv: list[str] | None = None) -> int:
     status, body = call("GET", "/auth/me", token=token)
     equals("hasHealthProfile is now true",
            body and body.get("hasHealthProfile"), True)
+
+    # -- PUT /auth/me: renaming the account --------------------------------
+    #
+    # Not in the specification. SS6 lists seven authentication endpoints and
+    # none of them edits the account's own details, while the app has a
+    # settings screen for the display name -- so the name was typed, shown,
+    # and gone on the next launch.
+    print("\n§7.1.4b  PUT /auth/me")
+    status, body = call("PUT", "/auth/me",
+                        {"displayName": "  Ten Moi  "}, token=token)
+    equals("200", status, 200)
+    equals("the name comes back trimmed",
+           (body or {}).get("displayName"), "Ten Moi")
+    check("and the answer is the same shape as GET /auth/me",
+          all(k in (body or {}) for k in
+              ("id", "email", "displayName", "hasHealthProfile",
+               "preferenceStage")),
+          str(sorted((body or {}).keys())))
+
+    status, body = call("GET", "/auth/me", token=token)
+    equals("it was stored, not just echoed",
+           (body or {}).get("displayName"), "Ten Moi")
+
+    for bad, label in ((" N ", "one letter once trimmed"),
+                       ("", "an empty name"),
+                       ("x" * 101, "101 characters")):
+        status, body = call("PUT", "/auth/me", {"displayName": bad},
+                            token=token)
+        equals(f"400 VALIDATION_FAILED for {label}",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        details = ((body or {}).get("error") or {}).get("details") or []
+        check("and the field named is displayName",
+              {d.get("field") for d in details} == {"displayName"},
+              str([d.get("field") for d in details]))
+
+    status, body = call("PUT", "/auth/me", {"displayName": "Smoke Test"},
+                        token=token)
+    equals("the original name goes back", status, 200)
 
     # -- 7.2.4 and 7.2.5 medical conditions -------------------------------
     print("\n7.2.4 / 7.2.5  medical conditions")
@@ -391,6 +468,16 @@ def main(argv: list[str] | None = None) -> int:
     check("returns 2 conditions with nameVi looked up from the conditions table",
           isinstance(body, list) and len(body) == 2
           and all(x.get("nameVi") for x in body), str(body)[:120])
+    # The code comes back too, so the app can recognise what it declared
+    # without carrying a table of ids.
+    check("each declared condition carries its code",
+          isinstance(body, list) and all(x.get("code") for x in body),
+          str([x.get("code") for x in (body or [])]))
+    by_id = {x["conditionId"]: x for x in (body or [])}
+    check("and the severity that was sent",
+          by_id.get(2, {}).get("severity") == "mild"
+          and by_id.get(6, {}).get("severity") == "severe",
+          str({k: v.get("severity") for k, v in by_id.items()}))
 
     status, body = call("PUT", "/profile/conditions", {"conditions": [
         {"conditionId": 2, "severity": "mild"},
@@ -538,6 +625,23 @@ def main(argv: list[str] | None = None) -> int:
         "the ids are what POST /onboarding/candidates/count takes",
         all(isinstance(c["id"], int) and c["id"] > 0 for c in conditions),
     )
+
+    # The stable key, added by migration 008. `id` is AUTO_INCREMENT and
+    # follows the seed's insert order, so a client cannot hard-code it: the
+    # same number means a different illness on a database built in another
+    # order. The app ships its own curated question list keyed by `code` and
+    # looks the ids up here.
+    codes = [c.get("code") for c in conditions]
+    check("every condition carries a code", all(codes), f"got {codes}")
+    check("and the codes are unique", len(set(codes)) == len(codes))
+    check(
+        "the code is the one the app and §7.5.2's example use",
+        "hypertension" in codes,
+        f"got {sorted(c for c in codes if c)}",
+    )
+    # The allergy the app's list used to be missing while F1 had a working
+    # rule for it over 20 dishes.
+    check("soy allergy is declarable", "allergy_soy" in codes)
 
     status, diets = call("GET", "/conditions?type=diet")
     equals("filtering by type returns 200", status, 200)
@@ -979,10 +1083,181 @@ def main(argv: list[str] | None = None) -> int:
                     all(w.get("conditionId") for w in warnings),
                     f"got {[w.get('conditionId') for w in warnings]}",
                 )
+                # The field §7.5.2's own example shows. Before migration 008
+                # there was no `conditions.code`, so the id went out in its
+                # place and the specification said one thing while the API
+                # said another.
+                check(
+                    "and the conditionCode the specification promises",
+                    all(w.get("conditionCode") for w in warnings),
+                    f"got {[w.get('conditionCode') for w in warnings]}",
+                )
+                check(
+                    "which is a code, not a number",
+                    all(isinstance(w.get("conditionCode"), str)
+                        and not w["conditionCode"].isdigit()
+                        for w in warnings),
+                )
 
             # Put the account back, so the later sections see a clean user.
             call("PUT", "/profile/conditions", {"conditions": []},
                  token=token)
+
+        # -- Bookmarks and blocked dishes --
+        #
+        # Not in §6's seven. §7.8.1 refuses a rating of a dish that was never
+        # in a plan AND never in the diary, deliberately, so there is no
+        # table in the specification that accepts an opinion about a dish the
+        # user has not eaten. The bookmark and the "không gợi ý món này nữa"
+        # switch are exactly that, so they have a table and an endpoint of
+        # their own.
+        print("\nPUT /foods/{id}/mark")
+        marked = page1["items"][0]["id"]
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": "loved"}, token=token)
+        equals("bookmarking a dish returns 200", status, 200)
+        body = body or {}
+        equals("the mark comes back as set", body.get("kind"), "loved")
+        equals("about the food asked for", body.get("foodId"), marked)
+        check("and says when it was made", body.get("markedAt"))
+
+        status, again = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": "loved"}, token=token)
+        equals(
+            "sending the same mark twice is idempotent, so a toggle may "
+            "re-send rather than track what it sent",
+            (status, (again or {}).get("kind")), (200, "loved"))
+
+        status, saved = call("GET", "/foods?mark=loved&pageSize=100",
+                             token=token)
+        equals("?mark=loved returns 200", status, 200)
+        equals("and lists exactly the bookmarked dish",
+               [i["id"] for i in (saved or {}).get("items", [])], [marked])
+        status, detail_marked = call("GET", f"/foods/{marked}", token=token)
+        equals("the detail screen sees the bookmark",
+               (detail_marked or {}).get("mark"), "loved")
+
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": "blocked"}, token=token)
+        equals("switching to blocked returns 200", status, 200)
+        equals("and the mark is now blocked", (body or {}).get("kind"),
+               "blocked")
+        status, saved = call("GET", "/foods?mark=loved&pageSize=100",
+                             token=token)
+        equals(
+            "the bookmark is gone - one row per (user, food), so `saved to "
+            "try` and `never suggest this` cannot both be true",
+            (saved or {}).get("totalItems"), 0)
+        status, blocked_list = call("GET", "/foods?mark=blocked&pageSize=100",
+                                    token=token)
+        equals("and ?mark=blocked finds it",
+               [i["id"] for i in (blocked_list or {}).get("items", [])],
+               [marked])
+
+        # The behaviour that matters most here, and the one the F1 change
+        # could easily have broken: F1 now subtracts blocked dishes, so a
+        # browse list built on "what F1 allows" would delete the dish from
+        # search - and the screen that unblocks it is the one it disappeared
+        # from. A block is about being SUGGESTED, not about being safe.
+        status, searched = call("GET", "/foods?pageSize=100", token=token)
+        check(
+            "a blocked dish is still findable with excludeUnsafe=true - the "
+            "only screen that can unblock it is reached by finding it",
+            marked in {i["id"] for i in (searched or {}).get("items", [])},
+        )
+        blocked_row = next(
+            (i for i in (searched or {}).get("items", [])
+             if i["id"] == marked),
+            None)
+        equals("and it is still reported safe to EAT",
+               (blocked_row or {}).get("isSafeForUser"), True)
+        equals("with the block carried as a mark, not as a warning",
+               (blocked_row or {}).get("mark"), "blocked")
+        status, detail_blocked = call("GET", f"/foods/{marked}", token=token)
+        detail_blocked = detail_blocked or {}
+        equals("the detail screen agrees it is safe",
+               detail_blocked.get("isSafeForUser"), True)
+        equals("and gives no health warning for a preference",
+               detail_blocked.get("warnings"), [])
+
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": None}, token=token)
+        equals("clearing the mark returns 200", status, 200)
+        equals("and the mark is gone", (body or {}).get("kind"), None)
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": None}, token=token)
+        equals("clearing a mark that is not there is not an error", status,
+               200)
+
+        for payload, label in (
+            ({"kind": "hated"}, "a kind outside the ENUM"),
+            ({"kind": ""}, "an empty kind"),
+        ):
+            status, body = call(
+                "PUT", f"/foods/{marked}/mark", payload, token=token)
+            equals(f"{label} is refused",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        status, body = call(
+            "PUT", "/foods/00000000-0000-4000-8000-000000000000/mark",
+            {"kind": "loved"}, token=token)
+        equals("a dish that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # -- Blocking the last dish of a role a meal needs --
+        #
+        # The refusal exists because a block is a HARD filter: it sits in the
+        # same layer as an allergy, so emptying a required role leaves a day
+        # that cannot be assembled at all, not merely a thinner one. The
+        # state is built in SQL because building it through the API means
+        # blocking a hundred dishes one at a time.
+        print("\nPUT /foods/{id}/mark - the last dish of a meal")
+        snacks = [r[0] for r in sql(
+            "SELECT id FROM foods WHERE is_active = 1 AND owner_id IS NULL "
+            "AND dish_role = 'snack' ORDER BY id")]
+        check(
+            "the catalogue has snack dishes to work with",
+            len(snacks) >= 2, f"got {len(snacks)}")
+        if len(snacks) >= 2:
+            last, rest = snacks[0], snacks[1:]
+            sql(
+                "INSERT INTO user_food_marks (user_id, food_id, kind) VALUES "
+                + ", ".join(["(%s, %s, 'blocked')"] * len(rest)),
+                tuple(x for food_id in rest for x in (uid, food_id)))
+            status, body = call(
+                "PUT", f"/foods/{last}/mark", {"kind": "blocked"}, token=token)
+            equals(
+                f"blocking the last of {len(snacks)} snack dishes is refused",
+                (status, error_code(body)),
+                (409, "BLOCK_WOULD_EMPTY_MEAL"))
+            message = ((body or {}).get("error") or {}).get("message") or ""
+            check(
+                "and the refusal names the meal that would break, so the "
+                "user knows what the choice costs",
+                "bữa phụ" in message, f"got {message!r}")
+            rows = sql(
+                "SELECT COUNT(*) FROM user_food_marks WHERE user_id = %s "
+                "AND food_id = %s", (uid, last))[0][0]
+            equals("and nothing was written - a refusal must not half-apply",
+                   rows, 0)
+
+            # One left in the role is enough: the refusal is about zero, not
+            # about few. Losing a dish is the user's choice to make; losing a
+            # meal is not a choice, it is a plan that cannot be built.
+            sql(
+                "DELETE FROM user_food_marks WHERE user_id = %s AND food_id "
+                "= %s", (uid, rest[0]))
+            status, body = call(
+                "PUT", f"/foods/{last}/mark", {"kind": "blocked"}, token=token)
+            equals(
+                "with one dish left in the role it goes through - the "
+                "threshold is zero left, not few left",
+                (status, (body or {}).get("kind")), (200, "blocked"))
+
+            sql("DELETE FROM user_food_marks WHERE user_id = %s", (uid,))
+            rows = sql(
+                "SELECT COUNT(*) FROM user_food_marks WHERE user_id = %s",
+                (uid,))[0][0]
+            equals("the marks were cleared before the plan sections", rows, 0)
 
         # -- 7.6 the meal plan --
         print("\n§7.6.2  POST /meal-plans")
@@ -1733,8 +2008,20 @@ def main(argv: list[str] | None = None) -> int:
         equals("both ratings are listed", mine.get("totalItems"), 2)
         equals("one page of them", mine.get("totalPages"), 1)
         items = mine.get("items") or []
-        equals("newest first, so the latest opinion is on top",
-               items and items[0].get("rating"), 2)
+        # Not "the 2-star one is on top". `feedbacks.created_at` is a
+        # DATETIME, so it stores whole seconds — and these two ratings were
+        # sent within one second of each other, which means the data simply
+        # does not record which came later. Asserting an order the column
+        # cannot express is a check that passes or fails on timing.
+        #
+        # What the endpoint does promise, and what the app shows, is that the
+        # list runs newest to oldest. That is checkable.
+        stamps = [i.get("createdAt") for i in items]
+        check("the list runs newest to oldest",
+              stamps == sorted(stamps, reverse=True), str(stamps))
+        check("and both ratings are in it",
+              {i.get("rating") for i in items} == {5, 2},
+              str([i.get("rating") for i in items]))
         check("each row carries the dish it is about",
               all((i.get("food") or {}).get("name") for i in items))
 
@@ -1778,6 +2065,61 @@ def main(argv: list[str] | None = None) -> int:
         rows = sql("SELECT COUNT(*) FROM meal_plan_items WHERE meal_plan_id "
                    "= %s", (plan_id,))[0][0]
         equals("its dishes went with it (ON DELETE CASCADE)", rows, 0)
+
+        # -- A blocked dish must not come back in a new plan --
+        #
+        # The decisive check for the whole feature, and the only one that
+        # crosses all three layers: the app's PUT writes a row, the ML
+        # service's F1 filter subtracts it before anything is scored, and the
+        # plan the backend stores is built from what is left. Every ML signal
+        # is soft - a label of 0.0 lowers a score and leaves the dish
+        # eligible - so this is the one place a rejected dish could reappear.
+        print("\nPUT /foods/{id}/mark - and the next plan")
+        fresh_items = [i for m in (fresh or {}).get("meals") or []
+                       for i in m["items"]]
+        # A dish whose role has alternatives, so the refusal is not what is
+        # being measured here.
+        chosen = next(
+            (i["food"]["id"] for i in fresh_items
+             if i["food"]["dishRole"] in ("main", "soup")),
+            fresh_items[0]["food"]["id"] if fresh_items else None)
+        if chosen is not None:
+            status, body = call(
+                "PUT", f"/foods/{chosen}/mark", {"kind": "blocked"},
+                token=token)
+            equals("blocking a dish the plan just used returns 200",
+                   (status, (body or {}).get("kind")), (200, "blocked"))
+
+            status, after = call(
+                "POST", "/meal-plans",
+                {"planDate": today, "regenerate": True}, token=token)
+            equals("regenerating returns 201", status, 201)
+            after_ids = {i["food"]["id"]
+                         for m in (after or {}).get("meals") or []
+                         for i in m["items"]}
+            check(
+                "the blocked dish is NOT in the new plan - F1 runs before "
+                "scoring, so no score can bring it back",
+                chosen not in after_ids,
+                f"{len(after_ids)} dishes, blocked dish present",
+            )
+            check("and the plan is still a whole day",
+                  len((after or {}).get("meals") or []) == 4
+                  and len(after_ids) > 0)
+            check(
+                "still inside the 10 % commitment, so losing a dish cost "
+                "accuracy and not the guarantee",
+                abs((after or {}).get("calorieDeviationPct") or 999) <= 10,
+                f"got {(after or {}).get('calorieDeviationPct')} %",
+            )
+
+            status, body = call(
+                "PUT", f"/foods/{chosen}/mark", {"kind": None}, token=token)
+            equals("unblocking returns 200", status, 200)
+            rows = sql(
+                "SELECT COUNT(*) FROM user_food_marks WHERE user_id = %s",
+                (uid,))[0][0]
+            equals("and leaves no mark behind", rows, 0)
 
     # -- Time zone: DATETIMEs written by the backend must match MySQL's NOW()
     #
@@ -1843,6 +2185,8 @@ def main(argv: list[str] | None = None) -> int:
         ("PUT", f"/food-diary/{missing_plan}", {"servingSizeG": 100}),
         ("DELETE", f"/food-diary/{missing_plan}", None),
         ("POST", "/feedbacks", {"foodId": missing_plan, "rating": 5}),
+        ("PUT", "/auth/me", {"displayName": "Blocked"}),
+        ("PUT", f"/foods/{missing_plan}/mark", {"kind": "loved"}),
     ):
         status, body = call(method, path, payload, token=access)
         equals(f"403 ACCOUNT_DISABLED at {method} {path}",
@@ -1878,7 +2222,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 31 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 33 endpoints behave per the "
           f"specification against the real database.")
     return 0
 

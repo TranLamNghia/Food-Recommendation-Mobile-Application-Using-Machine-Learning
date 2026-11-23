@@ -16,6 +16,7 @@ namespace Api.Entities;
 public class Conditions
 {
     public uint Id { get; set; }  // primary key
+    public string Code { get; set; } = string.Empty;
     public string NameVi { get; set; } = string.Empty;
     public string ConditionType { get; set; } = string.Empty;
     public string? Description { get; set; }

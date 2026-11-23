@@ -28,6 +28,20 @@ One thing the rules do **not** do here: hard per-day nutrient thresholds
 valid if the day's total stays under the limit; the per-day part is enforced
 by Step 4 phase 5. `daily_limit_rules` returns exactly those limits for Step 4.
 
+**One exclusion is not medical.** `user_food_marks` with `kind = 'blocked'`
+is the user saying "stop suggesting this dish", and it is applied here rather
+than at scoring time because it has to be absolute: every ML signal is soft —
+a label of 0.0 lowers a score and leaves the food eligible — so a dish the
+user has rejected would keep coming back whenever the pool for its role ran
+thin. It therefore sits in the same layer as an allergy, but stays
+distinguishable from one: `ExclusionReason.is_user_choice` is what lets the
+interface say *you* excluded this, and offer to undo it. A medical rule is not
+something a screen can offer to lift.
+
+It applies whenever a `user_id` is given, and only then. The training set is
+built with `public_only=True` and no `user_id`, so one user's dislikes never
+reach the shared model.
+
 A note on language. Identifiers, comments and developer-facing output in this
 file are English. The **data** stays Vietnamese — condition names, tag names,
 rule notes — and so do the few strings that the mobile app shows to end
@@ -63,6 +77,17 @@ EVIDENCE_LABELS = {
 
 #: Severity order. Used both in Python and in SQL via `FIELD()`.
 SEVERITY_ORDER = ("mild", "moderate", "severe")
+
+#: What the interface says when the **user** excluded the food, not a rule.
+#: Vietnamese on purpose, like `EVIDENCE_LABELS`: this is product text. It is
+#: a sentence of its own rather than a row in `conditions`, because no
+#: condition is involved — there is nobody to name and no threshold to quote.
+USER_BLOCKED_LABEL = "Bạn đã chọn không gợi ý món này"
+
+#: `rule_type` for that exclusion. Not a value of `condition_rules.rule_type`
+#: — the row it comes from is in `user_food_marks` — so it can never collide
+#: with a real rule, and a `ExclusionReason` carrying it has no condition.
+USER_BLOCKED_RULE = "user_blocked"
 
 
 @dataclass(frozen=True)
@@ -194,6 +219,7 @@ def allowed_foods(
     conditions: Sequence[Condition] = (),
     public_only: bool = False,
     use_saved_conditions: bool = True,
+    use_blocked_marks: bool = True,
 ) -> list[dict[str, Any]]:
     """The set of foods **safe** for this user, with every hard rule applied.
 
@@ -216,6 +242,22 @@ def allowed_foods(
     declared these?", and the answer for an empty list has to be the whole
     catalogue even for a user who has conditions on file. The food scope
     still follows `user_id`, so the user's own foods stay visible.
+
+    A `user_id` also brings in that user's blocked dishes.
+    `use_saved_conditions=False` does **not** turn that off: the question the
+    filter screen asks is about conditions it has not saved yet, whereas a
+    block is already saved and already means "never suggest this", so
+    answering a count with a dish the user has rejected would be a wrong
+    number.
+
+    `use_blocked_marks=False` is the one way to get them back, and it has
+    exactly one caller: §7.5's safety endpoint, which needs **every food the
+    user can see at all** so that an id in neither list can be called unknown.
+    A blocked dish is not unknown — the user can open it and unblock it — so
+    subtracting it there would make the endpoint report "no such food" about a
+    dish it holds a reason for. Note that `cross_check_f1` does not expose
+    this flag: with the blocks off, `exclusion_reasons` would still report
+    them and the comparison would call every one of them spurious.
     """
     if not conditions and user_id is not None and use_saved_conditions:
         conditions = conditions_for_user(cn, user_id)
@@ -227,6 +269,24 @@ def allowed_foods(
     )
     scope_params: list[Any] = [] if public_only else [user_id]
 
+    # (0) The user's own exclusion. Written as a clause rather than removed
+    # from the result in Python so that the one SQL statement stays the whole
+    # answer: `cross_check_f1` compares this set against `exclusion_reasons`,
+    # and a subtraction done afterwards would be invisible to it.
+    blocked = ""
+    blocked_params: list[Any] = []
+    if user_id is not None and use_blocked_marks:
+        blocked = """
+  AND NOT EXISTS (
+        SELECT 1
+        FROM user_food_marks m
+        WHERE m.food_id = f.id
+          AND m.user_id = %s
+          AND m.kind = 'blocked'
+      )
+"""
+        blocked_params = [user_id]
+
     select = """
 SELECT f.id, f.name, f.category_id, f.dish_role, f.spice_level,
        f.popularity_score, f.owner_id
@@ -236,17 +296,20 @@ WHERE f.is_active = 1
 """
 
     if not conditions:
-        # No conditions at all: F1 reduces to the scope clause. A separate
-        # branch because an empty derived table is invalid SQL.
-        sql = select.format(scope=scope) + " ORDER BY f.name, f.id"
+        # No conditions at all: F1 reduces to the scope clause, plus whatever
+        # the user has blocked. A separate branch because an empty derived
+        # table is invalid SQL — and note that a user with no condition can
+        # still have blocked a dish, so this branch cannot skip clause (0).
+        sql = select.format(scope=scope) + blocked + " ORDER BY f.name, f.id"
         with cn.cursor() as cur:
-            cur.execute(sql, tuple(scope_params))
+            cur.execute(sql, tuple(scope_params + blocked_params))
             return list(cur.fetchall())
 
     cte, cte_params = _conditions_cte(conditions)
 
     body = (
         select.format(scope=scope)
+        + blocked
         + f"""
   -- (1) exclude_tag — drop foods carrying a forbidden tag
   AND NOT EXISTS (
@@ -297,7 +360,10 @@ ORDER BY f.name, f.id
     )
 
     with cn.cursor() as cur:
-        cur.execute(cte + body, tuple(cte_params + scope_params))
+        cur.execute(
+            cte + body,
+            tuple(cte_params + scope_params + blocked_params),
+        )
         return list(cur.fetchall())
 
 
@@ -527,7 +593,13 @@ def soft_rules_by_scope(rules: Sequence[SoftRule]) -> dict[str, list[SoftRule]]:
 
 @dataclass(frozen=True)
 class ExclusionReason:
-    """One hard rule that a food violates."""
+    """One reason a food is not on the menu.
+
+    Usually a hard rule it violates. It can also be `USER_BLOCKED_RULE`, in
+    which case `condition` and `severity_min` are empty strings on purpose:
+    there is no condition behind it, and writing one in would attribute the
+    user's own decision to a medical rule.
+    """
 
     food_id: str
     name: str
@@ -573,16 +645,40 @@ class ExclusionReason:
         return self.rule_type == "nutrient_limit" and self.value is None
 
     @property
+    def is_user_choice(self) -> bool:
+        """Whether the user put this exclusion there — and can take it away.
+
+        The reason the two are kept apart at all. Unblocking the dish undoes
+        this one, so the interface may offer that; an allergy rule is not
+        something a screen can offer to lift, and showing both in the same
+        voice would invite the user to try.
+        """
+        return self.rule_type == USER_BLOCKED_RULE
+
+    @property
     def kind(self) -> str:
         """The class of reason, so the interface can group them.
 
+        - `user_blocked`       — the user asked not to be suggested this dish
         - `tag`                — carries a forbidden tag, or lacks a required one
         - `serving_threshold`  — the per-serving measurement exceeds a hard limit
         - `missing_data`       — no measurement, so it does not pass
         """
+        if self.is_user_choice:
+            return USER_BLOCKED_RULE
         if self.rule_type in ("exclude_tag", "require_tag"):
             return "tag"
         return "missing_data" if self.missing_data else "serving_threshold"
+
+    @property
+    def sentence(self) -> str | None:
+        """The ready-made Vietnamese line, where one exists without context.
+
+        Only `user_blocked` has one: the other three need the condition name,
+        the tag or the two numbers to say anything true, and assembling those
+        is the interface's job, not this layer's.
+        """
+        return USER_BLOCKED_LABEL if self.is_user_choice else None
 
     @property
     def excess(self) -> float | None:
@@ -621,11 +717,16 @@ def exclusion_reasons(
     Returns `{food_id: [reason, ...]}`. A food may violate several rules, and
     every violated rule is listed: one reason is not enough for the user to
     understand, because fixing one rule does not make the food acceptable.
+    A dish can therefore carry both a medical reason and the user's own, and
+    the list says so rather than picking one.
     """
     if not conditions and user_id is not None:
         conditions = conditions_for_user(cn, user_id)
-    if not conditions:
-        # With no conditions, F1 excludes nothing.
+    if not conditions and user_id is None:
+        # No conditions, and nobody who could have blocked a dish: F1 excludes
+        # nothing. A user with no condition does NOT land here — their blocked
+        # dishes still need a reason, or `cross_check_f1` would call them
+        # unexplained, which is precisely the bug it is there to catch.
         return {}
 
     scope = (
@@ -634,6 +735,26 @@ def exclusion_reasons(
         else "(f.owner_id IS NULL OR f.owner_id <=> %s)"
     )
     scope_params: list[Any] = [] if public_only else [user_id]
+
+    # Clause (0) of `allowed_foods`, as a branch. The literals stand in for
+    # the columns the other three read off `condition_rules`: there is no rule
+    # row behind this one. `definitional` is the honest evidence level — it is
+    # true because the user said so — and it keeps `is_citable` false, so
+    # nothing can quote a dislike as a published recommendation.
+    blocked_branch = f"""
+SELECT f.id AS food_id, f.name, f.dish_role,
+       '{USER_BLOCKED_RULE}' AS rule_type,
+       '' AS condition_name, '' AS severity_min,
+       NULL AS tag,
+       NULL AS nutrient, NULL AS comparator,
+       NULL AS threshold, NULL AS value,
+       'definitional' AS evidence_level, '' AS note
+FROM foods f
+JOIN user_food_marks m ON m.food_id = f.id AND m.kind = 'blocked'
+WHERE f.is_active = 1
+  AND {scope}
+  AND m.user_id = %s
+"""
 
     tag_branch = (
         _SELECT_REASON.format(
@@ -712,17 +833,31 @@ WHERE f.is_active = 1
 """
     )
 
-    cte, cte_params = _conditions_cte(conditions)
+    # Assembled rather than concatenated outright, because either half can be
+    # absent: a user with blocks and no condition gets one branch, and a
+    # scenario run with conditions and no user gets the other three. The
+    # parameters have to follow the same order as the text they belong to.
+    cte = ""
+    cte_params: list[Any] = []
+    branches: list[str] = []
+    branch_params: list[Any] = []
+
+    if user_id is not None:
+        branches.append(blocked_branch)
+        branch_params += scope_params + [user_id]
+
+    if conditions:
+        cte, cte_params = _conditions_cte(conditions)
+        for branch in (tag_branch, required_branch, threshold_branch):
+            branches.append(branch)
+            branch_params += scope_params
+
     sql = (
         cte
-        + tag_branch
-        + "UNION ALL"
-        + required_branch
-        + "UNION ALL"
-        + threshold_branch
+        + "UNION ALL".join(branches)
         + "ORDER BY name, food_id, rule_type"
     )
-    params = cte_params + scope_params + scope_params + scope_params
+    params = cte_params + branch_params
 
     with cn.cursor() as cur:
         cur.execute(sql, tuple(params))
@@ -847,7 +982,7 @@ def main() -> int:
 
             severe = conditions_by_name(cn, names, "severe")
             soft = soft_rule_rows(cn, severe)
-            per_day = daily_limits(cn, severe)
+            per_day = daily_limit_rules(cn, severe)
             if soft:
                 print(
                     "    soft:    "

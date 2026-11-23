@@ -67,6 +67,21 @@ CREATE TABLE users (
 -- Từ điển bệnh lý / dị ứng / chế độ ăn. Bảng cha của condition_rules.
 CREATE TABLE conditions (
     id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    -- Mã bền, dùng để NỐI HỆ THỐNG; `id` dùng để nối bảng.
+    --
+    -- `id` là khóa thay thế tự tăng, nên thứ tự chèn của `seed.sql` quyết
+    -- định giá trị: app hard-code `conditionId: 2` sẽ đúng trên một CSDL và
+    -- sai trên CSDL khác mà không báo gì — vẫn khai một bệnh, chỉ là bệnh
+    -- khác, rồi Bộ lọc F1 loại nhầm nhóm món.
+    --
+    -- Vốn từ này đã có sẵn và đang chạy: `conditionCode: "hypertension"` là
+    -- hình dạng API 7.5.2 hứa, và `mobile/lib/data/mock/mock_rules.dart`
+    -- khóa toàn bộ quy tắc F1 bản ngoại tuyến theo đúng các chuỗi này.
+    --
+    -- Xem `db/migrations/applied/008_condition_code.sql`.
+    code           VARCHAR(40)  NOT NULL UNIQUE,
+
     name_vi        VARCHAR(100) NOT NULL UNIQUE,
     condition_type ENUM('disease','allergy','intolerance','diet') NOT NULL,
     description    VARCHAR(255) NULL
@@ -287,6 +302,21 @@ CREATE TABLE health_profiles (
     date_of_birth         DATE         NOT NULL,
     height_cm             DECIMAL(5,2) NOT NULL,
     weight_kg             DECIMAL(5,2) NOT NULL,
+
+    -- Cân nặng người dùng MUỐN đạt. Dữ liệu người dùng khai, KHÔNG phải đầu
+    -- vào của Bước 1: hạn mức năng lượng đi từ `weight_kg` hiện tại qua
+    -- Mifflin-St Jeor rồi cộng/trừ 500 kcal theo `goal`. Tính TDEE theo cân
+    -- nặng mục tiêu sẽ cho hạn mức của một cơ thể chưa tồn tại, và càng xa
+    -- đích thì càng nguy hiểm.
+    --
+    -- Cho NULL vì chỉ `lose_weight` và `gain_weight` cần tới nó; `maintain`
+    -- và `healthy_eating` không có đích nào để nhắm nên app không hỏi. NOT
+    -- NULL sẽ buộc bịa một con số cho hai nửa còn lại.
+    --
+    -- Dùng cho dòng "còn bao nhiêu kg nữa" và cho theo dõi tiến độ cùng
+    -- `body_logs`. Xem `db/migrations/applied/007_target_weight.sql`.
+    target_weight_kg      DECIMAL(5,2) NULL,
+
     -- Thuộc tính DẪN XUẤT, không phải dữ liệu lưu trữ. Dùng VIRTUAL nên
     -- MySQL không ghi byte nào xuống đĩa, chỉ tính lúc đọc — do đó không có
     -- dư thừa lưu trữ và không vi phạm chuẩn 3. Trong ERD vẽ bằng nét đứt.
@@ -332,6 +362,11 @@ CREATE TABLE health_profiles (
     -- chk_height chặn luôn lỗi chia cho 0 ở cột bmi
     CONSTRAINT chk_height    CHECK (height_cm BETWEEN 50 AND 250),
     CONSTRAINT chk_weight    CHECK (weight_kg BETWEEN 20 AND 300),
+    -- Cùng khoảng với chk_weight, vì nó cũng là một cân nặng. KHÔNG đối
+    -- chiếu với `goal`: ràng buộc kiểu "giảm cân thì mục tiêu phải nhỏ hơn
+    -- cân hiện tại" sẽ chặn người đã giảm quá đích khi họ sửa cân nặng.
+    CONSTRAINT chk_target_weight CHECK (target_weight_kg IS NULL
+                                        OR target_weight_kg BETWEEN 20 AND 300),
     CONSTRAINT chk_macro_sum CHECK (target_protein_pct + target_carbs_pct
                                     + target_fat_pct = 100),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -751,6 +786,38 @@ CREATE TABLE food_diary (
     INDEX idx_compliance (user_id, ate_on, meal_type, food_id),
     -- Bước 2: loại món đã ăn trong N ngày gần đây
     INDEX idx_user_food  (user_id, food_id, ate_on)
+) ENGINE=InnoDB;
+
+
+-- ── user_food_marks ───────────────────────────────────────────────────────
+-- Dấu người dùng đặt lên một món, từ màn chi tiết món.
+--
+-- `blocked` là một quy tắc CỨNG, đọc ở Bước 2 cạnh Bộ lọc F1 — không phải
+-- một tín hiệu cho vector. Mọi tín hiệu ưa thích đều mềm: nhãn 0.0 trọng số
+-- 1.0 vẫn để món đủ điều kiện, và Bước 4 sẽ chọn nó nếu một vai trò cạn lựa
+-- chọn. Mà nút này hứa "không bao giờ".
+--
+--   ý kiến  ("không thích")  -> điểm số. Đã có: vuốt trái, chấm 1 sao.
+--   câu lệnh ("đừng gợi ý")  -> bộ lọc. Bảng này.
+--
+-- `loved` thì KHÔNG ảnh hưởng gợi ý và không nên: nó là dấu trang.
+--
+-- Khóa chính là cặp `(user_id, food_id)`, nên một món chỉ mang một dấu — luật
+-- loại trừ nằm ở CSDL thay vì ở app. Xem
+-- `db/migrations/applied/009_user_food_marks.sql`.
+CREATE TABLE user_food_marks (
+    user_id    CHAR(36) NOT NULL,
+    food_id    CHAR(36) NOT NULL,
+    kind       ENUM('loved','blocked') NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (user_id, food_id),
+
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (food_id) REFERENCES foods(id) ON DELETE CASCADE,
+
+    -- Bước 2 hỏi đúng câu này mỗi lần dựng thực đơn.
+    INDEX idx_kind (user_id, kind)
 ) ENGINE=InnoDB;
 
 

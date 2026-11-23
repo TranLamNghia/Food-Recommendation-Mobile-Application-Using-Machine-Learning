@@ -34,7 +34,7 @@ class DailyPlanScreen extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: plan == null
-            ? const _MissingProfile()
+            ? _NoPlan(complete: session.profile.isComplete)
             : _PlanBody(session: session, plan: plan),
       ),
     );
@@ -221,8 +221,14 @@ class _MealSection extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const Spacer(),
+            // `onPlateKcal`, not `actualKcal`: a skipped serving is off the
+            // meal, and showing a lunch as 620 kcal when the user removed
+            // the 320 kcal half of it is simply a wrong number on screen.
+            // `actualKcal` stays what it is — the plan as generated, which
+            // is what the ±10 % commitment is measured on — and the line
+            // below names the difference instead of hiding it.
             Text(
-              '${formatNumber(slot.actualKcal)} / '
+              '${formatNumber(slot.onPlateKcal)} / '
               '${formatNumber(slot.targetKcal)} kcal',
               style: const TextStyle(
                 fontSize: 13,
@@ -232,6 +238,18 @@ class _MealSection extends StatelessWidget {
             ),
           ],
         ),
+        if (slot.onPlateKcal < slot.actualKcal) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Đã bỏ ${slot.skippedItems.length} món · '
+            '−${formatNumber(slot.actualKcal - slot.onPlateKcal)} kcal so '
+            'với thực đơn gốc',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         if (slot.items.isEmpty)
           const _EmptySlot()
@@ -342,33 +360,57 @@ class _ExplorationNote extends StatelessWidget {
 
 /// Shown when the profile does not hold enough data to compute the
 /// targets.
-class _MissingProfile extends StatelessWidget {
-  const _MissingProfile();
+/// There is no plan for the day on screen.
+///
+/// Two different reasons, and telling them apart matters. The profile being
+/// incomplete is the user's to fix and the message says so. A **complete**
+/// profile with no plan is not the user's fault at all — it is a day the plan
+/// has not been generated for — and the old single message told those users
+/// their health profile was missing information and to start over, which was
+/// both wrong and alarming.
+///
+/// Offline the second case cannot happen: finishing the survey builds a plan
+/// at once. It appears with a server, where the profile is read back on
+/// signing in and the plan is fetched separately.
+class _NoPlan extends StatelessWidget {
+  const _NoPlan({required this.complete});
+
+  /// Whether the six fields step 1 needs all have answers.
+  final bool complete;
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.info_outline_rounded,
+            Icon(
+              complete
+                  ? Icons.restaurant_menu_rounded
+                  : Icons.info_outline_rounded,
               size: 44,
               color: AppColors.textTertiary,
             ),
             const SizedBox(height: 16),
             Text(
-              'Chưa tính được hạn mức',
-              style: Theme.of(context).textTheme.titleLarge,
+              complete
+                  ? 'Chưa có thực đơn cho ngày này'
+                  : 'Chưa tính được hạn mức',
+              style: text.titleLarge,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Hồ sơ sức khỏe còn thiếu thông tin nên chưa suy ra được nhu '
-              'cầu năng lượng. Hãy khai báo lại từ đầu.',
-              style: Theme.of(context).textTheme.bodyMedium,
+              complete
+                  ? 'Hạn mức dinh dưỡng của bạn đã có. Thực đơn cho ngày '
+                        'này thì chưa được tạo.'
+                  : 'Hồ sơ sức khỏe còn thiếu thông tin nên chưa suy ra '
+                        'được nhu cầu năng lượng. Hãy khai báo lại từ đầu.',
+              style: text.bodyMedium,
               textAlign: TextAlign.center,
             ),
           ],

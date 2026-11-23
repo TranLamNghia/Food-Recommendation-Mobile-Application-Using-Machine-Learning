@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_card.dart';
-import '../../core/widgets/confirm_dialog.dart';
 import '../../data/session.dart';
 import '../onboarding/onboarding_flow.dart';
 import 'account_settings_screen.dart';
@@ -41,25 +40,6 @@ class AccountScreen extends StatelessWidget {
     );
   }
 
-  /// Throws away the profile and what was learned, then asks the questions
-  /// again. For when the user's taste or situation has changed too much for
-  /// editing single answers; the account is untouched.
-  Future<void> _startOver(BuildContext context, AppSession session) async {
-    final ok = await confirmDestructive(
-      context,
-      title: 'Làm lại từ đầu?',
-      body:
-          'Hồ sơ sức khỏe, khẩu vị đã học, thực đơn và nhật ký sẽ bị xóa để '
-          'bạn khai lại. Tài khoản vẫn giữ nguyên. Không hoàn tác được.',
-      action: 'Xóa hết',
-    );
-    if (!ok || !context.mounted) return;
-
-    Navigator.of(
-      context,
-    ).pushAndRemoveUntil(fadeRoute<void>(const OnboardingFlow()), (_) => false);
-    session.reset();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -199,8 +179,8 @@ class AccountScreen extends StatelessWidget {
               child: Column(
                 children: [
                   AppRow(
-                    icon: Icons.favorite_border_rounded,
-                    label: 'Yêu thích',
+                    icon: Icons.bookmark_border_rounded,
+                    label: 'Đã lưu',
                     value: '${session.lovedIds.length} món',
                     onTap: () =>
                         SavedDishesScreen.open(context, SavedKind.loved),
@@ -256,12 +236,6 @@ class AccountScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                  AppRow(
-                    icon: Icons.restart_alt_rounded,
-                    label: 'Xóa dữ liệu và làm lại từ đầu',
-                    destructive: true,
-                    onTap: () => _startOver(context, session),
                   ),
                 ],
               ),

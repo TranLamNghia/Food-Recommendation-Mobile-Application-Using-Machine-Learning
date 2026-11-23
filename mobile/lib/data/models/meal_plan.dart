@@ -31,7 +31,17 @@ enum MealType {
 /// sample weight; see the label mapping table in `DATABASE_DESIGN.md` §7.4.
 enum MealItemStatus {
   /// Just generated, the user has not touched it.
-  planned('planned', 'Chờ ăn'),
+  ///
+  /// Named `suggested`, not `planned`: the column is
+  /// `ENUM('suggested','kept','replaced','eaten','skipped')` and MySQL would
+  /// refuse the string `planned` outright. The two names drifted apart while
+  /// this app had no server to send anything to.
+  suggested('suggested', 'Chờ ăn'),
+
+  /// The user looked at it and decided to keep it, before eating it — a
+  /// signal of its own, weight 0.6 in §4.6, and the one value that was
+  /// missing here entirely.
+  kept('kept', 'Đã giữ'),
 
   /// The user kept it and ate it — a strong signal.
   eaten('eaten', 'Đã ăn'),
@@ -55,7 +65,7 @@ class MealPlanItem {
     required this.food,
     required this.score,
     this.explorationDelta,
-    this.status = MealItemStatus.planned,
+    this.status = MealItemStatus.suggested,
   });
 
   final Food food;
@@ -101,6 +111,20 @@ class MealSlot {
   /// The deviation from the target as a percentage. Positive means over.
   double get deviationPct =>
       targetKcal <= 0 ? 0 : (actualKcal - targetKcal) / targetKcal * 100;
+
+  /// What is left of this meal once the skipped servings are taken out.
+  ///
+  /// See [DailyPlan.onPlateKcal] for why this is a second number rather than
+  /// a correction to [actualKcal].
+  double get onPlateKcal => items.fold(
+    0,
+    (sum, i) =>
+        i.status == MealItemStatus.skipped ? sum : sum + i.food.kcal.toDouble(),
+  );
+
+  /// The servings the user took off this meal, and what they came to.
+  Iterable<MealPlanItem> get skippedItems =>
+      items.where((i) => i.status == MealItemStatus.skipped);
 }
 
 /// One day's meal plan — the `meal_plans` table together with its
@@ -155,6 +179,51 @@ class DailyPlan {
       targetKcal <= 0 ? 0 : (actualKcal - targetKcal) / targetKcal * 100;
 
   bool get withinTolerance => deviationPct.abs() <= 10;
+
+  /// The day's energy **once the skipped servings are taken out**.
+  ///
+  /// A second number and not a correction to [actualKcal], because the two
+  /// answer different questions and both are needed:
+  ///
+  /// - [actualKcal] is the plan **as it was generated**. It is what the ±10 %
+  ///   commitment is measured on, what the parity checks compare against the
+  ///   Python and C# builders, and the only one of the two that can be
+  ///   reproduced from the inputs. Subtracting a user's later skip from it
+  ///   would make the guarantee unfalsifiable: a day could pass by having
+  ///   enough dishes dropped.
+  /// - This one is what the day now comes to, which is the figure a screen
+  ///   next to a target has to show. Leaving a skipped dish in it tells the
+  ///   user their lunch is 620 kcal when they removed the 320 kcal half of
+  ///   it.
+  ///
+  /// It counts `eaten` servings as well as `suggested` ones: they are part of
+  /// the day. What has actually been consumed is a third figure and comes
+  /// from the diary — §7.7.5's `consumed` — not from here.
+  double get onPlateKcal => slots.fold(0, (sum, s) => sum + s.onPlateKcal);
+
+  /// How much energy the user took off the day by skipping, as a positive
+  /// number. `0` when nothing was skipped, which is the usual case.
+  double get skippedKcal => actualKcal - onPlateKcal;
+
+  /// Whether the user has taken anything off the day.
+  bool get hasSkipped => skippedKcal > 0;
+
+  /// [onPlateKcal] against the target, as a percentage. Positive means over.
+  ///
+  /// This is the one a screen shows, because it answers the question the user
+  /// is asking — *am I on target today* — and [deviationPct] stops answering
+  /// it the moment they skip a dish. [deviationPct] remains the figure the
+  /// ±10 % commitment is claimed on, and the two are shown side by side when
+  /// they differ rather than one of them quietly standing in for the other.
+  double get onPlateDeviationPct =>
+      targetKcal <= 0 ? 0 : (onPlateKcal - targetKcal) / targetKcal * 100;
+
+  bool get onPlateWithinTolerance => onPlateDeviationPct.abs() <= 10;
+
+  /// The servings the user took off the day, across every meal.
+  List<MealPlanItem> get skippedItems => [
+    for (final s in slots) ...s.skippedItems,
+  ];
 
   /// The day's total of one nutrient.
   double totalOf(String nutrient) => allItems.fold(

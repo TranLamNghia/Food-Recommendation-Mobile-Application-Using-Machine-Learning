@@ -292,6 +292,61 @@ public sealed class AuthController(AppDbContext db, TokenService tokens)
         });
     }
 
+    // ── Change the account's own details ─────────────────────────────────
+
+    /// <summary>
+    /// Renames the account — <b>not in the specification</b>.
+    ///
+    /// <para>§6 lists seven authentication endpoints and not one of them
+    /// edits the account itself, while the app has a settings screen for the
+    /// display name. The name was typed, shown, and lost on the next launch.
+    /// </para>
+    ///
+    /// <para>It answers with the same body as <c>GET /auth/me</c>, so the
+    /// client has one shape to parse and does not need a second call to see
+    /// the result.</para>
+    /// </summary>
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<IActionResult> UpdateMe(UpdateAccountRequest req)
+    {
+        var userId = User.FindFirst("sub")?.Value;
+        if (userId is null)
+        {
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid, "Token thiếu `sub`");
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user is null)
+        {
+            return Fail(StatusCodes.Status401Unauthorized,
+                        ErrorCode.TokenInvalid, "Tài khoản không còn tồn tại");
+        }
+
+        // Trimmed before the length check has already happened, so a name of
+        // two spaces passed `MinLength(2)` and would be stored as empty. The
+        // check is repeated here on the trimmed value.
+        var name = req.DisplayName.Trim();
+        if (name.Length < 2)
+        {
+            return ApiProblem.Make(
+                StatusCodes.Status400BadRequest, ErrorCode.ValidationFailed,
+                "Dữ liệu gửi lên không hợp lệ", HttpContext.TraceIdentifier,
+                [new ApiError.FieldError
+                {
+                    Field = "displayName",
+                    Message = "Tên hiển thị tối thiểu 2 ký tự",
+                }]);
+        }
+
+        user.DisplayName = name;
+        user.UpdatedAt = Clock.Now;
+        await db.SaveChangesAsync();
+
+        return await Me();
+    }
+
     // ── shared ───────────────────────────────────────────────────────────
 
     private static AuthResponse BuildResponse(TokenPair pair, Users user)

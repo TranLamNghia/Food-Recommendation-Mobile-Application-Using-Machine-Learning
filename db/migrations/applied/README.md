@@ -12,6 +12,9 @@ làm lịch sử thay đổi, không chạy nữa — chạy lại sẽ báo l�
 | `004_evidence_level.sql` | `condition_rules.evidence_level` 4 giá trị + `chk_rule_evidence` |
 | `005_password_resets.sql` | Bảng `password_resets` cho luồng Quên mật khẩu — lược đồ 22 → 23 bảng |
 | `006_refresh_tokens.sql` | Bảng `refresh_tokens` cho xoay vòng token và phát hiện tái dùng — lược đồ 23 → 24 bảng |
+| `007_target_weight.sql` | `health_profiles.target_weight_kg` + `chk_target_weight` — chỗ lưu cân nặng mục tiêu mà app đã hỏi từ đầu nhưng không có cột nào nhận; **không** là đầu vào Bước 1 — 225 → 226 cột |
+| `008_condition_code.sql` | `conditions.code` + `uq_condition_code` — mã bền để nối app vốn đã dùng sẵn bộ mã này, và là trường `conditionCode` mà API 7.5.2 hứa — 226 → 227 cột |
+| `009_user_food_marks.sql` | Bảng `user_food_marks` — dấu trang và “không gợi ý món này nữa”; `blocked` là quy tắc cứng đọc ở Bước 2, không phải tín hiệu cho vector — lược đồ 24 → 25 bảng |
 
 Nguyên tắc từ nay: **`db/schema.sql` luôn là trạng thái hiện hành**. Dựng CSDL
 mới thì chạy `schema.sql` rồi `seed.sql`, không cần đụng tới thư mục này.
