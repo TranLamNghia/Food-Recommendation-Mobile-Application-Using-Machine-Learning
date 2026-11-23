@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 31 public endpoints built so far, against the real
+"""End-to-end test of the 32 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -416,6 +416,44 @@ def main(argv: list[str] | None = None) -> int:
     status, body = call("GET", "/auth/me", token=token)
     equals("hasHealthProfile is now true",
            body and body.get("hasHealthProfile"), True)
+
+    # -- PUT /auth/me: renaming the account --------------------------------
+    #
+    # Not in the specification. SS6 lists seven authentication endpoints and
+    # none of them edits the account's own details, while the app has a
+    # settings screen for the display name -- so the name was typed, shown,
+    # and gone on the next launch.
+    print("\n§7.1.4b  PUT /auth/me")
+    status, body = call("PUT", "/auth/me",
+                        {"displayName": "  Ten Moi  "}, token=token)
+    equals("200", status, 200)
+    equals("the name comes back trimmed",
+           (body or {}).get("displayName"), "Ten Moi")
+    check("and the answer is the same shape as GET /auth/me",
+          all(k in (body or {}) for k in
+              ("id", "email", "displayName", "hasHealthProfile",
+               "preferenceStage")),
+          str(sorted((body or {}).keys())))
+
+    status, body = call("GET", "/auth/me", token=token)
+    equals("it was stored, not just echoed",
+           (body or {}).get("displayName"), "Ten Moi")
+
+    for bad, label in ((" N ", "one letter once trimmed"),
+                       ("", "an empty name"),
+                       ("x" * 101, "101 characters")):
+        status, body = call("PUT", "/auth/me", {"displayName": bad},
+                            token=token)
+        equals(f"400 VALIDATION_FAILED for {label}",
+               (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        details = ((body or {}).get("error") or {}).get("details") or []
+        check("and the field named is displayName",
+              {d.get("field") for d in details} == {"displayName"},
+              str([d.get("field") for d in details]))
+
+    status, body = call("PUT", "/auth/me", {"displayName": "Smoke Test"},
+                        token=token)
+    equals("the original name goes back", status, 200)
 
     # -- 7.2.4 and 7.2.5 medical conditions -------------------------------
     print("\n7.2.4 / 7.2.5  medical conditions")
@@ -1936,6 +1974,7 @@ def main(argv: list[str] | None = None) -> int:
         ("PUT", f"/food-diary/{missing_plan}", {"servingSizeG": 100}),
         ("DELETE", f"/food-diary/{missing_plan}", None),
         ("POST", "/feedbacks", {"foodId": missing_plan, "rating": 5}),
+        ("PUT", "/auth/me", {"displayName": "Blocked"}),
     ):
         status, body = call(method, path, payload, token=access)
         equals(f"403 ACCOUNT_DISABLED at {method} {path}",
@@ -1971,7 +2010,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 31 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 32 endpoints behave per the "
           f"specification against the real database.")
     return 0
 

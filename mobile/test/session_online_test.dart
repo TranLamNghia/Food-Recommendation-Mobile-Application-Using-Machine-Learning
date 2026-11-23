@@ -495,6 +495,59 @@ void main() {
     });
   });
 
+  group('PUT /auth/me renames the account', () {
+    test('online, the name the server stored is the name kept', () async {
+      Map<String, dynamic>? sent;
+      final session = _online((request) async {
+        if (request.method == 'PUT') {
+          sent = jsonDecode(request.body) as Map<String, dynamic>;
+          // The server trimmed it, and it is the authority on what is now
+          // stored — so the app shows its answer, not the typed text.
+          return _json({..._user, 'displayName': 'Lâm Nghĩa'});
+        }
+        return _json(_tokens);
+      });
+
+      await session.updateAccount(displayName: '  Lâm Nghĩa  ');
+
+      expect(sent!['displayName'], 'Lâm Nghĩa');
+      expect(session.displayName, 'Lâm Nghĩa');
+    });
+
+    test('a name the server refuses leaves the old one in place', () async {
+      final session = _online((request) async {
+        if (request.method == 'PUT') {
+          return _envelope(
+            400,
+            'VALIDATION_FAILED',
+            'Tên hiển thị tối thiểu 2 ký tự',
+          );
+        }
+        if (request.url.path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        return _json(_tokens);
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final before = session.displayName;
+
+      await expectLater(
+        session.updateAccount(displayName: 'N'),
+        throwsA(isA<ApiFailure>()),
+      );
+      expect(session.displayName, before);
+    });
+
+    test('offline it is kept in memory, like everything else', () async {
+      final session = AppSession()..signIn(email: 'a@b.vn', displayName: 'A');
+
+      await session.updateAccount(displayName: '  B  ');
+
+      expect(session.displayName, 'B');
+      expect(session.isOnline, isFalse);
+    });
+  });
+
   group('where signing in leads', () {
     /// The point of having an account: someone who answered the questions
     /// last week is not asked them again.

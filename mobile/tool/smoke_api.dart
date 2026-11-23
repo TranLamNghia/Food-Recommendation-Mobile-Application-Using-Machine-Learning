@@ -222,6 +222,23 @@ Future<void> main() async {
   check('a preference stage came back', me.preferenceStage != null,
       '${me.preferenceStage}');
 
+  // PUT /auth/me, which the specification has no slot for: the app has a
+  // settings screen for the display name and there was nowhere to send it.
+  final renamed = await auth.updateDisplayName('  Ten Da Sua  ');
+  check('the display name can be changed, and comes back trimmed',
+      renamed.displayName == 'Ten Da Sua', renamed.displayName);
+  check('and it was stored, not just echoed',
+      (await auth.me()).displayName == 'Ten Da Sua');
+  try {
+    await auth.updateDisplayName(' N ');
+    check('a one-letter name is refused', false, 'it was accepted');
+  } on ApiFailure catch (f) {
+    check('a one-letter name is 400 VALIDATION_FAILED',
+        f.code == ApiFailure.validationFailed, '${f.status} ${f.code}');
+    check('and `details` names displayName',
+        f.forField('displayName') != null, '${f.fields}');
+  }
+
   print('\n§7.1.2  log in again and read the profile back');
   final fresh = ApiClient(baseUrl: base);
   final freshAuth = AuthApi(fresh);
