@@ -5,6 +5,7 @@ import '../../core/widgets/app_card.dart';
 import '../../data/session.dart';
 import '../home/home_shell.dart';
 import '../onboarding/onboarding_flow.dart';
+import '../survey/survey_intro_screen.dart';
 import 'auth_screen.dart';
 
 /// First screen of the app: says what it does, then offers the two ways in.
@@ -41,14 +42,35 @@ class WelcomeScreen extends StatelessWidget {
         .push<bool>(MaterialPageRoute(builder: (_) => AuthScreen(mode: mode)));
     if (ok != true || !context.mounted) return;
 
-    // With the real API this is `GET /auth/me`: an account that already has
-    // a profile reuses it and skips the questions. The mock keeps nothing
-    // between launches, so only a profile filled in earlier this session can
-    // be picked up.
-    final hasPlan = SessionScope.of(context).todayPlan != null;
-    Navigator.of(context).pushReplacement(
-      fadeRoute(hasPlan ? const HomeShell() : const OnboardingFlow()),
-    );
+    final session = SessionScope.of(context);
+    Navigator.of(context).pushReplacement(fadeRoute(nextFor(session)));
+  }
+
+  /// Where an account goes after signing in.
+  ///
+  /// This is the whole point of having an account: someone who answered the
+  /// questions last week must not be asked them again. Which screen that is
+  /// depends on how far they got, and the two modes know that in different
+  /// ways.
+  @visibleForTesting
+  static Widget nextFor(AppSession session) {
+    if (session.isOnline) {
+      // ONLINE: what `GET /auth/me` reported, read back in `logIn`.
+      //
+      // `onboardingCompletedAt` is the server's own record of having
+      // accepted the taste survey, and `isComplete` is true once the six
+      // fields step 1 needs came back from §7.2.1. Three states, in the
+      // order the user passes through them.
+      if (session.hasFinishedOnboarding) return const HomeShell();
+      if (session.profile.isComplete) return const SurveyIntroScreen();
+      return const OnboardingFlow();
+    }
+
+    // OFFLINE: nothing survives a restart, so a plan built earlier in this
+    // session is the only evidence the questions were ever answered.
+    return session.todayPlan != null
+        ? const HomeShell()
+        : const OnboardingFlow();
   }
 
   @override

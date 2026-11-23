@@ -12,6 +12,10 @@ import 'package:nutrition_app/data/api/failure.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 import 'package:nutrition_app/data/session.dart';
 import 'package:nutrition_app/features/auth/auth_screen.dart';
+import 'package:nutrition_app/features/auth/welcome_screen.dart';
+import 'package:nutrition_app/features/home/home_shell.dart';
+import 'package:nutrition_app/features/onboarding/onboarding_flow.dart';
+import 'package:nutrition_app/features/survey/survey_intro_screen.dart';
 import 'package:nutrition_app/features/onboarding/calculating_screen.dart';
 
 http.Response _json(Object body, [int status = 200]) => http.Response(
@@ -488,6 +492,81 @@ void main() {
       await session.saveProfile();
 
       expect(session.isOnline, isFalse);
+    });
+  });
+
+  group('where signing in leads', () {
+    /// The point of having an account: someone who answered the questions
+    /// last week is not asked them again.
+    ///
+    /// The routing used to read `todayPlan != null`, which online is always
+    /// null until the plan endpoints are wired — so a returning user with a
+    /// complete profile was walked through all nine questions again. These
+    /// three cases are the three states an account can be in.
+    Future<AppSession> signedIn({
+      required bool onboarded,
+      required bool hasProfile,
+    }) async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({
+            ..._user,
+            'hasHealthProfile': hasProfile,
+            'onboardingCompletedAt': onboarded
+                ? '2026-11-20T08:02:11Z'
+                : null,
+          });
+        }
+        if (path.endsWith('/profile/nutrition-targets')) {
+          return _json(_targets);
+        }
+        if (path.endsWith('/profile')) {
+          return _json({
+            'gender': 'male',
+            'dateOfBirth': '2004-11-04',
+            'heightCm': 172.0,
+            'weightKg': 68.5,
+            'activityLevel': 'moderate',
+            'goal': 'maintain',
+            'conditions': <dynamic>[],
+          });
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      return session;
+    }
+
+    test('a finished account goes straight to the app', () async {
+      final session = await signedIn(onboarded: true, hasProfile: true);
+
+      expect(session.hasFinishedOnboarding, isTrue);
+      expect(session.profile.isComplete, isTrue);
+      expect(WelcomeScreen.nextFor(session), isA<HomeShell>());
+    });
+
+    test('a profile filled in but no survey yet goes to the survey', () async {
+      final session = await signedIn(onboarded: false, hasProfile: true);
+
+      expect(session.hasFinishedOnboarding, isFalse);
+      expect(session.profile.isComplete, isTrue);
+      expect(WelcomeScreen.nextFor(session), isA<SurveyIntroScreen>());
+    });
+
+    test('a brand new account answers the questions', () async {
+      final session = await signedIn(onboarded: false, hasProfile: false);
+
+      expect(session.profile.isComplete, isFalse);
+      expect(WelcomeScreen.nextFor(session), isA<OnboardingFlow>());
+    });
+
+    /// Offline nothing survives a restart, so a plan built this session is
+    /// the only evidence the questions were answered — and that rule is
+    /// still the right one there.
+    test('offline it still goes by whether a plan was built', () {
+      expect(WelcomeScreen.nextFor(AppSession()), isA<OnboardingFlow>());
     });
   });
 

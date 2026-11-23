@@ -119,6 +119,14 @@ class HealthProfile {
   /// comparison that stops comparing without anyone noticing.
   DateTime? today;
 
+  /// Whether every field step 1 needs has an answer.
+  ///
+  /// The six that feed the formula, which is the same set
+  /// `PUT /profile` requires. Written against [energyTarget] rather than by
+  /// listing the fields again, so the two can never disagree: if the targets
+  /// can be computed, the profile is complete by definition.
+  bool get isComplete => energyTarget != null;
+
   // OFFLINE: the age step 1 needs; online, §7.2.1 sends it.
   int? get age {
     final b = birthday;
