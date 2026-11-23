@@ -115,6 +115,19 @@ public static class Enums
          "drink"];
 
     /// <summary>
+    /// <c>user_food_marks.kind</c> — the mark a user puts on a dish from the
+    /// food detail screen.
+    ///
+    /// <para>The two are <b>not</b> opposites of one degree.
+    /// <c>loved</c> is a bookmark and changes no recommendation;
+    /// <c>blocked</c> is a hard rule read in Step 2 beside the F1 filter. An
+    /// opinion ("I dislike this") is already a score — a left swipe, or one
+    /// star; this is an instruction ("do not suggest it"), which a score
+    /// cannot keep.</para>
+    /// </summary>
+    public static readonly string[] MarkKind = ["loved", "blocked"];
+
+    /// <summary>
     /// {field name: list}, built by reflection over the fields above rather
     /// than written out by hand, so the dictionary cannot drift away from
     /// them.

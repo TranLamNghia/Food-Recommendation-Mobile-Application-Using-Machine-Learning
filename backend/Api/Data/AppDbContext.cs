@@ -49,6 +49,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<MealPlans> MealPlans => Set<MealPlans>();
     public DbSet<Recommendations> Recommendations => Set<Recommendations>();
     public DbSet<FoodDiary> FoodDiary => Set<FoodDiary>();
+    public DbSet<UserFoodMarks> UserFoodMarks => Set<UserFoodMarks>();
     public DbSet<Feedbacks> Feedbacks => Set<Feedbacks>();
     public DbSet<MlTrainingSamples> MlTrainingSamples => Set<MlTrainingSamples>();
     public DbSet<MlEvaluations> MlEvaluations => Set<MlEvaluations>();
@@ -333,6 +334,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.Property(x => x.AteOn).HasColumnName("ate_on");
             e.Property(x => x.MealType).HasColumnName("meal_type");
             e.Property(x => x.PortionMultiplier).HasColumnName("portion_multiplier");
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+        });
+        b.Entity<UserFoodMarks>(e =>
+        {
+            e.ToTable("user_food_marks");
+            e.HasKey(x => new { x.UserId, x.FoodId });
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.FoodId).HasColumnName("food_id");
+            e.Property(x => x.Kind).HasColumnName("kind");
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
         });
         b.Entity<Feedbacks>(e =>
