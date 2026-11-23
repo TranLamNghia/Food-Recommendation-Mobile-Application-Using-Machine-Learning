@@ -61,6 +61,28 @@ public sealed class RegisterRequest
     public string DisplayName { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Body of <c>PUT /auth/me</c>.
+///
+/// <para><b>Not in the specification.</b> §6 lists seven authentication
+/// endpoints and none of them changes the account's own details, while the
+/// app has a settings screen that edits the display name. Without this the
+/// name could be typed and would be gone on the next launch.</para>
+///
+/// <para>The display name is the only field. The email identifies the
+/// account and changing it is a different operation with its own
+/// confirmation flow; the password has §7.1.7 already.</para>
+/// </summary>
+public sealed class UpdateAccountRequest
+{
+    // The same bounds as registration, deliberately: a name that could not
+    // have been registered must not be reachable by editing either.
+    [Required(ErrorMessage = "Thiếu tên hiển thị")]
+    [MinLength(2, ErrorMessage = "Tên hiển thị tối thiểu 2 ký tự")]
+    [MaxLength(100, ErrorMessage = "Tên hiển thị tối đa 100 ký tự")]
+    public string DisplayName { get; set; } = string.Empty;
+}
+
 /// <summary>Body of <c>POST /auth/login</c> — specification §7.1.2.</summary>
 public sealed class LoginRequest
 {
