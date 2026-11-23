@@ -92,6 +92,21 @@ public static class ErrorCode
     /// <see cref="RuleTooRestrictive"/> / <see cref="NoFeasiblePlan"/>.</para>
     /// </summary>
     public const string MlUnavailable = "ML_UNAVAILABLE";
+
+    /// <summary>
+    /// <c>409</c>: the user asked for a dish not to be suggested, and it is
+    /// the last one left in a role some meal cannot be assembled without —
+    /// so honouring the request would make a plan impossible to build, not
+    /// merely poorer.
+    ///
+    /// <para>Its own code rather than <see cref="RuleTooRestrictive"/>,
+    /// which reports the same shape of dead end arrived at by a <b>medical
+    /// rule</b>. The difference matters to the client because the remedy
+    /// does: this one is undone by picking a different dish to block, that
+    /// one by revisiting a declared condition. Not in §4's catalogue —
+    /// neither is the feature.</para>
+    /// </summary>
+    public const string BlockWouldEmptyMeal = "BLOCK_WOULD_EMPTY_MEAL";
 }
 
 /// <summary>Builds an error response in exactly the §2.5 envelope.</summary>

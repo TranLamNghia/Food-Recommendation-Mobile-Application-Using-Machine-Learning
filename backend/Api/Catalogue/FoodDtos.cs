@@ -1,3 +1,5 @@
+using Api.Profile;
+
 namespace Api.Catalogue;
 
 /// <summary>
@@ -31,15 +33,33 @@ public sealed class FoodListItemDto
     public int ServingSizeG { get; init; }
 
     /// <summary>
-    /// Whether the F1 filter lets this user eat it.
+    /// Whether this user may <b>eat</b> it — the medical half of the F1
+    /// filter.
     ///
     /// <para>With <c>excludeUnsafe=true</c> (the default) every row is
     /// <c>true</c>, because the unsafe ones are gone. With <c>false</c> the
     /// list is the whole catalogue and this is what the app shows a warning
     /// on — §7.5.1 asks for a warning rather than hiding the dish, so that
     /// someone can still look a food up.</para>
+    ///
+    /// <para>A dish the user <b>blocked</b> is still <c>true</c> here, and is
+    /// not hidden by <c>excludeUnsafe</c>. F1 removes it from what gets
+    /// <i>suggested</i>, which is a different question from whether it is
+    /// safe — see <see cref="Mark"/>. Were it otherwise, blocking a dish
+    /// would make it vanish from search, and the screen that unblocks it is
+    /// the one it vanished from.</para>
     /// </summary>
     public bool IsSafeForUser { get; init; }
+
+    /// <summary>
+    /// <c>loved</c> when the user bookmarked it, <c>blocked</c> when they
+    /// asked for it not to be suggested, <c>null</c> for neither.
+    ///
+    /// <para>One value and not two flags, because <c>user_food_marks</c> has
+    /// one row per (user, food): "saved to try" and "never suggest this"
+    /// contradict each other, so setting one clears the other.</para>
+    /// </summary>
+    public string? Mark { get; init; }
 }
 
 /// <summary>§7.5.2 — one food in full.</summary>
@@ -55,11 +75,26 @@ public sealed class FoodDetailResponse
     public FoodNutritionDto Nutrition { get; init; } = new();
     public List<FoodTagDto> Tags { get; init; } = [];
 
+    /// <summary>
+    /// Whether this user may <b>eat</b> it. A dish they blocked is still
+    /// <c>true</c>: see <see cref="FoodListItemDto.IsSafeForUser"/>.
+    /// </summary>
     public bool IsSafeForUser { get; init; }
 
     /// <summary>
-    /// Every hard rule this food breaks for this user, each with a sentence
-    /// to show. Empty when the food is safe.
+    /// <c>loved</c> · <c>blocked</c> · <c>null</c> — see
+    /// <see cref="FoodListItemDto.Mark"/>. This is what the detail screen
+    /// draws the bookmark and the "không gợi ý món này nữa" switch from, and
+    /// it is deliberately <b>not</b> a row in <see cref="Warnings"/>: a block
+    /// is a preference, and mixing it into the medical warnings would have
+    /// the screen state a health reason the system does not have.
+    /// </summary>
+    public string? Mark { get; init; }
+
+    /// <summary>
+    /// Every hard <b>medical</b> rule this food breaks for this user, each
+    /// with a sentence to show. Empty when the food is safe to eat, even if
+    /// the user has blocked it.
     /// </summary>
     public List<FoodWarningDto> Warnings { get; init; } = [];
 
@@ -178,4 +213,44 @@ public sealed class MyFeedbackDto
     public int Rating { get; init; }
     public string? Comment { get; init; }
     public DateTime CreatedAt { get; init; }
+}
+
+/// <summary>
+/// The body of <c>PUT /foods/{id}/mark</c> — bookmark a dish, or ask for it
+/// not to be suggested again.
+///
+/// <para><c>kind</c> is <b>nullable on purpose</b>, and <c>null</c> means
+/// "no mark": it is how both the bookmark and the switch are turned off. A
+/// separate <c>DELETE</c> would be the alternative, and would make the app
+/// choose between two verbs for one toggle.</para>
+///
+/// <para>Note that <see cref="InEnumAttribute"/> accepts <c>null</c> and
+/// there is no <c>[Required]</c> here, which is the combination that lets an
+/// absent <c>kind</c> through. An empty body therefore clears the mark, same
+/// as <c>{"kind": null}</c>.</para>
+/// </summary>
+public sealed class FoodMarkRequest
+{
+    [InEnum(nameof(Enums.MarkKind))]
+    public string? Kind { get; init; }
+}
+
+/// <summary>
+/// What <c>PUT /foods/{id}/mark</c> answers with: the mark as it now stands.
+///
+/// <para>The state and not just an acknowledgement, so the app renders from
+/// the server's answer rather than from what it hoped would happen. It
+/// matters here because the two marks are mutually exclusive: bookmarking a
+/// dish that was blocked comes back as <c>loved</c>, and a screen that
+/// assumed otherwise would draw both controls on.</para>
+/// </summary>
+public sealed class FoodMarkResponse
+{
+    public string FoodId { get; init; } = string.Empty;
+
+    /// <summary><c>loved</c> · <c>blocked</c> · <c>null</c> for cleared.</summary>
+    public string? Kind { get; init; }
+
+    /// <summary>When the mark was made, or <c>null</c> once cleared.</summary>
+    public DateTime? MarkedAt { get; init; }
 }

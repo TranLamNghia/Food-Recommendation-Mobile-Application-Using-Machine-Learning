@@ -1103,6 +1103,162 @@ def main(argv: list[str] | None = None) -> int:
             call("PUT", "/profile/conditions", {"conditions": []},
                  token=token)
 
+        # -- Bookmarks and blocked dishes --
+        #
+        # Not in §6's seven. §7.8.1 refuses a rating of a dish that was never
+        # in a plan AND never in the diary, deliberately, so there is no
+        # table in the specification that accepts an opinion about a dish the
+        # user has not eaten. The bookmark and the "không gợi ý món này nữa"
+        # switch are exactly that, so they have a table and an endpoint of
+        # their own.
+        print("\nPUT /foods/{id}/mark")
+        marked = page1["items"][0]["id"]
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": "loved"}, token=token)
+        equals("bookmarking a dish returns 200", status, 200)
+        body = body or {}
+        equals("the mark comes back as set", body.get("kind"), "loved")
+        equals("about the food asked for", body.get("foodId"), marked)
+        check("and says when it was made", body.get("markedAt"))
+
+        status, again = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": "loved"}, token=token)
+        equals(
+            "sending the same mark twice is idempotent, so a toggle may "
+            "re-send rather than track what it sent",
+            (status, (again or {}).get("kind")), (200, "loved"))
+
+        status, saved = call("GET", "/foods?mark=loved&pageSize=100",
+                             token=token)
+        equals("?mark=loved returns 200", status, 200)
+        equals("and lists exactly the bookmarked dish",
+               [i["id"] for i in (saved or {}).get("items", [])], [marked])
+        status, detail_marked = call("GET", f"/foods/{marked}", token=token)
+        equals("the detail screen sees the bookmark",
+               (detail_marked or {}).get("mark"), "loved")
+
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": "blocked"}, token=token)
+        equals("switching to blocked returns 200", status, 200)
+        equals("and the mark is now blocked", (body or {}).get("kind"),
+               "blocked")
+        status, saved = call("GET", "/foods?mark=loved&pageSize=100",
+                             token=token)
+        equals(
+            "the bookmark is gone - one row per (user, food), so `saved to "
+            "try` and `never suggest this` cannot both be true",
+            (saved or {}).get("totalItems"), 0)
+        status, blocked_list = call("GET", "/foods?mark=blocked&pageSize=100",
+                                    token=token)
+        equals("and ?mark=blocked finds it",
+               [i["id"] for i in (blocked_list or {}).get("items", [])],
+               [marked])
+
+        # The behaviour that matters most here, and the one the F1 change
+        # could easily have broken: F1 now subtracts blocked dishes, so a
+        # browse list built on "what F1 allows" would delete the dish from
+        # search - and the screen that unblocks it is the one it disappeared
+        # from. A block is about being SUGGESTED, not about being safe.
+        status, searched = call("GET", "/foods?pageSize=100", token=token)
+        check(
+            "a blocked dish is still findable with excludeUnsafe=true - the "
+            "only screen that can unblock it is reached by finding it",
+            marked in {i["id"] for i in (searched or {}).get("items", [])},
+        )
+        blocked_row = next(
+            (i for i in (searched or {}).get("items", [])
+             if i["id"] == marked),
+            None)
+        equals("and it is still reported safe to EAT",
+               (blocked_row or {}).get("isSafeForUser"), True)
+        equals("with the block carried as a mark, not as a warning",
+               (blocked_row or {}).get("mark"), "blocked")
+        status, detail_blocked = call("GET", f"/foods/{marked}", token=token)
+        detail_blocked = detail_blocked or {}
+        equals("the detail screen agrees it is safe",
+               detail_blocked.get("isSafeForUser"), True)
+        equals("and gives no health warning for a preference",
+               detail_blocked.get("warnings"), [])
+
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": None}, token=token)
+        equals("clearing the mark returns 200", status, 200)
+        equals("and the mark is gone", (body or {}).get("kind"), None)
+        status, body = call(
+            "PUT", f"/foods/{marked}/mark", {"kind": None}, token=token)
+        equals("clearing a mark that is not there is not an error", status,
+               200)
+
+        for payload, label in (
+            ({"kind": "hated"}, "a kind outside the ENUM"),
+            ({"kind": ""}, "an empty kind"),
+        ):
+            status, body = call(
+                "PUT", f"/foods/{marked}/mark", payload, token=token)
+            equals(f"{label} is refused",
+                   (status, error_code(body)), (400, "VALIDATION_FAILED"))
+        status, body = call(
+            "PUT", "/foods/00000000-0000-4000-8000-000000000000/mark",
+            {"kind": "loved"}, token=token)
+        equals("a dish that does not exist is 404",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+
+        # -- Blocking the last dish of a role a meal needs --
+        #
+        # The refusal exists because a block is a HARD filter: it sits in the
+        # same layer as an allergy, so emptying a required role leaves a day
+        # that cannot be assembled at all, not merely a thinner one. The
+        # state is built in SQL because building it through the API means
+        # blocking a hundred dishes one at a time.
+        print("\nPUT /foods/{id}/mark - the last dish of a meal")
+        snacks = [r[0] for r in sql(
+            "SELECT id FROM foods WHERE is_active = 1 AND owner_id IS NULL "
+            "AND dish_role = 'snack' ORDER BY id")]
+        check(
+            "the catalogue has snack dishes to work with",
+            len(snacks) >= 2, f"got {len(snacks)}")
+        if len(snacks) >= 2:
+            last, rest = snacks[0], snacks[1:]
+            sql(
+                "INSERT INTO user_food_marks (user_id, food_id, kind) VALUES "
+                + ", ".join(["(%s, %s, 'blocked')"] * len(rest)),
+                tuple(x for food_id in rest for x in (uid, food_id)))
+            status, body = call(
+                "PUT", f"/foods/{last}/mark", {"kind": "blocked"}, token=token)
+            equals(
+                f"blocking the last of {len(snacks)} snack dishes is refused",
+                (status, error_code(body)),
+                (409, "BLOCK_WOULD_EMPTY_MEAL"))
+            message = ((body or {}).get("error") or {}).get("message") or ""
+            check(
+                "and the refusal names the meal that would break, so the "
+                "user knows what the choice costs",
+                "bữa phụ" in message, f"got {message!r}")
+            rows = sql(
+                "SELECT COUNT(*) FROM user_food_marks WHERE user_id = %s "
+                "AND food_id = %s", (uid, last))[0][0]
+            equals("and nothing was written - a refusal must not half-apply",
+                   rows, 0)
+
+            # One left in the role is enough: the refusal is about zero, not
+            # about few. Losing a dish is the user's choice to make; losing a
+            # meal is not a choice, it is a plan that cannot be built.
+            sql(
+                "DELETE FROM user_food_marks WHERE user_id = %s AND food_id "
+                "= %s", (uid, rest[0]))
+            status, body = call(
+                "PUT", f"/foods/{last}/mark", {"kind": "blocked"}, token=token)
+            equals(
+                "with one dish left in the role it goes through - the "
+                "threshold is zero left, not few left",
+                (status, (body or {}).get("kind")), (200, "blocked"))
+
+            sql("DELETE FROM user_food_marks WHERE user_id = %s", (uid,))
+            rows = sql(
+                "SELECT COUNT(*) FROM user_food_marks WHERE user_id = %s",
+                (uid,))[0][0]
+            equals("the marks were cleared before the plan sections", rows, 0)
+
         # -- 7.6 the meal plan --
         print("\n§7.6.2  POST /meal-plans")
         today = date.today().isoformat()
@@ -1910,6 +2066,61 @@ def main(argv: list[str] | None = None) -> int:
                    "= %s", (plan_id,))[0][0]
         equals("its dishes went with it (ON DELETE CASCADE)", rows, 0)
 
+        # -- A blocked dish must not come back in a new plan --
+        #
+        # The decisive check for the whole feature, and the only one that
+        # crosses all three layers: the app's PUT writes a row, the ML
+        # service's F1 filter subtracts it before anything is scored, and the
+        # plan the backend stores is built from what is left. Every ML signal
+        # is soft - a label of 0.0 lowers a score and leaves the dish
+        # eligible - so this is the one place a rejected dish could reappear.
+        print("\nPUT /foods/{id}/mark - and the next plan")
+        fresh_items = [i for m in (fresh or {}).get("meals") or []
+                       for i in m["items"]]
+        # A dish whose role has alternatives, so the refusal is not what is
+        # being measured here.
+        chosen = next(
+            (i["food"]["id"] for i in fresh_items
+             if i["food"]["dishRole"] in ("main", "soup")),
+            fresh_items[0]["food"]["id"] if fresh_items else None)
+        if chosen is not None:
+            status, body = call(
+                "PUT", f"/foods/{chosen}/mark", {"kind": "blocked"},
+                token=token)
+            equals("blocking a dish the plan just used returns 200",
+                   (status, (body or {}).get("kind")), (200, "blocked"))
+
+            status, after = call(
+                "POST", "/meal-plans",
+                {"planDate": today, "regenerate": True}, token=token)
+            equals("regenerating returns 201", status, 201)
+            after_ids = {i["food"]["id"]
+                         for m in (after or {}).get("meals") or []
+                         for i in m["items"]}
+            check(
+                "the blocked dish is NOT in the new plan - F1 runs before "
+                "scoring, so no score can bring it back",
+                chosen not in after_ids,
+                f"{len(after_ids)} dishes, blocked dish present",
+            )
+            check("and the plan is still a whole day",
+                  len((after or {}).get("meals") or []) == 4
+                  and len(after_ids) > 0)
+            check(
+                "still inside the 10 % commitment, so losing a dish cost "
+                "accuracy and not the guarantee",
+                abs((after or {}).get("calorieDeviationPct") or 999) <= 10,
+                f"got {(after or {}).get('calorieDeviationPct')} %",
+            )
+
+            status, body = call(
+                "PUT", f"/foods/{chosen}/mark", {"kind": None}, token=token)
+            equals("unblocking returns 200", status, 200)
+            rows = sql(
+                "SELECT COUNT(*) FROM user_food_marks WHERE user_id = %s",
+                (uid,))[0][0]
+            equals("and leaves no mark behind", rows, 0)
+
     # -- Time zone: DATETIMEs written by the backend must match MySQL's NOW()
     #
     # The backend once wrote `DateTime.UtcNow`, 7 hours off from the schema's
@@ -1975,6 +2186,7 @@ def main(argv: list[str] | None = None) -> int:
         ("DELETE", f"/food-diary/{missing_plan}", None),
         ("POST", "/feedbacks", {"foodId": missing_plan, "rating": 5}),
         ("PUT", "/auth/me", {"displayName": "Blocked"}),
+        ("PUT", f"/foods/{missing_plan}/mark", {"kind": "loved"}),
     ):
         status, body = call(method, path, payload, token=access)
         equals(f"403 ACCOUNT_DISABLED at {method} {path}",
@@ -2010,7 +2222,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 32 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 33 endpoints behave per the "
           f"specification against the real database.")
     return 0
 

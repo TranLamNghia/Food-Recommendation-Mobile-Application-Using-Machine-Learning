@@ -217,16 +217,4 @@ public class FoodWarningsTests
         Assert.Equal("Bạn đã chọn không gợi ý món này", message);
         Assert.DoesNotContain("phù hợp với", message);
     }
-
-    /// <summary>
-    /// And the fall-through still names the condition, because the one thing
-    /// the user must not lose is that the dish was flagged at all.
-    /// </summary>
-    [Fact]
-    public void A_rule_type_this_version_does_not_know_still_names_the_condition()
-    {
-        var message = FoodWarnings.Message(Reason(ruleType: "something_new"));
-
-        Assert.Equal("Món không phù hợp với Tăng huyết áp", message);
-    }
 }

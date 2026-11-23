@@ -1292,10 +1292,17 @@ def check_csharp_mirror() -> None:
         for m in RE_CS_ARRAY.finditer(text)
     }
 
+    # Two groups of four. The plain arrays answer §7.5.1's "may this dish
+    # appear in this meal", where required and optional are the same answer;
+    # the `…Required` ones answer whether a plan can be assembled at all,
+    # where they are not. An exact set comparison rather than a filter,
+    # because a new array nobody audits is the whole failure mode here — a
+    # typo in a name would otherwise be silently skipped.
+    expected_names = set(MEAL_TYPES) | {m + "required" for m in MEAL_TYPES}
     check(
-        set(on_disk) == set(MEAL_TYPES),
-        f"MealStructure.cs declares {sorted(on_disk)}, the four meals are "
-        f"{sorted(MEAL_TYPES)}",
+        set(on_disk) == expected_names,
+        f"MealStructure.cs declares {sorted(on_disk)}, expected "
+        f"{sorted(expected_names)}",
     )
 
     for meal in MEAL_TYPES:
@@ -1307,6 +1314,34 @@ def check_csharp_mirror() -> None:
             f"MealStructure.{meal.capitalize()} = {actual}, but "
             f"MEAL_STRUCTURE[{meal!r}] required+optional = {expected}",
         )
+        actual_required = on_disk.get(meal + "required")
+        check(
+            actual_required == list(shape.required),
+            f"MealStructure.{meal.capitalize()}Required = {actual_required}, "
+            f"but MEAL_STRUCTURE[{meal!r}].required = "
+            f"{list(shape.required)}",
+        )
+
+    # The role sets alone do not say which roles are indispensable ACROSS the
+    # day, which is what the refusal to block a dish is measured against.
+    # `ml/survey.REQUIRED_ROLES` derives that from the same structure, so the
+    # two derivations have to land on the same four roles.
+    from ml.survey import REQUIRED_ROLES
+
+    derived = sorted({
+        role for meal in MEAL_TYPES for role in on_disk[meal + "required"]
+    })
+    check(
+        derived == sorted(REQUIRED_ROLES),
+        f"the C# required arrays cover {derived}, "
+        f"ml/survey.REQUIRED_ROLES is {sorted(REQUIRED_ROLES)}",
+    )
+    check(
+        "soup" not in derived,
+        f"`soup` must stay OUT of the required roles — it is optional in the "
+        f"one meal that has it, so a catalogue with no soup left still "
+        f"assembles a day. Got {derived}",
+    )
 
     # Every role named on the C# side has to be a real `dish_role`, or the
     # SQL filter silently matches nothing.

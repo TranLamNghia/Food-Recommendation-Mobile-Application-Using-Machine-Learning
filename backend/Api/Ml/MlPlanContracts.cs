@@ -315,6 +315,26 @@ public sealed record MlExclusionReason
     public bool Citable { get; init; }
 
     public string Note { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>user_blocked</c> · <c>tag</c> · <c>serving_threshold</c> ·
+    /// <c>missing_data</c> — the class of reason, so a caller can group them
+    /// without reading the fields above.
+    /// </summary>
+    public string Kind { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>true</c> when the <b>user</b> excluded this dish, not a rule.
+    ///
+    /// <para><b>Read this before treating an unsafe food as unsafe.</b> A
+    /// dish whose only reason is this one is perfectly safe to eat: the user
+    /// asked for it not to be <i>suggested</i>. §7.5.1's
+    /// <c>excludeUnsafe</c> and §7.5.2's <c>isSafeForUser</c> are about
+    /// health, so they must look past it — otherwise a dish the user blocked
+    /// would disappear from search, and the one way back would be a screen
+    /// they can no longer reach.</para>
+    /// </summary>
+    public bool UserChoice { get; init; }
 }
 
 /// <summary>One unsafe food, with every rule it breaks.</summary>
