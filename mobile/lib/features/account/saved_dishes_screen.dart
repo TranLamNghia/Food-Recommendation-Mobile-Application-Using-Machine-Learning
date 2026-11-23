@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/api/failure.dart';
 import '../../data/models/food.dart';
 import '../../data/session.dart';
 import '../food/food_detail_screen.dart';
 
 enum SavedKind { loved, neverAgain }
 
-/// The dishes the user hearted, or the ones they ruled out for good.
+/// The dishes the user bookmarked, or the ones they ruled out for good.
 ///
 /// Every exclusion has to be visible and reversible somewhere: a dish that
 /// silently never comes back looks like a gap in the catalogue.
@@ -37,7 +38,7 @@ class SavedDishesScreen extends StatelessWidget {
         backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         title: Text(
-          loved ? 'Món yêu thích' : 'Không gợi ý nữa',
+          loved ? 'Món đã lưu' : 'Không gợi ý nữa',
           style: Theme.of(context).textTheme.titleLarge,
         ),
       ),
@@ -50,7 +51,7 @@ class SavedDishesScreen extends StatelessWidget {
                   children: [
                     Icon(
                       loved
-                          ? Icons.favorite_border_rounded
+                          ? Icons.bookmark_border_rounded
                           : Icons.block_rounded,
                       size: 44,
                       color: AppColors.textTertiary,
@@ -63,8 +64,8 @@ class SavedDishesScreen extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       loved
-                          ? 'Chạm vào một món trong thực đơn rồi bấm trái tim '
-                                'để lưu lại.'
+                          ? 'Chạm vào một món trong thực đơn rồi bấm dấu '
+                                'trang để lưu lại.'
                           : 'Mở một món và bật "Không gợi ý món này nữa" để '
                                 'loại nó khỏi mọi thực đơn sắp tới.',
                       textAlign: TextAlign.center,
@@ -80,11 +81,31 @@ class SavedDishesScreen extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, i) => _SavedTile(
                 food: foods[i],
-                removeTooltip: loved ? 'Bỏ yêu thích' : 'Cho gợi ý lại',
+                removeTooltip: loved
+                    ? 'Bỏ khỏi món đã lưu'
+                    : 'Cho gợi ý lại',
                 onOpen: () => FoodDetailScreen.open(context, foods[i]),
-                onRemove: () => loved
-                    ? session.toggleLoved(foods[i])
-                    : session.setNeverAgain(foods[i], false),
+                // Neither of these two can be refused — only ADDING a block
+                // can be, when it would empty a meal — so the only thing
+                // that can go wrong here is the network, and it still has to
+                // be said rather than leaving the row sitting there.
+                onRemove: () async {
+                  try {
+                    if (loved) {
+                      await session.toggleLoved(foods[i]);
+                    } else {
+                      await session.setNeverAgain(foods[i], false);
+                    }
+                  } on ApiFailure catch (failure) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(failure.message),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                },
               ),
             ),
     );

@@ -6,6 +6,7 @@ import 'api/api_client.dart';
 import 'api/api_config.dart';
 import 'api/failure.dart';
 import 'api/auth_api.dart';
+import 'api/food_api.dart';
 import 'api/profile_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
@@ -40,6 +41,7 @@ class AppSession extends ChangeNotifier {
     if (client != null) {
       _auth = AuthApi(client);
       _profiles = ProfileApi(client);
+      _foods = FoodApi(client);
     }
   }
 
@@ -50,6 +52,7 @@ class AppSession extends ChangeNotifier {
   final ApiClient? _client;
   AuthApi? _auth;
   ProfileApi? _profiles;
+  FoodApi? _foods;
 
   /// Whether there is a server behind this session.
   ///
@@ -259,6 +262,10 @@ class AppSession extends ChangeNotifier {
 
     final me = await auth.me();
     _onboardingCompletedAt = me.onboardingCompletedAt;
+    // Before the `hasHealthProfile` return below: the marks belong to the
+    // account, not to the profile, so a user who signed up and bookmarked a
+    // dish before answering the questions still has them.
+    await _pullMarks();
     if (me.hasHealthProfile != true) return;
 
     (await api.read()).applyTo(profile);
@@ -371,30 +378,85 @@ class AppSession extends ChangeNotifier {
   }
 
   // ── Saved dishes ─────────────────────────────────────────────────
+  //
+  // One set each, and the two are kept exclusive on this side as well,
+  // because `user_food_marks` has one row per (user, food): "saved to try"
+  // and "never suggest this" contradict each other, so setting one clears
+  // the other. Online these two sets are a cache of that table; offline they
+  // are the whole store.
 
-  /// Dishes the user hearted.
+  /// Dishes the user bookmarked.
+  ///
+  /// Affects nothing that gets computed — not the plan, not the score. It is
+  /// a list the user keeps. Said plainly because the icon used to be a heart,
+  /// which promised the system was learning from it.
   final Set<String> lovedIds = {};
 
   /// Dishes the user never wants suggested again. Removed from the candidate
   /// pool before a plan is built, so no score can bring them back.
   final Set<String> neverAgainIds = {};
 
-  void toggleLoved(Food food) {
-    if (!lovedIds.remove(food.id)) {
-      lovedIds.add(food.id);
-      neverAgainIds.remove(food.id);
+  // ONLINE: PUT /foods/{id}/mark.
+  //
+  // OFFLINE: the two sets above are the store.
+  //
+  // The server answers with the state it now holds, and that answer is what
+  // is applied — not what was asked for. The two differ exactly when the
+  // other mark had to go, which is the case a local toggle would get wrong.
+  Future<void> toggleLoved(Food food) async {
+    final wanted = lovedIds.contains(food.id) ? null : FoodMark.loved;
+    await _applyMark(food, wanted);
+  }
+
+  /// Blocks or unblocks a dish.
+  ///
+  /// Throws [ApiFailure] with [ApiFailure.blockWouldEmptyMeal] when this is
+  /// the last dish left in a role some meal needs. Nothing is changed in that
+  /// case, here or on the server, so the caller's switch has to go back.
+  ///
+  /// **It does not touch today's plan.** Blocking a dish that is already on
+  /// the plate leaves it there, and the screen offers to drop or replace it
+  /// as a separate action the user can see. The alternative — quietly
+  /// skipping or regenerating — would change the day's energy figure from
+  /// under a user who only answered a question about future plans.
+  Future<void> setNeverAgain(Food food, bool value) async {
+    await _applyMark(food, value ? FoodMark.blocked : null);
+  }
+
+  Future<void> _applyMark(Food food, String? wanted) async {
+    final api = _foods;
+    final applied = api == null
+        ? wanted
+        : (await api.setMark(food.id, wanted)).kind;
+
+    lovedIds.remove(food.id);
+    neverAgainIds.remove(food.id);
+    switch (applied) {
+      case FoodMark.loved:
+        lovedIds.add(food.id);
+      case FoodMark.blocked:
+        neverAgainIds.add(food.id);
     }
     notifyListeners();
   }
 
-  void setNeverAgain(Food food, bool value) {
-    if (value) {
-      neverAgainIds.add(food.id);
-      lovedIds.remove(food.id);
-    } else {
-      neverAgainIds.remove(food.id);
-    }
-    notifyListeners();
+  // ONLINE: GET /foods?mark=… twice, once per list.
+  //
+  // Read at sign-in rather than when a saved-dishes screen opens: the
+  // bookmark is drawn on every dish tile and in the plan, so a list that
+  // arrived only on that screen would have every heart empty until the user
+  // visited it.
+  Future<void> _pullMarks() async {
+    final api = _foods;
+    if (api == null) return;
+    final loved = await api.markedIds(FoodMark.loved);
+    final blocked = await api.markedIds(FoodMark.blocked);
+    lovedIds
+      ..clear()
+      ..addAll(loved);
+    neverAgainIds
+      ..clear()
+      ..addAll(blocked);
   }
 
   // ── Settings ─────────────────────────────────────────────────────
@@ -589,6 +651,23 @@ class AppSession extends ChangeNotifier {
     for (final item in plan?.allItems ?? const <MealPlanItem>[])
       if (item.status == MealItemStatus.suggested) item.food,
   ];
+
+  /// The serving of [food] still on the plate for the day on screen, or
+  /// `null` if there is none.
+  ///
+  /// `suggested` only: an `eaten` serving is already in the diary and cannot
+  /// be taken back off the day, and a `skipped` one is off it already. Used
+  /// by the detail screen to ask what to do with a serving of a dish the
+  /// user has just blocked, rather than deciding for them.
+  MealPlanItem? plannedTodayItem(Food food) {
+    for (final item in plan?.allItems ?? const <MealPlanItem>[]) {
+      if (item.food.id == food.id &&
+          item.status == MealItemStatus.suggested) {
+        return item;
+      }
+    }
+    return null;
+  }
 
   /// Today's allowances, with the used part already subtracted.
   DayBudget get dayBudget => DayBudget.from(

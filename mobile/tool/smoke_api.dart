@@ -22,6 +22,7 @@ import 'dart:io';
 import 'package:nutrition_app/data/api/api_client.dart';
 import 'package:nutrition_app/data/api/auth_api.dart';
 import 'package:nutrition_app/data/api/failure.dart';
+import 'package:nutrition_app/data/api/food_api.dart';
 import 'package:nutrition_app/data/api/profile_api.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 
@@ -256,6 +257,65 @@ Future<void> main() async {
           reread.activity == ActivityLevel.moderate);
   check('and the same energy target as before',
       (reread.energyTarget! - localTarget).abs() <= 1);
+
+  print('\nPUT /foods/{id}/mark  bookmarks and blocked dishes');
+  final foods = FoodApi(fresh);
+  final page = await fresh.get('/foods', query: {'pageSize': '3'});
+  final dishIds = [
+    for (final item in page['items'] as List) (item as Map)['id'] as String,
+  ];
+  check('the catalogue answers with dishes to mark', dishIds.length == 3,
+      '${dishIds.length} dishes');
+
+  final dish = dishIds.first;
+  final loved = await foods.setMark(dish, FoodMark.loved);
+  check('bookmarking answers with the mark it stored',
+      loved.kind == FoodMark.loved && loved.foodId == dish, '${loved.kind}');
+  check('and says when', loved.markedAt != null);
+  check('the bookmark is in the saved list',
+      (await foods.markedIds(FoodMark.loved)).contains(dish));
+
+  final again = await foods.setMark(dish, FoodMark.loved);
+  check('sending the same mark twice is idempotent',
+      again.kind == FoodMark.loved);
+
+  final blocked = await foods.setMark(dish, FoodMark.blocked);
+  check('switching to blocked answers blocked',
+      blocked.kind == FoodMark.blocked, '${blocked.kind}');
+  check('and the bookmark is gone - one row per (user, food)',
+      !(await foods.markedIds(FoodMark.loved)).contains(dish));
+  check('while the blocked list has it',
+      (await foods.markedIds(FoodMark.blocked)).contains(dish));
+
+  // The behaviour the F1 change could have broken: a blocked dish must stay
+  // findable, because the only screen that unblocks it is reached by finding
+  // it. `excludeUnsafe` defaults to true, so this is the default path.
+  final searched = await fresh.get('/foods', query: {'pageSize': '100'});
+  final visible = [
+    for (final item in searched['items'] as List)
+      if ((item as Map)['id'] == dish) item,
+  ];
+  check('a blocked dish is still findable with excludeUnsafe=true',
+      visible.length == 1);
+  check('and still reported safe to EAT - a block is about being suggested',
+      visible.isEmpty || visible.single['isSafeForUser'] == true);
+  check('with the block carried as a mark',
+      visible.isEmpty || visible.single['mark'] == FoodMark.blocked);
+
+  final unmarked = await foods.setMark(dish, null);
+  check('a null kind clears the mark', unmarked.kind == null);
+  check('and leaves the account with no marks at all',
+      (await foods.markedIds(FoodMark.loved)).isEmpty &&
+          (await foods.markedIds(FoodMark.blocked)).isEmpty);
+
+  try {
+    await foods.setMark(
+        '00000000-0000-4000-8000-000000000000', FoodMark.loved);
+    check('a dish that does not exist is refused', false);
+  } on ApiFailure catch (f) {
+    check('404 NOT_FOUND', f.code == ApiFailure.notFound,
+        '${f.status} ${f.code}');
+  }
 
   print('\n§7.1.2  a wrong password');
   try {

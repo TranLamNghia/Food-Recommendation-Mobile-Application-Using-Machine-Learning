@@ -99,6 +99,15 @@ class ApiFailure implements Exception {
   static const String accountDisabled = 'ACCOUNT_DISABLED';
   static const String mlUnavailable = 'ML_UNAVAILABLE';
 
+  /// `409` from `PUT /foods/{id}/mark`: the dish is the last one left in a
+  /// role some meal cannot be assembled without, so blocking it would leave
+  /// a day that cannot be built at all.
+  ///
+  /// Recognised rather than merely shown because the screen has to put the
+  /// switch back: the user flipped it, the server refused, and a switch left
+  /// on would be the app claiming something it did not store.
+  static const String blockWouldEmptyMeal = 'BLOCK_WOULD_EMPTY_MEAL';
+
   final String code;
   final String message;
 

@@ -60,7 +60,7 @@ class EnergySummaryCard extends StatelessWidget {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          formatNumber(plan.actualKcal),
+                          formatNumber(plan.onPlateKcal),
                           style: const TextStyle(
                             fontSize: 34,
                             height: 1,
@@ -92,6 +92,26 @@ class EnergySummaryCard extends StatelessWidget {
               _DeviationBadge(plan: plan),
             ],
           ),
+          // Only once something has been skipped. The figure above is the day
+          // as it now stands; this is the plan as it was generated, which is
+          // the one the ±10 % commitment is claimed on. Both are shown
+          // because dropping either would be misleading: without the first
+          // the screen reports food the user removed, without the second the
+          // commitment looks unmet by a choice the builder did not make.
+          if (plan.hasSkipped) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Thực đơn gốc ${formatNumber(plan.actualKcal)} kcal '
+              '(${plan.deviationPct >= 0 ? '+' : '−'}'
+              '${plan.deviationPct.abs().toStringAsFixed(1)}%) · '
+              'bạn đã bỏ ${plan.skippedItems.length} món',
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           _MacroBars(plan: plan),
         ],
@@ -109,9 +129,9 @@ class _DeviationBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ok = plan.withinTolerance;
+    final ok = plan.onPlateWithinTolerance;
     final color = ok ? AppColors.like : AppColors.unknown;
-    final dev = plan.deviationPct;
+    final dev = plan.onPlateDeviationPct;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

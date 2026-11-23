@@ -179,8 +179,8 @@ class AccountScreen extends StatelessWidget {
               child: Column(
                 children: [
                   AppRow(
-                    icon: Icons.favorite_border_rounded,
-                    label: 'Yêu thích',
+                    icon: Icons.bookmark_border_rounded,
+                    label: 'Đã lưu',
                     value: '${session.lovedIds.length} món',
                     onTap: () =>
                         SavedDishesScreen.open(context, SavedKind.loved),

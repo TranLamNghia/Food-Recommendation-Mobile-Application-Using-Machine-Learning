@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:nutrition_app/core/theme/app_theme.dart';
 import 'package:nutrition_app/data/api/api_client.dart';
 import 'package:nutrition_app/data/api/failure.dart';
+import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 import 'package:nutrition_app/data/session.dart';
 import 'package:nutrition_app/features/auth/auth_screen.dart';
@@ -84,6 +85,33 @@ final _targets = {
   ],
 };
 
+/// One page of §7.5.1, holding [ids] and nothing else.
+///
+/// Every handler that lets a sign-in through needs this: the session reads
+/// the user's marked dishes as part of signing in, so a handler without a
+/// `/foods` route fails on a bookmark list rather than on what the test is
+/// about.
+http.Response _foodsPage([List<String> ids = const []]) => _json({
+  'items': [
+    for (final id in ids)
+      {
+        'id': id,
+        'name': 'Món $id',
+        'categoryName': 'Thử',
+        'dishRole': 'main',
+        'spiceLevel': 0,
+        'caloriesKcal': 500,
+        'servingSizeG': 300,
+        'isSafeForUser': true,
+        'mark': null,
+      },
+  ],
+  'page': 1,
+  'pageSize': 100,
+  'totalItems': ids.length,
+  'totalPages': ids.isEmpty ? 0 : 1,
+});
+
 Widget _app(AppSession session, Widget home) => SessionScope(
   session: session,
   child: MaterialApp(theme: AppTheme.light, home: home),
@@ -157,6 +185,7 @@ void main() {
       final session = _online((request) async {
         final path = request.url.path;
         if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
         if (path.endsWith('/auth/me')) {
           return _json({
             ..._user,
@@ -190,9 +219,16 @@ void main() {
       expect(session.hasFinishedOnboarding, isTrue);
       // And the server's own macro split replaced the local default.
       expect(session.profile.proteinPct, 20);
+      // The marked dishes are read between `/auth/me` and `/profile`, and
+      // before the `hasHealthProfile` test below: a bookmark belongs to the
+      // account, not to the health profile, so a user who signed up and
+      // saved a dish before answering the questions still has it. Twice,
+      // because `?mark=` takes one value and there are two lists.
       expect(calls, [
         'POST /api/v1/auth/login',
         'GET /api/v1/auth/me',
+        'GET /api/v1/foods',
+        'GET /api/v1/foods',
         'GET /api/v1/profile',
         'GET /api/v1/profile/nutrition-targets',
       ]);
@@ -206,6 +242,7 @@ void main() {
       final calls = <String>[];
       final session = _online((request) async {
         if (request.url.path.endsWith('/auth/login')) return _json(_tokens);
+        if (request.url.path.endsWith('/foods')) return _foodsPage();
         if (request.url.path.endsWith('/auth/me')) {
           return _json({..._user, 'hasHealthProfile': false});
         }
@@ -214,7 +251,14 @@ void main() {
 
       await session.logIn(email: 'new@example.com', password: 'MatKhau123');
 
-      expect(calls, ['POST /api/v1/auth/login', 'GET /api/v1/auth/me']);
+      // No `/profile` — which is the point. The two `/foods` calls are the
+      // marked-dish lists, which an account without a profile still has.
+      expect(calls, [
+        'POST /api/v1/auth/login',
+        'GET /api/v1/auth/me',
+        'GET /api/v1/foods',
+        'GET /api/v1/foods',
+      ]);
       expect(session.profile.gender, isNull);
       expect(session.hasFinishedOnboarding, isFalse);
     });
@@ -227,6 +271,7 @@ void main() {
       final session = _online((request) async {
         lastAuthorization = request.headers['Authorization'];
         if (request.url.path.endsWith('/auth/login')) return _json(_tokens);
+        if (request.url.path.endsWith('/foods')) return _foodsPage();
         if (request.url.path.endsWith('/auth/me')) {
           return _json({..._user, 'hasHealthProfile': false});
         }
@@ -264,6 +309,7 @@ void main() {
     test('a missing field becomes UNEXPECTED_RESPONSE', () async {
       final session = _online((request) async {
         if (request.url.path.endsWith('/auth/login')) return _json(_tokens);
+        if (request.url.path.endsWith('/foods')) return _foodsPage();
         return _json(const {}); // /auth/me with no id, no email
       });
 
@@ -495,6 +541,132 @@ void main() {
     });
   });
 
+  group('PUT /foods/{id}/mark - bookmarks and blocked dishes', () {
+    /// The answer is applied, not the request. The two differ exactly when
+    /// the other mark had to go, which is the case a local toggle gets wrong.
+    test('the mark that is stored is the one the server reports', () async {
+      final sent = <Map<String, dynamic>>[];
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.contains('/mark')) {
+          sent.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return _json({
+            'foodId': path.split('/')[4],
+            // The server answers `blocked` to a request for `loved`, which
+            // cannot happen in practice but is exactly what tells the two
+            // apart: a session that trusted its own request would now
+            // disagree with the database.
+            'kind': 'blocked',
+            'markedAt': '2026-11-23T10:00:00+07:00',
+          });
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final dish = MockFoods.surveyDeck.first;
+      await session.toggleLoved(dish);
+
+      expect(sent.single['kind'], 'loved');
+      expect(session.neverAgainIds, contains(dish.id));
+      expect(session.lovedIds, isNot(contains(dish.id)));
+    });
+
+    test('toggling a bookmark off sends a null kind', () async {
+      final sent = <Map<String, dynamic>>[];
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) {
+          return _foodsPage(
+            request.url.queryParameters['mark'] == 'loved'
+                ? [MockFoods.surveyDeck.first.id]
+                : const [],
+          );
+        }
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.contains('/mark')) {
+          sent.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return _json({'foodId': path.split('/')[4], 'kind': null});
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      // Read back at sign-in, so the bookmark is drawn filled before any
+      // screen asks for it.
+      final dish = MockFoods.surveyDeck.first;
+      expect(session.lovedIds, contains(dish.id));
+
+      await session.toggleLoved(dish);
+
+      expect(sent.single.containsKey('kind'), isTrue);
+      expect(sent.single['kind'], isNull);
+      expect(session.lovedIds, isNot(contains(dish.id)));
+    });
+
+    /// The refusal of §7.5: this is the last dish left in a role some meal
+    /// needs. Nothing is stored, so nothing may change here either — a
+    /// session that applied it locally would filter the dish out of its own
+    /// plans while the server kept suggesting it.
+    test('a refused block leaves both sets untouched', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.contains('/mark')) {
+          return _envelope(
+            409,
+            'BLOCK_WOULD_EMPTY_MEAL',
+            'Đây là món cuối cùng còn lại cho bữa phụ.',
+          );
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final dish = MockFoods.surveyDeck.first;
+      await expectLater(
+        session.setNeverAgain(dish, true),
+        throwsA(
+          isA<ApiFailure>().having(
+            (f) => f.code,
+            'code',
+            ApiFailure.blockWouldEmptyMeal,
+          ),
+        ),
+      );
+      expect(session.neverAgainIds, isEmpty);
+      expect(session.lovedIds, isEmpty);
+    });
+
+    test('offline, the two sets are the whole store', () async {
+      final session = AppSession();
+      final dish = MockFoods.surveyDeck.first;
+
+      await session.toggleLoved(dish);
+      expect(session.lovedIds, contains(dish.id));
+
+      await session.setNeverAgain(dish, true);
+      expect(session.neverAgainIds, contains(dish.id));
+      expect(session.lovedIds, isNot(contains(dish.id)));
+
+      await session.setNeverAgain(dish, false);
+      expect(session.neverAgainIds, isEmpty);
+      expect(session.isOnline, isFalse);
+    });
+  });
+
   group('PUT /auth/me renames the account', () {
     test('online, the name the server stored is the name kept', () async {
       Map<String, dynamic>? sent;
@@ -526,6 +698,7 @@ void main() {
         if (request.url.path.endsWith('/auth/me')) {
           return _json({..._user, 'hasHealthProfile': false});
         }
+        if (request.url.path.endsWith('/foods')) return _foodsPage();
         return _json(_tokens);
       });
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
@@ -563,6 +736,7 @@ void main() {
       final session = _online((request) async {
         final path = request.url.path;
         if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
         if (path.endsWith('/auth/me')) {
           return _json({
             ..._user,

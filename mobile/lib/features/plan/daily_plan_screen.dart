@@ -221,8 +221,14 @@ class _MealSection extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const Spacer(),
+            // `onPlateKcal`, not `actualKcal`: a skipped serving is off the
+            // meal, and showing a lunch as 620 kcal when the user removed
+            // the 320 kcal half of it is simply a wrong number on screen.
+            // `actualKcal` stays what it is — the plan as generated, which
+            // is what the ±10 % commitment is measured on — and the line
+            // below names the difference instead of hiding it.
             Text(
-              '${formatNumber(slot.actualKcal)} / '
+              '${formatNumber(slot.onPlateKcal)} / '
               '${formatNumber(slot.targetKcal)} kcal',
               style: const TextStyle(
                 fontSize: 13,
@@ -232,6 +238,18 @@ class _MealSection extends StatelessWidget {
             ),
           ],
         ),
+        if (slot.onPlateKcal < slot.actualKcal) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Đã bỏ ${slot.skippedItems.length} món · '
+            '−${formatNumber(slot.actualKcal - slot.onPlateKcal)} kcal so '
+            'với thực đơn gốc',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         if (slot.items.isEmpty)
           const _EmptySlot()

@@ -45,7 +45,7 @@ toàn bộ** — nhãn đặt ở đầu tệp. `data/api/` là **trực tuyến
 
 ```bash
 flutter pub get
-flutter test                  # 156 test
+flutter test                  # 230 test
 flutter run                   # mặc định: chế độ ngoại tuyến
 ```
 
@@ -63,4 +63,21 @@ Khởi động hai service phía sau:
 ```bash
 python tools/run_ml_service.py
 python tools/run_backend.py
+```
+
+## Kiểm chứng tầng mạng trên socket thật
+
+`flutter test` dùng bộ vận chuyển giả, nên nó chỉ chứng minh app tự nhất quán
+với chính mình. Để chứng minh app và server **đồng ý với nhau**, có một công
+cụ dòng lệnh chạy chính tầng API của app qua socket thật:
+
+```bash
+cd mobile && dart run tool/smoke_api.dart   # 62 phép kiểm
+```
+
+Nó **để lại một tài khoản** mỗi lần chạy, `dart-*@example.test`, vì §7.1
+không có endpoint nào xóa tài khoản. Dọn bằng:
+
+```bash
+python -c "import sys; sys.path.insert(0, 'tools'); from smoke_backend import delete_accounts; delete_accounts('dart-xxxx@example.test')"
 ```
