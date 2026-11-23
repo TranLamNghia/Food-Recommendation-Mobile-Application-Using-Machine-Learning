@@ -556,6 +556,19 @@ class ExclusionReasonOut(BaseModel):
     citable: bool
     note: str = ""
 
+    #: `user_blocked` · `tag` · `serving_threshold` · `missing_data` — the
+    #: class of reason, so the backend can group them without parsing the
+    #: fields above.
+    kind: str = "tag"
+
+    #: `True` when the **user** excluded this dish, not a rule. The one
+    #: exclusion a screen may offer to undo, which is why it travels as a flag
+    #: of its own rather than being left for the backend to infer from
+    #: `ruleType`. `condition` and `severityMin` are empty for it: there is no
+    #: condition to name, and inventing one would blame the user's own
+    #: decision on a medical rule.
+    userChoice: bool = False
+
 
 class FoodSafetyOut(BaseModel):
     foodId: str
@@ -1041,10 +1054,19 @@ def foods_safety(request: FoodSafetyRequest) -> FoodSafetyResponse:
         safe_ids = {row["id"] for row in safe}
         # Every food this user can see at all, so an id that is in neither
         # list can be reported as unknown rather than guessed at.
+        #
+        # `use_blocked_marks=False` is why this call is not the same as the
+        # one above with the conditions dropped: a dish the user has blocked
+        # is not unknown to them — they can open it and unblock it — so
+        # leaving it out here would answer "no such food" about a dish this
+        # very response holds a reason for.
         visible = {
             row["id"]
             for row in allowed_foods(
-                cn, user_id=request.userId, use_saved_conditions=False
+                cn,
+                user_id=request.userId,
+                use_saved_conditions=False,
+                use_blocked_marks=False,
             )
         }
 
@@ -1079,6 +1101,8 @@ def foods_safety(request: FoodSafetyRequest) -> FoodSafetyResponse:
                                 evidenceLevel=r.evidence_level,
                                 citable=r.is_citable,
                                 note=r.note or "",
+                                kind=r.kind,
+                                userChoice=r.is_user_choice,
                             )
                             for r in reasons.get(food_id, ())
                         ],

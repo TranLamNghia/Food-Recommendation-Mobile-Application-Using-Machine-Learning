@@ -47,6 +47,8 @@ from ml.f1_filter import (  # noqa: E402
     EVIDENCE_LEVELS,
     EVIDENCE_LABELS,
     ENFORCED_BY,
+    USER_BLOCKED_LABEL,
+    USER_BLOCKED_RULE,
     SoftRule,
     ExclusionReason,
     unenforced_rules,
@@ -1177,6 +1179,43 @@ def check_exclusion_reasons() -> None:
         no_data.kind == "missing_data",
         "PER SERVING: missing data means EXCLUDE (the opposite of the PER DAY "
         "limit, where missing data adds 0 and raises a flag)",
+    )
+
+    # The fourth kind is not a rule at all: the user asked for this dish not
+    # to be suggested. It is a hard filter like the three above — every ML
+    # signal is soft, so a disliked dish would come back whenever its role ran
+    # thin — but the interface must be able to tell it apart, because this one
+    # is the only exclusion the user can lift.
+    mine = _reason(
+        rule_type=USER_BLOCKED_RULE, condition="", severity_min=""
+    )
+    check(mine.kind == "user_blocked", "a user's block -> kind `user_blocked`")
+    check(
+        mine.is_user_choice,
+        "and it reports itself as the user's own choice",
+    )
+    check(
+        mine.sentence == USER_BLOCKED_LABEL,
+        "it carries a ready-made sentence, which no other kind has",
+    )
+    check(
+        over.sentence is None and forbidden_tag.sentence is None,
+        "a medical reason has none: it needs the condition and the numbers to "
+        "say anything true, and assembling those is the interface's job",
+    )
+    check(
+        not any(r.is_user_choice for r in (over, under, no_data, forbidden_tag,
+                                           missing_tag)),
+        "no medical reason claims to be the user's choice — offering to undo "
+        "an allergy rule would invite the user to try",
+    )
+    check(
+        not mine.missing_data and mine.excess is None,
+        "it has no measurement and invents no excess, without blowing up",
+    )
+    check(
+        not mine.is_citable,
+        "and it cannot be cited: `I do not like it` is not a published source",
     )
 
 

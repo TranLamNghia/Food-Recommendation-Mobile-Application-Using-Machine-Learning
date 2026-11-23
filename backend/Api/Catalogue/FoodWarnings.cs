@@ -96,6 +96,17 @@ public static class FoodWarnings
             case "nutrient_limit":
                 return NutrientMessage(reason, condition);
 
+            // Not a rule at all: the user asked for this dish not to be
+            // suggested. It arrives with no condition, so it is handled
+            // before the fall-through below — which names the condition and
+            // would otherwise produce the half-sentence "Món không phù hợp
+            // với ". The ML service has the same sentence in
+            // `USER_BLOCKED_LABEL` for its own reports; the copy that
+            // reaches a user is written here, like every other sentence in
+            // this file.
+            case "user_blocked":
+                return "Bạn đã chọn không gợi ý món này";
+
             default:
                 // A rule type this version does not know. The condition is
                 // still named, because the one thing the user must not lose

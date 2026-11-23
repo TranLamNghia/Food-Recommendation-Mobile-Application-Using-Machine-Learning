@@ -58,6 +58,7 @@ from ml.build_dataset import main as run_build_dataset  # noqa: E402
 from ml.db import connect, use_utf8  # noqa: E402
 from ml.evaluate import main as run_evaluate  # noqa: E402
 from ml.f1_filter import (  # noqa: E402
+    USER_BLOCKED_LABEL,
     conditions_for_user,
     conditions_by_name,
     cross_check_f1,
@@ -1544,6 +1545,148 @@ def check_exclusion_reasons_sql(db: str) -> None:
         check(
             n_deleted == 1,
             f"the test-only rule was cleaned up, {n_deleted} row deleted",
+        )
+
+        # -- The user's own exclusion ------------------------------------
+        #
+        # `user_food_marks` with `kind = 'blocked'` is the one exclusion that
+        # comes from no rule. It is applied in the same layer as an allergy,
+        # for a reason worth stating: every ML signal is soft — a label of 0.0
+        # lowers a score and leaves the dish eligible — so a dish the user has
+        # rejected would reappear the moment the pool for its role ran thin.
+        #
+        # Two things have to hold at once, and they pull in opposite
+        # directions: the dish must be gone for THIS user, and present for
+        # everyone else, including the shared model.
+        # The conditions are passed explicitly rather than read from
+        # `user_conditions`, so this block depends on no earlier section
+        # having given somebody a disease — and it still exercises the
+        # interesting case, where the UNION carries a medical branch and the
+        # user's own at the same time.
+        gout = conditions_by_name(cn, ["Gút"], severity="moderate")
+        with cn.cursor() as cur:
+            cur.execute("SELECT id FROM users ORDER BY id LIMIT 2")
+            users = [d["id"] for d in cur.fetchall()]
+        uid, other_uid = users[0], users[1]
+
+        before = allowed_foods(cn, user_id=uid, conditions=gout)
+        before_reasons = exclusion_reasons(cn, user_id=uid, conditions=gout)
+        # A dish F1 currently allows, so the block is what removes it, and a
+        # dish gout already excludes, to prove the two reasons stack.
+        dish = before[0]
+        already_excluded = sorted(before_reasons)[0]
+        with cn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO user_food_marks (user_id, food_id, kind) "
+                "VALUES (%s, %s, 'blocked')",
+                [(uid, dish["id"]), (uid, already_excluded)],
+            )
+        cn.commit()
+
+        after = allowed_foods(cn, user_id=uid, conditions=gout)
+        after_reasons = exclusion_reasons(cn, user_id=uid, conditions=gout)
+        cross_blocked = cross_check_f1(cn, user_id=uid, conditions=gout)
+        check(
+            len(after) == len(before) - 1,
+            f"blocking {dish['name']} removes exactly one food from F1 "
+            f"({len(before)} -> {len(after)}) — the second block was already "
+            f"excluded by gout, so it removes nothing twice",
+        )
+        check(
+            dish["id"] not in {f["id"] for f in after},
+            "and the one removed is that dish",
+        )
+        mine = [
+            r for r in after_reasons.get(dish["id"], []) if r.is_user_choice
+        ]
+        check(
+            len(mine) == 1,
+            f"`exclusion_reasons` explains it, {len(mine)} reason given — "
+            f"without this `cross_check_f1` would call it unexplained",
+        )
+        stacked = after_reasons.get(already_excluded, [])
+        check(
+            {r.kind for r in stacked} == {"tag", "user_blocked"},
+            f"a dish excluded by gout AND blocked carries both reasons, got "
+            f"{sorted({r.kind for r in stacked})} — the user needs to know "
+            f"that unblocking it will not bring it back",
+        )
+        if mine:
+            reason = mine[0]
+            check(
+                reason.kind == "user_blocked",
+                f"the kind is `user_blocked`, got {reason.kind!r}",
+            )
+            check(
+                reason.sentence == USER_BLOCKED_LABEL,
+                "and it carries its own sentence, so the interface can offer "
+                "to undo it instead of quoting a rule nobody wrote",
+            )
+            check(
+                reason.condition == "" and reason.severity_min == "",
+                "no condition is attributed to it: writing one in would blame "
+                "the user's own decision on a medical rule",
+            )
+            check(
+                not reason.is_citable,
+                "and it cannot be cited as a published recommendation",
+            )
+        check(
+            not cross_blocked["unexplained"] and not cross_blocked["spurious"],
+            "the two SQL statements still agree with a block in place",
+        )
+        check(
+            all(k in after_reasons for k in before_reasons),
+            f"every medical reason survives the new branch "
+            f"({len(before_reasons)} -> {len(after_reasons)} foods)",
+        )
+        check(
+            len(allowed_foods(cn, conditions=gout)) == len(before),
+            f"with no `user_id` the same condition set gives the same "
+            f"{len(before)} foods — one person's dislike must not shrink what "
+            f"the system knows",
+        )
+        check(
+            len(allowed_foods(cn, public_only=True)) == 318,
+            "nor the `public_only` set the shared model is trained on",
+        )
+        training_reasons = exclusion_reasons(
+            cn, conditions=gout, public_only=True
+        )
+        check(
+            not any(
+                r.is_user_choice
+                for reasons in training_reasons.values()
+                for r in reasons
+            )
+            and already_excluded in training_reasons,
+            "the call `build_dataset` makes — conditions, `public_only`, no "
+            "`user_id` — returns medical reasons and not one block, so a "
+            "dislike never reaches the shared model",
+        )
+        check(
+            dish["id"]
+            in {
+                f["id"]
+                for f in allowed_foods(cn, user_id=other_uid, conditions=gout)
+            },
+            "another user keeps the dish — the block is one user's, not a "
+            "catalogue edit",
+        )
+
+        with cn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM user_food_marks WHERE user_id = %s", (uid,)
+            )
+            n_unblocked = cur.rowcount
+        cn.commit()
+        check(
+            n_unblocked == 2
+            and len(allowed_foods(cn, user_id=uid, conditions=gout))
+            == len(before),
+            f"unblocking restores the dish ({n_unblocked} marks removed) — "
+            f"which is what makes this reason different from every other one "
+            f"in this section",
         )
     finally:
         cn.close()

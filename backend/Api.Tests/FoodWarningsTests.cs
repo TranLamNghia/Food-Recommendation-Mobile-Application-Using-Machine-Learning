@@ -199,4 +199,34 @@ public class FoodWarningsTests
         Assert.Equal("omega_3_g", NutrientLabels.Name("omega_3_g"));
         Assert.Empty(NutrientLabels.Unit("omega_3_g"));
     }
+
+    /// <summary>
+    /// The one exclusion that comes from no rule: the user asked for this
+    /// dish not to be suggested. It arrives with an empty condition, which
+    /// is why it needs a case of its own — the fall-through names the
+    /// condition, and would produce "Món không phù hợp với " with nothing
+    /// after the preposition.
+    /// </summary>
+    [Fact]
+    public void A_dish_the_user_blocked_says_so_without_naming_a_condition()
+    {
+        var message = FoodWarnings.Message(Reason(
+            ruleType: "user_blocked", condition: "", nutrient: null,
+            comparator: null, threshold: null, value: null));
+
+        Assert.Equal("Bạn đã chọn không gợi ý món này", message);
+        Assert.DoesNotContain("phù hợp với", message);
+    }
+
+    /// <summary>
+    /// And the fall-through still names the condition, because the one thing
+    /// the user must not lose is that the dish was flagged at all.
+    /// </summary>
+    [Fact]
+    public void A_rule_type_this_version_does_not_know_still_names_the_condition()
+    {
+        var message = FoodWarnings.Message(Reason(ruleType: "something_new"));
+
+        Assert.Equal("Món không phù hợp với Tăng huyết áp", message);
+    }
 }

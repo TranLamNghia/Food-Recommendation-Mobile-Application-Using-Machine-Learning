@@ -272,9 +272,19 @@ public sealed record MlFoodSafetyRequest
 /// </summary>
 public sealed record MlExclusionReason
 {
-    /// <summary><c>exclude_tag</c> · <c>require_tag</c> · <c>nutrient_limit</c>.</summary>
+    /// <summary>
+    /// <c>exclude_tag</c> · <c>require_tag</c> · <c>nutrient_limit</c> — or
+    /// <c>user_blocked</c>, which is not a value of
+    /// <c>condition_rules.rule_type</c> at all: it is the user's own
+    /// "do not suggest this", and it arrives with
+    /// <see cref="Condition"/> empty.
+    /// </summary>
     public string RuleType { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Empty for <c>user_blocked</c>. There is no condition behind that one,
+    /// and naming one would blame the user's own decision on a medical rule.
+    /// </summary>
     public string Condition { get; init; } = string.Empty;
     public string SeverityMin { get; init; } = string.Empty;
 
