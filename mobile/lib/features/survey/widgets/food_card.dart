@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../data/models/food.dart';
+import '../../../data/models/food_brief.dart';
+import '../../../core/dish_look.dart';
 import 'dish_icon.dart';
 
 /// The dish card — built from the `Card` node (5:32) in Figma.
@@ -22,7 +23,7 @@ class FoodCard extends StatelessWidget {
   static const designSize = Size(198, 280);
   static const aspectRatio = 198 / 280;
 
-  final Food food;
+  final FoodBrief food;
 
   /// The normalised drag distance (each axis in [-1, 1]) — the image
   /// shifts slightly against the card to create depth.
@@ -78,7 +79,7 @@ class _Metrics {
 class _Image extends StatelessWidget {
   const _Image({required this.food, required this.parallax});
 
-  final Food food;
+  final FoodBrief food;
   final Offset parallax;
 
   @override
@@ -151,7 +152,7 @@ class _BottomGradient extends StatelessWidget {
 class _Content extends StatelessWidget {
   const _Content({required this.food, required this.m});
 
-  final Food food;
+  final FoodBrief food;
   final _Metrics m;
 
   @override

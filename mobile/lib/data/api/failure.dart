@@ -94,6 +94,19 @@ class ApiFailure implements Exception {
   static const String notFound = 'NOT_FOUND';
   static const String profileRequired = 'PROFILE_REQUIRED';
   static const String onboardingRequired = 'ONBOARDING_REQUIRED';
+
+  /// `409` from §7.4: this account has already been through the survey. It
+  /// runs once in the lifetime of an account, so the answer is not an error
+  /// to show — it means the app is on the wrong screen and should move on.
+  static const String onboardingAlreadyCompleted =
+      'ONBOARDING_ALREADY_COMPLETED';
+
+  /// `422` from §7.4.2: too few swipes carried an opinion. Below about twenty
+  /// usable signals the preference vector is mostly the direction of
+  /// whichever few dishes were swiped, so the survey is not accepted and
+  /// nothing is stamped. Recognised rather than displayed because the only
+  /// way forward is a fresh deck, which the app has to offer.
+  static const String onboardingInsufficient = 'ONBOARDING_INSUFFICIENT';
   static const String emailAlreadyExists = 'EMAIL_ALREADY_EXISTS';
   static const String invalidCredentials = 'INVALID_CREDENTIALS';
   static const String accountDisabled = 'ACCOUNT_DISABLED';

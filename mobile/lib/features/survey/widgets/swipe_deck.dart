@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_motion.dart';
-import '../../../data/models/food.dart';
+import '../../../data/models/food_brief.dart';
 import '../../../data/models/swipe_action.dart';
 import 'food_card.dart';
 import 'swipe_burst.dart';
@@ -30,12 +30,12 @@ class SwipeDeck extends StatefulWidget {
     this.controller,
   });
 
-  final List<Food> foods;
+  final List<FoodBrief> foods;
 
   /// The index of the card currently on top.
   final int cursor;
 
-  final void Function(Food food, SwipeAction action) onSwipe;
+  final void Function(FoodBrief food, SwipeAction action) onSwipe;
 
   /// The direction the just-undone card flew out in — used to fly it back
   /// along the same path rather than having it appear out of nowhere.
@@ -378,7 +378,7 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
 
   /// The cards behind rotate towards upright as the top card progresses —
   /// each one advancing a notch through the design's fan shape.
-  Widget _buildStackedCard(Food food, int depth, double progress) {
+  Widget _buildStackedCard(FoodBrief food, int depth, double progress) {
     final angle = _lerp(_restAngles[depth], _restAngles[depth - 1], progress);
 
     return Positioned.fill(
@@ -411,7 +411,7 @@ class _SwipeDeckState extends State<SwipeDeck> with TickerProviderStateMixin {
   }
 
   Widget _buildTopCard(
-    Food food,
+    FoodBrief food,
     Offset offset,
     SwipeAction? action,
     double progress,

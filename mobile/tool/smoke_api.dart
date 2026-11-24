@@ -24,6 +24,7 @@ import 'package:nutrition_app/data/api/auth_api.dart';
 import 'package:nutrition_app/data/api/failure.dart';
 import 'package:nutrition_app/data/api/food_api.dart';
 import 'package:nutrition_app/data/api/profile_api.dart';
+import 'package:nutrition_app/data/api/survey_api.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 
 const base = 'http://localhost:5055/api/v1';
@@ -239,6 +240,113 @@ Future<void> main() async {
     check('and `details` names displayName',
         f.forField('displayName') != null, '${f.fields}');
   }
+
+  print('\n§7.4  the taste survey — the one thing that ends onboarding');
+  final surveys = SurveyApi(client);
+  final deck = await surveys.deck();
+  check('the deck comes back with a session id', deck.sessionId.isNotEmpty);
+  check('and 30 cards, the size §7.4.1 settles on', deck.items.length == 30,
+      '${deck.items.length} cards');
+  check('totalItems agrees with what arrived',
+      deck.totalItems == deck.items.length,
+      '${deck.totalItems} against ${deck.items.length}');
+  check('minRequired is the 20 opinionated swipes §7.4.2 asks for',
+      deck.minRequired == 20, '${deck.minRequired}');
+  check('every card has what a swipe card draws',
+      deck.items.every((c) =>
+          c.name.isNotEmpty && c.category.isNotEmpty && c.kcal > 0),
+      'one card was incomplete');
+  check('no card repeats — a deck with a dish twice wastes a swipe',
+      deck.items.map((c) => c.id).toSet().length == deck.items.length);
+  // Every one of the 318 rows has `image_url` null, so a card has nothing to
+  // draw but what `core/dish_look.dart` derives from `dish_role`. The look
+  // itself cannot be checked here — it is a Flutter `Color`, and this tool
+  // runs on plain Dart — so what is checked is the input it needs: a role
+  // this app recognises. An unknown one falls back to a plate icon, which is
+  // not wrong, only anonymous.
+  const knownRoles = {
+    'main', 'side_protein', 'side_veg', 'soup', 'dessert', 'drink', 'snack',
+  };
+  check('every card names a dish_role this app has a look for',
+      deck.items.every((c) => knownRoles.contains(c.dishRole)),
+      '${deck.items.map((c) => c.dishRole).toSet()}');
+  check('and none of them carries a photo, so the fallback is the only path',
+      deck.items.every((c) => c.imageUrl == null));
+
+  // 28 opinions and 2 "chưa từng ăn", which is over `minRequired` and still
+  // exercises the `unknown` path that is stored but left out of the vector.
+  final swipes = <SurveySwipe>[
+    for (var i = 0; i < deck.items.length; i++)
+      (
+        foodId: deck.items[i].id,
+        action: i >= deck.items.length - 2
+            ? 'unknown'
+            : (i % 3 == 0 ? 'like' : (i % 3 == 1 ? 'neutral' : 'dislike')),
+      ),
+  ];
+  final outcome =
+      await surveys.submit(sessionId: deck.sessionId, swipes: swipes);
+  check('the submission answers with the same session id',
+      outcome.sessionId == deck.sessionId);
+  check('every swipe was stored', outcome.total == swipes.length,
+      '${outcome.total} of ${swipes.length}');
+  check('the two `unknown` swipes are counted as skipped, not as opinions',
+      outcome.skipped == 2 && outcome.opinionated == swipes.length - 2,
+      '${outcome.opinionated} opinions, ${outcome.skipped} skipped');
+  check('a preference stage came back', outcome.stage.isNotEmpty,
+      outcome.stage);
+  check('with signals behind it', outcome.nSignals > 0, '${outcome.nSignals}');
+  check('nSignals never exceeds the opinions sent — F1 can only remove',
+      outcome.nSignals <= outcome.opinionated,
+      '${outcome.nSignals} against ${outcome.opinionated}');
+
+  // THE POINT OF THIS SECTION. Before the survey reached the server the app
+  // built a vector locally and moved on, so this stamp stayed null — and
+  // `welcome_screen` reads it on every launch, which sent a user who had
+  // just swiped thirty cards straight back to the survey, for good.
+  final after = await auth.me();
+  check('and NOW the account has finished onboarding',
+      after.hasFinishedOnboarding, '${after.onboardingCompletedAt}');
+  // Within a second, not identical. `users.onboarding_completed_at` is a
+  // DATETIME with no fractional seconds, so MySQL rounds on store and the
+  // POST's answer carries the value from before that rounding. Only the
+  // presence of the stamp is meaningful, and nothing in the app compares the
+  // two.
+  check('and reports it within a second of the value POST returned',
+      after.onboardingCompletedAt != null &&
+          after.onboardingCompletedAt!
+                  .difference(outcome.onboardingCompletedAt)
+                  .abs() <
+              const Duration(seconds: 1),
+      '${after.onboardingCompletedAt} against '
+      '${outcome.onboardingCompletedAt}');
+
+  // Re-sending the SAME session is the retry the app's button makes, for the
+  // one failure it is there for: the request arrived, the account was
+  // stamped, and the answer was lost coming back. It does NOT replay as a
+  // second survey — the server checks the stamp BEFORE it looks at the
+  // session id — so the retry answers 409, and the caller has to read that
+  // as success. The app does: `survey_screen._explain` sends the user on.
+  try {
+    await surveys.submit(sessionId: deck.sessionId, swipes: swipes);
+    check('re-submitting the same session is refused once the account is '
+        'stamped', false, 'it was accepted a second time');
+  } on ApiFailure catch (f) {
+    check('re-submitting the same session answers 409, not a second survey',
+        f.code == ApiFailure.onboardingAlreadyCompleted,
+        '${f.status} ${f.code}');
+  }
+
+  try {
+    await surveys.deck();
+    check('the deck is refused once the survey is done', false,
+        'it was handed out again');
+  } on ApiFailure catch (f) {
+    check('409 ONBOARDING_ALREADY_COMPLETED',
+        f.code == ApiFailure.onboardingAlreadyCompleted,
+        '${f.status} ${f.code}');
+  }
+
 
   print('\n§7.1.2  log in again and read the profile back');
   final fresh = ApiClient(baseUrl: base);

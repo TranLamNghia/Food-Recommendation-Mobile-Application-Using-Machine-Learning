@@ -11,6 +11,7 @@ import 'package:nutrition_app/data/api/api_client.dart';
 import 'package:nutrition_app/data/api/failure.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
+import 'package:nutrition_app/data/models/swipe_action.dart';
 import 'package:nutrition_app/data/session.dart';
 import 'package:nutrition_app/features/auth/auth_screen.dart';
 import 'package:nutrition_app/features/auth/welcome_screen.dart';
@@ -538,6 +539,214 @@ void main() {
       await session.saveProfile();
 
       expect(session.isOnline, isFalse);
+    });
+  });
+
+  group('§7.4 the taste survey - what ends onboarding', () {
+    Map<String, Object?> deckCard(String id) => {
+      'id': id,
+      'name': 'Món $id',
+      'imageUrl': null,
+      'categoryName': 'Món nước',
+      'spiceLevel': 1,
+      'dishRole': 'main',
+      'caloriesKcal': 420,
+      'servingSizeG': 300,
+      'tags': ['Món nước'],
+    };
+
+    Map<String, Object?> deckBody(List<String> ids) => {
+      'sessionId': 'a1b2c3d4-0000-4000-8000-000000000000',
+      'totalItems': ids.length,
+      'minRequired': 20,
+      'items': [for (final id in ids) deckCard(id)],
+    };
+
+    Map<String, Object?> submitBody(int opinionated) => {
+      'sessionId': 'a1b2c3d4-0000-4000-8000-000000000000',
+      'onboardingCompletedAt': '2026-11-23T10:30:00+07:00',
+      'recorded': {
+        'total': opinionated + 1,
+        'opinionated': opinionated,
+        'skipped': 1,
+        'droppedUnsafe': 0,
+      },
+      'preferenceProfile': {
+        'stage': 'content',
+        'nSignals': opinionated,
+        'alpha': 0.0,
+        'featureVersion': 'v2',
+      },
+      'tasteSummary': {
+        'topLikedCategories': ['Món nước'],
+        'topLikedTastes': ['salty'],
+      },
+    };
+
+    /// The defect this whole group exists for. Before the survey reached the
+    /// server, `completeSurvey` built a vector locally and returned, so
+    /// `onboarding_completed_at` stayed null — and `welcome_screen` reads
+    /// that stamp on every launch, which sent the user back to the survey
+    /// after they had finished it. For good.
+    test('submitting the survey is what sets hasFinishedOnboarding', () async {
+      Map<String, dynamic>? posted;
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': true});
+        }
+        if (path.endsWith('/profile/nutrition-targets')) {
+          return _json(_targets);
+        }
+        if (path.endsWith('/profile')) {
+          return _json({
+            'gender': 'male',
+            'dateOfBirth': '2004-11-04',
+            'heightCm': 172.0,
+            'weightKg': 68.5,
+            'activityLevel': 'moderate',
+            'goal': 'maintain',
+            'conditions': <dynamic>[],
+          });
+        }
+        if (path.endsWith('/onboarding/survey')) {
+          if (request.method == 'POST') {
+            posted = jsonDecode(request.body) as Map<String, dynamic>;
+            return _json(submitBody(24));
+          }
+          return _json(deckBody(['f1', 'f2', 'f3']));
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      expect(session.hasFinishedOnboarding, isFalse);
+
+      final deck = await session.loadSurveyDeck();
+      expect(deck.map((c) => c.id), ['f1', 'f2', 'f3']);
+      expect(session.surveyDeck?.minRequired, 20);
+
+      await session.completeSurvey([
+        (food: deck[0], action: SwipeAction.like),
+        (food: deck[1], action: SwipeAction.dislike),
+        (food: deck[2], action: SwipeAction.unknown),
+      ]);
+
+      expect(session.hasFinishedOnboarding, isTrue);
+      expect(session.onboardingCompletedAt, isNotNull);
+      // The session id handed out by the deck call travels back, which is
+      // what makes a retry recognisable as the same event.
+      expect(posted!['sessionId'], 'a1b2c3d4-0000-4000-8000-000000000000');
+      expect(posted!['swipes'], [
+        {'foodId': 'f1', 'action': 'like'},
+        {'foodId': 'f2', 'action': 'dislike'},
+        {'foodId': 'f3', 'action': 'unknown'},
+      ]);
+      expect(session.surveyOutcome?.stage, 'content');
+      expect(session.surveyOutcome?.nSignals, 24);
+      expect(session.surveyOutcome?.topLikedCategories, ['Món nước']);
+    });
+
+    /// The request carries ids and codes and nothing else. Rocchio runs in
+    /// the ML service, and a second implementation of it on this side would
+    /// be the one nothing compares — so the local vector is left alone.
+    test('the local preference vector is not built online', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/onboarding/survey')) {
+          return request.method == 'POST'
+              ? _json(submitBody(24))
+              : _json(deckBody(['f1']));
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final deck = await session.loadSurveyDeck();
+      await session.completeSurvey([
+        (food: deck.single, action: SwipeAction.like),
+      ]);
+
+      expect(session.hasFinishedOnboarding, isTrue);
+      // Still the empty vector: every weight zero, so no dish outranks
+      // another on taste. `session.preference` builds a fresh empty profile
+      // on each read while nothing is stored, which is why this asserts the
+      // CONTENT rather than the identity.
+      expect(session.preference.isEmpty, isTrue);
+      // And no plan was built here either. Online the day comes from
+      // §7.6, which this branch has not reached; building one locally would
+      // put a second, disagreeing plan on screen.
+      expect(session.plan, isNull);
+    });
+
+    /// `422` when too few swipes carried an opinion. Nothing is stamped, so
+    /// the app must not treat the survey as done — the screen offers a fresh
+    /// deck instead.
+    test('too few opinions leaves onboarding unfinished', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/onboarding/survey')) {
+          if (request.method == 'POST') {
+            return _envelope(
+              422,
+              'ONBOARDING_INSUFFICIENT',
+              'Cần ít nhất 20 món có ý kiến',
+            );
+          }
+          return _json(deckBody(['f1']));
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final deck = await session.loadSurveyDeck();
+
+      await expectLater(
+        session.completeSurvey([
+          (food: deck.single, action: SwipeAction.unknown),
+        ]),
+        throwsA(
+          isA<ApiFailure>().having(
+            (f) => f.code,
+            'code',
+            ApiFailure.onboardingInsufficient,
+          ),
+        ),
+      );
+      expect(session.hasFinishedOnboarding, isFalse);
+      expect(session.surveyOutcome, isNull);
+    });
+
+    test('offline, the deck is the mock one and the cold start is local', () async {
+      final session = AppSession();
+      _filled(session.profile);
+
+      final deck = await session.loadSurveyDeck();
+
+      expect(deck, isNotEmpty);
+      // No session id: there is nowhere to store a session offline, and
+      // `completeSurvey` uses its absence to know which path it is on.
+      expect(session.surveyDeck, isNull);
+
+      await session.completeSurvey([
+        for (final card in deck) (food: card, action: SwipeAction.like),
+      ]);
+
+      // Offline nothing stamps the account, and the first plan is built on
+      // the spot instead.
+      expect(session.hasFinishedOnboarding, isFalse);
+      expect(session.surveyOutcome, isNull);
+      expect(session.plan, isNotNull);
     });
   });
 

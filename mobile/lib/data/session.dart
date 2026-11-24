@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import '../core/dish_look.dart';
 
 import 'api/api_client.dart';
 import 'api/api_config.dart';
@@ -8,10 +9,12 @@ import 'api/failure.dart';
 import 'api/auth_api.dart';
 import 'api/food_api.dart';
 import 'api/profile_api.dart';
+import 'api/survey_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
 import 'models/food.dart';
+import 'models/food_brief.dart';
 import 'models/health_profile.dart';
 import 'models/meal_plan.dart';
 import 'models/swipe_action.dart';
@@ -42,6 +45,7 @@ class AppSession extends ChangeNotifier {
       _auth = AuthApi(client);
       _profiles = ProfileApi(client);
       _foods = FoodApi(client);
+      _surveys = SurveyApi(client);
     }
   }
 
@@ -53,6 +57,7 @@ class AppSession extends ChangeNotifier {
   AuthApi? _auth;
   ProfileApi? _profiles;
   FoodApi? _foods;
+  SurveyApi? _surveys;
 
   /// Whether there is a server behind this session.
   ///
@@ -502,10 +507,89 @@ class AppSession extends ChangeNotifier {
 
   // ── Cold start ───────────────────────────────────────────────────
 
-  /// Takes the swipe session's result, builds the preference profile and then
-  /// generates the first plan.
-  void completeSurvey(List<({Food food, SwipeAction action})> swipes) {
-    _preference = PreferenceProfile.fromSwipes(space: _space, swipes: swipes);
+  SurveyDeck? _surveyDeck;
+
+  /// The deck being swiped, online. `null` offline, and `null` before
+  /// [loadSurveyDeck] — the session id in it is what [completeSurvey] needs.
+  SurveyDeck? get surveyDeck => _surveyDeck;
+
+  SurveyOutcome? _surveyOutcome;
+
+  /// What the server made of the survey — §7.4.2's answer. `null` offline,
+  /// where nothing computes a taste summary.
+  SurveyOutcome? get surveyOutcome => _surveyOutcome;
+
+  // ONLINE: GET /onboarding/survey — §7.4.1. The deck is chosen by the ML
+  // service: maximum diversity over the feature space, out of the dishes the
+  // F1 filter leaves, which is why it cannot be chosen here.
+  //
+  // OFFLINE: the mock deck, with no session id, because there is nowhere to
+  // store a session.
+  Future<List<FoodBrief>> loadSurveyDeck() async {
+    final api = _surveys;
+    if (api == null) {
+      _surveyDeck = null;
+      return [for (final f in MockFoods.surveyDeck) f.brief];
+    }
+    final deck = await api.deck();
+    _surveyDeck = deck;
+    return deck.items;
+  }
+
+  /// Takes the swipe session's result and finishes onboarding.
+  ///
+  // ONLINE: POST /onboarding/survey — §7.4.2. **This is what ends the
+  // onboarding flow.** The stamp lives in `users.onboarding_completed_at`
+  // and nothing else writes it, so until this call returns, a user who has
+  // swiped every card is still a user who has not finished: `welcome_screen`
+  // reads that stamp on every launch and would send them back to the survey
+  // for good.
+  //
+  // The preference vector is built server-side by Rocchio (§8.2) and the
+  // local [PreferenceProfile] is left alone — it is the offline mode's copy,
+  // and two vectors for one user, built from the same swipes by two
+  // implementations, is exactly the drift the parity checks exist to stop.
+  //
+  // OFFLINE: builds that local vector and the first plan, which is the whole
+  // cold start when there is no server.
+  ///
+  /// Throws [ApiFailure] with `ONBOARDING_INSUFFICIENT` when too few swipes
+  /// carried an opinion, and `ONBOARDING_ALREADY_COMPLETED` when the account
+  /// has already been through this.
+  Future<void> completeSurvey(
+    List<({FoodBrief food, SwipeAction action})> swipes,
+  ) async {
+    final api = _surveys;
+    final deck = _surveyDeck;
+    if (api == null || deck == null) {
+      _completeSurveyOffline(swipes);
+      return;
+    }
+
+    final outcome = await api.submit(
+      sessionId: deck.sessionId,
+      swipes: [
+        for (final s in swipes)
+          (foodId: s.food.id, action: s.action.code),
+      ],
+    );
+    _surveyOutcome = outcome;
+    _onboardingCompletedAt = outcome.onboardingCompletedAt;
+    notifyListeners();
+  }
+
+  // OFFLINE: the Dart copy of the cold start — Rocchio over the mock deck,
+  // then step 4. Looks each card's dish up again because a card holds no
+  // nutrition, and the vector is built from nutrition.
+  void _completeSurveyOffline(
+    List<({FoodBrief food, SwipeAction action})> swipes,
+  ) {
+    final byId = {for (final f in MockFoods.surveyDeck) f.id: f};
+    final known = <({Food food, SwipeAction action})>[
+      for (final s in swipes)
+        if (byId[s.food.id] case final dish?) (food: dish, action: s.action),
+    ];
+    _preference = PreferenceProfile.fromSwipes(space: _space, swipes: known);
     regeneratePlan();
   }
 
