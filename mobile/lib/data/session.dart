@@ -179,7 +179,22 @@ class AppSession extends ChangeNotifier {
   /// `NutrientTarget.valueOf`. Passing it in is still valid and it will show
   /// up in `DailyPlan.unenforceableTargets` instead of being quietly treated
   /// as satisfied.
-  List<NutrientTarget> nutrientTargets = const [];
+  /// The day-level nutrient constraints step 4's phase 5 repairs a plan
+  /// against — sodium for hypertension, purine for gout.
+  ///
+  /// **Derived, not stored.** It used to be a plain field that nothing ever
+  /// assigned outside one test, so the thresholds existed in the rule set,
+  /// were shown on the day-budget card, and never reached the builder at
+  /// all. Deriving it means it cannot fall out of step with what the user
+  /// has declared.
+  ///
+  /// Hard ceilings only. A soft threshold costs score and does not bind, and
+  /// handing one to phase 5 would turn a recommendation into a prohibition —
+  /// sugar ≤ 25 g/day is advice, sodium ≤ 2 000 mg is a limit.
+  List<NutrientTarget> get nutrientTargets => [
+    for (final limit in dayThresholdsFor(userConditions))
+      if (limit.isHard) NutrientTarget.atMost(limit.nutrient, limit.amount),
+  ];
 
   // ── Account ──────────────────────────────────────────────────────
 
@@ -746,8 +761,27 @@ class AppSession extends ChangeNotifier {
   /// [avoid] is a soft exclusion for variety: it is dropped when honouring
   /// it would leave too few dishes to fill a day.
   MenuBuilder _builder({Set<String> avoid = const {}}) {
+    // The F1 filter, which `MenuBuilder` requires of its caller in so many
+    // words: "it has to run **first** and pass in an already-safe dish set".
+    // Nothing used to do that. The declared conditions reached the
+    // excluded-dishes screen and never the builder, so offline a user with a
+    // seafood allergy was served seafood while the card below the plan
+    // correctly listed those same dishes as excluded — two screens of one
+    // session answering opposite things.
+    //
+    // An EMPTY day budget on purpose. This filter is about the dishes
+    // themselves; a per-day allowance belongs to a day in progress, and
+    // reading `dayBudget` here would ask for the plan that is being built.
+    // The per-day thresholds reach step 4 through [nutrientTargets] instead,
+    // which is phase 5's input — the same split as `ml/f1_filter.py` and
+    // `ml/menu_builder.py`.
+    final safe = screenDishes(
+      foods: candidates,
+      conditions: userConditions,
+      budget: const DayBudget(),
+    ).allowed;
     final allowed = [
-      for (final f in candidates)
+      for (final f in safe)
         if (!neverAgainIds.contains(f.id)) f,
     ];
     final varied = [

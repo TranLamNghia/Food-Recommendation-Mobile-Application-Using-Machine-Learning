@@ -1171,19 +1171,32 @@ void main() {
       expect(allergic.byDishRole, isNotEmpty);
       expect(session.isOnline, isFalse);
 
-      // And one that excludes NOTHING offline, which is not the count being
-      // wrong but the offline rule set being short: `mock_rules._tagRules`
-      // holds four `exclude_tag` rules — seafood, peanut, egg, purine — and
-      // no `require_tag` mechanism at all, while the server's
-      // `condition_rules` has nine including the two vegetarian diets.
-      // Pinned so the day someone adds them, this line fails and says why.
+      // The `require_tag` direction, which the offline copy had no mechanism
+      // for at all until this branch: a vegan diet keeps only the dishes
+      // CARRYING `Món thuần chay` instead of dropping the ones that carry
+      // something. It used to exclude nothing, so a vegetarian offline got a
+      // plan with meat in it.
       final vegan = await session.countCandidates(codes: {'vegan'});
       expect(
         vegan.remainingFoods,
-        all.totalFoods,
-        reason: 'offline, a vegetarian diet excludes nothing — recorded in '
-            'DOC_DEVIATIONS.md, not a property worth keeping',
+        lessThan(all.totalFoods),
+        reason: 'a vegan diet has to remove the dishes that are not vegan',
       );
+      expect(
+        vegan.remainingFoods,
+        greaterThan(0),
+        reason: 'and it must not remove everything, or no day can be built',
+      );
+      // The role a day cannot be assembled without, and the reason two
+      // dishes were added to the mock deck: none of the original thirty was
+      // a vegetarian MAIN course.
+      expect(
+        vegan.byDishRole['Món chính'] ?? 0,
+        greaterThan(0),
+        reason: 'a vegetarian needs a main course, or MEAL_STRUCTURE cannot '
+            'fill breakfast, lunch or dinner',
+      );
+      expect(vegan.emptyRequiredRoles, isEmpty);
     });
   });
 

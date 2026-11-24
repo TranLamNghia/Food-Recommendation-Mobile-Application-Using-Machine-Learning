@@ -121,7 +121,7 @@ class WelcomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Tạo tài khoản, trả lời vài câu hỏi và vuốt thử 30 món. Phần '
+            'Tạo tài khoản, trả lời vài câu hỏi và vuốt thử vài chục món. Phần '
             'còn lại để hệ thống lo.',
             style: text.bodyLarge,
           ),

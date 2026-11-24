@@ -125,7 +125,7 @@ class _SurveyIntroScreenState extends State<SurveyIntroScreen> {
               Text('Khảo sát khẩu vị', style: text.displaySmall),
               const SizedBox(height: 10),
               Text(
-                'Vuốt 30 món để hệ thống nhận ra gu ăn uống của bạn. '
+                'Vuốt vài chục món để hệ thống nhận ra gu ăn uống của bạn. '
                 'Mất khoảng 2 phút và chỉ phải làm một lần duy nhất.',
                 style: text.bodyLarge,
               ),

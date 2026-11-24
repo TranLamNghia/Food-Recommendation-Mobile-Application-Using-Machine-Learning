@@ -45,7 +45,7 @@ toàn bộ** — nhãn đặt ở đầu tệp. `data/api/` là **trực tuyến
 
 ```bash
 flutter pub get
-flutter test                  # 245 test
+flutter test                  # 252 test
 flutter run                   # mặc định: chế độ ngoại tuyến
 ```
 

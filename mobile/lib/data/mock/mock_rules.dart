@@ -186,6 +186,33 @@ const List<({String condition, String tag, String severityMin})> _tagRules = [
   (condition: 'Dị ứng đậu phộng', tag: 'Có đậu phộng', severityMin: 'mild'),
   (condition: 'Dị ứng trứng', tag: 'Có trứng', severityMin: 'mild'),
   (condition: 'Gút', tag: 'Giàu purin', severityMin: 'moderate'),
+  // These three were missing, and the gap was invisible: a user who declared
+  // a soy allergy, gluten or lactose intolerance offline had no dish removed
+  // and nothing said so. `condition_rules` has had all seven of these rows
+  // since the schema was seeded.
+  (condition: 'Dị ứng đậu nành', tag: 'Có đậu nành', severityMin: 'mild'),
+  (condition: 'Không dung nạp gluten', tag: 'Có gluten', severityMin: 'mild'),
+  (
+    condition: 'Không dung nạp lactose',
+    tag: 'Có sữa / chế phẩm sữa',
+    severityMin: 'mild',
+  ),
+];
+
+/// The **`require_tag`** rules: drop every dish that does **not** carry this
+/// tag.
+///
+/// The opposite direction from [_tagRules], and the offline copy had no
+/// mechanism for it at all — so `Ăn chay` and `Ăn thuần chay`, the two rules
+/// in `condition_rules` that work this way, removed nothing. A vegetarian got
+/// a plan with meat in it, and the only screen that disagreed was the
+/// excluded-dishes list.
+///
+/// Both sit at `mild`: a diet is not a thing one has mildly.
+const List<({String condition, String tag, String severityMin})>
+_requireTagRules = [
+  (condition: 'Ăn chay', tag: 'Món chay', severityMin: 'mild'),
+  (condition: 'Ăn thuần chay', tag: 'Món thuần chay', severityMin: 'mild'),
 ];
 
 /// The per-day thresholds, hard **and** soft, that apply to this person.
@@ -220,6 +247,19 @@ List<ExclusionReason> tagExclusionsFor(
           condition: '${r.condition}${_severitySuffix(c.severity)}',
           tag: r.tag,
           note: 'Loại mọi món có nhãn ${r.tag}',
+        ),
+  // `require_tag`, which reads the other way: the dish is dropped for what
+  // it does NOT carry. The sentence has to say that, or a vegetarian reading
+  // "Loại mọi món có nhãn Món chay" would be told the opposite of the truth.
+  for (final r in _requireTagRules)
+    for (final c in conditions)
+      if (c.name == r.condition &&
+          c.atLeast(r.severityMin) &&
+          !food.tags.contains(r.tag))
+        ExclusionReason.tagRule(
+          condition: '${r.condition}${_severitySuffix(c.severity)}',
+          tag: r.tag,
+          note: 'Chỉ giữ món có nhãn ${r.tag}',
         ),
 ];
 

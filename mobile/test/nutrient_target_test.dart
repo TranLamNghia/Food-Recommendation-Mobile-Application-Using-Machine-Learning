@@ -283,12 +283,21 @@ void main() {
       expect(session.plan!.nutrientTargets, isEmpty);
       final sodiumWithout = session.plan!.totalOf('sodium_mg');
 
-      session.nutrientTargets = const [
-        NutrientTarget.atMost('sodium_mg', 2000),
-      ];
+      // Through the DECLARATION, not by setting the thresholds directly.
+      // `nutrientTargets` used to be a plain field that only this test ever
+      // assigned, which is how the whole chain stayed broken while the test
+      // stayed green: the rule set had the 2 000 mg ceiling, the day-budget
+      // card showed it, and the builder never saw it. Declaring the
+      // condition is the path a user actually takes.
+      session.profile.conditions.add('hypertension');
       expect(session.regeneratePlan(), isTrue);
 
       expect(session.plan!.nutrientTargets, hasLength(1));
+      expect(
+        session.plan!.nutrientTargets.single.amount,
+        2000,
+        reason: 'the ceiling comes from `mock_rules._dayThresholds`',
+      );
       expect(session.plan!.totalOf('sodium_mg'), lessThan(sodiumWithout));
     });
 
