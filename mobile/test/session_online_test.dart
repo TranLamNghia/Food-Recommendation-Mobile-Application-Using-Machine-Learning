@@ -971,6 +971,222 @@ void main() {
     });
   });
 
+  group('§7.4.3 the filter screen\'s live count', () {
+    http.Response catalogue() => _json([
+      {
+        'id': 2,
+        'code': 'hypertension',
+        'nameVi': 'Tăng huyết áp',
+        'conditionType': 'disease',
+        'description': null,
+      },
+      {
+        'id': 7,
+        'code': 'allergy_seafood',
+        'nameVi': 'Dị ứng hải sản',
+        'conditionType': 'allergy',
+        'description': null,
+      },
+    ]);
+
+    http.Response countBody({
+      int remaining = 227,
+      List<String> emptyRoles = const [],
+      List<String> notes = const [],
+    }) => _json({
+      'totalFoods': 318,
+      'remainingFoods': remaining,
+      'removedFoods': 318 - remaining,
+      'byDishRole': {'main': 80, 'soup': 30, 'side_protein': 60},
+      'emptyRequiredRoles': emptyRoles,
+      'enoughForSurvey': remaining >= 30,
+      'surveyDeckSize': remaining >= 30 ? 30 : remaining,
+      'notes': notes,
+    });
+
+    test('codes are mapped to ids, with the severity each one was given',
+        () async {
+      Map<String, dynamic>? posted;
+      final calls = <String>[];
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        if (path.endsWith('/candidates/count')) {
+          posted = jsonDecode(request.body) as Map<String, dynamic>;
+          return countBody();
+        }
+        return _json(const {});
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final count = await session.countCandidates(
+        codes: {'hypertension', 'allergy_seafood'},
+        severities: {'hypertension': 'severe'},
+      );
+
+      expect(posted!['conditions'], containsAll([
+        {'conditionId': 2, 'severity': 'severe'},
+        // No severity was picked for the allergy, so the column's own
+        // default travels — every allergy rule applies from `mild` anyway,
+        // which is why the screen does not ask.
+        {'conditionId': 7, 'severity': 'moderate'},
+      ]));
+      expect(count.totalFoods, 318);
+      expect(count.remainingFoods, 227);
+      expect(count.removedFoods, 91);
+      expect(count.canBuildAPlan, isTrue);
+      expect(count.byDishRole['main'], 80);
+
+      // Asked twice, looked up once: the dictionary cannot change between
+      // two ticks of a checkbox, and the count is asked again on every one.
+      await session.countCandidates(codes: {'hypertension'});
+      expect(
+        calls.where((c) => c.endsWith('/conditions')),
+        hasLength(1),
+        reason: 'the condition dictionary must be cached',
+      );
+    });
+
+    /// An empty set means "nothing declared", not "whatever is on file".
+    /// Getting this wrong shows a filtered number as the catalogue on the
+    /// very first view of the screen.
+    test('nothing ticked sends an empty list, and asks for no dictionary',
+        () async {
+      Map<String, dynamic>? posted;
+      final calls = <String>[];
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        if (path.endsWith('/candidates/count')) {
+          posted = jsonDecode(request.body) as Map<String, dynamic>;
+          return countBody(remaining: 318);
+        }
+        return _json(const {});
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final count = await session.countCandidates(
+        codes: {HealthProfile.noneCode},
+      );
+
+      expect(posted!['conditions'], isEmpty);
+      expect(count.removedFoods, 0);
+      expect(
+        calls.where((c) => c.endsWith('/conditions')),
+        isEmpty,
+        reason: 'with nothing declared there is no code to look up',
+      );
+    });
+
+    /// The same stance as saving the declarations: a code the server does not
+    /// know stops the count. Dropping it would show a reassuring number built
+    /// from an allergy the server never heard about.
+    test('a code the dictionary does not know stops the count', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        return countBody();
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      await expectLater(
+        session.countCandidates(codes: {'allergy_pangolin'}),
+        throwsA(isA<ApiFailure>().having(
+          (f) => f.message,
+          'message',
+          contains('allergy_pangolin'),
+        )),
+      );
+    });
+
+    /// A healthy total is not enough. One required role with nothing left in
+    /// it makes a day unbuildable, whatever the total says.
+    test('an empty required role means no plan, however big the total',
+        () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        if (path.endsWith('/candidates/count')) {
+          return countBody(
+            remaining: 180,
+            emptyRoles: ['side_protein'],
+            notes: ['Không còn món mặn nào.'],
+          );
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final count = await session.countCandidates(codes: {'hypertension'});
+
+      expect(count.remainingFoods, 180);
+      expect(count.canBuildAPlan, isFalse);
+      expect(count.emptyRequiredRoles, ['side_protein']);
+      expect(count.notes, isNotEmpty);
+    });
+
+    test('offline, the count comes from the Dart copy of the filter',
+        () async {
+      final session = AppSession();
+
+      final all = await session.countCandidates(codes: const {});
+      expect(all.totalFoods, greaterThan(0));
+      expect(
+        all.remainingFoods,
+        all.totalFoods,
+        reason: 'nothing declared removes nothing',
+      );
+      expect(all.removedFoods, 0);
+
+      // A seafood allergy, which really does exclude dishes in the mock
+      // deck: seven of the thirty carry the `Có hải sản` tag.
+      final allergic = await session.countCandidates(
+        codes: {'allergy_seafood'},
+      );
+      expect(
+        allergic.remainingFoods,
+        lessThan(all.totalFoods),
+        reason: 'the mock deck has dishes a seafood allergy excludes',
+      );
+      expect(allergic.byDishRole, isNotEmpty);
+      expect(session.isOnline, isFalse);
+
+      // And one that excludes NOTHING offline, which is not the count being
+      // wrong but the offline rule set being short: `mock_rules._tagRules`
+      // holds four `exclude_tag` rules — seafood, peanut, egg, purine — and
+      // no `require_tag` mechanism at all, while the server's
+      // `condition_rules` has nine including the two vegetarian diets.
+      // Pinned so the day someone adds them, this line fails and says why.
+      final vegan = await session.countCandidates(codes: {'vegan'});
+      expect(
+        vegan.remainingFoods,
+        all.totalFoods,
+        reason: 'offline, a vegetarian diet excludes nothing — recorded in '
+            'DOC_DEVIATIONS.md, not a property worth keeping',
+      );
+    });
+  });
+
   group('PUT /foods/{id}/mark - bookmarks and blocked dishes', () {
     /// The answer is applied, not the request. The two differ exactly when
     /// the other mark had to go, which is the case a local toggle gets wrong.

@@ -368,6 +368,76 @@ Future<void> main() async {
 
   final foods = FoodApi(fresh);
 
+  print('\n§7.4.3  the filter screen counts as the answers come in');
+  final noneDeclared = await surveys.countCandidates(const []);
+  check('nothing declared leaves the whole catalogue',
+      noneDeclared.remainingFoods == noneDeclared.totalFoods,
+      '${noneDeclared.remainingFoods} of ${noneDeclared.totalFoods}');
+  check('and that total is the 318 active dishes',
+      noneDeclared.totalFoods == 318, '${noneDeclared.totalFoods}');
+  check('nothing removed, and a plan is possible',
+      noneDeclared.removedFoods == 0 && noneDeclared.canBuildAPlan);
+  check('the breakdown by role covers the roles a day needs',
+      const {'main', 'side_protein', 'side_veg', 'snack'}
+          .every((r) => (noneDeclared.byDishRole[r] ?? 0) > 0),
+      '${noneDeclared.byDishRole}');
+  check('and a full-size survey can be drawn',
+      noneDeclared.enoughForSurvey && noneDeclared.surveyDeckSize == 30,
+      '${noneDeclared.surveyDeckSize}');
+
+  // Gout's purine rule sits at `moderate`, so the same condition removes a
+  // different number of dishes at two severities. A count that ignored
+  // severity would answer the same twice, and the column would be decoration.
+  final gout = (await profiles.conditionCatalogue())
+      .where((c) => c.code == 'gout')
+      .firstOrNull;
+  check('the catalogue has gout to test severity with', gout != null);
+  if (gout != null) {
+    final mild = await surveys.countCandidates([
+      (conditionId: gout.id, severity: 'mild'),
+    ]);
+    final moderate = await surveys.countCandidates([
+      (conditionId: gout.id, severity: 'moderate'),
+    ]);
+    check('gout at mild removes nothing — the rule needs moderate',
+        mild.removedFoods == 0, '${mild.removedFoods} removed');
+    check('gout at moderate removes the high-purine dishes',
+        moderate.removedFoods > 0, '${moderate.removedFoods} removed');
+    check('so severity really is read, not merely accepted',
+        moderate.remainingFoods < mild.remainingFoods,
+        '${moderate.remainingFoods} against ${mild.remainingFoods}');
+  }
+
+  // Two conditions at once narrow at least as much as either alone: the
+  // filter is a conjunction, and a count that overwrote instead of
+  // intersecting would show the second condition's figure.
+  final seafoodRow = (await profiles.conditionCatalogue())
+      .where((c) => c.code == 'allergy_seafood')
+      .firstOrNull;
+  if (gout != null && seafoodRow != null) {
+    final one = await surveys.countCandidates([
+      (conditionId: seafoodRow.id, severity: 'severe'),
+    ]);
+    final both = await surveys.countCandidates([
+      (conditionId: seafoodRow.id, severity: 'severe'),
+      (conditionId: gout.id, severity: 'severe'),
+    ]);
+    check('two conditions never leave more dishes than one of them',
+        both.remainingFoods <= one.remainingFoods,
+        '${both.remainingFoods} against ${one.remainingFoods}');
+  }
+
+  try {
+    await surveys.countCandidates([
+      (conditionId: 999999, severity: 'mild'),
+    ]);
+    check('a condition id that does not exist is refused', false);
+  } on ApiFailure catch (f) {
+    check('a condition id that does not exist is refused',
+        f.status == 400 || f.status == 404, '${f.status} ${f.code}');
+  }
+
+
   print('\n§7.3.2 · §7.3.3  the dictionaries the browse screen filters by');
   final categories = await foods.categories();
   check('the food groups come back', categories.isNotEmpty,

@@ -45,7 +45,7 @@ toàn bộ** — nhãn đặt ở đầu tệp. `data/api/` là **trực tuyến
 
 ```bash
 flutter pub get
-flutter test                  # 240 test
+flutter test                  # 245 test
 flutter run                   # mặc định: chế độ ngoại tuyến
 ```
 
@@ -72,7 +72,7 @@ với chính mình. Để chứng minh app và server **đồng ý với nhau**,
 cụ dòng lệnh chạy chính tầng API của app qua socket thật:
 
 ```bash
-cd mobile && dart run tool/smoke_api.dart   # 106 phép kiểm
+cd mobile && dart run tool/smoke_api.dart   # 117 phép kiểm
 ```
 
 Lưu ý một ràng buộc dễ phá mà khó thấy: `dart run` biên dịch **Dart thuần**, không thấy engine của Flutter. Nên `data/api/` và các model nó dùng (`FoodBrief`) **không được import `package:flutter/...`** — chỉ một trường `Color` trong model là công cụ này hết biên dịch được. Phần trình bày (màu, emoji) nằm ở `core/dish_look.dart` dưới dạng extension.

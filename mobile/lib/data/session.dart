@@ -13,6 +13,7 @@ import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
 import 'models/food.dart';
+import 'models/candidate_count.dart';
 import 'models/food_adapters.dart';
 import 'models/food_brief.dart';
 import 'models/food_detail.dart';
@@ -342,6 +343,96 @@ class AppSession extends ChangeNotifier {
           severity: profile.severityOf(code),
         ),
     ]);
+  }
+
+  // ── The filter screen's live count ───────────────────────────────
+
+  /// `conditions.code` -> `conditions.id`, fetched once.
+  ///
+  /// Cached because the count is asked again on every tick of a checkbox,
+  /// and the dictionary cannot change between two of them. `conditions.id`
+  /// is `AUTO_INCREMENT`, so it is whatever the seed order made it and
+  /// cannot be hard-coded on this side — see [_saveConditions].
+  Map<String, int>? _conditionIds;
+
+  // ONLINE: POST /onboarding/candidates/count — §7.4.3.
+  //
+  // OFFLINE: the Dart copy of the filter, over the mock catalogue. Numbers
+  // out of 30 rather than out of 318, which is what the offline catalogue
+  // holds — the screen prints whatever [CandidateCount.totalFoods] says
+  // rather than a figure of its own, so both modes read correctly.
+  //
+  // Takes the selection as an argument rather than reading [profile]: the
+  // screen asks about what is ticked at this moment, and an empty set has to
+  // mean "nothing declared" and not "whatever is on file". Reading the
+  // profile would lose that distinction, which is the one the endpoint
+  // exists for.
+  Future<CandidateCount> countCandidates({
+    required Set<String> codes,
+    Map<String, String> severities = const {},
+  }) async {
+    final declared = codes.where((c) => c != HealthProfile.noneCode).toSet();
+    final api = _surveys;
+    if (api == null) return _countCandidatesOffline(declared);
+
+    if (declared.isEmpty) {
+      // No code to look up, so no dictionary to fetch. This is the first
+      // view of the screen, which is the one view that must not wait on a
+      // round trip it does not need.
+      return api.countCandidates(const []);
+    }
+
+    final ids = _conditionIds ??= {
+      for (final option in await _profiles!.conditionCatalogue())
+        option.code: option.id,
+    };
+    // A code the dictionary does not know stops the count, for the same
+    // reason it stops a save: these declarations are what dishes are removed
+    // by, so quietly dropping one would show a reassuring number built from
+    // an allergy the server never heard about.
+    final unknown = declared.where((c) => !ids.containsKey(c)).toList();
+    if (unknown.isNotEmpty) {
+      throw ApiFailure(
+        code: ApiFailure.unexpectedShape,
+        message:
+            'Không đếm được: máy chủ không biết ${unknown.join(", ")}. '
+            'Hãy cập nhật ứng dụng rồi thử lại.',
+      );
+    }
+
+    return api.countCandidates([
+      for (final code in declared)
+        (
+          conditionId: ids[code]!,
+          severity: severities[code] ?? HealthProfile.defaultSeverity,
+        ),
+    ]);
+  }
+
+  // OFFLINE: `rules/dish_screening.dart`, which `step1_parity_test` holds in
+  // parity with the Python filter. An empty [DayBudget] on purpose: this
+  // count is about the dishes themselves, and a per-day allowance belongs to
+  // a day that has not started.
+  CandidateCount _countCandidatesOffline(Set<String> codes) {
+    final foods = MockFoods.surveyDeck;
+    final result = screenDishes(
+      foods: foods,
+      conditions: conditionsFromCodes(codes),
+      budget: const DayBudget(),
+    );
+    final byRole = <String, int>{};
+    for (final food in result.allowed) {
+      byRole[food.dishRole] = (byRole[food.dishRole] ?? 0) + 1;
+    }
+    return CandidateCount(
+      totalFoods: foods.length,
+      remainingFoods: result.allowed.length,
+      byDishRole: byRole,
+      // The offline catalogue is 30 dishes, which is the survey's own deck,
+      // so "enough for a survey" is the same question as "anything left".
+      enoughForSurvey: result.allowed.isNotEmpty,
+      surveyDeckSize: result.allowed.length,
+    );
   }
 
   /// Leaves the account but keeps the profile, the plans and the diary: they

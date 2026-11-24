@@ -1,5 +1,6 @@
 // ONLINE: §7.4 the taste survey — the cold-start answer.
 
+import '../models/candidate_count.dart';
 import '../models/food_brief.dart';
 import 'api_client.dart';
 import 'failure.dart';
@@ -184,6 +185,32 @@ class SurveyApi {
       },
     );
     return parsed(() => SurveyOutcome.fromJson(json));
+  }
+
+  /// §7.4.3 — how much of the catalogue the declarations so far leave.
+  ///
+  /// [conditions] is what the user has ticked **on screen**, not what is
+  /// stored for them, and an empty list therefore means **no restriction at
+  /// all**. That distinction is the whole endpoint: answering an empty list
+  /// with "whatever this account has on file" would show a filtered number
+  /// as if it were the catalogue, on the very first view of the screen.
+  ///
+  /// Only **hard** rules narrow this count. A soft rule lowers a dish's
+  /// score and leaves it eligible, so counting one here would promise the
+  /// user a dish is gone while the plan can still contain it.
+  Future<CandidateCount> countCandidates(
+    List<({int conditionId, String severity})> conditions,
+  ) async {
+    final json = await _client.post(
+      '/onboarding/candidates/count',
+      body: {
+        'conditions': [
+          for (final c in conditions)
+            {'conditionId': c.conditionId, 'severity': c.severity},
+        ],
+      },
+    );
+    return parsed(() => CandidateCount.fromJson(json));
   }
 
   /// §7.4.1's default. The range is 20–50 and the server checks it, but the
