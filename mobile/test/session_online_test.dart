@@ -9,6 +9,9 @@ import 'package:http/testing.dart';
 import 'package:nutrition_app/core/theme/app_theme.dart';
 import 'package:nutrition_app/data/api/api_client.dart';
 import 'package:nutrition_app/data/api/failure.dart';
+import 'package:nutrition_app/data/models/food_brief.dart';
+import 'package:nutrition_app/data/api/food_api.dart';
+import 'package:nutrition_app/data/models/food_adapters.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 import 'package:nutrition_app/data/models/swipe_action.dart';
@@ -750,6 +753,224 @@ void main() {
     });
   });
 
+  group('§7.5 the catalogue - and the empty saved lists it fixes', () {
+    /// Server ids, deliberately nothing `MockFoods` holds. That is the whole
+    /// defect: the saved screens used to filter the mock deck by these, and
+    /// online no id could ever match.
+    const lovedId = '7f3a0000-0000-4000-8000-000000000001';
+    const blockedId = '7f3a0000-0000-4000-8000-000000000002';
+
+    http.Response markedPage(String mark) => _json({
+      'items': [
+        {
+          'id': mark == 'loved' ? lovedId : blockedId,
+          'name': mark == 'loved' ? 'Bún bò Huế' : 'Chè ba màu',
+          'categoryName': 'Món nước',
+          'dishRole': mark == 'loved' ? 'main' : 'dessert',
+          'spiceLevel': 2,
+          'caloriesKcal': 480,
+          'servingSizeG': 350,
+          'isSafeForUser': true,
+          'mark': mark,
+        },
+      ],
+      'page': 1,
+      'pageSize': 100,
+      'totalItems': 1,
+      'totalPages': 1,
+    });
+
+    AppSession signedIn(List<String>? calls) => _online((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/login')) return _json(_tokens);
+      if (path.endsWith('/auth/me')) {
+        return _json({..._user, 'hasHealthProfile': false});
+      }
+      if (path.endsWith('/foods')) {
+        return markedPage(request.url.queryParameters['mark'] ?? 'loved');
+      }
+      if (path.contains('/foods/')) {
+        return _json({
+          'id': lovedId,
+          'name': 'Bún bò Huế',
+          'description': 'Món nước xứ Huế.',
+          'imageUrl': null,
+          'category': {'id': 'c1', 'name': 'Món nước'},
+          'spiceLevel': 2,
+          'dishRole': 'main',
+          'nutrition': {
+            'servingSizeG': 350,
+            'caloriesKcal': 480,
+            'proteinG': 28.0,
+            'carbsG': 55.0,
+            'fatG': 14.0,
+            'fiberG': 1.2,
+            'sugarG': 3.0,
+            'sodiumMg': 1600.0,
+            // Deliberately absent, as they are for most of the 318 dishes.
+            'purineMg': null,
+            'calciumMg': null,
+          },
+          'tags': [
+            {'id': 3, 'nameVi': 'Giàu purin', 'tagType': 'nutrition'},
+          ],
+          'isSafeForUser': false,
+          'mark': 'loved',
+          'warnings': [
+            {
+              'conditionId': 5,
+              'conditionCode': 'gout',
+              'conditionName': 'Gút',
+              'ruleType': 'exclude_tag',
+              'message': 'Món có nhãn “Giàu purin”, không phù hợp với Gút',
+              'isHard': true,
+              'missingData': false,
+            },
+          ],
+          'myFeedback': null,
+        });
+      }
+      return _json(const {});
+    }, calls: calls);
+
+    /// The defect, stated as a test: the dishes behind the marks have to come
+    /// from the server, because their ids are the server's.
+    test('signing in brings back the saved dishes, not just their ids',
+        () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      expect(session.lovedIds, {lovedId});
+      expect(session.neverAgainIds, {blockedId});
+
+      final saved = session.savedDishes(FoodMark.loved);
+      expect(saved, hasLength(1));
+      expect(saved.single.name, 'Bún bò Huế');
+      expect(session.savedDishes(FoodMark.blocked).single.name, 'Chè ba màu');
+
+      // And none of it could have come from the mock deck, which is what the
+      // old version filtered.
+      expect(
+        MockFoods.surveyDeck.map((f) => f.id),
+        isNot(contains(lovedId)),
+        reason: 'the fixture must use ids the mock cannot supply, or this '
+            'test would pass against the broken version too',
+      );
+    });
+
+    test('marking a dish keeps the id, the set and the dish in step',
+        () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/mark')) {
+          return _json({'foodId': lovedId, 'kind': 'blocked'});
+        }
+        if (path.endsWith('/foods')) {
+          return markedPage(request.url.queryParameters['mark'] ?? 'loved');
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final dish = session.savedDishes(FoodMark.loved).single;
+
+      await session.setNeverAgain(dish, true);
+
+      expect(session.lovedIds, isNot(contains(lovedId)));
+      expect(session.neverAgainIds, contains(lovedId));
+      expect(session.savedDishes(FoodMark.loved), isEmpty);
+      expect(
+        session.savedDishes(FoodMark.blocked).map((d) => d.id),
+        containsAll([lovedId, blockedId]),
+      );
+    });
+
+    test('§7.5.2 comes back whole, with the gaps left as gaps', () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final detail = await session.dishDetail(
+        session.savedDishes(FoodMark.loved).single,
+      );
+
+      expect(detail.nutrition.caloriesKcal, 480);
+      expect(detail.nutrition.sodiumMg, 1600.0);
+      // `null`, not 0. A health app printing "Purin 0 mg" for an unmeasured
+      // dish has told a gout patient it is safe.
+      expect(detail.nutrition.purineMg, isNull);
+      expect(detail.nutrition.calciumMg, isNull);
+      // Absent from the answer altogether, which is also not zero.
+      expect(detail.nutrition.ironMg, isNull);
+
+      final share = detail.nutrition.macroShare;
+      expect(share, isNotNull);
+      expect(
+        share!.protein + share.carbs + share.fat,
+        closeTo(1.0, 1e-9),
+        reason: 'the three shares are normalised by their own total',
+      );
+
+      expect(detail.warnings, hasLength(1));
+      expect(detail.warnings.single.conditionCode, 'gout');
+      expect(detail.warnings.single.message, contains('Gút'));
+      expect(detail.brief.category, 'Món nước');
+      expect(detail.brief.tags, ['Giàu purin']);
+      expect(detail.brief.mark, FoodMark.loved);
+      expect(detail.myFeedback, isNull);
+    });
+
+    /// Online there is no local taste vector and no endpoint that scores one
+    /// dish, so the "Hợp gu" tag has to disappear rather than show a number
+    /// this side made up.
+    test('no taste percentage is invented online', () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      expect(session.scoreOf(session.savedDishes(FoodMark.loved).single),
+          isNull);
+    });
+
+    test('offline, the detail is the mock dish and its gaps are honest',
+        () async {
+      final session = AppSession();
+      final dish = MockFoods.surveyDeck.first;
+
+      final detail = await session.dishDetail(dish.brief);
+
+      expect(detail.nutrition.caloriesKcal, dish.kcal.toDouble());
+      expect(detail.nutrition.proteinG, dish.protein);
+      // The mock holds no micronutrients, so neither does this.
+      expect(detail.nutrition.calciumMg, isNull);
+      expect(detail.nutrition.vitaminCMg, isNull);
+      // Offline the F1 verdict comes from `rules/dish_screening.dart`, which
+      // the screen asks separately; duplicating it here would put the same
+      // verdict in two places.
+      expect(detail.warnings, isEmpty);
+    });
+
+    test('offline, a dish the mock does not hold is a 404, not a crash',
+        () async {
+      final session = AppSession();
+
+      await expectLater(
+        session.dishDetail(const FoodBrief(
+          id: 'nope',
+          name: 'Món không có',
+          category: '',
+          dishRole: 'main',
+          spiceLevel: 0,
+          kcal: 0,
+          servingSizeG: 0,
+        )),
+        throwsA(isA<ApiFailure>()
+            .having((f) => f.code, 'code', ApiFailure.notFound)),
+      );
+    });
+  });
+
   group('PUT /foods/{id}/mark - bookmarks and blocked dishes', () {
     /// The answer is applied, not the request. The two differ exactly when
     /// the other mark had to go, which is the case a local toggle gets wrong.
@@ -778,7 +999,7 @@ void main() {
       });
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
 
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
       await session.toggleLoved(dish);
 
       expect(sent.single['kind'], 'loved');
@@ -811,7 +1032,7 @@ void main() {
 
       // Read back at sign-in, so the bookmark is drawn filled before any
       // screen asks for it.
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
       expect(session.lovedIds, contains(dish.id));
 
       await session.toggleLoved(dish);
@@ -844,7 +1065,7 @@ void main() {
       });
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
 
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
       await expectLater(
         session.setNeverAgain(dish, true),
         throwsA(
@@ -861,7 +1082,7 @@ void main() {
 
     test('offline, the two sets are the whole store', () async {
       final session = AppSession();
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
 
       await session.toggleLoved(dish);
       expect(session.lovedIds, contains(dish.id));

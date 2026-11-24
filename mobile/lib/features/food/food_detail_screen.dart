@@ -5,8 +5,10 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_card.dart';
 import '../../data/api/failure.dart';
+import '../../core/dish_look.dart';
 import '../../data/mock/mock_ingredients.dart';
-import '../../data/models/food.dart';
+import '../../data/models/food_brief.dart';
+import '../../data/models/food_detail.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/session.dart';
 import '../plan/widgets/replace_sheet.dart';
@@ -22,13 +24,18 @@ import '../plan/widgets/replace_sheet.dart';
 /// be refused, so the controls have to be disabled while in flight and put
 /// back when the answer is no.
 class FoodDetailScreen extends StatefulWidget {
-  const FoodDetailScreen({super.key, required this.food});
+  const FoodDetailScreen({super.key, required this.dish});
 
-  final Food food;
+  /// What the list that opened this screen already knew. Shown at once, so
+  /// the name and the picture are never a spinner; the nutrition underneath
+  /// arrives from §7.5.2, which is the only answer in the API carrying a
+  /// whole `food_nutrition` row.
+  final FoodBrief dish;
 
-  static Future<void> open(BuildContext context, Food food) => Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => FoodDetailScreen(food: food)));
+  static Future<void> open(BuildContext context, FoodBrief dish) =>
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => FoodDetailScreen(dish: dish)),
+      );
 
   @override
   State<FoodDetailScreen> createState() => _FoodDetailScreenState();
@@ -43,7 +50,52 @@ class _FoodDetailScreenState extends State<FoodDetailScreen> {
   /// the block is in flight would race two writes to the same row.
   bool _saving = false;
 
-  Food get food => widget.food;
+  FoodDetail? _detail;
+  ApiFailure? _error;
+  bool _loading = true;
+
+  FoodBrief get food => widget.dish;
+
+  @override
+  void initState() {
+    super.initState();
+    // `didChangeDependencies` and not `initState` for the session lookup:
+    // `SessionScope.of` reads an inherited widget, which asserts if it is
+    // called before the first build.
+    _started = false;
+  }
+
+  bool _started = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final session = SessionScope.of(context);
+    try {
+      final detail = await session.dishDetail(widget.dish);
+      if (!mounted) return;
+      setState(() {
+        _detail = detail;
+        _loading = false;
+      });
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _error = failure;
+        _loading = false;
+      });
+    }
+  }
 
   /// Runs one mark write, turning a failure into something the user can act
   /// on. Returns nothing: what was actually stored is read back off the
@@ -253,39 +305,53 @@ class _FoodDetailScreenState extends State<FoodDetailScreen> {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    if (!session.preference.isEmpty)
-                      _Tag(
-                        'Hợp gu ${(session.preference.score(food) * 100).round()}%',
-                        accent: true,
-                      ),
+                    // Only offline, where there is a local vector and a
+                    // local dish to put through it. Online the taste model
+                    // lives in the ML service and no endpoint scores one
+                    // dish, so the tag goes rather than showing a number
+                    // this side made up.
+                    if (session.scoreOf(food) case final score?)
+                      _Tag('Hợp gu ${(score * 100).round()}%', accent: true),
                     if (food.spiceLevel > 0)
                       _Tag('Cay ${'🌶' * food.spiceLevel}'),
                     for (final t in food.tags) _Tag(t),
                   ],
                 ),
                 const SizedBox(height: 18),
-                _EnergyCard(food: food),
-                const SizedBox(height: 14),
-                AppCard(
-                  title: 'Trong một suất',
-                  child: Column(
-                    children: [
-                      _Fact('Đường', '${formatNumber(food.sugar, 1)} g'),
-                      _Fact('Natri', '${formatNumber(food.sodium)} mg'),
-                      _Fact('Chất xơ', '${formatNumber(food.fiber, 1)} g'),
-                      // A missing purine figure is "unknown", never zero —
-                      // see `Food.purine`.
-                      _Fact(
-                        'Purin',
-                        food.purine == null
-                            ? 'Chưa có số liệu'
-                            : '${formatNumber(food.purine!)} mg',
-                        muted: food.purine == null,
-                        last: true,
-                      ),
-                    ],
+                if (_loading)
+                  const _Pending()
+                else if (_error case final failure?)
+                  _LoadFailed(failure: failure, onRetry: _load)
+                else if (_detail case final detail?) ...[
+                  if (detail.warnings.isNotEmpty) ...[
+                    _WarningsCard(warnings: detail.warnings),
+                    const SizedBox(height: 14),
+                  ],
+                  _EnergyCard(nutrition: detail.nutrition),
+                  const SizedBox(height: 14),
+                  AppCard(
+                    title: 'Trong một suất',
+                    child: Column(
+                      children: [
+                        // Every one of these can be absent, and `null` is
+                        // never 0: the Vietnamese food composition table
+                        // leaves real gaps, and printing "0 mg" where the
+                        // answer is "nobody measured it" is the kind of false
+                        // statement that reads as reassuring.
+                        _Amount('Đường', detail.nutrition.sugarG, 'g', 1),
+                        _Amount('Natri', detail.nutrition.sodiumMg, 'mg', 0),
+                        _Amount('Chất xơ', detail.nutrition.fiberG, 'g', 1),
+                        _Amount(
+                          'Purin',
+                          detail.nutrition.purineMg,
+                          'mg',
+                          0,
+                          last: true,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
                 if (ingredients.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   AppCard(
@@ -330,7 +396,7 @@ class _FoodDetailScreenState extends State<FoodDetailScreen> {
 class _Hero extends StatelessWidget {
   const _Hero({required this.food});
 
-  final Food food;
+  final FoodBrief food;
 
   @override
   Widget build(BuildContext context) {
@@ -420,13 +486,13 @@ class _Tag extends StatelessWidget {
 
 /// Energy of the serving, and where it comes from.
 class _EnergyCard extends StatelessWidget {
-  const _EnergyCard({required this.food});
+  const _EnergyCard({required this.nutrition});
 
-  final Food food;
+  final DishNutrition nutrition;
 
   @override
   Widget build(BuildContext context) {
-    final share = food.macroShare;
+    final share = nutrition.macroShare;
 
     return AppCard(
       child: Column(
@@ -437,7 +503,7 @@ class _EnergyCard extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                '${food.kcal}',
+                formatNumber(nutrition.caloriesKcal),
                 style: const TextStyle(
                   fontSize: 40,
                   height: 1,
@@ -452,36 +518,60 @@ class _EnergyCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: SizedBox(
-              height: 8,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final part in [
-                    (share.protein, AppColors.protein),
-                    (share.carb, AppColors.carb),
-                    (share.fat, AppColors.fat),
-                  ])
-                    if (part.$1 > 0)
-                      Expanded(
-                        flex: (part.$1 * 1000).round().clamp(1, 1000),
-                        child: ColoredBox(color: part.$2),
-                      ),
-                ],
+          // No bars when any of the three macros is missing. Two thirds of
+          // a composition is not a composition, and drawing it as one would
+          // overstate whichever macros happen to be known — the bar would
+          // fill, so it would read as complete.
+          if (share == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Text(
+                'Chưa có đủ số liệu đạm · bột đường · béo để tách tỉ lệ.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textTertiary),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: SizedBox(
+                height: 8,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final part in [
+                      (share.protein, AppColors.protein),
+                      (share.carbs, AppColors.carb),
+                      (share.fat, AppColors.fat),
+                    ])
+                      if (part.$1 > 0)
+                        Expanded(
+                          flex: (part.$1 * 1000).round().clamp(1, 1000),
+                          child: ColoredBox(color: part.$2),
+                        ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _Macro('Đạm', food.protein, share.protein, AppColors.protein),
-              _Macro('Bột đường', food.carb, share.carb, AppColors.carb),
-              _Macro('Béo', food.fat, share.fat, AppColors.fat),
-            ],
-          ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _Macro(
+                  'Đạm',
+                  nutrition.proteinG!,
+                  share.protein,
+                  AppColors.protein,
+                ),
+                _Macro(
+                  'Bột đường',
+                  nutrition.carbsG!,
+                  share.carbs,
+                  AppColors.carb,
+                ),
+                _Macro('Béo', nutrition.fatG!, share.fat, AppColors.fat),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -644,6 +734,163 @@ class _NeverAgainCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// While §7.5.2 is in flight. A card and not a full-screen spinner: the name
+/// and the picture are already on screen from the list row, so only the part
+/// that is actually unknown should look unknown.
+class _Pending extends StatelessWidget {
+  const _Pending();
+
+  @override
+  Widget build(BuildContext context) {
+    return const AppCard(
+      child: SizedBox(
+        height: 96,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+    );
+  }
+}
+
+/// When the nutrition could not be fetched.
+///
+/// It says what is missing rather than showing the dish as though nothing
+/// were: a detail screen with no numbers and no warnings looks like a dish
+/// with nothing to warn about, which for someone with an allergy is the one
+/// mistake this screen must not make.
+class _LoadFailed extends StatelessWidget {
+  const _LoadFailed({required this.failure, required this.onRetry});
+
+  final ApiFailure failure;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Chưa tải được thông tin dinh dưỡng',
+            style: TextStyle(
+              fontSize: 15,
+              color: AppColors.textPrimary,
+              fontVariations: [FontVariation('wght', 700)],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            failure.message,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (failure.isRetryable) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(onPressed: onRetry, child: const Text('Thử lại')),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The hard medical rules this dish breaks for this user — §7.5.2's
+/// `warnings[]`.
+///
+/// Above the numbers, because it is the one part of the screen that can stop
+/// someone eating something. The sentences are written by the backend and
+/// shown as they arrive: the app composes no safety prose, so there is one
+/// wording per rule and one place it comes from.
+class _WarningsCard extends StatelessWidget {
+  const _WarningsCard({required this.warnings});
+
+  final List<FoodWarning> warnings;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 18,
+                color: AppColors.danger,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                warnings.length == 1
+                    ? 'Món này không phù hợp với bạn'
+                    : 'Món này vi phạm ${warnings.length} quy tắc',
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: AppColors.danger,
+                  fontVariations: [FontVariation('wght', 700)],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Every rule, not the first. Fixing one does not make the dish
+          // acceptable, so the user has to see them all.
+          for (final warning in warnings) ...[
+            Text(
+              '· ${warning.message}',
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            if (warning != warnings.last) const SizedBox(height: 4),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One nutrition figure, or the fact that nobody measured it.
+///
+/// The muted "Chưa có số liệu" is the whole reason this is its own widget:
+/// `null` is not 0 anywhere in this project, and a health app that prints
+/// "Purin 0 mg" for an unmeasured dish has told a gout patient it is safe.
+class _Amount extends StatelessWidget {
+  const _Amount(
+    this.label,
+    this.value,
+    this.unit,
+    this.decimals, {
+    this.last = false,
+  });
+
+  final String label;
+  final double? value;
+  final String unit;
+  final int decimals;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = value;
+    return _Fact(
+      label,
+      amount == null
+          ? 'Chưa có số liệu'
+          : '${formatNumber(amount, decimals)} $unit',
+      muted: amount == null,
+      last: last,
     );
   }
 }

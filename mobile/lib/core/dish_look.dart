@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+// `DishRole` lives beside `Food`. Imported for the enum only — this file
+// is a UI one, so depending on the model that carries Flutter colours
+// costs nothing here.
 import '../data/models/food.dart';
 import '../data/models/food_brief.dart';
 
@@ -27,25 +30,6 @@ extension DishLook on FoodBrief {
 
   /// The two-stop gradient behind the card.
   List<Color> get gradient => _lookFor(dishRole).gradient;
-}
-
-/// A mock dish as a list row, so one widget serves both modes.
-///
-/// `imageAsset` comes with it: the offline deck's thirty dishes each carry a
-/// placeholder photo from the Figma design, and those are what actually show
-/// — the gradient is only the floor underneath.
-extension FoodAsBrief on Food {
-  FoodBrief get brief => FoodBrief(
-    id: id,
-    name: name,
-    category: category,
-    dishRole: dishRole,
-    spiceLevel: spiceLevel,
-    kcal: kcal.toDouble(),
-    servingSizeG: servingSizeG,
-    imageAsset: imageAsset,
-    tags: tags,
-  );
 }
 
 _RoleLook _lookFor(String dishRole) =>

@@ -1,5 +1,8 @@
-// ONLINE: §7.5 the catalogue, and the dish marks that go with it.
+// ONLINE: §7.5 the catalogue, §7.3 the dictionaries it filters by, and the
+// dish marks that go with both.
 
+import '../models/food_brief.dart';
+import '../models/food_detail.dart';
 import 'api_client.dart';
 import 'failure.dart';
 
@@ -70,29 +73,176 @@ class FoodApi {
     return parsed(() => FoodMarkState.fromJson(json));
   }
 
-  /// The ids of the dishes carrying [kind], for the saved-dishes screens.
+  /// §7.5.1 — browse and search the catalogue.
   ///
-  /// `excludeUnsafe=false` on purpose. The default hides dishes this user may
-  /// not eat, and a dish can be bookmarked and later become unsafe — a new
-  /// allergy, a tighter severity. Hiding it would leave the user with a list
-  /// they cannot empty, because the row they want to remove is the row that
-  /// is not there.
-  Future<List<String>> markedIds(String kind) async {
+  /// Every argument left out is a filter not applied, which is what the
+  /// server's own defaults mean. [excludeUnsafe] has a default here too, and
+  /// it is the server's: dishes this user may not eat are hidden unless asked
+  /// for. A dish they merely **blocked** is not hidden by it — that flag is
+  /// about health, and a blocked dish has to stay findable or the screen that
+  /// unblocks it can never be reached.
+  Future<FoodPage> search({
+    String? query,
+    String? categoryId,
+    String? mealType,
+    String? dishRole,
+    double? maxCalories,
+    String? mark,
+    bool excludeUnsafe = true,
+    int page = 1,
+    int pageSize = defaultPageSize,
+  }) async {
     final json = await _client.get(
       '/foods',
       query: {
-        'mark': kind,
-        'excludeUnsafe': 'false',
-        'pageSize': '$_pageSize',
+        if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
+        'categoryId': ?categoryId,
+        'mealType': ?mealType,
+        'dishRole': ?dishRole,
+        if (maxCalories != null) 'maxCalories': '$maxCalories',
+        'mark': ?mark,
+        'excludeUnsafe': '$excludeUnsafe',
+        'page': '$page',
+        'pageSize': '$pageSize',
       },
     );
+    return parsed(() => FoodPage.fromJson(json));
+  }
+
+  /// The dishes carrying [kind], for the saved-dishes screens.
+  ///
+  /// `excludeUnsafe: false` on purpose. The default hides dishes this user
+  /// may not eat, and a dish can be bookmarked and later become unsafe — a
+  /// new allergy, a tighter severity. Hiding it would leave the user with a
+  /// list they cannot empty, because the row they want to remove is the row
+  /// that is not there.
+  ///
+  /// One page, and that is enough: a user with more than a hundred
+  /// bookmarked dishes out of a 318-dish catalogue has bookmarked a third of
+  /// everything, and a second page would be the smaller of their problems.
+  Future<List<FoodBrief>> marked(String kind) async => (await search(
+    mark: kind,
+    excludeUnsafe: false,
+    pageSize: maxPageSize,
+  )).items;
+
+  /// §7.5.2 — one dish in full: its whole nutrition row, the medical warnings
+  /// for this user, their own mark and their latest rating.
+  ///
+  /// `404 NOT_FOUND` for a dish this user cannot see, which includes another
+  /// user's private food. `503 ML_UNAVAILABLE` when the safety verdict cannot
+  /// be obtained — the screen cannot be drawn honestly without it, so the
+  /// endpoint refuses rather than showing a dish with no warnings.
+  Future<FoodDetail> detail(String foodId) async {
+    final json = await _client.get('/foods/$foodId');
+    return parsed(() => FoodDetail.fromJson(json));
+  }
+
+  /// §7.3.3 — the food groups, for the browse screen's filter.
+  ///
+  /// A bare array, not a page: these are dictionaries, and §7.3 answers all
+  /// three of them that way.
+  Future<List<FoodCategory>> categories() async {
+    final rows = await _client.getList('/food-categories');
     return parsed(() => [
-      for (final item in json['items'] as List) (item as Map)['id'] as String,
+      for (final row in rows)
+        FoodCategory.fromJson(row as Map<String, dynamic>),
     ]);
   }
 
-  /// §7.5.1's cap. One page is enough for both lists: a user with more than
-  /// a hundred bookmarked dishes out of a 318-dish catalogue has bookmarked
-  /// a third of everything, and a second page would be the smaller problem.
-  static const int _pageSize = 100;
+  /// §7.3.2 — the tags: allergen, diet and nutrition labels.
+  ///
+  /// [type] narrows to one `tags.tag_type`. There is no `taste` type: the
+  /// schema dropped it, because salty and sweet became measured vector
+  /// dimensions computed from `sodium_mg` and `sugar_g`, and sour and bitter
+  /// are published by no source this project uses.
+  Future<List<FoodTag>> tags({String? type}) async {
+    final rows = await _client.getList(
+      '/tags',
+      query: {'type': ?type},
+    );
+    return parsed(() => [
+      for (final row in rows) FoodTag.fromJson(row as Map<String, dynamic>),
+    ]);
+  }
+
+  /// §7.5.1's default page size, and its cap.
+  static const int defaultPageSize = 20;
+  static const int maxPageSize = 100;
+}
+
+/// One page of §7.5.1.
+class FoodPage {
+  const FoodPage({
+    required this.items,
+    required this.page,
+    required this.pageSize,
+    required this.totalItems,
+    required this.totalPages,
+  });
+
+  factory FoodPage.fromJson(Map<String, dynamic> json) => FoodPage(
+    items: [
+      for (final item in (json['items'] as List? ?? const []))
+        FoodBrief.fromJson(item as Map<String, dynamic>),
+    ],
+    page: (json['page'] as num?)?.toInt() ?? 1,
+    pageSize: (json['pageSize'] as num?)?.toInt() ?? 0,
+    totalItems: (json['totalItems'] as num?)?.toInt() ?? 0,
+    // 0 for an empty result and not 1: there is no page to ask for.
+    totalPages: (json['totalPages'] as num?)?.toInt() ?? 0,
+  );
+
+  final List<FoodBrief> items;
+  final int page;
+  final int pageSize;
+  final int totalItems;
+  final int totalPages;
+
+  bool get hasMore => page < totalPages;
+}
+
+/// One row of `food_categories` — §7.3.3.
+class FoodCategory {
+  const FoodCategory({required this.id, required this.name, this.description});
+
+  factory FoodCategory.fromJson(Map<String, dynamic> json) => FoodCategory(
+    // A **CHAR(36) UUID**, not an int. §7.5.1's own parameter table says
+    // `int` for `categoryId` while the JSON example beside it shows a UUID;
+    // the schema is the side that is right, and this is the side that has to
+    // match it.
+    id: json['id'] as String,
+    name: json['name'] as String,
+    description: json['description'] as String?,
+  );
+
+  final String id;
+
+  /// Already Vietnamese in the database, so it is shown as it arrives.
+  final String name;
+  final String? description;
+}
+
+/// One row of `tags` — §7.3.2.
+class FoodTag {
+  const FoodTag({
+    required this.id,
+    required this.nameVi,
+    required this.tagType,
+  });
+
+  factory FoodTag.fromJson(Map<String, dynamic> json) => FoodTag(
+    // An **int**, unlike `foods.id` and `food_categories.id`: `tags.id` is
+    // `INT UNSIGNED AUTO_INCREMENT`. The two kinds of key live side by side
+    // in this API, which is worth stating rather than discovering.
+    id: (json['id'] as num).toInt(),
+    nameVi: json['nameVi'] as String,
+    tagType: json['tagType'] as String,
+  );
+
+  final int id;
+  final String nameVi;
+
+  /// `allergen` · `diet` · `nutrition` — a `tags.tag_type` code.
+  final String tagType;
 }

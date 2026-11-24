@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/dish_look.dart';
 import '../../data/api/failure.dart';
-import '../../data/models/food.dart';
+import '../../data/api/food_api.dart';
+import '../../data/models/food_brief.dart';
 import '../../data/session.dart';
 import '../food/food_detail_screen.dart';
 
@@ -26,11 +28,14 @@ class SavedDishesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = SessionScope.of(context);
     final loved = kind == SavedKind.loved;
-    final ids = loved ? session.lovedIds : session.neverAgainIds;
-    final foods = [
-      for (final f in session.candidates)
-        if (ids.contains(f.id)) f,
-    ];
+    // The dishes the session holds for this mark, not the catalogue filtered
+    // by their ids. That is what the old version did, and online the ids are
+    // the server's UUIDs while `candidates` is the mock deck: nothing
+    // matched, so the account screen read "3 mon" and this list under it was
+    // blank — the marks stored, enforced, and unreachable.
+    final foods = session.savedDishes(
+      loved ? FoodMark.loved : FoodMark.blocked,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -120,7 +125,7 @@ class _SavedTile extends StatelessWidget {
     required this.onRemove,
   });
 
-  final Food food;
+  final FoodBrief food;
   final String removeTooltip;
   final VoidCallback onOpen;
   final VoidCallback onRemove;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/food_adapters.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/mock/mock_rules.dart';
 import '../../data/recommender/match_reason.dart';
@@ -257,7 +258,7 @@ class _MealSection extends StatelessWidget {
           for (final item in slot.items) ...[
             PlanItemTile(
               item: item,
-              onOpen: () => FoodDetailScreen.open(context, item.food),
+              onOpen: () => FoodDetailScreen.open(context, item.food.brief),
               onReplace: () => _replace(context, item),
               // Only today can be eaten: logging a meal stamps it with the
               // current time, so "eating" tomorrow's dinner would land in

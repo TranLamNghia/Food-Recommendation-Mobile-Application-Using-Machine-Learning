@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import '../core/dish_look.dart';
 
 import 'api/api_client.dart';
 import 'api/api_config.dart';
@@ -14,7 +13,9 @@ import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
 import 'models/food.dart';
+import 'models/food_adapters.dart';
 import 'models/food_brief.dart';
+import 'models/food_detail.dart';
 import 'models/health_profile.dart';
 import 'models/meal_plan.dart';
 import 'models/swipe_action.dart';
@@ -401,14 +402,30 @@ class AppSession extends ChangeNotifier {
   /// pool before a plan is built, so no score can bring them back.
   final Set<String> neverAgainIds = {};
 
+  /// The dishes behind those two sets, so the saved-dishes screens have
+  /// something to draw.
+  ///
+  /// This is what the empty-list defect was: the screens filtered
+  /// `MockFoods` by these ids, and online the ids are the server's UUIDs. No
+  /// id matched, so the account screen read "3 món" and the list under it was
+  /// blank — the marks were stored and enforced, and unreachable.
+  final Map<String, FoodBrief> _markedDishes = {};
+
+  /// The dishes carrying [kind], in the order the server listed them (by
+  /// name) or, offline, the order they were marked in.
+  List<FoodBrief> savedDishes(String kind) => [
+    for (final dish in _markedDishes.values)
+      if (dish.mark == kind) dish,
+  ];
+
   // ONLINE: PUT /foods/{id}/mark.
   //
-  // OFFLINE: the two sets above are the store.
+  // OFFLINE: the sets and the map above are the store.
   //
   // The server answers with the state it now holds, and that answer is what
   // is applied — not what was asked for. The two differ exactly when the
   // other mark had to go, which is the case a local toggle would get wrong.
-  Future<void> toggleLoved(Food food) async {
+  Future<void> toggleLoved(FoodBrief food) async {
     final wanted = lovedIds.contains(food.id) ? null : FoodMark.loved;
     await _applyMark(food, wanted);
   }
@@ -424,11 +441,13 @@ class AppSession extends ChangeNotifier {
   /// as a separate action the user can see. The alternative — quietly
   /// skipping or regenerating — would change the day's energy figure from
   /// under a user who only answered a question about future plans.
-  Future<void> setNeverAgain(Food food, bool value) async {
+  Future<void> setNeverAgain(FoodBrief food, bool value) async {
     await _applyMark(food, value ? FoodMark.blocked : null);
   }
 
-  Future<void> _applyMark(Food food, String? wanted) async {
+  /// The one place any of the three stores is written, so they cannot drift
+  /// into disagreeing about what is marked.
+  Future<void> _applyMark(FoodBrief food, String? wanted) async {
     final api = _foods;
     final applied = api == null
         ? wanted
@@ -436,11 +455,14 @@ class AppSession extends ChangeNotifier {
 
     lovedIds.remove(food.id);
     neverAgainIds.remove(food.id);
+    _markedDishes.remove(food.id);
     switch (applied) {
       case FoodMark.loved:
         lovedIds.add(food.id);
+        _markedDishes[food.id] = food.copyWith(mark: FoodMark.loved);
       case FoodMark.blocked:
         neverAgainIds.add(food.id);
+        _markedDishes[food.id] = food.copyWith(mark: FoodMark.blocked);
     }
     notifyListeners();
   }
@@ -449,19 +471,29 @@ class AppSession extends ChangeNotifier {
   //
   // Read at sign-in rather than when a saved-dishes screen opens: the
   // bookmark is drawn on every dish tile and in the plan, so a list that
-  // arrived only on that screen would have every heart empty until the user
-  // visited it.
+  // arrived only on that screen would show every dish unmarked until the
+  // user had visited the one screen that fetched it.
+  //
+  // Twice because `?mark=` takes one value. The alternative — one unfiltered
+  // page carrying each row's `mark` — would be four pages of 100 over a
+  // 318-dish catalogue, to find what is usually a handful of dishes.
   Future<void> _pullMarks() async {
     final api = _foods;
     if (api == null) return;
-    final loved = await api.markedIds(FoodMark.loved);
-    final blocked = await api.markedIds(FoodMark.blocked);
+    final loved = await api.marked(FoodMark.loved);
+    final blocked = await api.marked(FoodMark.blocked);
+
     lovedIds
       ..clear()
-      ..addAll(loved);
+      ..addAll(loved.map((d) => d.id));
     neverAgainIds
       ..clear()
-      ..addAll(blocked);
+      ..addAll(blocked.map((d) => d.id));
+    _markedDishes
+      ..clear()
+      ..addEntries([
+        for (final dish in [...loved, ...blocked]) MapEntry(dish.id, dish),
+      ]);
   }
 
   // ── Settings ─────────────────────────────────────────────────────
@@ -502,6 +534,7 @@ class AppSession extends ChangeNotifier {
     diary.clear();
     lovedIds.clear();
     neverAgainIds.clear();
+    _markedDishes.clear();
     notifyListeners();
   }
 
@@ -736,16 +769,55 @@ class AppSession extends ChangeNotifier {
       if (item.status == MealItemStatus.suggested) item.food,
   ];
 
-  /// The serving of [food] still on the plate for the day on screen, or
+  // ONLINE: GET /foods/{id} — §7.5.2, the only answer carrying a dish's
+  // whole nutrition row.
+  //
+  // OFFLINE: the mock dish of the same id, adapted. Its micronutrients come
+  // back null rather than 0, because the mock does not hold them either.
+  //
+  // The brief is passed in and not just an id: it is what the list already
+  // knew, so the screen can draw the name and the picture while this is in
+  // flight instead of showing a spinner over everything.
+  Future<FoodDetail> dishDetail(FoodBrief dish) async {
+    final api = _foods;
+    if (api != null) return api.detail(dish.id);
+
+    for (final food in MockFoods.surveyDeck) {
+      if (food.id == dish.id) return food.detail;
+    }
+    throw ApiFailure(
+      code: ApiFailure.notFound,
+      message: 'Không tìm thấy món ${dish.name}',
+    );
+  }
+
+  /// How well a dish fits this user's taste, 0 to 1, or `null` when there is
+  /// no answer to give.
+  ///
+  /// `null` happens in two ways and both are honest. Before any swipe the
+  /// vector is empty, so every dish would score the same and a percentage
+  /// would be noise dressed as a measurement. And online there is no local
+  /// vector at all — Rocchio runs in the ML service and no endpoint scores a
+  /// single dish — so the screen drops the figure rather than inventing one.
+  // OFFLINE: the Dart copy of step 3, over the mock catalogue.
+  double? scoreOf(FoodBrief dish) {
+    if (_preference == null) return null;
+    for (final food in MockFoods.surveyDeck) {
+      if (food.id == dish.id) return _preference!.score(food);
+    }
+    return null;
+  }
+
+  /// The serving of the dish still on the plate for the day on screen, or
   /// `null` if there is none.
   ///
   /// `suggested` only: an `eaten` serving is already in the diary and cannot
   /// be taken back off the day, and a `skipped` one is off it already. Used
   /// by the detail screen to ask what to do with a serving of a dish the
   /// user has just blocked, rather than deciding for them.
-  MealPlanItem? plannedTodayItem(Food food) {
+  MealPlanItem? plannedTodayItem(FoodBrief dish) {
     for (final item in plan?.allItems ?? const <MealPlanItem>[]) {
-      if (item.food.id == food.id &&
+      if (item.food.id == dish.id &&
           item.status == MealItemStatus.suggested) {
         return item;
       }

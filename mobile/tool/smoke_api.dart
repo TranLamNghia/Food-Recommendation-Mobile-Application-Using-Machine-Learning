@@ -366,8 +366,123 @@ Future<void> main() async {
   check('and the same energy target as before',
       (reread.energyTarget! - localTarget).abs() <= 1);
 
-  print('\nPUT /foods/{id}/mark  bookmarks and blocked dishes');
   final foods = FoodApi(fresh);
+
+  print('\n§7.3.2 · §7.3.3  the dictionaries the browse screen filters by');
+  final categories = await foods.categories();
+  check('the food groups come back', categories.isNotEmpty,
+      '${categories.length} groups');
+  check('each one has a Vietnamese name',
+      categories.every((c) => c.name.trim().isNotEmpty));
+  // §7.5.1's parameter table says `int` for categoryId while the JSON
+  // example beside it shows a UUID. The schema is the side that is right,
+  // and a client that parsed an int here would fail on every row.
+  check('and a CHAR(36) id, not an int as §7.5.1 claims',
+      categories.every((c) => c.id.length == 36 && c.id.contains('-')),
+      categories.first.id);
+
+  final allTags = await foods.tags();
+  check('the tags come back', allTags.isNotEmpty, '${allTags.length} tags');
+  check('with int ids, unlike the dishes and the groups',
+      allTags.every((t) => t.id > 0));
+  check('and only the three types the schema kept — no `taste`',
+      allTags.map((t) => t.tagType).toSet().every(
+          (t) => const {'allergen', 'diet', 'nutrition'}.contains(t)),
+      '${allTags.map((t) => t.tagType).toSet()}');
+  final allergens = await foods.tags(type: 'allergen');
+  check('?type= narrows to one tag_type',
+      allergens.isNotEmpty && allergens.every((t) => t.tagType == 'allergen'),
+      '${allergens.length} allergen tags');
+
+  print('\n§7.5.1  browse the catalogue');
+  final firstPage = await foods.search(pageSize: 10);
+  check('a page of ten comes back', firstPage.items.length == 10,
+      '${firstPage.items.length}');
+  check('the whole catalogue is bigger than one page',
+      firstPage.totalItems > 10, '${firstPage.totalItems}');
+  check('totalPages is the ceiling, not the floor',
+      firstPage.totalPages == (firstPage.totalItems + 9) ~/ 10,
+      '${firstPage.totalPages} for ${firstPage.totalItems}');
+  check('hasMore agrees with the page it is on', firstPage.hasMore);
+  check('every row carries what a list tile draws',
+      firstPage.items.every((f) =>
+          f.name.isNotEmpty && f.category.isNotEmpty && f.kcal > 0 &&
+          f.servingSizeG > 0),
+      'one row was incomplete');
+
+  final secondPage = await foods.search(pageSize: 10, page: 2);
+  check('page 2 shares no row with page 1 — an unstable sort would hide a '
+      'dish from every page',
+      firstPage.items
+          .map((f) => f.id)
+          .toSet()
+          .intersection(secondPage.items.map((f) => f.id).toSet())
+          .isEmpty);
+
+  final soups = await foods.search(dishRole: 'soup', pageSize: 100);
+  check('dishRole really filters',
+      soups.items.isNotEmpty &&
+          soups.items.every((f) => f.dishRole == 'soup'),
+      '${soups.items.length} soups');
+  final lunch = await foods.search(mealType: 'lunch', pageSize: 100);
+  check('mealType returns exactly the roles a lunch can hold',
+      lunch.items.map((f) => f.dishRole).toSet().difference(
+          const {'main', 'side_protein', 'soup'}).isEmpty,
+      '${lunch.items.map((f) => f.dishRole).toSet()}');
+  final light = await foods.search(maxCalories: 100, pageSize: 100);
+  check('maxCalories is a ceiling per serving',
+      light.items.every((f) => f.kcal <= 100));
+  final byGroup = await foods.search(
+      categoryId: categories.first.id, pageSize: 100);
+  check('categoryId filters by the UUID the dictionary gave',
+      byGroup.items.isNotEmpty &&
+          byGroup.items.every((f) => f.category == categories.first.name),
+      '${byGroup.items.length} dishes in ${categories.first.name}');
+
+  print('\n§7.5.2  one dish in full');
+  final subject = firstPage.items.first;
+  final full = await foods.detail(subject.id);
+  check('it is the dish asked for', full.id == subject.id);
+  check('the list row and the detail agree on the name',
+      full.name == subject.name, '${full.name} against ${subject.name}');
+  check('a serving weight and an energy figure came back',
+      full.nutrition.servingSizeG > 0 && full.nutrition.caloriesKcal > 0);
+  check('and the three macros, which is what the bars need',
+      full.nutrition.macroShare != null,
+      'protein=${full.nutrition.proteinG} carbs=${full.nutrition.carbsG} '
+      'fat=${full.nutrition.fatG}');
+  final share = full.nutrition.macroShare;
+  check('the three shares are normalised by their own total',
+      share == null ||
+          (share.protein + share.carbs + share.fat - 1).abs() < 1e-9);
+  check('the detail carries the group as an object with a name',
+      full.brief.category.isNotEmpty, full.brief.category);
+  check('and this user has no mark on it yet', full.brief.mark == null,
+      '${full.brief.mark}');
+
+  // The catalogue publishes purine for 70 of its 318 dishes. Over a page of
+  // ten there is almost certainly at least one gap, and a gap has to arrive
+  // as `null` — a 0 would read as "contains no purine", which is a different
+  // and reassuring claim.
+  var withGaps = 0;
+  for (final row in firstPage.items) {
+    final detail = await foods.detail(row.id);
+    if (detail.nutrition.purineMg == null) withGaps++;
+  }
+  check('an unmeasured nutrient arrives as null, never as 0',
+      withGaps > 0,
+      'all ten dishes had a purine figure, so the null path went unchecked');
+
+  try {
+    await foods.detail('00000000-0000-4000-8000-000000000000');
+    check('a dish that does not exist is refused', false);
+  } on ApiFailure catch (f) {
+    check('404 NOT_FOUND for a dish that is not there',
+        f.code == ApiFailure.notFound, '${f.status} ${f.code}');
+  }
+
+
+  print('\nPUT /foods/{id}/mark  bookmarks and blocked dishes');
   final page = await fresh.get('/foods', query: {'pageSize': '3'});
   final dishIds = [
     for (final item in page['items'] as List) (item as Map)['id'] as String,
@@ -381,7 +496,7 @@ Future<void> main() async {
       loved.kind == FoodMark.loved && loved.foodId == dish, '${loved.kind}');
   check('and says when', loved.markedAt != null);
   check('the bookmark is in the saved list',
-      (await foods.markedIds(FoodMark.loved)).contains(dish));
+      (await foods.marked(FoodMark.loved)).any((d) => d.id == dish));
 
   final again = await foods.setMark(dish, FoodMark.loved);
   check('sending the same mark twice is idempotent',
@@ -391,9 +506,9 @@ Future<void> main() async {
   check('switching to blocked answers blocked',
       blocked.kind == FoodMark.blocked, '${blocked.kind}');
   check('and the bookmark is gone - one row per (user, food)',
-      !(await foods.markedIds(FoodMark.loved)).contains(dish));
+      !(await foods.marked(FoodMark.loved)).any((d) => d.id == dish));
   check('while the blocked list has it',
-      (await foods.markedIds(FoodMark.blocked)).contains(dish));
+      (await foods.marked(FoodMark.blocked)).any((d) => d.id == dish));
 
   // The behaviour the F1 change could have broken: a blocked dish must stay
   // findable, because the only screen that unblocks it is reached by finding
@@ -413,8 +528,8 @@ Future<void> main() async {
   final unmarked = await foods.setMark(dish, null);
   check('a null kind clears the mark', unmarked.kind == null);
   check('and leaves the account with no marks at all',
-      (await foods.markedIds(FoodMark.loved)).isEmpty &&
-          (await foods.markedIds(FoodMark.blocked)).isEmpty);
+      (await foods.marked(FoodMark.loved)).isEmpty &&
+          (await foods.marked(FoodMark.blocked)).isEmpty);
 
   try {
     await foods.setMark(

@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nutrition_app/core/dish_look.dart';
+import 'package:nutrition_app/data/models/food_adapters.dart';
 import 'package:nutrition_app/core/theme/app_theme.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/mock/mock_ingredients.dart';
@@ -114,7 +114,7 @@ void main() {
     test('a never-again dish stays out of every later plan', () {
       final session = _readySession();
       final banned = session.plan!.allItems.first.food;
-      session.setNeverAgain(banned, true);
+      session.setNeverAgain(banned.brief, true);
 
       for (var i = 0; i < 20; i++) {
         session.regeneratePlan();
@@ -364,11 +364,11 @@ void main() {
       // that serving instead of deciding. Nothing has happened to the plan
       // while the question is open.
       expect(find.text('Món này vẫn trong thực đơn hôm nay'), findsOneWidget);
-      expect(session.plannedTodayItem(food), isNotNull);
+      expect(session.plannedTodayItem(food.brief), isNotNull);
       await tester.tap(find.text('Giữ nguyên'));
       await tester.pumpAndSettle();
       expect(
-        session.plannedTodayItem(food),
+        session.plannedTodayItem(food.brief),
         isNotNull,
         reason: 'keeping the serving must leave the plan exactly as it was',
       );
@@ -397,7 +397,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final plan = session.plan!;
-      expect(session.plannedTodayItem(food), isNull);
+      expect(session.plannedTodayItem(food.brief), isNull);
       expect(plan.onPlateKcal, closeTo(before - food.kcal, 0.001));
       expect(
         plan.actualKcal,
