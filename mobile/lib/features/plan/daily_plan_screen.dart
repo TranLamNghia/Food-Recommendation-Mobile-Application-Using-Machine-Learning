@@ -9,6 +9,7 @@ import '../../data/recommender/match_reason.dart';
 import '../../data/rules/condition_rule.dart';
 import '../../data/rules/day_budget.dart';
 import '../../data/session.dart';
+import '../food/food_browse_screen.dart';
 import '../food/food_detail_screen.dart';
 import 'excluded_screen.dart';
 import 'reason_screen.dart';
@@ -308,6 +309,15 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
+        ),
+        // The way into the whole catalogue. Here because the plan is where
+        // a user wonders "what else could I eat", and the four tabs are
+        // already full.
+        IconButton(
+          onPressed: () => FoodBrowseScreen.open(context),
+          tooltip: 'Tìm món',
+          icon: const Icon(Icons.search_rounded),
+          color: AppColors.textPrimary,
         ),
         IconButton(
           onPressed: () => _regenerate(context),

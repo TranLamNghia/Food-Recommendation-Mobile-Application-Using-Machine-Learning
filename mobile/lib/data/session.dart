@@ -18,6 +18,7 @@ import 'models/candidate_count.dart';
 import 'models/food_adapters.dart';
 import 'models/food_brief.dart';
 import 'models/food_detail.dart';
+import 'models/food_query.dart';
 import 'models/health_profile.dart';
 import 'models/meal_plan.dart';
 import 'models/swipe_action.dart';
@@ -1033,6 +1034,94 @@ class AppSession extends ChangeNotifier {
       notifyListeners();
       return;
     }
+  }
+
+  // ── Browsing the catalogue ───────────────────────────────────────
+
+  List<FoodCategory>? _categories;
+
+  /// The food groups the browse screen filters by.
+  // ONLINE: GET /food-categories — §7.3.3, asked once per session: a
+  // dictionary that changes only when the catalogue is re-imported.
+  //
+  // OFFLINE: the groups the mock dishes carry. The mock has no ids, so the
+  // name stands in for one and [searchFoods] compares names.
+  Future<List<FoodCategory>> foodCategories() async {
+    final cached = _categories;
+    if (cached != null) return cached;
+    final api = _foods;
+    final loaded = api != null
+        ? await api.categories()
+        : [
+            for (final name in {for (final f in candidates) f.category})
+              FoodCategory(id: name, name: name),
+          ];
+    loaded.sort((a, b) => a.name.compareTo(b.name));
+    return _categories = loaded;
+  }
+
+  /// One page of the catalogue matching [query].
+  // ONLINE: GET /foods — §7.5.1, all six filters plus `excludeUnsafe`.
+  //
+  // OFFLINE: the same filters over the mock dishes, in one page. "Fits the
+  // meal" is read off the meal structure step 4 builds with, and "safe" off
+  // the same F1 screening the plan uses.
+  Future<FoodPage> searchFoods(FoodQuery query, {int page = 1}) async {
+    final api = _foods;
+    if (api != null) {
+      return api.search(
+        query: query.text,
+        categoryId: query.categoryId,
+        mealType: query.meal?.code,
+        dishRole: query.role?.code,
+        maxCalories: query.maxKcal,
+        mark: query.mark,
+        excludeUnsafe: query.safeOnly,
+        page: page,
+      );
+    }
+
+    final text = foldVietnamese(query.text.trim());
+    final roles = query.meal == null ? null : mealRolesOf(query.meal!);
+    final safe = {
+      for (final f in screenDishes(
+        foods: candidates,
+        conditions: userConditions,
+        budget: const DayBudget(),
+      ).allowed)
+        f.id,
+    };
+    final items = <FoodBrief>[];
+    for (final f in candidates) {
+      final mark = lovedIds.contains(f.id)
+          ? FoodMark.loved
+          : neverAgainIds.contains(f.id)
+          ? FoodMark.blocked
+          : null;
+      final isSafe = safe.contains(f.id);
+      if (text.isNotEmpty && !foldVietnamese(f.name).contains(text)) continue;
+      if (query.categoryId != null && f.category != query.categoryId) {
+        continue;
+      }
+      if (roles != null && !roles.contains(f.dishRole)) continue;
+      if (query.role != null &&
+          f.dishRole != query.role!.code &&
+          f.dishRole != query.role!.label) {
+        continue;
+      }
+      if (query.maxKcal != null && f.kcal > query.maxKcal!) continue;
+      if (query.mark != null && mark != query.mark) continue;
+      if (query.safeOnly && !isSafe) continue;
+      items.add(f.brief.copyWith(mark: mark, isSafeForUser: isSafe));
+    }
+    items.sort((a, b) => a.name.compareTo(b.name));
+    return FoodPage(
+      items: items,
+      page: 1,
+      pageSize: items.length,
+      totalItems: items.length,
+      totalPages: items.isEmpty ? 0 : 1,
+    );
   }
 
   // ── The day's allowance, and dish screening ──────────────────────
