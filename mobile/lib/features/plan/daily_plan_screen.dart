@@ -9,6 +9,7 @@ import '../../data/recommender/match_reason.dart';
 import '../../data/rules/condition_rule.dart';
 import '../../data/rules/day_budget.dart';
 import '../../data/session.dart';
+import '../food/food_browse_screen.dart';
 import '../food/food_detail_screen.dart';
 import 'excluded_screen.dart';
 import 'reason_screen.dart';
@@ -309,6 +310,15 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
+        // The way into the whole catalogue. Here because the plan is where
+        // a user wonders "what else could I eat", and the four tabs are
+        // already full.
+        IconButton(
+          onPressed: () => FoodBrowseScreen.open(context),
+          tooltip: 'Tìm món',
+          icon: const Icon(Icons.search_rounded),
+          color: AppColors.textPrimary,
+        ),
         IconButton(
           onPressed: () => _regenerate(context),
           tooltip: 'Sinh lại thực đơn',
@@ -316,6 +326,59 @@ class _Header extends StatelessWidget {
           color: AppColors.textPrimary,
         ),
       ],
+    );
+  }
+}
+
+/// Rebuilds one meal and leaves the other three alone — for a user who likes
+/// the day but not its dinner, and would otherwise have had to throw the
+/// whole day away to change it.
+///
+/// Asks first, like the day-level button, because the meal's dishes are
+/// replaced and not added to. Milder wording: nothing eaten can be lost, as
+/// the button is not offered on a meal with an eaten dish.
+Future<void> _regenerateMeal(BuildContext context, MealType meal) async {
+  final session = SessionScope.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  final day = session.selectedDay;
+  final name = meal.label.toLowerCase();
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Đổi $name?'),
+      content: Text(
+        'Các món của $name sẽ được thay bằng món khác, vẫn tính theo hạn mức '
+        'của bữa. Những bữa còn lại giữ nguyên.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Để nguyên'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Đổi bữa'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+
+  try {
+    await session.regenerateMeal(meal, date: day);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Đã đổi $name sang món khác'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  } on ApiFailure catch (failure) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(failure.message),
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 }
@@ -409,67 +472,97 @@ class _MealSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A meal with an eaten dish cannot be rebuilt: that dish is in the diary,
+    // and §7.6.2b refuses rather than replan around a record. Hidden rather
+    // than offered and refused.
+    final canRebuild =
+        slot.items.isNotEmpty &&
+        slot.items.every((i) => i.status != MealItemStatus.eaten);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(
-              slot.type.label,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const Spacer(),
-            // `onPlateKcal`, not `actualKcal`: a skipped serving is off the
-            // meal, and showing a lunch as 620 kcal when the user removed
-            // the 320 kcal half of it is simply a wrong number on screen.
-            // `actualKcal` stays what it is — the plan as generated, which
-            // is what the ±10 % commitment is measured on — and the line
-            // below names the difference instead of hiding it.
-            Text(
-              '${formatNumber(slot.onPlateKcal)} / '
-              '${formatNumber(slot.targetKcal)} kcal',
-              style: const TextStyle(
-                fontSize: 13,
+            Expanded(child: _mealTitle(context)),
+            if (canRebuild)
+              IconButton(
+                onPressed: () => _regenerateMeal(context, slot.type),
+                tooltip: 'Đổi ${slot.type.label.toLowerCase()}',
+                icon: const Icon(Icons.autorenew_rounded, size: 20),
                 color: AppColors.textSecondary,
-                fontVariations: [FontVariation('wght', 600)],
+                visualDensity: VisualDensity.compact,
               ),
-            ),
           ],
         ),
-        if (slot.onPlateKcal < slot.actualKcal) ...[
-          const SizedBox(height: 2),
-          Text(
-            'Đã bỏ ${slot.skippedItems.length} món · '
-            '−${formatNumber(slot.actualKcal - slot.onPlateKcal)} kcal so '
-            'với thực đơn gốc',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textTertiary,
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        if (slot.items.isEmpty)
-          const _EmptySlot()
-        else
-          for (final item in slot.items) ...[
-            PlanItemTile(
-              item: item,
-              onOpen: () => FoodDetailScreen.open(context, item.food),
-              onReplace: () => _replace(context, item),
-              // Only today can be eaten: logging a meal stamps it with the
-              // current time, so "eating" tomorrow's dinner would land in
-              // today's diary.
-              onEat: session.viewingToday ? () => _eat(context, item) : null,
-              onSkip: () => _skip(context, item, true),
-              onRestore: () => _skip(context, item, false),
-            ),
-            _WhyRow(item: item, session: session),
-          ],
+        ..._afterTitle(context),
       ],
     );
+  }
+
+  Widget _mealTitle(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(slot.type.label, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(width: 8),
+        // `onPlateKcal`, not `actualKcal`: a skipped serving is off the
+        // meal, and showing a lunch as 620 kcal when the user removed
+        // the 320 kcal half of it is simply a wrong number on screen.
+        // `actualKcal` stays what it is — the plan as generated, which
+        // is what the ±10 % commitment is measured on — and the line
+        // below names the difference instead of hiding it.
+        // Expanded so it gives way, not the meal's name, now that the
+        // rebuild button shares the line.
+        Expanded(
+          child: Text(
+            '${formatNumber(slot.onPlateKcal)} / '
+            '${formatNumber(slot.targetKcal)} kcal',
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              fontVariations: [FontVariation('wght', 600)],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _afterTitle(BuildContext context) {
+    return [
+      if (slot.onPlateKcal < slot.actualKcal) ...[
+        const SizedBox(height: 2),
+        Text(
+          'Đã bỏ ${slot.skippedItems.length} món · '
+          '−${formatNumber(slot.actualKcal - slot.onPlateKcal)} kcal so '
+          'với thực đơn gốc',
+          style: const TextStyle(fontSize: 12, color: AppColors.textTertiary),
+        ),
+      ],
+      const SizedBox(height: 12),
+      if (slot.items.isEmpty)
+        const _EmptySlot()
+      else
+        for (final item in slot.items) ...[
+          PlanItemTile(
+            item: item,
+            onOpen: () => FoodDetailScreen.open(context, item.food),
+            onReplace: () => _replace(context, item),
+            // Only today can be eaten: logging a meal stamps it with the
+            // current time, so "eating" tomorrow's dinner would land in
+            // today's diary.
+            onEat: session.viewingToday ? () => _eat(context, item) : null,
+            onSkip: () => _skip(context, item, true),
+            onRestore: () => _skip(context, item, false),
+          ),
+          _WhyRow(item: item, session: session),
+        ],
+    ];
   }
 }
 

@@ -45,6 +45,13 @@ const _mealStructure = <MealType, _MealShape>{
   MealType.snack: _MealShape(required: ['Món phụ']),
 };
 
+/// The dish roles [meal] is built from, required and optional. What "fits
+/// this meal" means offline, for the browse screen's meal filter.
+List<String> mealRolesOf(MealType meal) {
+  final shape = _mealStructure[meal]!;
+  return [...shape.required, ...shape.optional];
+}
+
 /// One serving to fill, identified by its meal and its dish role.
 typedef _Slot = ({MealType meal, String role, bool explore});
 
