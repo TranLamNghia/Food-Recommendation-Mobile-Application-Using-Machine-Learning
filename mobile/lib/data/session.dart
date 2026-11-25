@@ -801,6 +801,60 @@ class AppSession extends ChangeNotifier {
     return true;
   }
 
+  /// Rebuilds one [meal] of the day on screen and keeps the other three.
+  ///
+  /// Refused while a dish of that meal is marked eaten: it is in the diary,
+  /// and replanning around it would delete a record of something that
+  /// happened. The screen hides the button then; the check here is for the
+  /// offline mode, which has no server to refuse it.
+  // ONLINE: POST /meal-plans/{id}/meals/{mealType} — §7.6.2b. The server
+  // leaves the meal's current dishes out, so the answer is a different meal
+  // and not the same one again, and it answers with the whole day because
+  // the day's totals and its ±10 % verdict moved with it.
+  //
+  // OFFLINE: a fresh day from the Dart builder with every dish already on
+  // the plan avoided, of which only this meal is kept. Phase 5 is not rerun
+  // over the merged day, so offline the ±10 % is not measured again.
+  Future<void> regenerateMeal(MealType meal, {DateTime? date}) async {
+    final day = _dateOnly(date ?? _selectedDay);
+    final current = _plans[_dayKey(day)];
+    if (current == null) return;
+    final slot = current.slots.where((s) => s.type == meal).firstOrNull;
+    if (slot != null &&
+        slot.items.any((i) => i.status == MealItemStatus.eaten)) {
+      throw const ApiFailure(
+        code: ApiFailure.validationFailed,
+        message:
+            'Bữa này đã có món được đánh dấu là đã ăn, nên không sinh lại được',
+      );
+    }
+
+    final api = _mealPlans;
+    if (api != null && current.id != null) {
+      _plans[_dayKey(day)] = await api.regenerateMeal(current.id!, meal.code);
+      notifyListeners();
+      return;
+    }
+
+    final energy = profile.energyTarget;
+    final macro = profile.macroTarget;
+    if (energy == null || macro == null || slot == null) return;
+    final fresh = _builder(avoid: {for (final i in current.allItems) i.food.id})
+        .build(
+          date: day,
+          targetKcal: energy,
+          targetProtein: macro.protein,
+          targetCarb: macro.carb,
+          targetFat: macro.fat,
+        );
+    final rebuilt = fresh.slots.where((s) => s.type == meal).firstOrNull;
+    if (rebuilt == null) return;
+    slot.items
+      ..clear()
+      ..addAll(rebuilt.items);
+    notifyListeners();
+  }
+
   /// Drops the plans that were sized to the old profile and rebuilds the one
   /// on screen. Today is kept once something on it has been eaten: that day
   /// has started, so it stays as built.
