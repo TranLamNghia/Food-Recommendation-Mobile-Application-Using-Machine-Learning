@@ -9,8 +9,13 @@ import 'package:http/testing.dart';
 import 'package:nutrition_app/core/theme/app_theme.dart';
 import 'package:nutrition_app/data/api/api_client.dart';
 import 'package:nutrition_app/data/api/failure.dart';
+import 'package:nutrition_app/data/models/food_brief.dart';
+import 'package:nutrition_app/data/api/food_api.dart';
+import 'package:nutrition_app/data/models/meal_plan.dart';
+import 'package:nutrition_app/data/models/food_adapters.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
+import 'package:nutrition_app/data/models/swipe_action.dart';
 import 'package:nutrition_app/data/session.dart';
 import 'package:nutrition_app/features/auth/auth_screen.dart';
 import 'package:nutrition_app/features/auth/welcome_screen.dart';
@@ -541,6 +546,1191 @@ void main() {
     });
   });
 
+  group('§7.4 the taste survey - what ends onboarding', () {
+    Map<String, Object?> deckCard(String id) => {
+      'id': id,
+      'name': 'Món $id',
+      'imageUrl': null,
+      'categoryName': 'Món nước',
+      'spiceLevel': 1,
+      'dishRole': 'main',
+      'caloriesKcal': 420,
+      'servingSizeG': 300,
+      'tags': ['Món nước'],
+    };
+
+    Map<String, Object?> deckBody(List<String> ids) => {
+      'sessionId': 'a1b2c3d4-0000-4000-8000-000000000000',
+      'totalItems': ids.length,
+      'minRequired': 20,
+      'items': [for (final id in ids) deckCard(id)],
+    };
+
+    Map<String, Object?> submitBody(int opinionated) => {
+      'sessionId': 'a1b2c3d4-0000-4000-8000-000000000000',
+      'onboardingCompletedAt': '2026-11-23T10:30:00+07:00',
+      'recorded': {
+        'total': opinionated + 1,
+        'opinionated': opinionated,
+        'skipped': 1,
+        'droppedUnsafe': 0,
+      },
+      'preferenceProfile': {
+        'stage': 'content',
+        'nSignals': opinionated,
+        'alpha': 0.0,
+        'featureVersion': 'v2',
+      },
+      'tasteSummary': {
+        'topLikedCategories': ['Món nước'],
+        'topLikedTastes': ['salty'],
+      },
+    };
+
+    /// The defect this whole group exists for. Before the survey reached the
+    /// server, `completeSurvey` built a vector locally and returned, so
+    /// `onboarding_completed_at` stayed null — and `welcome_screen` reads
+    /// that stamp on every launch, which sent the user back to the survey
+    /// after they had finished it. For good.
+    test('submitting the survey is what sets hasFinishedOnboarding', () async {
+      Map<String, dynamic>? posted;
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': true});
+        }
+        if (path.endsWith('/profile/nutrition-targets')) {
+          return _json(_targets);
+        }
+        if (path.endsWith('/profile')) {
+          return _json({
+            'gender': 'male',
+            'dateOfBirth': '2004-11-04',
+            'heightCm': 172.0,
+            'weightKg': 68.5,
+            'activityLevel': 'moderate',
+            'goal': 'maintain',
+            'conditions': <dynamic>[],
+          });
+        }
+        if (path.endsWith('/onboarding/survey')) {
+          if (request.method == 'POST') {
+            posted = jsonDecode(request.body) as Map<String, dynamic>;
+            return _json(submitBody(24));
+          }
+          return _json(deckBody(['f1', 'f2', 'f3']));
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      expect(session.hasFinishedOnboarding, isFalse);
+
+      final deck = await session.loadSurveyDeck();
+      expect(deck.map((c) => c.id), ['f1', 'f2', 'f3']);
+      expect(session.surveyDeck?.minRequired, 20);
+
+      await session.completeSurvey([
+        (food: deck[0], action: SwipeAction.like),
+        (food: deck[1], action: SwipeAction.dislike),
+        (food: deck[2], action: SwipeAction.unknown),
+      ]);
+
+      expect(session.hasFinishedOnboarding, isTrue);
+      expect(session.onboardingCompletedAt, isNotNull);
+      // The session id handed out by the deck call travels back, which is
+      // what makes a retry recognisable as the same event.
+      expect(posted!['sessionId'], 'a1b2c3d4-0000-4000-8000-000000000000');
+      expect(posted!['swipes'], [
+        {'foodId': 'f1', 'action': 'like'},
+        {'foodId': 'f2', 'action': 'dislike'},
+        {'foodId': 'f3', 'action': 'unknown'},
+      ]);
+      expect(session.surveyOutcome?.stage, 'content');
+      expect(session.surveyOutcome?.nSignals, 24);
+      expect(session.surveyOutcome?.topLikedCategories, ['Món nước']);
+    });
+
+    /// The request carries ids and codes and nothing else. Rocchio runs in
+    /// the ML service, and a second implementation of it on this side would
+    /// be the one nothing compares — so the local vector is left alone.
+    test('the local preference vector is not built online', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/onboarding/survey')) {
+          return request.method == 'POST'
+              ? _json(submitBody(24))
+              : _json(deckBody(['f1']));
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final deck = await session.loadSurveyDeck();
+      await session.completeSurvey([
+        (food: deck.single, action: SwipeAction.like),
+      ]);
+
+      expect(session.hasFinishedOnboarding, isTrue);
+      // Still the empty vector: every weight zero, so no dish outranks
+      // another on taste. `session.preference` builds a fresh empty profile
+      // on each read while nothing is stored, which is why this asserts the
+      // CONTENT rather than the identity.
+      expect(session.preference.isEmpty, isTrue);
+      // And no plan was built here either. Online the day comes from
+      // §7.6, which this branch has not reached; building one locally would
+      // put a second, disagreeing plan on screen.
+      expect(session.plan, isNull);
+    });
+
+    /// `422` when too few swipes carried an opinion. Nothing is stamped, so
+    /// the app must not treat the survey as done — the screen offers a fresh
+    /// deck instead.
+    test('too few opinions leaves onboarding unfinished', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/onboarding/survey')) {
+          if (request.method == 'POST') {
+            return _envelope(
+              422,
+              'ONBOARDING_INSUFFICIENT',
+              'Cần ít nhất 20 món có ý kiến',
+            );
+          }
+          return _json(deckBody(['f1']));
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final deck = await session.loadSurveyDeck();
+
+      await expectLater(
+        session.completeSurvey([
+          (food: deck.single, action: SwipeAction.unknown),
+        ]),
+        throwsA(
+          isA<ApiFailure>().having(
+            (f) => f.code,
+            'code',
+            ApiFailure.onboardingInsufficient,
+          ),
+        ),
+      );
+      expect(session.hasFinishedOnboarding, isFalse);
+      expect(session.surveyOutcome, isNull);
+    });
+
+    test('offline, the deck is the mock one and the cold start is local', () async {
+      final session = AppSession();
+      _filled(session.profile);
+
+      final deck = await session.loadSurveyDeck();
+
+      expect(deck, isNotEmpty);
+      // No session id: there is nowhere to store a session offline, and
+      // `completeSurvey` uses its absence to know which path it is on.
+      expect(session.surveyDeck, isNull);
+
+      await session.completeSurvey([
+        for (final card in deck) (food: card, action: SwipeAction.like),
+      ]);
+
+      // Offline nothing stamps the account, and the first plan is built on
+      // the spot instead.
+      expect(session.hasFinishedOnboarding, isFalse);
+      expect(session.surveyOutcome, isNull);
+      expect(session.plan, isNotNull);
+    });
+  });
+
+  group('§7.5 the catalogue - and the empty saved lists it fixes', () {
+    /// Server ids, deliberately nothing `MockFoods` holds. That is the whole
+    /// defect: the saved screens used to filter the mock deck by these, and
+    /// online no id could ever match.
+    const lovedId = '7f3a0000-0000-4000-8000-000000000001';
+    const blockedId = '7f3a0000-0000-4000-8000-000000000002';
+
+    http.Response markedPage(String mark) => _json({
+      'items': [
+        {
+          'id': mark == 'loved' ? lovedId : blockedId,
+          'name': mark == 'loved' ? 'Bún bò Huế' : 'Chè ba màu',
+          'categoryName': 'Món nước',
+          'dishRole': mark == 'loved' ? 'main' : 'dessert',
+          'spiceLevel': 2,
+          'caloriesKcal': 480,
+          'servingSizeG': 350,
+          'isSafeForUser': true,
+          'mark': mark,
+        },
+      ],
+      'page': 1,
+      'pageSize': 100,
+      'totalItems': 1,
+      'totalPages': 1,
+    });
+
+    AppSession signedIn(List<String>? calls) => _online((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/login')) return _json(_tokens);
+      if (path.endsWith('/auth/me')) {
+        return _json({..._user, 'hasHealthProfile': false});
+      }
+      if (path.endsWith('/foods')) {
+        return markedPage(request.url.queryParameters['mark'] ?? 'loved');
+      }
+      if (path.contains('/foods/')) {
+        return _json({
+          'id': lovedId,
+          'name': 'Bún bò Huế',
+          'description': 'Món nước xứ Huế.',
+          'imageUrl': null,
+          'category': {'id': 'c1', 'name': 'Món nước'},
+          'spiceLevel': 2,
+          'dishRole': 'main',
+          'nutrition': {
+            'servingSizeG': 350,
+            'caloriesKcal': 480,
+            'proteinG': 28.0,
+            'carbsG': 55.0,
+            'fatG': 14.0,
+            'fiberG': 1.2,
+            'sugarG': 3.0,
+            'sodiumMg': 1600.0,
+            // Deliberately absent, as they are for most of the 318 dishes.
+            'purineMg': null,
+            'calciumMg': null,
+          },
+          'tags': [
+            {'id': 3, 'nameVi': 'Giàu purin', 'tagType': 'nutrition'},
+          ],
+          'isSafeForUser': false,
+          'mark': 'loved',
+          'warnings': [
+            {
+              'conditionId': 5,
+              'conditionCode': 'gout',
+              'conditionName': 'Gút',
+              'ruleType': 'exclude_tag',
+              'message': 'Món có nhãn “Giàu purin”, không phù hợp với Gút',
+              'isHard': true,
+              'missingData': false,
+            },
+          ],
+          'myFeedback': null,
+        });
+      }
+      return _json(const {});
+    }, calls: calls);
+
+    /// The defect, stated as a test: the dishes behind the marks have to come
+    /// from the server, because their ids are the server's.
+    test('signing in brings back the saved dishes, not just their ids',
+        () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      expect(session.lovedIds, {lovedId});
+      expect(session.neverAgainIds, {blockedId});
+
+      final saved = session.savedDishes(FoodMark.loved);
+      expect(saved, hasLength(1));
+      expect(saved.single.name, 'Bún bò Huế');
+      expect(session.savedDishes(FoodMark.blocked).single.name, 'Chè ba màu');
+
+      // And none of it could have come from the mock deck, which is what the
+      // old version filtered.
+      expect(
+        MockFoods.surveyDeck.map((f) => f.id),
+        isNot(contains(lovedId)),
+        reason: 'the fixture must use ids the mock cannot supply, or this '
+            'test would pass against the broken version too',
+      );
+    });
+
+    test('marking a dish keeps the id, the set and the dish in step',
+        () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/mark')) {
+          return _json({'foodId': lovedId, 'kind': 'blocked'});
+        }
+        if (path.endsWith('/foods')) {
+          return markedPage(request.url.queryParameters['mark'] ?? 'loved');
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final dish = session.savedDishes(FoodMark.loved).single;
+
+      await session.setNeverAgain(dish, true);
+
+      expect(session.lovedIds, isNot(contains(lovedId)));
+      expect(session.neverAgainIds, contains(lovedId));
+      expect(session.savedDishes(FoodMark.loved), isEmpty);
+      expect(
+        session.savedDishes(FoodMark.blocked).map((d) => d.id),
+        containsAll([lovedId, blockedId]),
+      );
+    });
+
+    test('§7.5.2 comes back whole, with the gaps left as gaps', () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final detail = await session.dishDetail(
+        session.savedDishes(FoodMark.loved).single,
+      );
+
+      expect(detail.nutrition.caloriesKcal, 480);
+      expect(detail.nutrition.sodiumMg, 1600.0);
+      // `null`, not 0. A health app printing "Purin 0 mg" for an unmeasured
+      // dish has told a gout patient it is safe.
+      expect(detail.nutrition.purineMg, isNull);
+      expect(detail.nutrition.calciumMg, isNull);
+      // Absent from the answer altogether, which is also not zero.
+      expect(detail.nutrition.ironMg, isNull);
+
+      final share = detail.nutrition.macroShare;
+      expect(share, isNotNull);
+      expect(
+        share!.protein + share.carbs + share.fat,
+        closeTo(1.0, 1e-9),
+        reason: 'the three shares are normalised by their own total',
+      );
+
+      expect(detail.warnings, hasLength(1));
+      expect(detail.warnings.single.conditionCode, 'gout');
+      expect(detail.warnings.single.message, contains('Gút'));
+      expect(detail.brief.category, 'Món nước');
+      expect(detail.brief.tags, ['Giàu purin']);
+      expect(detail.brief.mark, FoodMark.loved);
+      expect(detail.myFeedback, isNull);
+    });
+
+    /// Online there is no local taste vector and no endpoint that scores one
+    /// dish, so the "Hợp gu" tag has to disappear rather than show a number
+    /// this side made up.
+    test('no taste percentage is invented online', () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      expect(session.scoreOf(session.savedDishes(FoodMark.loved).single),
+          isNull);
+    });
+
+    test('offline, the detail is the mock dish and its gaps are honest',
+        () async {
+      final session = AppSession();
+      final dish = MockFoods.surveyDeck.first;
+
+      final detail = await session.dishDetail(dish.brief);
+
+      expect(detail.nutrition.caloriesKcal, dish.kcal.toDouble());
+      expect(detail.nutrition.proteinG, dish.protein);
+      // The mock holds no micronutrients, so neither does this.
+      expect(detail.nutrition.calciumMg, isNull);
+      expect(detail.nutrition.vitaminCMg, isNull);
+      // Offline the F1 verdict comes from `rules/dish_screening.dart`, which
+      // the screen asks separately; duplicating it here would put the same
+      // verdict in two places.
+      expect(detail.warnings, isEmpty);
+    });
+
+    test('offline, a dish the mock does not hold is a 404, not a crash',
+        () async {
+      final session = AppSession();
+
+      await expectLater(
+        session.dishDetail(const FoodBrief(
+          id: 'nope',
+          name: 'Món không có',
+          category: '',
+          dishRole: 'main',
+          spiceLevel: 0,
+          kcal: 0,
+          servingSizeG: 0,
+        )),
+        throwsA(isA<ApiFailure>()
+            .having((f) => f.code, 'code', ApiFailure.notFound)),
+      );
+    });
+  });
+
+  group('§7.4.3 the filter screen\'s live count', () {
+    http.Response catalogue() => _json([
+      {
+        'id': 2,
+        'code': 'hypertension',
+        'nameVi': 'Tăng huyết áp',
+        'conditionType': 'disease',
+        'description': null,
+      },
+      {
+        'id': 7,
+        'code': 'allergy_seafood',
+        'nameVi': 'Dị ứng hải sản',
+        'conditionType': 'allergy',
+        'description': null,
+      },
+    ]);
+
+    http.Response countBody({
+      int remaining = 227,
+      List<String> emptyRoles = const [],
+      List<String> notes = const [],
+    }) => _json({
+      'totalFoods': 318,
+      'remainingFoods': remaining,
+      'removedFoods': 318 - remaining,
+      'byDishRole': {'main': 80, 'soup': 30, 'side_protein': 60},
+      'emptyRequiredRoles': emptyRoles,
+      'enoughForSurvey': remaining >= 30,
+      'surveyDeckSize': remaining >= 30 ? 30 : remaining,
+      'notes': notes,
+    });
+
+    test('codes are mapped to ids, with the severity each one was given',
+        () async {
+      Map<String, dynamic>? posted;
+      final calls = <String>[];
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        if (path.endsWith('/candidates/count')) {
+          posted = jsonDecode(request.body) as Map<String, dynamic>;
+          return countBody();
+        }
+        return _json(const {});
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final count = await session.countCandidates(
+        codes: {'hypertension', 'allergy_seafood'},
+        severities: {'hypertension': 'severe'},
+      );
+
+      expect(posted!['conditions'], containsAll([
+        {'conditionId': 2, 'severity': 'severe'},
+        // No severity was picked for the allergy, so the column's own
+        // default travels — every allergy rule applies from `mild` anyway,
+        // which is why the screen does not ask.
+        {'conditionId': 7, 'severity': 'moderate'},
+      ]));
+      expect(count.totalFoods, 318);
+      expect(count.remainingFoods, 227);
+      expect(count.removedFoods, 91);
+      expect(count.canBuildAPlan, isTrue);
+      expect(count.byDishRole['main'], 80);
+
+      // Asked twice, looked up once: the dictionary cannot change between
+      // two ticks of a checkbox, and the count is asked again on every one.
+      await session.countCandidates(codes: {'hypertension'});
+      expect(
+        calls.where((c) => c.endsWith('/conditions')),
+        hasLength(1),
+        reason: 'the condition dictionary must be cached',
+      );
+    });
+
+    /// An empty set means "nothing declared", not "whatever is on file".
+    /// Getting this wrong shows a filtered number as the catalogue on the
+    /// very first view of the screen.
+    test('nothing ticked sends an empty list, and asks for no dictionary',
+        () async {
+      Map<String, dynamic>? posted;
+      final calls = <String>[];
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        if (path.endsWith('/candidates/count')) {
+          posted = jsonDecode(request.body) as Map<String, dynamic>;
+          return countBody(remaining: 318);
+        }
+        return _json(const {});
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final count = await session.countCandidates(
+        codes: {HealthProfile.noneCode},
+      );
+
+      expect(posted!['conditions'], isEmpty);
+      expect(count.removedFoods, 0);
+      expect(
+        calls.where((c) => c.endsWith('/conditions')),
+        isEmpty,
+        reason: 'with nothing declared there is no code to look up',
+      );
+    });
+
+    /// The same stance as saving the declarations: a code the server does not
+    /// know stops the count. Dropping it would show a reassuring number built
+    /// from an allergy the server never heard about.
+    test('a code the dictionary does not know stops the count', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        return countBody();
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      await expectLater(
+        session.countCandidates(codes: {'allergy_pangolin'}),
+        throwsA(isA<ApiFailure>().having(
+          (f) => f.message,
+          'message',
+          contains('allergy_pangolin'),
+        )),
+      );
+    });
+
+    /// A healthy total is not enough. One required role with nothing left in
+    /// it makes a day unbuildable, whatever the total says.
+    test('an empty required role means no plan, however big the total',
+        () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/conditions')) return catalogue();
+        if (path.endsWith('/candidates/count')) {
+          return countBody(
+            remaining: 180,
+            emptyRoles: ['side_protein'],
+            notes: ['Không còn món mặn nào.'],
+          );
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final count = await session.countCandidates(codes: {'hypertension'});
+
+      expect(count.remainingFoods, 180);
+      expect(count.canBuildAPlan, isFalse);
+      expect(count.emptyRequiredRoles, ['side_protein']);
+      expect(count.notes, isNotEmpty);
+    });
+
+    test('offline, the count comes from the Dart copy of the filter',
+        () async {
+      final session = AppSession();
+
+      final all = await session.countCandidates(codes: const {});
+      expect(all.totalFoods, greaterThan(0));
+      expect(
+        all.remainingFoods,
+        all.totalFoods,
+        reason: 'nothing declared removes nothing',
+      );
+      expect(all.removedFoods, 0);
+
+      // A seafood allergy, which really does exclude dishes in the mock
+      // deck: seven of the thirty carry the `Có hải sản` tag.
+      final allergic = await session.countCandidates(
+        codes: {'allergy_seafood'},
+      );
+      expect(
+        allergic.remainingFoods,
+        lessThan(all.totalFoods),
+        reason: 'the mock deck has dishes a seafood allergy excludes',
+      );
+      expect(allergic.byDishRole, isNotEmpty);
+      expect(session.isOnline, isFalse);
+
+      // The `require_tag` direction, which the offline copy had no mechanism
+      // for at all until this branch: a vegan diet keeps only the dishes
+      // CARRYING `Món thuần chay` instead of dropping the ones that carry
+      // something. It used to exclude nothing, so a vegetarian offline got a
+      // plan with meat in it.
+      final vegan = await session.countCandidates(codes: {'vegan'});
+      expect(
+        vegan.remainingFoods,
+        lessThan(all.totalFoods),
+        reason: 'a vegan diet has to remove the dishes that are not vegan',
+      );
+      expect(
+        vegan.remainingFoods,
+        greaterThan(0),
+        reason: 'and it must not remove everything, or no day can be built',
+      );
+      // The role a day cannot be assembled without, and the reason two
+      // dishes were added to the mock deck: none of the original thirty was
+      // a vegetarian MAIN course.
+      expect(
+        vegan.byDishRole['Món chính'] ?? 0,
+        greaterThan(0),
+        reason: 'a vegetarian needs a main course, or MEAL_STRUCTURE cannot '
+            'fill breakfast, lunch or dinner',
+      );
+      expect(vegan.emptyRequiredRoles, isEmpty);
+    });
+  });
+
+  group('§7.6 the meal plan, as the server builds it', () {
+    Map<String, Object?> item(String id, String foodId, String name, {
+      int kcal = 420,
+      int grams = 300,
+      String role = 'main',
+      String status = 'suggested',
+      double? delta,
+    }) => {
+      'id': id,
+      'food': {
+        'id': foodId,
+        'name': name,
+        'imageUrl': null,
+        'categoryName': 'Món nước',
+        'dishRole': role,
+        'caloriesKcal': kcal,
+      },
+      'servingSizeG': grams,
+      'predictedScore': 0.72,
+      'status': status,
+      'replacedByFood': null,
+      'explorationDelta': delta,
+      'position': 1,
+    };
+
+    Map<String, Object?> planBody({Map<String, Object?>? actuals}) => {
+      'id': 'p1',
+      'planDate': '2026-11-25',
+      'status': 'active',
+      'generationSource': 'hybrid',
+      'modelVersion': 'gb-v1-1',
+      'targets': {
+        'caloriesKcal': 2542,
+        'proteinG': 128,
+        'carbsG': 352,
+        'fatG': 71,
+      },
+      'actuals': actuals,
+      'calorieDeviationPct': -1.2,
+      'withinTolerance': true,
+      'totalPreferenceScore': 2.9,
+      'explorationRatio': 0.3,
+      'meals': [
+        {
+          'mealType': 'breakfast',
+          'targetCaloriesKcal': 699,
+          'actualCaloriesKcal': 420,
+          'items': [item('i1', 'f1', 'Phở bò')],
+        },
+        {
+          'mealType': 'lunch',
+          'targetCaloriesKcal': 953,
+          'actualCaloriesKcal': 930,
+          'items': [
+            item('i2', 'f2', 'Cơm tấm', kcal: 560),
+            item('i3', 'f3', 'Canh chua', kcal: 370, role: 'soup',
+                delta: 0.35),
+          ],
+        },
+        {
+          'mealType': 'dinner',
+          'targetCaloriesKcal': 699,
+          'actualCaloriesKcal': 690,
+          'items': [item('i4', 'f4', 'Cá kho', kcal: 690, role: 'side_protein')],
+        },
+        {
+          'mealType': 'snack',
+          'targetCaloriesKcal': 191,
+          'actualCaloriesKcal': 190,
+          'items': [item('i5', 'f5', 'Chè đậu xanh', kcal: 190, role: 'snack')],
+        },
+      ],
+      'nutrientViolations': <dynamic>[],
+      'generatedAt': '2026-11-25T06:30:00+07:00',
+    };
+
+    AppSession signedIn(
+      List<String>? calls, {
+      Future<http.Response> Function(http.Request)? plan,
+    }) => _online((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/login')) return _json(_tokens);
+      if (path.endsWith('/auth/me')) {
+        return _json({..._user, 'hasHealthProfile': false});
+      }
+      if (path.endsWith('/foods')) return _foodsPage();
+      if (path.endsWith('/meal-plans')) {
+        return plan == null ? _json(planBody()) : plan(request);
+      }
+      return _json(const {});
+    }, calls: calls);
+
+    test('the day comes back whole, with each serving addressable', () async {
+      final calls = <String>[];
+      final session = signedIn(calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final loaded = await session.loadPlan(date: DateTime(2026, 11, 25));
+
+      expect(loaded, isNotNull);
+      expect(loaded!.id, 'p1');
+      expect(loaded.slots.map((s) => s.type), MealType.values);
+      expect(loaded.allItems, hasLength(5));
+      // The serving's id, which §7.6.4 to §7.6.6 all act on. Without it the
+      // screen could show a plan and change nothing in it.
+      expect(loaded.allItems.map((i) => i.id), [
+        'i1', 'i2', 'i3', 'i4', 'i5',
+      ]);
+      expect(loaded.targetKcal, 2542);
+      expect(loaded.allItems.first.food.name, 'Phở bò');
+      // The grams on the plate belong to the SERVING, not to the food:
+      // `portion_multiplier` can make them differ from one standard serving.
+      expect(loaded.allItems.first.food.servingSizeG, 300);
+      // `exploration_delta IS NOT NULL` is the question, by design — there is
+      // no separate flag.
+      expect(loaded.allItems[2].isExploration, isTrue);
+      expect(loaded.allItems.first.isExploration, isFalse);
+    });
+
+    /// Every serving arrives without its whole dish, and the things that
+    /// need one have to say so rather than answer 0.
+    test('a server plan carries no nutrition, and does not pretend to',
+        () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      expect(plan.allItems.every((i) => i.dish == null), isTrue);
+      expect(plan.totalOf('sodium_mg'), isNull);
+      expect(plan.slots.first.protein, isNull);
+      // Empty, and that is NOT "the plan is clear": this side has nothing to
+      // judge by, so it says nothing. §7.6's own verdict travels with the
+      // plan instead.
+      expect(plan.nutrientViolations, isEmpty);
+      // And the energy, which every serving DOES carry, still adds up.
+      expect(plan.actualKcal, 420 + 560 + 370 + 690 + 190);
+    });
+
+    test("the day's macros come from the server when it sent them", () async {
+      final session = signedIn(null, plan: (_) async => _json(planBody(
+        actuals: {
+          'caloriesKcal': 2230,
+          'proteinG': 119.5,
+          'carbsG': 300.0,
+          'fatG': 66.0,
+        },
+      )));
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      expect(plan.actualProtein, 119.5);
+      expect(plan.actualCarb, 300.0);
+      expect(plan.actualFat, 66.0);
+    });
+
+    /// `null` actuals is a real state: §7.6's schema has no `DEFAULT 0` for
+    /// them, because a stored 0 would make the deviation read −100 % the
+    /// moment the row appeared.
+    test('and are unknown, not zero, when it did not', () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      expect(plan.serverActuals, isNull);
+      expect(plan.actualProtein, isNull);
+      expect(plan.actualFat, isNull);
+    });
+
+    test('the plan is asked for once, not once per rebuild', () async {
+      final calls = <String>[];
+      final session = signedIn(calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      await session.loadPlan(date: DateTime(2026, 11, 25));
+      await session.loadPlan(date: DateTime(2026, 11, 25));
+      await session.loadPlan(date: DateTime(2026, 11, 25));
+
+      expect(
+        calls.where((c) => c.endsWith('/meal-plans')),
+        hasLength(1),
+        reason: 'the week strip rebuilds often; §7.6.1 is not a per-frame call',
+      );
+    });
+
+    test('regenerating posts regenerate: true', () async {
+      Map<String, dynamic>? posted;
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/meal-plans')) {
+          if (request.method == 'POST') {
+            posted = jsonDecode(request.body) as Map<String, dynamic>;
+          }
+          return _json(planBody());
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      expect(await session.regeneratePlan(date: DateTime(2026, 11, 25)), isTrue);
+
+      expect(posted!['regenerate'], isTrue);
+      // A plain date in the LOCAL calendar. An ISO timestamp converted to UTC
+      // would move the date for anyone east of Greenwich, and Vietnam is
+      // +07:00 — a late-evening request would ask for tomorrow.
+      expect(posted!['planDate'], '2026-11-25');
+    });
+
+    /// A day with no plan and `autoGenerate: false` is a 404 that means
+    /// "nothing here yet", not a failure. The week strip asks that way about
+    /// days ahead: looking at next Friday must not commit a plan for it.
+    test('looking ahead without generating gives null, not an error',
+        () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/meal-plans')) {
+          return _envelope(404, 'NOT_FOUND', 'Chưa có thực đơn cho ngày này');
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      // Through the session's own loader, which asks with autoGenerate ON,
+      // the same 404 IS a failure: the server did not do what it says it
+      // does, and swallowing it would leave an empty screen with no reason.
+      await expectLater(
+        session.loadPlan(date: DateTime(2026, 11, 27)),
+        throwsA(isA<ApiFailure>()
+            .having((f) => f.code, 'code', ApiFailure.notFound)),
+      );
+    });
+
+    test('offline, the plan is still built on the spot', () async {
+      final session = AppSession();
+      _filled(session.profile);
+
+      final built = await session.loadPlan();
+
+      expect(built, isNotNull);
+      expect(built!.id, isNull, reason: 'an offline plan is stored nowhere');
+      expect(built.allItems.every((i) => i.dish != null), isTrue);
+      expect(built.allItems.every((i) => i.id == null), isTrue);
+      // And the figures this side computes are all there, which is the whole
+      // point of keeping the offline mode.
+      expect(built.actualProtein, isNotNull);
+      expect(built.totalOf('sodium_mg'), isNotNull);
+    });
+  });
+
+  group('§7.6.4–7.6.6 acting on one serving', () {
+    Map<String, Object?> onePlanBody({String status = 'suggested'}) => {
+      'id': 'p1',
+      'planDate': '2026-11-25',
+      'status': 'active',
+      'generationSource': 'hybrid',
+      'targets': {
+        'caloriesKcal': 2542,
+        'proteinG': 128,
+        'carbsG': 352,
+        'fatG': 71,
+      },
+      'actuals': null,
+      'explorationRatio': 0.3,
+      'meals': [
+        for (final meal in ['breakfast', 'lunch', 'dinner', 'snack'])
+          {
+            'mealType': meal,
+            'targetCaloriesKcal': 699,
+            'actualCaloriesKcal': 420,
+            'items': meal == 'breakfast'
+                ? [
+                    {
+                      'id': 'i1',
+                      'food': {
+                        'id': 'f1',
+                        'name': 'Phở bò',
+                        'imageUrl': null,
+                        'categoryName': 'Món nước',
+                        'dishRole': 'main',
+                        'caloriesKcal': 420,
+                      },
+                      'servingSizeG': 300,
+                      'predictedScore': 0.72,
+                      'status': status,
+                      'replacedByFood': null,
+                      'explorationDelta': null,
+                      'position': 1,
+                    },
+                  ]
+                : <dynamic>[],
+          },
+      ],
+      'nutrientViolations': <dynamic>[],
+      'generatedAt': '2026-11-25T06:30:00+07:00',
+    };
+
+    AppSession signedIn(
+      Future<http.Response> Function(http.Request) items, {
+      List<String>? calls,
+    }) => _online((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/login')) return _json(_tokens);
+      if (path.endsWith('/auth/me')) {
+        return _json({..._user, 'hasHealthProfile': false});
+      }
+      if (path.endsWith('/foods')) return _foodsPage();
+      if (path.endsWith('/meal-plans')) return _json(onePlanBody());
+      if (path.contains('/meal-plan-items/')) return items(request);
+      return _json(const {});
+    }, calls: calls);
+
+    /// §7.6.6 writes the diary entry in the SAME request, which is why
+    /// `markEaten` must not also write one of its own: two would count the
+    /// meal twice in every compliance figure the report quotes.
+    test('marking a serving eaten sends one request and returns the entry',
+        () async {
+      final calls = <String>[];
+      Map<String, dynamic>? patched;
+      final session = signedIn((request) async {
+        patched = jsonDecode(request.body) as Map<String, dynamic>;
+        return _json({
+          'id': 'i1',
+          'status': 'eaten',
+          'diaryEntryCreated': true,
+          'diaryEntryId': 'd9',
+        });
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+      final item = plan.allItems.single;
+
+      final entryId = await session.markEaten(item, MealType.breakfast);
+
+      expect(patched, {'status': 'eaten'});
+      expect(entryId, 'd9');
+      expect(
+        session.plan!.allItems.single.status,
+        MealItemStatus.eaten,
+        reason: 'the cached serving follows what the server stored',
+      );
+      // No second write of its own.
+      expect(session.diary, isEmpty);
+      expect(
+        calls.where((c) => c.contains('/meal-plan-items/')),
+        hasLength(1),
+      );
+    });
+
+    /// A repeat answers `diaryEntryCreated: false`, and that is not a
+    /// failure: the entry already exists. A screen that read it as one would
+    /// tell the user their meal was not recorded.
+    test('a repeat is not a failure, and creates no second entry', () async {
+      final session = signedIn((_) async => _json({
+        'id': 'i1',
+        'status': 'eaten',
+        'diaryEntryCreated': false,
+        'diaryEntryId': 'd9',
+      }));
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      final entryId = await session.markEaten(
+        plan.allItems.single,
+        MealType.breakfast,
+      );
+
+      expect(entryId, isNull);
+      expect(session.plan!.allItems.single.status, MealItemStatus.eaten);
+    });
+
+    /// Putting a skipped serving back sends `kept`, not `suggested`: §7.6.6
+    /// accepts only the three a client may set, and §4.6 reads `kept` as the
+    /// user having looked at a suggestion and left it.
+    test('skipping sends skipped, and putting it back sends kept', () async {
+      final sent = <String>[];
+      final session = signedIn((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        sent.add(body['status'] as String);
+        return _json({
+          'id': 'i1',
+          'status': body['status'],
+          'diaryEntryCreated': false,
+          'diaryEntryId': null,
+        });
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      await session.setSkipped(plan.allItems.single, true);
+      expect(session.plan!.allItems.single.status, MealItemStatus.skipped);
+      await session.setSkipped(session.plan!.allItems.single, false);
+      expect(session.plan!.allItems.single.status, MealItemStatus.kept);
+
+      expect(sent, ['skipped', 'kept']);
+    });
+
+    /// A refusal must leave the cached serving alone. A status applied
+    /// locally and refused by the server would have the screen showing a
+    /// serving as eaten while the diary has no record of it.
+    test('a refused status change does not move the serving', () async {
+      final session = signedIn((_) async => _envelope(
+        409, 'VALIDATION_FAILED', 'Dòng nhật ký đã bị khóa',
+      ));
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      await expectLater(
+        session.markEaten(plan.allItems.single, MealType.breakfast),
+        throwsA(isA<ApiFailure>()),
+      );
+      expect(session.plan!.allItems.single.status, MealItemStatus.suggested);
+    });
+
+    /// §7.6.4 answers with figures this side cannot compute — the energy the
+    /// swap would move, at the portions that would be served, and whether
+    /// the day stays inside ±10 %.
+    test('the alternatives carry the day-level figures', () async {
+      final session = signedIn((request) async {
+        if (!request.url.path.endsWith('/alternatives')) {
+          return _json(const {});
+        }
+        return _json({
+          'originalItem': {
+            'id': 'i1',
+            'foodName': 'Phở bò',
+            'caloriesKcal': 420,
+            'dishRole': 'main',
+          },
+          'alternatives': [
+            {
+              'food': {
+                'id': 'f9',
+                'name': 'Bún chả',
+                'imageUrl': null,
+                'categoryName': 'Món nước',
+                'dishRole': 'main',
+                'caloriesKcal': 520,
+              },
+              'servingSizeG': 320,
+              'predictedScore': 0.81,
+              'calorieDeltaKcal': 100,
+              'keepsWithinTolerance': false,
+            },
+          ],
+        });
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      final options = await session.replaceOptions(plan.allItems.single);
+
+      expect(options, hasLength(1));
+      expect(options.single.food.name, 'Bún chả');
+      expect(options.single.score, 0.81);
+      expect(options.single.deltaKcal, 100);
+      // Shown and not acted on: the dish stays selectable, because a user
+      // may prefer one that costs them some accuracy.
+      expect(options.single.keepsWithinTolerance, isFalse);
+      // No whole dish, so the local allowance check cannot run and must not
+      // pretend to.
+      expect(options.single.dish, isNull);
+    });
+
+    /// §7.6.5 answers with the WHOLE day, because the swap moves the day's
+    /// totals and its ±10 % verdict.
+    test('replacing a serving replaces the cached day', () async {
+      Map<String, dynamic>? put;
+      final session = signedIn((request) async {
+        if (request.method != 'PUT') return _json(const {});
+        put = jsonDecode(request.body) as Map<String, dynamic>;
+        return _json(onePlanBody(status: 'kept'));
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      await session.replaceItem(
+        plan.allItems.single,
+        const FoodBrief(
+          id: 'f9',
+          name: 'Bún chả',
+          category: 'Món nước',
+          dishRole: 'main',
+          spiceLevel: 0,
+          kcal: 520,
+          servingSizeG: 320,
+        ),
+      );
+
+      expect(put!['newFoodId'], 'f9');
+      // The day that came back, not a locally patched one.
+      expect(session.plan!.allItems.single.status, MealItemStatus.kept);
+    });
+
+    test('offline, all four still work on the plan in memory', () async {
+      final session = AppSession();
+      _filled(session.profile);
+      await session.loadPlan();
+      final item = session.plan!.allItems.first;
+
+      await session.markEaten(item, item.food.dishRole == 'Món phụ'
+          ? MealType.snack
+          : MealType.breakfast);
+      expect(session.diary, hasLength(1),
+          reason: 'offline the local diary IS the store');
+
+      final other = session.plan!.allItems.last;
+      await session.setSkipped(other, true);
+      expect(
+        session.plan!.allItems.last.status,
+        MealItemStatus.skipped,
+      );
+
+      final options = await session.replaceOptions(session.plan!.allItems[1]);
+      expect(options, isNotEmpty);
+      // The whole dish, which is what the local allowance check needs.
+      expect(options.first.dish, isNotNull);
+      // And no day-level figures, because nothing on this side computed any.
+      expect(options.first.deltaKcal, isNull);
+      expect(options.first.keepsWithinTolerance, isNull);
+    });
+  });
+
   group('PUT /foods/{id}/mark - bookmarks and blocked dishes', () {
     /// The answer is applied, not the request. The two differ exactly when
     /// the other mark had to go, which is the case a local toggle gets wrong.
@@ -569,7 +1759,7 @@ void main() {
       });
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
 
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
       await session.toggleLoved(dish);
 
       expect(sent.single['kind'], 'loved');
@@ -602,7 +1792,7 @@ void main() {
 
       // Read back at sign-in, so the bookmark is drawn filled before any
       // screen asks for it.
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
       expect(session.lovedIds, contains(dish.id));
 
       await session.toggleLoved(dish);
@@ -635,7 +1825,7 @@ void main() {
       });
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
 
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
       await expectLater(
         session.setNeverAgain(dish, true),
         throwsA(
@@ -652,7 +1842,7 @@ void main() {
 
     test('offline, the two sets are the whole store', () async {
       final session = AppSession();
-      final dish = MockFoods.surveyDeck.first;
+      final dish = MockFoods.surveyDeck.first.brief;
 
       await session.toggleLoved(dish);
       expect(session.lovedIds, contains(dish.id));

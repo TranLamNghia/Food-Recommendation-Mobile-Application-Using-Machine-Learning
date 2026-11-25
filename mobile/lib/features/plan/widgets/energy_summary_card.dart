@@ -213,16 +213,25 @@ class _MacroBar extends StatelessWidget {
   });
 
   final String label;
-  final double actual;
+
+  /// `null` when nobody can say what the day adds up to in this macro — a
+  /// plan whose servings carry only their energy and that came with no
+  /// day-level figures. Drawn as an empty bar and a dash, never as 0: a full
+  /// target with a zero bar reads as "you have eaten no protein", which is a
+  /// claim, while a dash is the absence of one.
+  final double? actual;
   final double target;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
+    final amount = actual;
     // A bar can exceed 100 %, but the drawing is clipped at 1.0 so it does
     // not spill outside its frame. The number below it is what states the
     // real overshoot.
-    final ratio = target <= 0 ? 0.0 : (actual / target).clamp(0.0, 1.0);
+    final ratio = (amount == null || target <= 0)
+        ? 0.0
+        : (amount / target).clamp(0.0, 1.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,7 +261,9 @@ class _MacroBar extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Text(
-          '${formatNumber(actual)}/${formatNumber(target)}g',
+          amount == null
+              ? '—/${formatNumber(target)}g'
+              : '${formatNumber(amount)}/${formatNumber(target)}g',
           style: const TextStyle(
             fontSize: 11.5,
             color: AppColors.textTertiary,

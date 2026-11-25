@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nutrition_app/data/models/food_adapters.dart';
 import 'package:nutrition_app/core/theme/app_theme.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/mock/mock_ingredients.dart';
@@ -26,10 +27,12 @@ AppSession _readySession() {
     ..activity = ActivityLevel.moderate;
 
   final deck = MockFoods.surveyDeck;
+  // Offline, so this resolves at once and needs no await to have taken
+  // effect by the time the helper returns.
   session.completeSurvey([
     for (var i = 0; i < deck.length; i++)
       (
-        food: deck[i],
+        food: deck[i].brief,
         action: i % 3 == 0
             ? SwipeAction.like
             : i % 3 == 1
@@ -65,7 +68,7 @@ void main() {
     test('undoing a meal returns it to the plan and keeps the log', () {
       final session = _readySession();
       final slot = session.plan!.slots.first;
-      final food = slot.items.first.food;
+      final food = slot.items.first.dish!;
 
       session.logMeal(food: food, meal: slot.type);
       expect(slot.items.first.status, MealItemStatus.eaten);
@@ -155,7 +158,7 @@ void main() {
       final item = session.plan!.allItems.first;
 
       // Logged now, so it belongs to today even while tomorrow is on screen.
-      session.logMeal(food: item.food, meal: MealType.breakfast);
+      session.logMeal(food: item.dish!, meal: MealType.breakfast);
       expect(
         session.plan!.allItems.every((i) => i.status != MealItemStatus.eaten),
         isTrue,

@@ -24,6 +24,7 @@ import 'package:nutrition_app/data/api/auth_api.dart';
 import 'package:nutrition_app/data/api/failure.dart';
 import 'package:nutrition_app/data/api/food_api.dart';
 import 'package:nutrition_app/data/api/profile_api.dart';
+import 'package:nutrition_app/data/api/survey_api.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 
 const base = 'http://localhost:5055/api/v1';
@@ -240,6 +241,113 @@ Future<void> main() async {
         f.forField('displayName') != null, '${f.fields}');
   }
 
+  print('\n§7.4  the taste survey — the one thing that ends onboarding');
+  final surveys = SurveyApi(client);
+  final deck = await surveys.deck();
+  check('the deck comes back with a session id', deck.sessionId.isNotEmpty);
+  check('and 30 cards, the size §7.4.1 settles on', deck.items.length == 30,
+      '${deck.items.length} cards');
+  check('totalItems agrees with what arrived',
+      deck.totalItems == deck.items.length,
+      '${deck.totalItems} against ${deck.items.length}');
+  check('minRequired is the 20 opinionated swipes §7.4.2 asks for',
+      deck.minRequired == 20, '${deck.minRequired}');
+  check('every card has what a swipe card draws',
+      deck.items.every((c) =>
+          c.name.isNotEmpty && c.category.isNotEmpty && c.kcal > 0),
+      'one card was incomplete');
+  check('no card repeats — a deck with a dish twice wastes a swipe',
+      deck.items.map((c) => c.id).toSet().length == deck.items.length);
+  // Every one of the 318 rows has `image_url` null, so a card has nothing to
+  // draw but what `core/dish_look.dart` derives from `dish_role`. The look
+  // itself cannot be checked here — it is a Flutter `Color`, and this tool
+  // runs on plain Dart — so what is checked is the input it needs: a role
+  // this app recognises. An unknown one falls back to a plate icon, which is
+  // not wrong, only anonymous.
+  const knownRoles = {
+    'main', 'side_protein', 'side_veg', 'soup', 'dessert', 'drink', 'snack',
+  };
+  check('every card names a dish_role this app has a look for',
+      deck.items.every((c) => knownRoles.contains(c.dishRole)),
+      '${deck.items.map((c) => c.dishRole).toSet()}');
+  check('and none of them carries a photo, so the fallback is the only path',
+      deck.items.every((c) => c.imageUrl == null));
+
+  // 28 opinions and 2 "chưa từng ăn", which is over `minRequired` and still
+  // exercises the `unknown` path that is stored but left out of the vector.
+  final swipes = <SurveySwipe>[
+    for (var i = 0; i < deck.items.length; i++)
+      (
+        foodId: deck.items[i].id,
+        action: i >= deck.items.length - 2
+            ? 'unknown'
+            : (i % 3 == 0 ? 'like' : (i % 3 == 1 ? 'neutral' : 'dislike')),
+      ),
+  ];
+  final outcome =
+      await surveys.submit(sessionId: deck.sessionId, swipes: swipes);
+  check('the submission answers with the same session id',
+      outcome.sessionId == deck.sessionId);
+  check('every swipe was stored', outcome.total == swipes.length,
+      '${outcome.total} of ${swipes.length}');
+  check('the two `unknown` swipes are counted as skipped, not as opinions',
+      outcome.skipped == 2 && outcome.opinionated == swipes.length - 2,
+      '${outcome.opinionated} opinions, ${outcome.skipped} skipped');
+  check('a preference stage came back', outcome.stage.isNotEmpty,
+      outcome.stage);
+  check('with signals behind it', outcome.nSignals > 0, '${outcome.nSignals}');
+  check('nSignals never exceeds the opinions sent — F1 can only remove',
+      outcome.nSignals <= outcome.opinionated,
+      '${outcome.nSignals} against ${outcome.opinionated}');
+
+  // THE POINT OF THIS SECTION. Before the survey reached the server the app
+  // built a vector locally and moved on, so this stamp stayed null — and
+  // `welcome_screen` reads it on every launch, which sent a user who had
+  // just swiped thirty cards straight back to the survey, for good.
+  final after = await auth.me();
+  check('and NOW the account has finished onboarding',
+      after.hasFinishedOnboarding, '${after.onboardingCompletedAt}');
+  // Within a second, not identical. `users.onboarding_completed_at` is a
+  // DATETIME with no fractional seconds, so MySQL rounds on store and the
+  // POST's answer carries the value from before that rounding. Only the
+  // presence of the stamp is meaningful, and nothing in the app compares the
+  // two.
+  check('and reports it within a second of the value POST returned',
+      after.onboardingCompletedAt != null &&
+          after.onboardingCompletedAt!
+                  .difference(outcome.onboardingCompletedAt)
+                  .abs() <
+              const Duration(seconds: 1),
+      '${after.onboardingCompletedAt} against '
+      '${outcome.onboardingCompletedAt}');
+
+  // Re-sending the SAME session is the retry the app's button makes, for the
+  // one failure it is there for: the request arrived, the account was
+  // stamped, and the answer was lost coming back. It does NOT replay as a
+  // second survey — the server checks the stamp BEFORE it looks at the
+  // session id — so the retry answers 409, and the caller has to read that
+  // as success. The app does: `survey_screen._explain` sends the user on.
+  try {
+    await surveys.submit(sessionId: deck.sessionId, swipes: swipes);
+    check('re-submitting the same session is refused once the account is '
+        'stamped', false, 'it was accepted a second time');
+  } on ApiFailure catch (f) {
+    check('re-submitting the same session answers 409, not a second survey',
+        f.code == ApiFailure.onboardingAlreadyCompleted,
+        '${f.status} ${f.code}');
+  }
+
+  try {
+    await surveys.deck();
+    check('the deck is refused once the survey is done', false,
+        'it was handed out again');
+  } on ApiFailure catch (f) {
+    check('409 ONBOARDING_ALREADY_COMPLETED',
+        f.code == ApiFailure.onboardingAlreadyCompleted,
+        '${f.status} ${f.code}');
+  }
+
+
   print('\n§7.1.2  log in again and read the profile back');
   final fresh = ApiClient(baseUrl: base);
   final freshAuth = AuthApi(fresh);
@@ -258,8 +366,193 @@ Future<void> main() async {
   check('and the same energy target as before',
       (reread.energyTarget! - localTarget).abs() <= 1);
 
-  print('\nPUT /foods/{id}/mark  bookmarks and blocked dishes');
   final foods = FoodApi(fresh);
+
+  print('\n§7.4.3  the filter screen counts as the answers come in');
+  final noneDeclared = await surveys.countCandidates(const []);
+  check('nothing declared leaves the whole catalogue',
+      noneDeclared.remainingFoods == noneDeclared.totalFoods,
+      '${noneDeclared.remainingFoods} of ${noneDeclared.totalFoods}');
+  check('and that total is the 318 active dishes',
+      noneDeclared.totalFoods == 318, '${noneDeclared.totalFoods}');
+  check('nothing removed, and a plan is possible',
+      noneDeclared.removedFoods == 0 && noneDeclared.canBuildAPlan);
+  check('the breakdown by role covers the roles a day needs',
+      const {'main', 'side_protein', 'side_veg', 'snack'}
+          .every((r) => (noneDeclared.byDishRole[r] ?? 0) > 0),
+      '${noneDeclared.byDishRole}');
+  check('and a full-size survey can be drawn',
+      noneDeclared.enoughForSurvey && noneDeclared.surveyDeckSize == 30,
+      '${noneDeclared.surveyDeckSize}');
+
+  // Gout's purine rule sits at `moderate`, so the same condition removes a
+  // different number of dishes at two severities. A count that ignored
+  // severity would answer the same twice, and the column would be decoration.
+  final gout = (await profiles.conditionCatalogue())
+      .where((c) => c.code == 'gout')
+      .firstOrNull;
+  check('the catalogue has gout to test severity with', gout != null);
+  if (gout != null) {
+    final mild = await surveys.countCandidates([
+      (conditionId: gout.id, severity: 'mild'),
+    ]);
+    final moderate = await surveys.countCandidates([
+      (conditionId: gout.id, severity: 'moderate'),
+    ]);
+    check('gout at mild removes nothing — the rule needs moderate',
+        mild.removedFoods == 0, '${mild.removedFoods} removed');
+    check('gout at moderate removes the high-purine dishes',
+        moderate.removedFoods > 0, '${moderate.removedFoods} removed');
+    check('so severity really is read, not merely accepted',
+        moderate.remainingFoods < mild.remainingFoods,
+        '${moderate.remainingFoods} against ${mild.remainingFoods}');
+  }
+
+  // Two conditions at once narrow at least as much as either alone: the
+  // filter is a conjunction, and a count that overwrote instead of
+  // intersecting would show the second condition's figure.
+  final seafoodRow = (await profiles.conditionCatalogue())
+      .where((c) => c.code == 'allergy_seafood')
+      .firstOrNull;
+  if (gout != null && seafoodRow != null) {
+    final one = await surveys.countCandidates([
+      (conditionId: seafoodRow.id, severity: 'severe'),
+    ]);
+    final both = await surveys.countCandidates([
+      (conditionId: seafoodRow.id, severity: 'severe'),
+      (conditionId: gout.id, severity: 'severe'),
+    ]);
+    check('two conditions never leave more dishes than one of them',
+        both.remainingFoods <= one.remainingFoods,
+        '${both.remainingFoods} against ${one.remainingFoods}');
+  }
+
+  try {
+    await surveys.countCandidates([
+      (conditionId: 999999, severity: 'mild'),
+    ]);
+    check('a condition id that does not exist is refused', false);
+  } on ApiFailure catch (f) {
+    check('a condition id that does not exist is refused',
+        f.status == 400 || f.status == 404, '${f.status} ${f.code}');
+  }
+
+
+  print('\n§7.3.2 · §7.3.3  the dictionaries the browse screen filters by');
+  final categories = await foods.categories();
+  check('the food groups come back', categories.isNotEmpty,
+      '${categories.length} groups');
+  check('each one has a Vietnamese name',
+      categories.every((c) => c.name.trim().isNotEmpty));
+  // §7.5.1's parameter table says `int` for categoryId while the JSON
+  // example beside it shows a UUID. The schema is the side that is right,
+  // and a client that parsed an int here would fail on every row.
+  check('and a CHAR(36) id, not an int as §7.5.1 claims',
+      categories.every((c) => c.id.length == 36 && c.id.contains('-')),
+      categories.first.id);
+
+  final allTags = await foods.tags();
+  check('the tags come back', allTags.isNotEmpty, '${allTags.length} tags');
+  check('with int ids, unlike the dishes and the groups',
+      allTags.every((t) => t.id > 0));
+  check('and only the three types the schema kept — no `taste`',
+      allTags.map((t) => t.tagType).toSet().every(
+          (t) => const {'allergen', 'diet', 'nutrition'}.contains(t)),
+      '${allTags.map((t) => t.tagType).toSet()}');
+  final allergens = await foods.tags(type: 'allergen');
+  check('?type= narrows to one tag_type',
+      allergens.isNotEmpty && allergens.every((t) => t.tagType == 'allergen'),
+      '${allergens.length} allergen tags');
+
+  print('\n§7.5.1  browse the catalogue');
+  final firstPage = await foods.search(pageSize: 10);
+  check('a page of ten comes back', firstPage.items.length == 10,
+      '${firstPage.items.length}');
+  check('the whole catalogue is bigger than one page',
+      firstPage.totalItems > 10, '${firstPage.totalItems}');
+  check('totalPages is the ceiling, not the floor',
+      firstPage.totalPages == (firstPage.totalItems + 9) ~/ 10,
+      '${firstPage.totalPages} for ${firstPage.totalItems}');
+  check('hasMore agrees with the page it is on', firstPage.hasMore);
+  check('every row carries what a list tile draws',
+      firstPage.items.every((f) =>
+          f.name.isNotEmpty && f.category.isNotEmpty && f.kcal > 0 &&
+          f.servingSizeG > 0),
+      'one row was incomplete');
+
+  final secondPage = await foods.search(pageSize: 10, page: 2);
+  check('page 2 shares no row with page 1 — an unstable sort would hide a '
+      'dish from every page',
+      firstPage.items
+          .map((f) => f.id)
+          .toSet()
+          .intersection(secondPage.items.map((f) => f.id).toSet())
+          .isEmpty);
+
+  final soups = await foods.search(dishRole: 'soup', pageSize: 100);
+  check('dishRole really filters',
+      soups.items.isNotEmpty &&
+          soups.items.every((f) => f.dishRole == 'soup'),
+      '${soups.items.length} soups');
+  final lunch = await foods.search(mealType: 'lunch', pageSize: 100);
+  check('mealType returns exactly the roles a lunch can hold',
+      lunch.items.map((f) => f.dishRole).toSet().difference(
+          const {'main', 'side_protein', 'soup'}).isEmpty,
+      '${lunch.items.map((f) => f.dishRole).toSet()}');
+  final light = await foods.search(maxCalories: 100, pageSize: 100);
+  check('maxCalories is a ceiling per serving',
+      light.items.every((f) => f.kcal <= 100));
+  final byGroup = await foods.search(
+      categoryId: categories.first.id, pageSize: 100);
+  check('categoryId filters by the UUID the dictionary gave',
+      byGroup.items.isNotEmpty &&
+          byGroup.items.every((f) => f.category == categories.first.name),
+      '${byGroup.items.length} dishes in ${categories.first.name}');
+
+  print('\n§7.5.2  one dish in full');
+  final subject = firstPage.items.first;
+  final full = await foods.detail(subject.id);
+  check('it is the dish asked for', full.id == subject.id);
+  check('the list row and the detail agree on the name',
+      full.name == subject.name, '${full.name} against ${subject.name}');
+  check('a serving weight and an energy figure came back',
+      full.nutrition.servingSizeG > 0 && full.nutrition.caloriesKcal > 0);
+  check('and the three macros, which is what the bars need',
+      full.nutrition.macroShare != null,
+      'protein=${full.nutrition.proteinG} carbs=${full.nutrition.carbsG} '
+      'fat=${full.nutrition.fatG}');
+  final share = full.nutrition.macroShare;
+  check('the three shares are normalised by their own total',
+      share == null ||
+          (share.protein + share.carbs + share.fat - 1).abs() < 1e-9);
+  check('the detail carries the group as an object with a name',
+      full.brief.category.isNotEmpty, full.brief.category);
+  check('and this user has no mark on it yet', full.brief.mark == null,
+      '${full.brief.mark}');
+
+  // The catalogue publishes purine for 70 of its 318 dishes. Over a page of
+  // ten there is almost certainly at least one gap, and a gap has to arrive
+  // as `null` — a 0 would read as "contains no purine", which is a different
+  // and reassuring claim.
+  var withGaps = 0;
+  for (final row in firstPage.items) {
+    final detail = await foods.detail(row.id);
+    if (detail.nutrition.purineMg == null) withGaps++;
+  }
+  check('an unmeasured nutrient arrives as null, never as 0',
+      withGaps > 0,
+      'all ten dishes had a purine figure, so the null path went unchecked');
+
+  try {
+    await foods.detail('00000000-0000-4000-8000-000000000000');
+    check('a dish that does not exist is refused', false);
+  } on ApiFailure catch (f) {
+    check('404 NOT_FOUND for a dish that is not there',
+        f.code == ApiFailure.notFound, '${f.status} ${f.code}');
+  }
+
+
+  print('\nPUT /foods/{id}/mark  bookmarks and blocked dishes');
   final page = await fresh.get('/foods', query: {'pageSize': '3'});
   final dishIds = [
     for (final item in page['items'] as List) (item as Map)['id'] as String,
@@ -273,7 +566,7 @@ Future<void> main() async {
       loved.kind == FoodMark.loved && loved.foodId == dish, '${loved.kind}');
   check('and says when', loved.markedAt != null);
   check('the bookmark is in the saved list',
-      (await foods.markedIds(FoodMark.loved)).contains(dish));
+      (await foods.marked(FoodMark.loved)).any((d) => d.id == dish));
 
   final again = await foods.setMark(dish, FoodMark.loved);
   check('sending the same mark twice is idempotent',
@@ -283,9 +576,9 @@ Future<void> main() async {
   check('switching to blocked answers blocked',
       blocked.kind == FoodMark.blocked, '${blocked.kind}');
   check('and the bookmark is gone - one row per (user, food)',
-      !(await foods.markedIds(FoodMark.loved)).contains(dish));
+      !(await foods.marked(FoodMark.loved)).any((d) => d.id == dish));
   check('while the blocked list has it',
-      (await foods.markedIds(FoodMark.blocked)).contains(dish));
+      (await foods.marked(FoodMark.blocked)).any((d) => d.id == dish));
 
   // The behaviour the F1 change could have broken: a blocked dish must stay
   // findable, because the only screen that unblocks it is reached by finding
@@ -305,8 +598,8 @@ Future<void> main() async {
   final unmarked = await foods.setMark(dish, null);
   check('a null kind clears the mark', unmarked.kind == null);
   check('and leaves the account with no marks at all',
-      (await foods.markedIds(FoodMark.loved)).isEmpty &&
-          (await foods.markedIds(FoodMark.blocked)).isEmpty);
+      (await foods.marked(FoodMark.loved)).isEmpty &&
+          (await foods.marked(FoodMark.blocked)).isEmpty);
 
   try {
     await foods.setMark(

@@ -179,7 +179,7 @@ abstract final class MockFoods {
       emoji: '🥬',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _fresh,
-      tags: ['Nhiều xơ', 'Chay'],
+      tags: ['Nhiều xơ', 'Món chay', 'Món thuần chay'],
     ),
     Food(
       id: '8',
@@ -339,7 +339,7 @@ abstract final class MockFoods {
       emoji: '🍅',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _fresh,
-      tags: ['Chay', 'Đạm thực vật'],
+      tags: ['Món chay', 'Món thuần chay', 'Đạm thực vật', 'Có đậu nành'],
     ),
     Food(
       id: '16',
@@ -540,7 +540,7 @@ abstract final class MockFoods {
       emoji: '🥗',
       imageAsset: 'assets/images/placeholder/card1.png',
       gradient: _fresh,
-      tags: ['Thanh đạm', 'Chay'],
+      tags: ['Thanh đạm', 'Món chay', 'Món thuần chay'],
     ),
     Food(
       id: '26',
@@ -581,7 +581,7 @@ abstract final class MockFoods {
       emoji: '🍧',
       imageAsset: 'assets/images/placeholder/card3.png',
       gradient: _sweet,
-      tags: ['Vị ngọt', 'Có sữa'],
+      tags: ['Vị ngọt', 'Món chay', 'Có sữa / chế phẩm sữa'],
     ),
     Food(
       id: '28',
@@ -602,7 +602,7 @@ abstract final class MockFoods {
       emoji: '🍮',
       imageAsset: 'assets/images/placeholder/card4.png',
       gradient: _sweet,
-      tags: ['Vị ngọt', 'Chay'],
+      tags: ['Vị ngọt', 'Món chay', 'Món thuần chay'],
     ),
     Food(
       id: '29',
@@ -643,6 +643,63 @@ abstract final class MockFoods {
       imageAsset: 'assets/images/placeholder/card2.png',
       gradient: _fresh,
       tags: ['Nhiều xơ', 'Thanh đạm'],
+    ),
+    // Two dishes 31 and 32, and the reason they exist is worth stating.
+    //
+    // None of the thirty dishes above is a vegetarian MAIN course: the four
+    // that were tagged `Chay` are two vegetable dishes, a tofu `món mặn` and
+    // a sweet soup. So the moment the `require_tag` rules of `Ăn chay` and
+    // `Ăn thuần chay` were given a mechanism, a vegetarian user offline was
+    // left with no `Món chính` at all, and `MEAL_STRUCTURE` cannot assemble
+    // breakfast, lunch or dinner without one — the day came out empty.
+    //
+    // The hole was in the demo data, not in the filter. Rather than tag a
+    // beef phở as vegetarian, which would be a lie the F1 filter then acts
+    // on, the deck gained two dishes that really are.
+    //
+    // The nutrition figures are estimates, like every figure in this file:
+    // the offline mode is a demo, and `docs/` never claimed otherwise.
+    Food(
+      id: '31',
+      name: 'Cơm chay rau củ',
+      category: 'Cơm',
+      dishRole: 'Món chính',
+      spiceLevel: 0,
+      kcal: 520,
+      protein: 15,
+      carb: 82,
+      fat: 14,
+      sugar: 7.5,
+      sodium: 520.0,
+      fiber: 6.5,
+      servingSizeG: 340,
+      // purine: not published for a dish like this
+      emoji: '🍚',
+      imageAsset: 'assets/images/placeholder/card2.png',
+      gradient: _fresh,
+      tags: ['Món chay', 'Món thuần chay', 'Nhiều xơ', 'Thanh đạm'],
+    ),
+    Food(
+      id: '32',
+      name: 'Bún xào chay',
+      category: 'Món nước',
+      dishRole: 'Món chính',
+      spiceLevel: 1,
+      kcal: 500,
+      protein: 16,
+      carb: 74,
+      fat: 15,
+      sugar: 8.0,
+      sodium: 620.0,
+      fiber: 4.8,
+      servingSizeG: 320,
+      emoji: '🍜',
+      imageAsset: 'assets/images/placeholder/card3.png',
+      gradient: _fresh,
+      // Rice vermicelli stir-fried with tofu, so the soy tag belongs on it
+      // — which is also the one dish a soy allergy and a vegetarian diet
+      // disagree about, and the filter has to get that right.
+      tags: ['Món chay', 'Món thuần chay', 'Có đậu nành', 'Xào'],
     ),
   ];
 }

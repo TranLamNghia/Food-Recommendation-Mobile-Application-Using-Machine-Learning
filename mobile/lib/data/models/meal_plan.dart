@@ -1,4 +1,7 @@
+import '../api/failure.dart';
 import 'food.dart';
+import 'food_adapters.dart';
+import 'food_brief.dart';
 import '../recommender/nutrient_target.dart';
 
 /// A meal of the day — the `meal_type` enum of API specification §5.4.
@@ -64,11 +67,47 @@ class MealPlanItem {
   MealPlanItem({
     required this.food,
     required this.score,
+    this.id,
+    this.dish,
     this.explorationDelta,
     this.status = MealItemStatus.suggested,
   });
 
-  final Food food;
+  /// A serving built by the offline builder, which has the whole dish in
+  /// hand and passes both views of it.
+  MealPlanItem.offline({
+    required Food dish,
+    required double score,
+    double? explorationDelta,
+    MealItemStatus status = MealItemStatus.suggested,
+  }) : this(
+         food: dish.brief,
+         dish: dish,
+         score: score,
+         explorationDelta: explorationDelta,
+         status: status,
+       );
+
+  /// `meal_plan_items.id`, for the endpoints that act on one serving —
+  /// §7.6.4 to §7.6.6. `null` on an offline plan, which is stored nowhere
+  /// and has nothing to address.
+  final String? id;
+
+  /// What a tile draws. A **brief** and not a [Food]: §7.6.1's `items[].food`
+  /// carries id, name, picture, group, role and the energy of one serving,
+  /// and no macros at all — the plan's own totals are computed by the server
+  /// and sent with it. Pouring that into a [Food] would mean inventing the
+  /// numbers it does not carry.
+  final FoodBrief food;
+
+  /// The whole dish, **offline only**.
+  ///
+  /// The Dart builder has it, so the things that need per-dish nutrition —
+  /// the day's allowance card, the "why this dish" reasons, the local
+  /// alternatives — keep working in that mode. Online it is `null` and those
+  /// answers come from the server, which is the one place that has the
+  /// numbers to produce them.
+  final Food? dish;
 
   /// The suitability score produced by the scoring step, in [0, 1].
   final double score;
@@ -84,6 +123,8 @@ class MealPlanItem {
 
   MealPlanItem copyWith({MealItemStatus? status}) => MealPlanItem(
     food: food,
+    dish: dish,
+    id: id,
     score: score,
     explorationDelta: explorationDelta,
     status: status ?? this.status,
@@ -104,9 +145,26 @@ class MealSlot {
   double get actualKcal =>
       items.fold(0, (sum, i) => sum + i.food.kcal.toDouble());
 
-  double get protein => items.fold(0, (sum, i) => sum + i.food.protein);
-  double get carb => items.fold(0, (sum, i) => sum + i.food.carb);
-  double get fat => items.fold(0, (sum, i) => sum + i.food.fat);
+  /// This meal's macros, or `null` when the servings do not carry them.
+  ///
+  /// Only an offline serving holds the whole dish; §7.6.1 sends the energy of
+  /// each serving and the macros of the **day**, computed server-side. So
+  /// these three are an offline answer, and [DailyPlan.actualProtein] and its
+  /// neighbours prefer the server's figures when there are any — rather than
+  /// summing a column that is not there and calling the result 0.
+  double? get protein => _macro((f) => f.protein);
+  double? get carb => _macro((f) => f.carb);
+  double? get fat => _macro((f) => f.fat);
+
+  double? _macro(double Function(Food) of) {
+    var sum = 0.0;
+    for (final item in items) {
+      final dish = item.dish;
+      if (dish == null) return null;
+      sum += of(dish);
+    }
+    return sum;
+  }
 
   /// The deviation from the target as a percentage. Positive means over.
   double get deviationPct =>
@@ -132,6 +190,7 @@ class MealSlot {
 class DailyPlan {
   DailyPlan({
     required this.date,
+    this.id,
     required this.targetKcal,
     required this.targetProtein,
     required this.targetCarb,
@@ -140,6 +199,10 @@ class DailyPlan {
     required this.explorationRatio,
     this.nutrientTargets = const [],
   });
+
+  /// `meal_plans.id`, for §7.6.3 and for rebuilding one meal. `null` on an
+  /// offline plan, which is stored nowhere and has nothing to address.
+  final String? id;
 
   final DateTime date;
 
@@ -156,6 +219,13 @@ class DailyPlan {
   /// then it is no longer a personalised recommendation.
   final double explorationRatio;
 
+  /// The macros §7.6 computed for this day, when the plan came from there.
+  ///
+  /// `null` on an offline plan, where the figures are summed from the dishes
+  /// instead. Kept apart from the summed ones rather than merged, because
+  /// only one of the two can be reproduced from the inputs on this side.
+  MacroTotals? serverActuals;
+
   /// The day-level micronutrient constraints this plan was built under.
   ///
   /// Kept in the result rather than used and discarded, because the question
@@ -166,9 +236,26 @@ class DailyPlan {
   List<MealPlanItem> get allItems => [for (final s in slots) ...s.items];
 
   double get actualKcal => slots.fold(0, (sum, s) => sum + s.actualKcal);
-  double get actualProtein => slots.fold(0, (sum, s) => sum + s.protein);
-  double get actualCarb => slots.fold(0, (sum, s) => sum + s.carb);
-  double get actualFat => slots.fold(0, (sum, s) => sum + s.fat);
+
+  /// What the day adds up to in macros, or `null` when nobody can say.
+  ///
+  /// Online that is [serverActuals], because §7.6 computed it from the whole
+  /// `food_nutrition` rows and this side has only each serving's energy.
+  /// Offline it is summed from the dishes. `null` would mean neither — a
+  /// state the macro bars have to draw as unknown rather than as zero.
+  double? get actualProtein => serverActuals?.proteinG ?? _sum((s) => s.protein);
+  double? get actualCarb => serverActuals?.carbsG ?? _sum((s) => s.carb);
+  double? get actualFat => serverActuals?.fatG ?? _sum((s) => s.fat);
+
+  double? _sum(double? Function(MealSlot) of) {
+    var total = 0.0;
+    for (final slot in slots) {
+      final value = of(slot);
+      if (value == null) return null;
+      total += value;
+    }
+    return total;
+  }
 
   /// The energy deviation from the target, as a percentage.
   ///
@@ -225,11 +312,20 @@ class DailyPlan {
     for (final s in slots) ...s.skippedItems,
   ];
 
-  /// The day's total of one nutrient.
-  double totalOf(String nutrient) => allItems.fold(
-    0,
-    (sum, i) => sum + (NutrientTarget.valueOf(i.food, nutrient) ?? 0),
-  );
+  /// The day's total of one nutrient, or `null` when it cannot be worked out.
+  ///
+  /// It needs whole nutrition rows, which only an offline serving carries.
+  /// Online the equivalent answer is §7.6's own `nutrientViolations`,
+  /// computed where the numbers are — see [nutrientViolations].
+  double? totalOf(String nutrient) {
+    var sum = 0.0;
+    for (final item in allItems) {
+      final dish = item.dish;
+      if (dish == null) return null;
+      sum += NutrientTarget.valueOf(dish, nutrient) ?? 0;
+    }
+    return sum;
+  }
 
   /// The micronutrient constraints that are **not** satisfied, with the
   /// actual amount.
@@ -242,11 +338,15 @@ class DailyPlan {
   ///
   /// Only the **enforceable** nutrients are considered — see
   /// [unenforceableTargets].
+  /// Empty on a plan from §7.6, whatever its state: [totalOf] cannot answer
+  /// without whole nutrition rows, so this side has nothing to judge by and
+  /// says nothing rather than reporting a clear plan it never checked. The
+  /// server's own verdict travels with the plan instead.
   List<({NutrientTarget target, double actual})> get nutrientViolations => [
     for (final t in nutrientTargets)
-      if (NutrientTarget.supported.contains(t.nutrient) &&
-          !t.isSatisfiedBy(totalOf(t.nutrient)))
-        (target: t, actual: totalOf(t.nutrient)),
+      if (NutrientTarget.supported.contains(t.nutrient))
+        if (totalOf(t.nutrient) case final actual?)
+          if (!t.isSatisfiedBy(actual)) (target: t, actual: actual),
   ];
 
   /// The constraints the system **cannot enforce** because [Food] does not
@@ -277,4 +377,155 @@ class DailyPlan {
     if (items.isEmpty) return 0;
     return items.where((i) => i.isExploration).length / items.length;
   }
+}
+
+/// Energy and the three macros of a whole day, as §7.6 reports them.
+class MacroTotals {
+  const MacroTotals({
+    required this.caloriesKcal,
+    required this.proteinG,
+    required this.carbsG,
+    required this.fatG,
+  });
+
+  factory MacroTotals.fromJson(Map<String, dynamic> json) => MacroTotals(
+    caloriesKcal: _n(json['caloriesKcal']),
+    proteinG: _n(json['proteinG']),
+    carbsG: _n(json['carbsG']),
+    fatG: _n(json['fatG']),
+  );
+
+  static double _n(Object? v) => v is num ? v.toDouble() : 0;
+
+  final double caloriesKcal;
+  final double proteinG;
+  final double carbsG;
+  final double fatG;
+}
+
+// ── Reading a plan the server built — §7.6 ───────────────────────────
+//
+// Kept beside the models rather than in `data/api/`, because this is where
+// the shape being built is declared: a parser that drifts from its model is
+// a parser nobody notices has drifted.
+
+/// §7.6.1's body as a [DailyPlan].
+///
+/// Every serving comes back with `dish` **null**: the answer carries each
+/// one's energy and no macros, so there is no whole dish to put there. What
+/// the day adds up to arrives separately, in `actuals`, computed where the
+/// nutrition rows are.
+DailyPlan planFromJson(Map<String, dynamic> json) {
+  final targets = json['targets'] as Map<String, dynamic>? ?? const {};
+  final targetKcal = MacroTotals.fromJson(targets);
+  final actuals = json['actuals'];
+
+  return DailyPlan(
+    id: json['id'] as String?,
+    date: DateTime.parse(json['planDate'] as String),
+    targetKcal: targetKcal.caloriesKcal,
+    targetProtein: targetKcal.proteinG,
+    targetCarb: targetKcal.carbsG,
+    targetFat: targetKcal.fatG,
+    slots: [
+      for (final meal in (json['meals'] as List? ?? const []))
+        _slotFromJson(meal as Map<String, dynamic>),
+    ],
+    explorationRatio: (json['explorationRatio'] as num?)?.toDouble() ?? 0,
+  )..serverActuals = switch (actuals) {
+    final Map<String, dynamic> m => MacroTotals.fromJson(m),
+    // `null` on a plan whose step 4 has not finished. The schema has no
+    // `DEFAULT 0` for exactly this reason: a stored 0 would make
+    // `calorie_deviation_pct` read −100 % the moment the row appeared.
+    _ => null,
+  };
+}
+
+MealSlot _slotFromJson(Map<String, dynamic> json) {
+  final code = json['mealType'] as String?;
+  return MealSlot(
+    type: MealType.values.firstWhere(
+      (t) => t.code == code,
+      // A meal type this app does not know cannot be shown, and guessing
+      // which of the four it is would put dishes in the wrong meal.
+      orElse: () => throw ApiFailure(
+        code: ApiFailure.unexpectedShape,
+        message: 'Máy chủ gửi bữa ăn lạ: $code',
+      ),
+    ),
+    targetKcal: (json['targetCaloriesKcal'] as num?)?.toDouble() ?? 0,
+    items: [
+      for (final item in (json['items'] as List? ?? const []))
+        _itemFromJson(item as Map<String, dynamic>),
+    ],
+  );
+}
+
+MealPlanItem _itemFromJson(Map<String, dynamic> json) => MealPlanItem(
+  id: json['id'] as String?,
+  food: FoodBrief.fromJson({
+    ...?(json['food'] as Map<String, dynamic>?),
+    // §7.6.1's `items[].food` has no serving weight of its own — the grams
+    // on the plate belong to the SERVING, because `portion_multiplier` can
+    // make them differ from one standard serving.
+    'servingSizeG': json['servingSizeG'],
+  }),
+  score: (json['predictedScore'] as num?)?.toDouble() ?? 0,
+  explorationDelta: (json['explorationDelta'] as num?)?.toDouble(),
+  status: _statusFromCode(json['status'] as String?),
+);
+
+/// A status the app does not know becomes [MealItemStatus.suggested].
+///
+/// The safe direction of the two: an unknown status read as `eaten` would
+/// put a dish in the day's consumed figures that nobody ate, while read as
+/// `suggested` it merely shows as still on the plate.
+MealItemStatus _statusFromCode(String? code) {
+  for (final status in MealItemStatus.values) {
+    if (status.code == code) return status;
+  }
+  return MealItemStatus.suggested;
+}
+
+/// One dish a serving could be swapped for, from whichever side produced it.
+///
+/// The two sources answer different halves, and the sheet shows whichever it
+/// is given rather than computing what it lacks:
+///
+/// - **§7.6.4** scores the candidate and says how the day's energy would
+///   move and whether the day would still be inside ±10 %. It cannot send
+///   nutrition, so [dish] is `null` and the local allowance check cannot run.
+/// - **the Dart builder** hands over the whole dish, so the allowance check
+///   runs, but nothing has computed what the swap would do to the day.
+///
+/// Neither half is invented for the other. A sheet that filled in a missing
+/// `keepsWithinTolerance` with `true` would be promising something nobody
+/// checked.
+class ReplaceOption {
+  const ReplaceOption({
+    required this.food,
+    required this.score,
+    this.dish,
+    this.deltaKcal,
+    this.keepsWithinTolerance,
+  });
+
+  final FoodBrief food;
+
+  /// The suitability score, in [0, 1].
+  final double score;
+
+  /// The whole dish — **offline only**, and what the day's allowance check
+  /// needs.
+  final Food? dish;
+
+  /// How the day's energy would move, at the portions that would be served.
+  /// `null` offline, where nobody computed it.
+  final double? deltaKcal;
+
+  /// Whether the day would still be inside ±10 % after the swap. `null`
+  /// offline. The sheet **dims or warns** on `false` rather than hiding the
+  /// option: a user may well prefer a dish that costs them some accuracy,
+  /// and that is their call to make with the cost in front of them.
+  final bool? keepsWithinTolerance;
 }

@@ -262,5 +262,26 @@ abstract final class MockIngredients {
       _I('Thịt heo', 50, _m),
       _I('Nước mắm', 8, _p),
     ],
+    // Cơm chay rau củ. Soy sauce and not fish sauce, which is the whole
+    // point of the dish: a `require_tag` rule the F1 filter acts on has to
+    // match an ingredient list that could really pass for vegetarian.
+    '31': [
+      _I('Gạo', 110, _g),
+      _I('Đậu hũ', 70, _p),
+      _I('Cà rốt', 50, _v),
+      _I('Súp lơ', 50, _v),
+      _I('Nấm hương', 20, _v),
+      _I('Dầu ăn', 12, _p),
+      _I('Nước tương', 10, _p),
+    ],
+    // Bún xào chay
+    '32': [
+      _I('Bún tươi', 180, _g),
+      _I('Đậu hũ', 80, _p),
+      _I('Giá đỗ', 40, _v),
+      _I('Cải thảo', 40, _v),
+      _I('Dầu ăn', 14, _p),
+      _I('Nước tương', 12, _p),
+    ],
   };
 }

@@ -243,7 +243,7 @@ void main() {
         deck, profile, const [NutrientTarget.atMost('sodium_mg', 2000)],
       );
 
-      expect(with_.totalOf('sodium_mg'), lessThan(without.totalOf('sodium_mg')),
+      expect(with_.totalOf('sodium_mg')!, lessThan(without.totalOf('sodium_mg')!),
           reason: 'it still has to improve as far as it can');
       expect(with_.nutrientViolations, hasLength(1));
       expect(with_.nutrientViolations.first.target.nutrient,
@@ -267,7 +267,7 @@ void main() {
       expect(plan.meetsNutrientTargets, isFalse);
     });
 
-    test('AppSession passes the constraints down to the plan', () {
+    test('AppSession passes the constraints down to the plan', () async {
       // If this wiring breaks, phase 5 is dead code: every check above
       // would still be green, because they call MenuBuilder directly.
       final session = AppSession(rng: math.Random(5))
@@ -279,17 +279,26 @@ void main() {
         ..profile.activity = ActivityLevel.moderate
         ..explorationRatio = 0;
 
-      expect(session.regeneratePlan(), isTrue);
+      expect(await session.regeneratePlan(), isTrue);
       expect(session.plan!.nutrientTargets, isEmpty);
       final sodiumWithout = session.plan!.totalOf('sodium_mg');
 
-      session.nutrientTargets = const [
-        NutrientTarget.atMost('sodium_mg', 2000),
-      ];
-      expect(session.regeneratePlan(), isTrue);
+      // Through the DECLARATION, not by setting the thresholds directly.
+      // `nutrientTargets` used to be a plain field that only this test ever
+      // assigned, which is how the whole chain stayed broken while the test
+      // stayed green: the rule set had the 2 000 mg ceiling, the day-budget
+      // card showed it, and the builder never saw it. Declaring the
+      // condition is the path a user actually takes.
+      session.profile.conditions.add('hypertension');
+      expect(await session.regeneratePlan(), isTrue);
 
       expect(session.plan!.nutrientTargets, hasLength(1));
-      expect(session.plan!.totalOf('sodium_mg'), lessThan(sodiumWithout));
+      expect(
+        session.plan!.nutrientTargets.single.amount,
+        2000,
+        reason: 'the ceiling comes from `mock_rules._dayThresholds`',
+      );
+      expect(session.plan!.totalOf('sodium_mg')!, lessThan(sodiumWithout!));
     });
 
     test('with no constraint at all, phase 5 changes nothing', () {

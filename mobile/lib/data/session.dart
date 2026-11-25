@@ -7,11 +7,17 @@ import 'api/api_config.dart';
 import 'api/failure.dart';
 import 'api/auth_api.dart';
 import 'api/food_api.dart';
+import 'api/meal_plan_api.dart';
 import 'api/profile_api.dart';
+import 'api/survey_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
 import 'models/diary_entry.dart';
 import 'models/food.dart';
+import 'models/candidate_count.dart';
+import 'models/food_adapters.dart';
+import 'models/food_brief.dart';
+import 'models/food_detail.dart';
 import 'models/health_profile.dart';
 import 'models/meal_plan.dart';
 import 'models/swipe_action.dart';
@@ -42,6 +48,8 @@ class AppSession extends ChangeNotifier {
       _auth = AuthApi(client);
       _profiles = ProfileApi(client);
       _foods = FoodApi(client);
+      _surveys = SurveyApi(client);
+      _mealPlans = MealPlanApi(client);
     }
   }
 
@@ -53,6 +61,8 @@ class AppSession extends ChangeNotifier {
   AuthApi? _auth;
   ProfileApi? _profiles;
   FoodApi? _foods;
+  SurveyApi? _surveys;
+  MealPlanApi? _mealPlans;
 
   /// Whether there is a server behind this session.
   ///
@@ -100,12 +110,43 @@ class AppSession extends ChangeNotifier {
 
   DailyPlan? planOn(DateTime day) => _plans[_dayKey(day)];
 
-  /// Switches the plan screen to [day], building that day's plan on first
+  /// Switches the plan screen to [day], and loads that day's plan on first
   /// visit.
-  void selectDay(DateTime day) {
+  ///
+  /// The switch itself is immediate — the week strip must not wait on a
+  /// network call to move — and the plan arrives after. A screen draws
+  /// [plan] as `null` in between, which is the state it already had to
+  /// handle for a day with no targets yet.
+  Future<void> selectDay(DateTime day) async {
     _selectedDay = _dateOnly(day);
-    if (plan == null) _build(_selectedDay);
     notifyListeners();
+    if (plan == null) await loadPlan();
+  }
+
+  // ONLINE: GET /meal-plans?date=… — §7.6.1, with `autoGenerate` left on, so
+  // a day that has no plan gets one built server-side.
+  //
+  // OFFLINE: the Dart builder, which needs no round trip.
+  //
+  // The cache is checked first in both modes. §7.6.1 is idempotent and would
+  // answer with the stored plan anyway, but asking again on every rebuild of
+  // the screen would be a request per frame of the week strip.
+  Future<DailyPlan?> loadPlan({DateTime? date}) async {
+    final day = _dateOnly(date ?? _selectedDay);
+    final cached = _plans[_dayKey(day)];
+    if (cached != null) return cached;
+
+    final api = _mealPlans;
+    if (api == null) {
+      final built = _build(day);
+      notifyListeners();
+      return built;
+    }
+
+    final loaded = await api.forDate(day);
+    if (loaded != null) _plans[_dayKey(day)] = loaded;
+    notifyListeners();
+    return loaded;
   }
 
   /// Plans for [days] consecutive days starting today, building the missing
@@ -172,7 +213,22 @@ class AppSession extends ChangeNotifier {
   /// `NutrientTarget.valueOf`. Passing it in is still valid and it will show
   /// up in `DailyPlan.unenforceableTargets` instead of being quietly treated
   /// as satisfied.
-  List<NutrientTarget> nutrientTargets = const [];
+  /// The day-level nutrient constraints step 4's phase 5 repairs a plan
+  /// against — sodium for hypertension, purine for gout.
+  ///
+  /// **Derived, not stored.** It used to be a plain field that nothing ever
+  /// assigned outside one test, so the thresholds existed in the rule set,
+  /// were shown on the day-budget card, and never reached the builder at
+  /// all. Deriving it means it cannot fall out of step with what the user
+  /// has declared.
+  ///
+  /// Hard ceilings only. A soft threshold costs score and does not bind, and
+  /// handing one to phase 5 would turn a recommendation into a prohibition —
+  /// sugar ≤ 25 g/day is advice, sodium ≤ 2 000 mg is a limit.
+  List<NutrientTarget> get nutrientTargets => [
+    for (final limit in dayThresholdsFor(userConditions))
+      if (limit.isHard) NutrientTarget.atMost(limit.nutrient, limit.amount),
+  ];
 
   // ── Account ──────────────────────────────────────────────────────
 
@@ -338,6 +394,96 @@ class AppSession extends ChangeNotifier {
     ]);
   }
 
+  // ── The filter screen's live count ───────────────────────────────
+
+  /// `conditions.code` -> `conditions.id`, fetched once.
+  ///
+  /// Cached because the count is asked again on every tick of a checkbox,
+  /// and the dictionary cannot change between two of them. `conditions.id`
+  /// is `AUTO_INCREMENT`, so it is whatever the seed order made it and
+  /// cannot be hard-coded on this side — see [_saveConditions].
+  Map<String, int>? _conditionIds;
+
+  // ONLINE: POST /onboarding/candidates/count — §7.4.3.
+  //
+  // OFFLINE: the Dart copy of the filter, over the mock catalogue. Numbers
+  // out of 30 rather than out of 318, which is what the offline catalogue
+  // holds — the screen prints whatever [CandidateCount.totalFoods] says
+  // rather than a figure of its own, so both modes read correctly.
+  //
+  // Takes the selection as an argument rather than reading [profile]: the
+  // screen asks about what is ticked at this moment, and an empty set has to
+  // mean "nothing declared" and not "whatever is on file". Reading the
+  // profile would lose that distinction, which is the one the endpoint
+  // exists for.
+  Future<CandidateCount> countCandidates({
+    required Set<String> codes,
+    Map<String, String> severities = const {},
+  }) async {
+    final declared = codes.where((c) => c != HealthProfile.noneCode).toSet();
+    final api = _surveys;
+    if (api == null) return _countCandidatesOffline(declared);
+
+    if (declared.isEmpty) {
+      // No code to look up, so no dictionary to fetch. This is the first
+      // view of the screen, which is the one view that must not wait on a
+      // round trip it does not need.
+      return api.countCandidates(const []);
+    }
+
+    final ids = _conditionIds ??= {
+      for (final option in await _profiles!.conditionCatalogue())
+        option.code: option.id,
+    };
+    // A code the dictionary does not know stops the count, for the same
+    // reason it stops a save: these declarations are what dishes are removed
+    // by, so quietly dropping one would show a reassuring number built from
+    // an allergy the server never heard about.
+    final unknown = declared.where((c) => !ids.containsKey(c)).toList();
+    if (unknown.isNotEmpty) {
+      throw ApiFailure(
+        code: ApiFailure.unexpectedShape,
+        message:
+            'Không đếm được: máy chủ không biết ${unknown.join(", ")}. '
+            'Hãy cập nhật ứng dụng rồi thử lại.',
+      );
+    }
+
+    return api.countCandidates([
+      for (final code in declared)
+        (
+          conditionId: ids[code]!,
+          severity: severities[code] ?? HealthProfile.defaultSeverity,
+        ),
+    ]);
+  }
+
+  // OFFLINE: `rules/dish_screening.dart`, which `step1_parity_test` holds in
+  // parity with the Python filter. An empty [DayBudget] on purpose: this
+  // count is about the dishes themselves, and a per-day allowance belongs to
+  // a day that has not started.
+  CandidateCount _countCandidatesOffline(Set<String> codes) {
+    final foods = MockFoods.surveyDeck;
+    final result = screenDishes(
+      foods: foods,
+      conditions: conditionsFromCodes(codes),
+      budget: const DayBudget(),
+    );
+    final byRole = <String, int>{};
+    for (final food in result.allowed) {
+      byRole[food.dishRole] = (byRole[food.dishRole] ?? 0) + 1;
+    }
+    return CandidateCount(
+      totalFoods: foods.length,
+      remainingFoods: result.allowed.length,
+      byDishRole: byRole,
+      // The offline catalogue is 30 dishes, which is the survey's own deck,
+      // so "enough for a survey" is the same question as "anything left".
+      enoughForSurvey: result.allowed.isNotEmpty,
+      surveyDeckSize: result.allowed.length,
+    );
+  }
+
   /// Leaves the account but keeps the profile, the plans and the diary: they
   /// belong to the account, and logging back in finds them again.
   void signOut() {
@@ -396,14 +542,30 @@ class AppSession extends ChangeNotifier {
   /// pool before a plan is built, so no score can bring them back.
   final Set<String> neverAgainIds = {};
 
+  /// The dishes behind those two sets, so the saved-dishes screens have
+  /// something to draw.
+  ///
+  /// This is what the empty-list defect was: the screens filtered
+  /// `MockFoods` by these ids, and online the ids are the server's UUIDs. No
+  /// id matched, so the account screen read "3 món" and the list under it was
+  /// blank — the marks were stored and enforced, and unreachable.
+  final Map<String, FoodBrief> _markedDishes = {};
+
+  /// The dishes carrying [kind], in the order the server listed them (by
+  /// name) or, offline, the order they were marked in.
+  List<FoodBrief> savedDishes(String kind) => [
+    for (final dish in _markedDishes.values)
+      if (dish.mark == kind) dish,
+  ];
+
   // ONLINE: PUT /foods/{id}/mark.
   //
-  // OFFLINE: the two sets above are the store.
+  // OFFLINE: the sets and the map above are the store.
   //
   // The server answers with the state it now holds, and that answer is what
   // is applied — not what was asked for. The two differ exactly when the
   // other mark had to go, which is the case a local toggle would get wrong.
-  Future<void> toggleLoved(Food food) async {
+  Future<void> toggleLoved(FoodBrief food) async {
     final wanted = lovedIds.contains(food.id) ? null : FoodMark.loved;
     await _applyMark(food, wanted);
   }
@@ -419,11 +581,13 @@ class AppSession extends ChangeNotifier {
   /// as a separate action the user can see. The alternative — quietly
   /// skipping or regenerating — would change the day's energy figure from
   /// under a user who only answered a question about future plans.
-  Future<void> setNeverAgain(Food food, bool value) async {
+  Future<void> setNeverAgain(FoodBrief food, bool value) async {
     await _applyMark(food, value ? FoodMark.blocked : null);
   }
 
-  Future<void> _applyMark(Food food, String? wanted) async {
+  /// The one place any of the three stores is written, so they cannot drift
+  /// into disagreeing about what is marked.
+  Future<void> _applyMark(FoodBrief food, String? wanted) async {
     final api = _foods;
     final applied = api == null
         ? wanted
@@ -431,11 +595,14 @@ class AppSession extends ChangeNotifier {
 
     lovedIds.remove(food.id);
     neverAgainIds.remove(food.id);
+    _markedDishes.remove(food.id);
     switch (applied) {
       case FoodMark.loved:
         lovedIds.add(food.id);
+        _markedDishes[food.id] = food.copyWith(mark: FoodMark.loved);
       case FoodMark.blocked:
         neverAgainIds.add(food.id);
+        _markedDishes[food.id] = food.copyWith(mark: FoodMark.blocked);
     }
     notifyListeners();
   }
@@ -444,19 +611,29 @@ class AppSession extends ChangeNotifier {
   //
   // Read at sign-in rather than when a saved-dishes screen opens: the
   // bookmark is drawn on every dish tile and in the plan, so a list that
-  // arrived only on that screen would have every heart empty until the user
-  // visited it.
+  // arrived only on that screen would show every dish unmarked until the
+  // user had visited the one screen that fetched it.
+  //
+  // Twice because `?mark=` takes one value. The alternative — one unfiltered
+  // page carrying each row's `mark` — would be four pages of 100 over a
+  // 318-dish catalogue, to find what is usually a handful of dishes.
   Future<void> _pullMarks() async {
     final api = _foods;
     if (api == null) return;
-    final loved = await api.markedIds(FoodMark.loved);
-    final blocked = await api.markedIds(FoodMark.blocked);
+    final loved = await api.marked(FoodMark.loved);
+    final blocked = await api.marked(FoodMark.blocked);
+
     lovedIds
       ..clear()
-      ..addAll(loved);
+      ..addAll(loved.map((d) => d.id));
     neverAgainIds
       ..clear()
-      ..addAll(blocked);
+      ..addAll(blocked.map((d) => d.id));
+    _markedDishes
+      ..clear()
+      ..addEntries([
+        for (final dish in [...loved, ...blocked]) MapEntry(dish.id, dish),
+      ]);
   }
 
   // ── Settings ─────────────────────────────────────────────────────
@@ -497,15 +674,97 @@ class AppSession extends ChangeNotifier {
     diary.clear();
     lovedIds.clear();
     neverAgainIds.clear();
+    _markedDishes.clear();
     notifyListeners();
   }
 
   // ── Cold start ───────────────────────────────────────────────────
 
-  /// Takes the swipe session's result, builds the preference profile and then
-  /// generates the first plan.
-  void completeSurvey(List<({Food food, SwipeAction action})> swipes) {
-    _preference = PreferenceProfile.fromSwipes(space: _space, swipes: swipes);
+  SurveyDeck? _surveyDeck;
+
+  /// The deck being swiped, online. `null` offline, and `null` before
+  /// [loadSurveyDeck] — the session id in it is what [completeSurvey] needs.
+  SurveyDeck? get surveyDeck => _surveyDeck;
+
+  SurveyOutcome? _surveyOutcome;
+
+  /// What the server made of the survey — §7.4.2's answer. `null` offline,
+  /// where nothing computes a taste summary.
+  SurveyOutcome? get surveyOutcome => _surveyOutcome;
+
+  // ONLINE: GET /onboarding/survey — §7.4.1. The deck is chosen by the ML
+  // service: maximum diversity over the feature space, out of the dishes the
+  // F1 filter leaves, which is why it cannot be chosen here.
+  //
+  // OFFLINE: the mock deck, with no session id, because there is nowhere to
+  // store a session.
+  Future<List<FoodBrief>> loadSurveyDeck() async {
+    final api = _surveys;
+    if (api == null) {
+      _surveyDeck = null;
+      return [for (final f in MockFoods.surveyDeck) f.brief];
+    }
+    final deck = await api.deck();
+    _surveyDeck = deck;
+    return deck.items;
+  }
+
+  /// Takes the swipe session's result and finishes onboarding.
+  ///
+  // ONLINE: POST /onboarding/survey — §7.4.2. **This is what ends the
+  // onboarding flow.** The stamp lives in `users.onboarding_completed_at`
+  // and nothing else writes it, so until this call returns, a user who has
+  // swiped every card is still a user who has not finished: `welcome_screen`
+  // reads that stamp on every launch and would send them back to the survey
+  // for good.
+  //
+  // The preference vector is built server-side by Rocchio (§8.2) and the
+  // local [PreferenceProfile] is left alone — it is the offline mode's copy,
+  // and two vectors for one user, built from the same swipes by two
+  // implementations, is exactly the drift the parity checks exist to stop.
+  //
+  // OFFLINE: builds that local vector and the first plan, which is the whole
+  // cold start when there is no server.
+  ///
+  /// Throws [ApiFailure] with `ONBOARDING_INSUFFICIENT` when too few swipes
+  /// carried an opinion, and `ONBOARDING_ALREADY_COMPLETED` when the account
+  /// has already been through this.
+  Future<void> completeSurvey(
+    List<({FoodBrief food, SwipeAction action})> swipes,
+  ) async {
+    final api = _surveys;
+    final deck = _surveyDeck;
+    if (api == null || deck == null) {
+      _completeSurveyOffline(swipes);
+      return;
+    }
+
+    final outcome = await api.submit(
+      sessionId: deck.sessionId,
+      swipes: [
+        for (final s in swipes)
+          (foodId: s.food.id, action: s.action.code),
+      ],
+    );
+    _surveyOutcome = outcome;
+    _onboardingCompletedAt = outcome.onboardingCompletedAt;
+    notifyListeners();
+  }
+
+  // OFFLINE: the Dart copy of the cold start — Rocchio over the mock deck,
+  // then step 4. Looks each card's dish up again because a card holds no
+  // nutrition, and the vector is built from nutrition.
+  void _completeSurveyOffline(
+    List<({FoodBrief food, SwipeAction action})> swipes,
+  ) {
+    final byId = {for (final f in MockFoods.surveyDeck) f.id: f};
+    final known = <({Food food, SwipeAction action})>[
+      for (final s in swipes)
+        if (byId[s.food.id] case final dish?) (food: dish, action: s.action),
+    ];
+    _preference = PreferenceProfile.fromSwipes(space: _space, swipes: known);
+    // Offline only — this whole method is — so the builder runs here and
+    // now, and the Future it returns is already complete.
     regeneratePlan();
   }
 
@@ -516,8 +775,27 @@ class AppSession extends ChangeNotifier {
   /// Returns `false` when the health profile does not hold enough data to
   /// compute the targets — a missing sex, date of birth, height, weight or
   /// activity level.
-  bool regeneratePlan({DateTime? date}) {
-    if (_build(_dateOnly(date ?? _selectedDay)) == null) return false;
+  // ONLINE: POST /meal-plans with `regenerate: true` — §7.6.2. It DELETES
+  // the stored plan for that day and builds a new one, which is why the
+  // screen confirms first: a day the user has eaten from would go with it.
+  //
+  // OFFLINE: the Dart builder, over the same day.
+  //
+  /// Returns `false` when the health profile does not hold enough data to
+  /// compute the targets — a missing sex, date of birth, height, weight or
+  /// activity level. Throws [ApiFailure] for anything the server refuses,
+  /// including `422 NO_FEASIBLE_PLAN` and `422 RULE_TOO_RESTRICTIVE`: the
+  /// two are different answers, and only the second is the user's to change.
+  Future<bool> regeneratePlan({DateTime? date}) async {
+    final day = _dateOnly(date ?? _selectedDay);
+    final api = _mealPlans;
+    if (api == null) {
+      if (_build(day) == null) return false;
+      notifyListeners();
+      return true;
+    }
+
+    _plans[_dayKey(day)] = await api.generate(day, regenerate: true);
     notifyListeners();
     return true;
   }
@@ -538,8 +816,27 @@ class AppSession extends ChangeNotifier {
   /// [avoid] is a soft exclusion for variety: it is dropped when honouring
   /// it would leave too few dishes to fill a day.
   MenuBuilder _builder({Set<String> avoid = const {}}) {
+    // The F1 filter, which `MenuBuilder` requires of its caller in so many
+    // words: "it has to run **first** and pass in an already-safe dish set".
+    // Nothing used to do that. The declared conditions reached the
+    // excluded-dishes screen and never the builder, so offline a user with a
+    // seafood allergy was served seafood while the card below the plan
+    // correctly listed those same dishes as excluded — two screens of one
+    // session answering opposite things.
+    //
+    // An EMPTY day budget on purpose. This filter is about the dishes
+    // themselves; a per-day allowance belongs to a day in progress, and
+    // reading `dayBudget` here would ask for the plan that is being built.
+    // The per-day thresholds reach step 4 through [nutrientTargets] instead,
+    // which is phase 5's input — the same split as `ml/f1_filter.py` and
+    // `ml/menu_builder.py`.
+    final safe = screenDishes(
+      foods: candidates,
+      conditions: userConditions,
+      budget: const DayBudget(),
+    ).allowed;
     final allowed = [
-      for (final f in candidates)
+      for (final f in safe)
         if (!neverAgainIds.contains(f.id)) f,
     ];
     final varied = [
@@ -561,13 +858,58 @@ class AppSession extends ChangeNotifier {
   );
 
   /// The replacement dishes for one serving, in descending score order.
-  List<Food> alternativesFor(MealPlanItem item) {
+  // ONLINE: GET /meal-plan-items/{id}/alternatives — §7.6.4. The service
+  // scores the candidates and says, for each one, how the day's energy would
+  // move and whether it would stay inside ±10 % — figures this side cannot
+  // compute, because a serving from §7.6 carries no nutrition.
+  //
+  // OFFLINE: the Dart builder's own candidate list.
+  Future<List<FoodBrief>> alternativesFor(MealPlanItem item) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      return [for (final a in await api.alternatives(item.id!)) a.food];
+    }
+
     final plan = this.plan;
     final exclude = plan == null
         ? <String>{}
         : plan.allItems.map((i) => i.food.id).toSet();
+    return [
+      for (final food in _builder().alternativesFor(item, excludeIds: exclude))
+        food.brief,
+    ];
+  }
 
-    return _builder().alternativesFor(item, excludeIds: exclude);
+  /// What this serving could be swapped for, from whichever side can say.
+  ///
+  /// One list for one sheet. See [ReplaceOption] for why each source fills a
+  /// different half of it and neither half is invented for the other.
+  Future<List<ReplaceOption>> replaceOptions(MealPlanItem item) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      return [
+        for (final a in await api.alternatives(item.id!))
+          ReplaceOption(
+            food: a.food,
+            score: a.predictedScore,
+            deltaKcal: a.calorieDeltaKcal,
+            keepsWithinTolerance: a.keepsWithinTolerance,
+          ),
+      ];
+    }
+
+    final plan = this.plan;
+    final exclude = plan == null
+        ? <String>{}
+        : plan.allItems.map((i) => i.food.id).toSet();
+    return [
+      for (final dish in _builder().alternativesFor(item, excludeIds: exclude))
+        ReplaceOption(
+          food: dish.brief,
+          dish: dish,
+          score: preference.score(dish),
+        ),
+    ];
   }
 
   /// Swaps one serving for another dish.
@@ -576,9 +918,33 @@ class AppSession extends ChangeNotifier {
   /// takes the `plan_replaced` label (0.15), the chosen dish takes
   /// `plan_kept` (0.70). It is the main source of data once the swipe session
   /// is over.
-  void replaceItem(MealPlanItem item, Food replacement) {
+  // ONLINE: PUT /meal-plan-items/{id}/replace — §7.6.5, which answers with
+  // the whole day: the swap moves the day's totals and its ±10 % verdict, so
+  // a response about one serving would leave this side to recompute figures
+  // it cannot.
+  //
+  // OFFLINE: the swap in memory, keeping the old serving as a `replaced` row
+  // for the same reason the server does.
+  Future<void> replaceItem(MealPlanItem item, FoodBrief replacement) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      final day = _dateOnly(_selectedDay);
+      _plans[_dayKey(day)] = await api.replace(item.id!, replacement.id);
+      notifyListeners();
+      return;
+    }
+    _replaceItemOffline(item, replacement);
+  }
+
+  // OFFLINE: the Dart copy. Looks the dish up again because a brief carries
+  // no nutrition, and the local scoring needs it.
+  void _replaceItemOffline(MealPlanItem item, FoodBrief replacement) {
     final plan = this.plan;
     if (plan == null) return;
+    final dish = MockFoods.surveyDeck
+        .where((f) => f.id == replacement.id)
+        .firstOrNull;
+    if (dish == null) return;
 
     for (final slot in plan.slots) {
       final index = slot.items.indexOf(item);
@@ -587,9 +953,9 @@ class AppSession extends ChangeNotifier {
       slot.items[index] = item.copyWith(status: MealItemStatus.replaced);
       slot.items.insert(
         index,
-        MealPlanItem(
-          food: replacement,
-          score: preference.score(replacement),
+        MealPlanItem.offline(
+          dish: dish,
+          score: preference.score(dish),
           explorationDelta: item.explorationDelta,
         ),
       );
@@ -604,11 +970,62 @@ class AppSession extends ChangeNotifier {
   /// Marks a planned item as skipped (eating out, not hungry…), or puts a
   /// skipped one back. A weak training signal: the reason may have nothing to
   /// do with taste.
-  void setSkipped(MealPlanItem item, bool skipped) {
-    final from = skipped ? MealItemStatus.suggested : MealItemStatus.skipped;
-    final to = skipped ? MealItemStatus.skipped : MealItemStatus.suggested;
-    if (item.status != from) return;
+  // ONLINE: PATCH /meal-plan-items/{id}/status — §7.6.6.
+  //
+  // OFFLINE: the status on the serving in memory.
+  //
+  // Putting a skipped serving back sends `kept`, not `suggested`: §7.6.6
+  // accepts only the three a CLIENT may set, and `suggested` is what the
+  // system writes when it generates a plan. §4.6 reads the difference —
+  // `kept` is the user having looked at a suggestion and left it, which is a
+  // weak positive, while `suggested` is nobody having said anything yet.
+  Future<void> setSkipped(MealPlanItem item, bool skipped) async {
+    final to = skipped ? MealItemStatus.skipped : MealItemStatus.kept;
+    if (skipped && item.status == MealItemStatus.skipped) return;
+    if (!skipped && item.status != MealItemStatus.skipped) return;
 
+    await _setItemStatus(item, to);
+  }
+
+  /// Marks a serving as eaten.
+  ///
+  // ONLINE: PATCH /meal-plan-items/{id}/status with `eaten` — §7.6.6, which
+  // writes the `food_diary` entry **in the same request**. Two calls would
+  // leave a window where the plan says eaten and the diary does not, and
+  // every compliance figure in the report reads both.
+  //
+  // OFFLINE: [logMeal], which writes the local diary and the status together
+  // for the same reason.
+  ///
+  /// Returns the diary entry's id when the server created one, so a screen
+  /// can send the user on to rate the dish. `null` offline, and `null` on a
+  /// repeat — the entry already exists, and a second one would count the
+  /// meal twice.
+  Future<String?> markEaten(MealPlanItem item, MealType meal) async {
+    final api = _mealPlans;
+    if (api == null || item.id == null) {
+      final dish = item.dish;
+      if (dish == null) return null;
+      logMeal(food: dish, meal: meal);
+      return null;
+    }
+
+    final result = await api.setStatus(item.id!, MealItemStatus.eaten.code);
+    _applyItemStatus(item, MealItemStatus.eaten);
+    return result.diaryEntryCreated ? result.diaryEntryId : null;
+  }
+
+  Future<void> _setItemStatus(MealPlanItem item, MealItemStatus to) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      await api.setStatus(item.id!, to.code);
+    }
+    _applyItemStatus(item, to);
+  }
+
+  /// Writes the status onto the cached serving, after the server agreed to
+  /// it — or at once, offline, where this side is the store.
+  void _applyItemStatus(MealPlanItem item, MealItemStatus to) {
     for (final slot in plan?.slots ?? const <MealSlot>[]) {
       final index = slot.items.indexOf(item);
       if (index < 0) continue;
@@ -649,19 +1066,62 @@ class AppSession extends ChangeNotifier {
   /// both parts were fixed.
   List<Food> get plannedToday => [
     for (final item in plan?.allItems ?? const <MealPlanItem>[])
-      if (item.status == MealItemStatus.suggested) item.food,
+      // `dish` and not `food`: the day's allowance is arithmetic over whole
+      // nutrition rows, which only an offline serving carries. Online the
+      // allowance comes from §7.7.5 and this list is empty.
+      if (item.status == MealItemStatus.suggested && item.dish != null)
+        item.dish!,
   ];
 
-  /// The serving of [food] still on the plate for the day on screen, or
+  // ONLINE: GET /foods/{id} — §7.5.2, the only answer carrying a dish's
+  // whole nutrition row.
+  //
+  // OFFLINE: the mock dish of the same id, adapted. Its micronutrients come
+  // back null rather than 0, because the mock does not hold them either.
+  //
+  // The brief is passed in and not just an id: it is what the list already
+  // knew, so the screen can draw the name and the picture while this is in
+  // flight instead of showing a spinner over everything.
+  Future<FoodDetail> dishDetail(FoodBrief dish) async {
+    final api = _foods;
+    if (api != null) return api.detail(dish.id);
+
+    for (final food in MockFoods.surveyDeck) {
+      if (food.id == dish.id) return food.detail;
+    }
+    throw ApiFailure(
+      code: ApiFailure.notFound,
+      message: 'Không tìm thấy món ${dish.name}',
+    );
+  }
+
+  /// How well a dish fits this user's taste, 0 to 1, or `null` when there is
+  /// no answer to give.
+  ///
+  /// `null` happens in two ways and both are honest. Before any swipe the
+  /// vector is empty, so every dish would score the same and a percentage
+  /// would be noise dressed as a measurement. And online there is no local
+  /// vector at all — Rocchio runs in the ML service and no endpoint scores a
+  /// single dish — so the screen drops the figure rather than inventing one.
+  // OFFLINE: the Dart copy of step 3, over the mock catalogue.
+  double? scoreOf(FoodBrief dish) {
+    if (_preference == null) return null;
+    for (final food in MockFoods.surveyDeck) {
+      if (food.id == dish.id) return _preference!.score(food);
+    }
+    return null;
+  }
+
+  /// The serving of the dish still on the plate for the day on screen, or
   /// `null` if there is none.
   ///
   /// `suggested` only: an `eaten` serving is already in the diary and cannot
   /// be taken back off the day, and a `skipped` one is off it already. Used
   /// by the detail screen to ask what to do with a serving of a dish the
   /// user has just blocked, rather than deciding for them.
-  MealPlanItem? plannedTodayItem(Food food) {
+  MealPlanItem? plannedTodayItem(FoodBrief dish) {
     for (final item in plan?.allItems ?? const <MealPlanItem>[]) {
-      if (item.food.id == food.id &&
+      if (item.food.id == dish.id &&
           item.status == MealItemStatus.suggested) {
         return item;
       }

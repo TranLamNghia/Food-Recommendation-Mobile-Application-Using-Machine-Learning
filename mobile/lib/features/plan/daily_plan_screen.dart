@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/api/failure.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/mock/mock_rules.dart';
 import '../../data/recommender/match_reason.dart';
 import '../../data/rules/condition_rule.dart';
+import '../../data/rules/day_budget.dart';
 import '../../data/session.dart';
 import '../food/food_detail_screen.dart';
 import 'excluded_screen.dart';
@@ -21,8 +23,46 @@ import 'widgets/week_strip.dart';
 /// Everything before this screen (the profile, the survey swipes) is only
 /// preparing data. This is where the four steps of the recommendation
 /// algorithm produce a visible result.
-class DailyPlanScreen extends StatelessWidget {
+/// Stateful because the day's plan is a round trip online — §7.6.1 — and a
+/// refusal there has to be shown as itself rather than as an empty screen.
+class DailyPlanScreen extends StatefulWidget {
   const DailyPlanScreen({super.key});
+
+  @override
+  State<DailyPlanScreen> createState() => _DailyPlanScreenState();
+}
+
+class _DailyPlanScreenState extends State<DailyPlanScreen> {
+  bool _started = false;
+  bool _loading = false;
+  ApiFailure? _error;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // Online the day's plan is a round trip (§7.6.1, `autoGenerate` on), so
+    // it cannot be fetched during a build. `didChangeDependencies` and not
+    // `initState` because `SessionScope.of` reads an inherited widget.
+    _load();
+  }
+
+  Future<void> _load() async {
+    final session = SessionScope.of(context);
+    if (session.plan != null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await session.loadPlan();
+    } on ApiFailure catch (failure) {
+      if (mounted) setState(() => _error = failure);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +73,65 @@ class DailyPlanScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: plan == null
-            ? _NoPlan(complete: session.profile.isComplete)
-            : _PlanBody(session: session, plan: plan),
+        child: switch ((plan, _loading, _error)) {
+          (final DailyPlan p, _, _) => _PlanBody(session: session, plan: p),
+          (_, true, _) => const Center(child: CircularProgressIndicator()),
+          // A refusal is shown as itself. `_NoPlan` says "there is no plan
+          // yet", which for a user whose conditions leave no feasible day
+          // would be the wrong story entirely.
+          (_, _, final ApiFailure f) => _PlanFailed(
+            failure: f,
+            onRetry: _load,
+          ),
+          _ => _NoPlan(complete: session.profile.isComplete),
+        },
+      ),
+    );
+  }
+}
+
+/// When §7.6 refuses to produce a day.
+///
+/// Its own screen rather than a snackbar over an empty one: the two refusals
+/// that matter here are `NO_FEASIBLE_PLAN` and `RULE_TOO_RESTRICTIVE`, and
+/// the second is the user's to act on — their declarations left too few
+/// dishes. Telling them that is the only way out of it.
+class _PlanFailed extends StatelessWidget {
+  const _PlanFailed({required this.failure, required this.onRetry});
+
+  final ApiFailure failure;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 44,
+              color: AppColors.textTertiary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Chưa dựng được thực đơn',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              failure.message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (failure.isRetryable) ...[
+              const SizedBox(height: 18),
+              FilledButton(onPressed: onRetry, child: const Text('Thử lại')),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -107,6 +203,71 @@ class _PlanBody extends StatelessWidget {
   }
 }
 
+/// Regenerating **deletes** the stored plan for the day and builds another,
+/// so it asks first — §7.6.2 is explicit that a day the user has started
+/// eating from should not vanish because a button was within reach. And the
+/// message afterwards says what happened rather than what was attempted: the
+/// old version announced success before the request had been made.
+Future<void> _regenerate(BuildContext context) async {
+  final session = SessionScope.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+
+  // The day ON SCREEN, which the week strip can have moved away from today.
+  // The question has to name it: a user looking at Thursday who is asked
+  // about "hôm nay" would answer the wrong question. One day only — there is
+  // no regenerate-the-week, and §7.6.2 takes a single `planDate`.
+  final day = session.selectedDay;
+  final label = session.viewingToday
+      ? 'hôm nay'
+      : 'ngày ${day.day}/${day.month}';
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Sinh lại thực đơn $label?'),
+      content: Text(
+        'Thực đơn $label sẽ bị thay bằng một thực đơn mới. '
+        '${session.viewingToday ? "Những món đã ăn vẫn ở trong nhật ký. " : ""}'
+        'Các ngày khác không đổi.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Để nguyên'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Sinh lại'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+
+  try {
+    // Explicitly the day that was named in the question, not whatever
+    // `_selectedDay` happens to be by the time the dialog closes.
+    final built = await session.regeneratePlan(date: day);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          built
+              ? 'Đã sinh lại thực đơn $label'
+              : 'Chưa đủ thông tin hồ sơ để dựng thực đơn',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  } on ApiFailure catch (failure) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(failure.message),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
   const _Header({required this.plan, required this.session});
 
@@ -149,15 +310,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         IconButton(
-          onPressed: () {
-            session.regeneratePlan();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Đã sinh lại thực đơn'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
+          onPressed: () => _regenerate(context),
           tooltip: 'Sinh lại thực đơn',
           icon: const Icon(Icons.refresh_rounded),
           color: AppColors.textPrimary,
@@ -175,18 +328,26 @@ class _MealSection extends StatelessWidget {
   final AppSession session;
 
   Future<void> _replace(BuildContext context, MealPlanItem item) async {
+    final offlineDish = item.dish;
+    final options = await session.replaceOptions(item);
+    if (!context.mounted) return;
     final choice = await ReplaceSheet.show(
       context,
       item: item,
-      alternatives: session.alternativesFor(item),
-      scoreOf: session.preference.score,
+      alternatives: options,
       // The allowance has to have the dish being replaced subtracted:
       // the room for the new dish includes what the old one takes up.
-      budgetAfterRemoval: session.dayBudget.withoutPlanned(item.food),
+      // Offline only: the allowance is arithmetic over whole nutrition
+      // rows, and a serving from §7.6 carries just its energy. Online the
+      // sheet shows the alternatives without a budget line rather than one
+      // computed from numbers this side does not have.
+      budgetAfterRemoval: offlineDish == null
+          ? const DayBudget()
+          : session.dayBudget.withoutPlanned(offlineDish),
     );
     if (choice == null) return;
 
-    session.replaceItem(item, choice);
+    await session.replaceItem(item, choice);
     if (!context.mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -197,14 +358,53 @@ class _MealSection extends StatelessWidget {
     );
   }
 
-  void _eat(BuildContext context, MealPlanItem item) {
-    session.logMeal(food: item.food, meal: slot.type);
-    ScaffoldMessenger.of(context).showSnackBar(
+  // Online this is PATCH /meal-plan-items/{id}/status with `eaten`, which
+  // writes the diary entry in the SAME request — two calls would leave a
+  // window where the plan says eaten and the diary does not, and every
+  // compliance figure reads both.
+  Future<void> _eat(BuildContext context, MealPlanItem item) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await session.markEaten(item, slot.type);
+    } on ApiFailure catch (failure) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(failure.message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    messenger.showSnackBar(
       SnackBar(
         content: Text('Đã ghi ${item.food.name.toLowerCase()} vào nhật ký'),
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Taking a serving off the day, or putting it back.
+  ///
+  /// Online both are §7.6.6. Putting one back sends `kept`, not `suggested`:
+  /// a client may set only the three statuses that describe what the USER
+  /// did, and §4.6 reads `kept` as a weak positive rather than as nobody
+  /// having said anything.
+  Future<void> _skip(
+    BuildContext context,
+    MealPlanItem item,
+    bool skipped,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await session.setSkipped(item, skipped);
+    } on ApiFailure catch (failure) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(failure.message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
@@ -263,8 +463,8 @@ class _MealSection extends StatelessWidget {
               // current time, so "eating" tomorrow's dinner would land in
               // today's diary.
               onEat: session.viewingToday ? () => _eat(context, item) : null,
-              onSkip: () => session.setSkipped(item, true),
-              onRestore: () => session.setSkipped(item, false),
+              onSkip: () => _skip(context, item, true),
+              onRestore: () => _skip(context, item, false),
             ),
             _WhyRow(item: item, session: session),
           ],
@@ -513,9 +713,18 @@ class _WhyRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cau = matchSentences(session.preference, item.food, limit: 2);
+    // Offline only. Every line of this row is computed from the whole dish
+    // — the match sentences from the feature vector, the soft penalty from
+    // the nutrition row, the share from scoring the rest of the catalogue —
+    // and a serving from §7.6 carries none of that. Online the explanation
+    // belongs to the service that did the scoring, and until there is an
+    // endpoint for it the row is absent rather than invented.
+    final dish = item.dish;
+    if (dish == null) return const SizedBox.shrink();
+
+    final cau = matchSentences(session.preference, dish, limit: 2);
     final penalty = PenaltyOutcome.of(
-      item.food,
+      dish,
       softRulesFor(session.userConditions),
     );
 
@@ -538,7 +747,7 @@ class _WhyRow extends StatelessWidget {
               InkWell(
                 onTap: () => ReasonScreen.open(
                   context,
-                  food: item.food,
+                  food: dish,
                   profile: session.preference,
                   budget: session.dayBudget,
                   penalty: penalty,
@@ -591,8 +800,9 @@ class _WhyRow extends StatelessWidget {
   /// every dish scores the same, so this share is meaningless — it returns
   /// `null` so the interface drops that line.
   double? _betterThanShare() {
-    if (session.preference.isEmpty) return null;
-    final diem = session.preference.score(item.food);
+    final dish = item.dish;
+    if (dish == null || session.preference.isEmpty) return null;
+    final diem = session.preference.score(dish);
     final tatCa = session.candidates;
     if (tatCa.isEmpty) return null;
     var thapHon = 0;

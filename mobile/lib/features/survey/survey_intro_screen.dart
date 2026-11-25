@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
-import '../../data/mock/mock_foods.dart';
+import '../../data/api/failure.dart';
+import '../../data/models/food_brief.dart';
 import '../../data/models/swipe_action.dart';
+import '../../data/session.dart';
 import 'survey_screen.dart';
 
 /// The survey's opening screen — it teaches the gesture before starting.
@@ -13,8 +15,82 @@ import 'survey_screen.dart';
 /// Rather than describing it in words, the screen runs a sample card that
 /// swipes itself in each of the four directions in turn. One cycle is enough
 /// to understand it, with nothing to read.
-class SurveyIntroScreen extends StatelessWidget {
+///
+/// It is also where the deck is fetched. Stateful for that: §7.4.1 chooses
+/// the cards in the ML service — maximum diversity over the feature space,
+/// out of the dishes the F1 filter leaves — so the deck is a round trip,
+/// and it is made here rather than on the next screen so that the user is
+/// never dropped into an empty swipe deck.
+class SurveyIntroScreen extends StatefulWidget {
   const SurveyIntroScreen({super.key});
+
+  @override
+  State<SurveyIntroScreen> createState() => _SurveyIntroScreenState();
+}
+
+class _SurveyIntroScreenState extends State<SurveyIntroScreen> {
+  bool _loading = false;
+
+  Future<void> _start() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    final session = SessionScope.of(context);
+    List<FoodBrief> deck;
+    try {
+      deck = await session.loadSurveyDeck();
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(failure.message),
+          duration: const Duration(seconds: 4),
+          action: failure.isRetryable
+              ? SnackBarAction(label: 'Thứ lại', onPressed: _start)
+              : null,
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    if (deck.isEmpty) {
+      // §7.4.1 can legitimately answer with nothing: a user whose declared
+      // conditions leave no safe dish. That is a different screen from "the
+      // service is down", and saying so is the only honest move — there is
+      // nothing to swipe.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 5),
+          content: Text(
+            'Không còn món nào an toàn với khai báo sức khỏe hiện tại, nên '
+            'chưa thể khảo sát. Hãy xem lại phần bệnh lý và dị ứng.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: AppMotion.page,
+        pageBuilder: (_, _, _) => SurveyScreen(foods: deck),
+        transitionsBuilder: (_, animation, _, child) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.94, end: 1.0).animate(
+              CurvedAnimation(
+                parent: animation,
+                curve: AppMotion.emphasized,
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +125,7 @@ class SurveyIntroScreen extends StatelessWidget {
               Text('Khảo sát khẩu vị', style: text.displaySmall),
               const SizedBox(height: 10),
               Text(
-                'Vuốt 30 món để hệ thống nhận ra gu ăn uống của bạn. '
+                'Vuốt vài chục món để hệ thống nhận ra gu ăn uống của bạn. '
                 'Mất khoảng 2 phút và chỉ phải làm một lần duy nhất.',
                 style: text.bodyLarge,
               ),
@@ -57,27 +133,14 @@ class SurveyIntroScreen extends StatelessWidget {
               const _LegendGrid(),
               const SizedBox(height: 22),
               FilledButton(
-                onPressed: () => Navigator.of(context).push(
-                  PageRouteBuilder(
-                    transitionDuration: AppMotion.page,
-                    pageBuilder: (_, _, _) =>
-                        SurveyScreen(foods: MockFoods.surveyDeck),
-                    transitionsBuilder: (_, animation, _, child) =>
-                        FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(
-                            scale: Tween(begin: 0.94, end: 1.0).animate(
-                              CurvedAnimation(
-                                parent: animation,
-                                curve: AppMotion.emphasized,
-                              ),
-                            ),
-                            child: child,
-                          ),
-                        ),
-                  ),
-                ),
-                child: const Text('Bắt đầu vuốt'),
+                onPressed: _loading ? null : _start,
+                child: _loading
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Bắt đầu vuốt'),
               ),
             ],
           ),

@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nutrition_app/core/theme/app_theme.dart';
 import 'package:nutrition_app/data/mock/mock_rules.dart';
 import 'package:nutrition_app/data/models/food.dart';
+import 'package:nutrition_app/data/models/food_adapters.dart';
+import 'package:nutrition_app/data/models/food_brief.dart';
 import 'package:nutrition_app/data/models/meal_plan.dart';
 import 'package:nutrition_app/data/models/swipe_action.dart';
 import 'package:nutrition_app/data/recommender/food_vector.dart';
@@ -77,6 +79,12 @@ DayBudget _budget({
   eaten: eaten,
   planned: planned,
 );
+
+/// A candidate the OFFLINE builder would hand over: the whole dish and a
+/// score, and no day-level figures, because nothing on this side computes
+/// them. See [ReplaceOption].
+ReplaceOption _option(Food dish, {double score = 0.7}) =>
+    ReplaceOption(food: dish.brief, dish: dish, score: score);
 
 void main() {
   group('DayBudgetCard — the allowance shows BEFORE it blocks a dish', () {
@@ -395,8 +403,8 @@ void main() {
   });
 
   group('ReplaceSheet — two allowances side by side, misfits still shown', () {
-    final old = MealPlanItem(
-      food: _food(id: 'cu', name: 'Món cũ', sodium: 400, purine: 50),
+    final old = MealPlanItem.offline(
+      dish: _food(id: 'cu', name: 'Món cũ', sodium: 400, purine: 50),
       score: 0.6,
     );
 
@@ -408,8 +416,7 @@ void main() {
         _host(
           ReplaceSheet(
             item: old,
-            alternatives: [_food(id: 'a', name: 'Món A', purine: 20)],
-            scoreOf: (_) => 0.7,
+            alternatives: [_option(_food(id: 'a', name: 'Món A', purine: 20))],
             budgetAfterRemoval: _budget(
               eaten: [_food(id: 'e', name: 'Đã ăn', sodium: 1500, purine: 300)],
             ),
@@ -434,10 +441,11 @@ void main() {
           ReplaceSheet(
             item: old,
             alternatives: [
-              _food(id: 'man', name: 'Món quá mặn', sodium: 5000, purine: 20),
-              _food(id: 'ok', name: 'Món vừa', sodium: 50, purine: 20),
+              _option(_food(
+                id: 'man', name: 'Món quá mặn', sodium: 5000, purine: 20)),
+              _option(_food(
+                id: 'ok', name: 'Món vừa', sodium: 50, purine: 20)),
             ],
-            scoreOf: (_) => 0.7,
             budgetAfterRemoval: _budget(),
           ),
         ),
@@ -451,7 +459,7 @@ void main() {
 
     testWidgets('tapping a misfit does NOT close the sheet', (tester) async {
       _tall(tester);
-      Food? picked;
+      FoodBrief? picked;
       await tester.pumpWidget(
         _host(
           Builder(
@@ -461,9 +469,10 @@ void main() {
                   context,
                   item: old,
                   alternatives: [
-                    _food(id: 'man', name: 'Món quá mặn', sodium: 5000, purine: 20),
+                    _option(_food(
+                      id: 'man', name: 'Món quá mặn',
+                      sodium: 5000, purine: 20)),
                   ],
-                  scoreOf: (_) => 0.7,
                   budgetAfterRemoval: _budget(),
                 );
               },
@@ -495,8 +504,7 @@ void main() {
         _host(
           ReplaceSheet(
             item: old,
-            alternatives: [_food(id: 'la', name: 'Chưa đo purin', sodium: 50)],
-            scoreOf: (_) => 0.7,
+            alternatives: [_option(_food(id: 'la', name: 'Chưa đo purin', sodium: 50))],
             budgetAfterRemoval: _budget(),
           ),
         ),

@@ -169,6 +169,66 @@ public sealed class MealPlanController(
                             "Đã có thực đơn cho ngày này");
             }
 
+            // How much of the day is still the system's to decide.
+            //
+            // Regenerating used to delete the whole plan and build a fresh
+            // day at the FULL energy target, whatever had been eaten from
+            // the old one. The eaten dishes were excluded from the candidate
+            // set — so the new day did not repeat them — but nothing
+            // subtracted their energy, and nothing anywhere added the diary
+            // to the plan. A user who ate their 2 542 kcal day and pressed
+            // the button got a second whole day, reporting itself at −1 %
+            // of target, for an actual ~5 100 kcal. The ±10 % commitment was
+            // being measured on the plan rather than on the day.
+            //
+            // So the SCOPE now follows the state of the day, and the request
+            // body is unchanged: one call still replaces a whole untouched
+            // day, which is what the button is for.
+            var eatenMeals = await db.MealPlanItems
+                .Where(i => i.MealPlanId == existing.Id
+                            && i.Status == MealItemStatus.Eaten)
+                .Select(i => i.MealType)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (eatenMeals.Count > 0)
+            {
+                var untouched = Enums.MealType
+                    .Where(m => !eatenMeals.Contains(m))
+                    .ToList();
+
+                if (untouched.Count == 0)
+                {
+                    // Every meal has something eaten in it. There is no part
+                    // of the day left to plan, and planning another whole
+                    // one would be the bug this branch exists to close.
+                    return ApiProblem.Make(
+                        409, ErrorCode.ValidationFailed,
+                        "Cả bốn bữa hôm nay đều đã có món được đánh dấu là "
+                        + "đã ăn, nên không còn phần nào để sinh lại",
+                        HttpContext.TraceIdentifier,
+                        [new ApiError.FieldError
+                        {
+                            Field = "regenerate",
+                            Message = "Hãy bỏ đánh dấu đã ăn ở bữa muốn "
+                                + "đổi, hoặc đổi từng món bằng chức năng "
+                                + "thay thế món",
+                        }]);
+                }
+
+                log.LogInformation(
+                    "Plan {PlanId} of {Day} for {User}: {Eaten} already has "
+                    + "eaten dishes, so the regenerate rebuilds {Untouched} "
+                    + "only and the day is measured around what was eaten.",
+                    existing.Id, day, uid, string.Join("+", eatenMeals),
+                    string.Join("+", untouched));
+
+                return await RebuildMealsAsync(existing, untouched, ct);
+            }
+
+            // Nothing eaten: the whole day is still the system's to decide,
+            // and this is the path the button was designed for.
+            //
             // `ON DELETE CASCADE` on `meal_plan_items.meal_plan_id` takes the
             // dishes with it. Deliberate: the old plan's `kept`/`replaced`
             // rows are preference signals, and regenerating discards them —
@@ -301,16 +361,56 @@ public sealed class MealPlanController(
         // (`round(1 * 0.3) == 0`), so the same food wins every time. Forcing
         // an exploration serving instead would make that meal 100 %
         // exploration and move a figure Chapter 3 measures.
-        var current = ofMeal
+        return await RebuildMealsAsync(plan, [mealType], ct);
+    }
+
+    /// <summary>
+    /// Rebuilds <paramref name="mealTypes"/> inside <paramref name="plan"/>,
+    /// leaving every other meal exactly as it is.
+    ///
+    /// <para>One body for two callers: §7.6's per-meal endpoint passes one
+    /// meal, and a full-day regenerate passes the meals that have nothing
+    /// eaten in them. They were the same operation all along — the only
+    /// difference was the length of the list — and writing it twice is how
+    /// the two would start disagreeing about what a rebuild does to the old
+    /// rows.</para>
+    ///
+    /// <para><b>The day stays the unit of measurement.</b> The ML service is
+    /// asked for a subset of an existing day, so it keeps the meals it was
+    /// not asked about and measures the ±10 % and every per-day threshold
+    /// over the whole thing. A meal rebuilt around servings the user has
+    /// already eaten is fitted into what is left of the day's budget, and if
+    /// there is not enough left the day reports
+    /// <c>withinTolerance = false</c> — which is the honest answer and the
+    /// reason this is not a silent recalculation.</para>
+    /// </summary>
+    private async Task<IActionResult> RebuildMealsAsync(
+        Entities.MealPlans plan,
+        IReadOnlyList<string> mealTypes,
+        CancellationToken ct)
+    {
+        var ofMeals = await db.MealPlanItems
+            .Where(i => i.MealPlanId == plan.Id
+                        && mealTypes.Contains(i.MealType))
+            .ToListAsync(ct);
+
+        // The dishes currently in these meals are excluded, so "sinh lại" is
+        // a DIFFERENT meal and not the same one again. Without this the
+        // answer is identical: `_greedy_pick` is deterministic, and a
+        // one-serving meal draws no exploration serving either
+        // (`round(1 * 0.3) == 0`), so the same food wins every time. Forcing
+        // an exploration serving instead would make that meal 100 %
+        // exploration and move a figure Chapter 3 measures.
+        var current = ofMeals
             .Where(i => i.Status != MealItemStatus.Replaced)
             .Select(i => i.FoodId)
             .Distinct()
             .ToList();
 
         var asked = await AskPlanAsync(
-            uid, plan.PlanDate,
+            plan.UserId, plan.PlanDate,
             (double?)plan.ExplorationRatio ?? DefaultExplorationRatio,
-            [mealType], ct, alsoExclude: current);
+            mealTypes, ct, alsoExclude: current);
         if (asked.Problem is not null)
         {
             return asked.Problem;
@@ -318,37 +418,40 @@ public sealed class MealPlanController(
         var result = asked.Result!;
 
         var rebuilt = result.Meals
-            .Where(m => m.MealType == mealType)
+            .Where(m => mealTypes.Contains(m.MealType))
             .SelectMany(m => m.Items)
             .ToList();
         if (rebuilt.Count == 0)
         {
-            // Nothing else fits this meal's roles once the current dishes
-            // are excluded. The old meal is left exactly as it was: an empty
-            // meal would be a worse answer than the one the user already
-            // had, and deleting the rows first and discovering this
+            // Nothing else fits these meals' roles once the current dishes
+            // are excluded. The old meals are left exactly as they were: an
+            // empty meal would be a worse answer than the one the user
+            // already had, and deleting the rows first and discovering this
             // afterwards is how a plan ends up with a hole in it.
             return ApiProblem.Make(
                 409, ErrorCode.NoFeasiblePlan,
-                "Không còn món nào khác phù hợp cho bữa này, nên thực đơn "
-                + "được giữ nguyên",
+                mealTypes.Count == 1
+                    ? "Không còn món nào khác phù hợp cho bữa này, nên thực "
+                      + "đơn được giữ nguyên"
+                    : "Không còn món nào khác phù hợp cho những bữa chưa ăn, "
+                      + "nên thực đơn được giữ nguyên",
                 HttpContext.TraceIdentifier);
         }
 
         var now = Clock.Now;
         await using (var tx = await db.Database.BeginTransactionAsync(ct))
         {
-            // The `replaced` rows of this meal stay. They are the record of
-            // a swap the user made, and §4.6 reads them as a rejection of
+            // The `replaced` rows of these meals stay. They are the record
+            // of a swap the user made, and §4.6 reads them as a rejection of
             // the old dish — deleting them would erase a training signal
             // because the meal was re-rolled afterwards.
-            var drop = ofMeal
+            var drop = ofMeals
                 .Where(i => i.Status != MealItemStatus.Replaced)
                 .ToList();
             db.MealPlanItems.RemoveRange(drop);
             await db.SaveChangesAsync(ct);
 
-            WriteItems(plan, result, [mealType], now);
+            WriteItems(plan, result, mealTypes, now);
             await db.SaveChangesAsync(ct);
 
             await MealPlanMapper.RecomputeActualsAsync(db, plan, ct);
@@ -362,15 +465,18 @@ public sealed class MealPlanController(
         if (plan.CalorieDeviationPct is { } deviation
             && Math.Abs(deviation) > MealPlanMapper.ToleranceP)
         {
-            // Allowed, and written down. The user asked for this meal; the
-            // day's figure is what it is, and a plan that quietly reported
-            // itself as within tolerance would be the dishonest option.
+            // Allowed, and written down. The user asked for this rebuild;
+            // the day's figure is what it is, and a plan that quietly
+            // reported itself as within tolerance would be the dishonest
+            // option. It is also the state a user who has already eaten
+            // their whole target lands in, which is exactly when they most
+            // need to be told.
             log.LogInformation(
-                "Plan {PlanId}: {Meal} was rebuilt and the day is now "
+                "Plan {PlanId}: {Meals} rebuilt and the day is now "
                 + "{Deviation} % from its energy target, outside the ±10 % "
                 + "the proposal commits to. The plan is kept and reports "
                 + "withinTolerance = false.",
-                plan.Id, mealType, deviation);
+                plan.Id, string.Join("+", mealTypes), deviation);
         }
 
         return Ok(await MealPlanMapper.BuildAsync(db, plan, violations, ct));
