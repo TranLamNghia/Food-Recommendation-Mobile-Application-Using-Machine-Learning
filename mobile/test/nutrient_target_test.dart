@@ -243,7 +243,7 @@ void main() {
         deck, profile, const [NutrientTarget.atMost('sodium_mg', 2000)],
       );
 
-      expect(with_.totalOf('sodium_mg'), lessThan(without.totalOf('sodium_mg')),
+      expect(with_.totalOf('sodium_mg')!, lessThan(without.totalOf('sodium_mg')!),
           reason: 'it still has to improve as far as it can');
       expect(with_.nutrientViolations, hasLength(1));
       expect(with_.nutrientViolations.first.target.nutrient,
@@ -298,7 +298,7 @@ void main() {
         2000,
         reason: 'the ceiling comes from `mock_rules._dayThresholds`',
       );
-      expect(session.plan!.totalOf('sodium_mg'), lessThan(sodiumWithout));
+      expect(session.plan!.totalOf('sodium_mg')!, lessThan(sodiumWithout!));
     });
 
     test('with no constraint at all, phase 5 changes nothing', () {

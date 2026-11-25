@@ -169,8 +169,8 @@ class MenuBuilder {
 
       usedIds.add(best.id);
       picks[slot.meal]!.add(
-        MealPlanItem(
-          food: best,
+        MealPlanItem.offline(
+          dish: best,
           score: activeProfile.score(best),
           explorationDelta: slot.explore ? explorationDelta : null,
         ),
@@ -182,7 +182,7 @@ class MenuBuilder {
 
     // ── Phase 3 — local search within each meal ──────────────────────
     for (final type in MealType.values) {
-      final before = picks[type]!.map((i) => i.food.id).toSet();
+      final before = picks[type]!.map((i) => i.dish!.id).toSet();
 
       final refined = _localSearch(
         selected: picks[type]!,
@@ -200,7 +200,7 @@ class MenuBuilder {
       // dish appears twice in one day. Conversely, a dish swapped OUT has to
       // be returned to the candidate set, because it is no longer in the
       // plan.
-      final after = refined.map((i) => i.food.id).toSet();
+      final after = refined.map((i) => i.dish!.id).toSet();
       usedIds
         ..removeAll(before.difference(after))
         ..addAll(after);
@@ -261,7 +261,7 @@ class MenuBuilder {
       var sum = 0.0;
       for (final items in picks.values) {
         for (final item in items) {
-          sum += NutrientTarget.valueOf(item.food, nutrient) ?? 0;
+          sum += NutrientTarget.valueOf(item.dish!, nutrient) ?? 0;
         }
       }
       totals[nutrient] = sum;
@@ -333,7 +333,7 @@ class MenuBuilder {
       for (final type in MealType.values) {
         final items = picks[type]!;
         for (var i = 0; i < items.length; i++) {
-          final current = items[i].food;
+          final current = items[i].dish!;
           final currentValue =
               NutrientTarget.valueOf(current, worst.nutrient) ?? 0;
 
@@ -391,10 +391,10 @@ class MenuBuilder {
 
       final replaced = picks[bestMeal]![bestIndex];
       usedIds
-        ..remove(replaced.food.id)
+        ..remove(replaced.dish!.id)
         ..add(bestFood.id);
-      picks[bestMeal]![bestIndex] = MealPlanItem(
-        food: bestFood,
+      picks[bestMeal]![bestIndex] = MealPlanItem.offline(
+        dish: bestFood,
         score: profile.score(bestFood),
         explorationDelta: replaced.explorationDelta,
       );
@@ -464,7 +464,7 @@ class MenuBuilder {
       for (final type in MealType.values) {
         for (final role in _mealStructure[type]!.optional) {
           // Never add two dishes of the same role to one meal.
-          if (picks[type]!.any((i) => i.food.dishRole == role)) continue;
+          if (picks[type]!.any((i) => i.dish!.dishRole == role)) continue;
 
           for (final food in candidates) {
             if (food.dishRole != role || usedIds.contains(food.id)) continue;
@@ -483,7 +483,7 @@ class MenuBuilder {
 
       usedIds.add(bestFood.id);
       picks[bestMeal]!.add(
-        MealPlanItem(food: bestFood, score: profile.score(bestFood)),
+        MealPlanItem.offline(dish: bestFood, score: profile.score(bestFood)),
       );
     }
   }
@@ -560,19 +560,19 @@ class MenuBuilder {
 
       for (var i = 0; i < current.length; i++) {
         final item = current[i];
-        final inPlan = current.map((e) => e.food.id).toSet();
+        final inPlan = current.map((e) => e.dish!.id).toSet();
 
         final pool = candidates.where(
           (f) =>
-              f.dishRole == item.food.dishRole &&
+              f.dishRole == item.dish!.dishRole &&
               !inPlan.contains(f.id) &&
               !usedIds.contains(f.id),
         );
 
         for (final swap in pool) {
           final trial = [...current];
-          trial[i] = MealPlanItem(
-            food: swap,
+          trial[i] = MealPlanItem.offline(
+            dish: swap,
             score: profile.score(swap),
             explorationDelta: item.explorationDelta,
           );
@@ -629,9 +629,9 @@ class MenuBuilder {
     double macroTerm(double actual, double target) =>
         target <= 0 ? 0.0 : (actual - target).abs() / target;
 
-    final protein = items.fold<double>(0, (s, i) => s + i.food.protein);
-    final carb = items.fold<double>(0, (s, i) => s + i.food.carb);
-    final fat = items.fold<double>(0, (s, i) => s + i.food.fat);
+    final protein = items.fold<double>(0, (s, i) => s + i.dish!.protein);
+    final carb = items.fold<double>(0, (s, i) => s + i.dish!.carb);
+    final fat = items.fold<double>(0, (s, i) => s + i.dish!.fat);
 
     final macroSum =
         macroTerm(protein, targetProtein) +
@@ -642,7 +642,7 @@ class MenuBuilder {
   }
 
   double _kcalOf(List<MealPlanItem> items) =>
-      items.fold(0, (sum, i) => sum + i.food.kcal.toDouble());
+      items.fold(0, (sum, i) => sum + i.dish!.kcal.toDouble());
 
   /// Suggests replacements for one serving, in descending score order.
   ///
@@ -657,7 +657,7 @@ class MenuBuilder {
   }) {
     final pool = candidates
         .where(
-          (f) => f.dishRole == item.food.dishRole && !excludeIds.contains(f.id),
+          (f) => f.dishRole == item.dish!.dishRole && !excludeIds.contains(f.id),
         )
         .toList();
 
@@ -666,8 +666,8 @@ class MenuBuilder {
       if (byScore != 0) return byScore;
       // On an equal score, prefer the dish closer to the target of the
       // serving being replaced.
-      final da = (a.kcal - item.food.kcal).abs();
-      final db = (b.kcal - item.food.kcal).abs();
+      final da = (a.kcal - item.dish!.kcal).abs();
+      final db = (b.kcal - item.dish!.kcal).abs();
       return da.compareTo(db);
     });
 

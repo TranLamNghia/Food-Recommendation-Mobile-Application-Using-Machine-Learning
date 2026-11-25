@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/models/food_adapters.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/mock/mock_rules.dart';
 import '../../data/recommender/match_reason.dart';
 import '../../data/rules/condition_rule.dart';
+import '../../data/rules/day_budget.dart';
 import '../../data/session.dart';
 import '../food/food_detail_screen.dart';
 import 'excluded_screen.dart';
@@ -176,6 +176,7 @@ class _MealSection extends StatelessWidget {
   final AppSession session;
 
   Future<void> _replace(BuildContext context, MealPlanItem item) async {
+    final offlineDish = item.dish;
     final choice = await ReplaceSheet.show(
       context,
       item: item,
@@ -183,7 +184,13 @@ class _MealSection extends StatelessWidget {
       scoreOf: session.preference.score,
       // The allowance has to have the dish being replaced subtracted:
       // the room for the new dish includes what the old one takes up.
-      budgetAfterRemoval: session.dayBudget.withoutPlanned(item.food),
+      // Offline only: the allowance is arithmetic over whole nutrition
+      // rows, and a serving from §7.6 carries just its energy. Online the
+      // sheet shows the alternatives without a budget line rather than one
+      // computed from numbers this side does not have.
+      budgetAfterRemoval: offlineDish == null
+          ? const DayBudget()
+          : session.dayBudget.withoutPlanned(offlineDish),
     );
     if (choice == null) return;
 
@@ -199,7 +206,7 @@ class _MealSection extends StatelessWidget {
   }
 
   void _eat(BuildContext context, MealPlanItem item) {
-    session.logMeal(food: item.food, meal: slot.type);
+    session.logMeal(food: item.dish!, meal: slot.type);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Đã ghi ${item.food.name.toLowerCase()} vào nhật ký'),
@@ -258,7 +265,7 @@ class _MealSection extends StatelessWidget {
           for (final item in slot.items) ...[
             PlanItemTile(
               item: item,
-              onOpen: () => FoodDetailScreen.open(context, item.food.brief),
+              onOpen: () => FoodDetailScreen.open(context, item.food),
               onReplace: () => _replace(context, item),
               // Only today can be eaten: logging a meal stamps it with the
               // current time, so "eating" tomorrow's dinner would land in
@@ -514,9 +521,18 @@ class _WhyRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cau = matchSentences(session.preference, item.food, limit: 2);
+    // Offline only. Every line of this row is computed from the whole dish
+    // — the match sentences from the feature vector, the soft penalty from
+    // the nutrition row, the share from scoring the rest of the catalogue —
+    // and a serving from §7.6 carries none of that. Online the explanation
+    // belongs to the service that did the scoring, and until there is an
+    // endpoint for it the row is absent rather than invented.
+    final dish = item.dish;
+    if (dish == null) return const SizedBox.shrink();
+
+    final cau = matchSentences(session.preference, dish, limit: 2);
     final penalty = PenaltyOutcome.of(
-      item.food,
+      dish,
       softRulesFor(session.userConditions),
     );
 
@@ -539,7 +555,7 @@ class _WhyRow extends StatelessWidget {
               InkWell(
                 onTap: () => ReasonScreen.open(
                   context,
-                  food: item.food,
+                  food: dish,
                   profile: session.preference,
                   budget: session.dayBudget,
                   penalty: penalty,
@@ -592,8 +608,9 @@ class _WhyRow extends StatelessWidget {
   /// every dish scores the same, so this share is meaningless — it returns
   /// `null` so the interface drops that line.
   double? _betterThanShare() {
-    if (session.preference.isEmpty) return null;
-    final diem = session.preference.score(item.food);
+    final dish = item.dish;
+    if (dish == null || session.preference.isEmpty) return null;
+    final diem = session.preference.score(dish);
     final tatCa = session.candidates;
     if (tatCa.isEmpty) return null;
     var thapHon = 0;

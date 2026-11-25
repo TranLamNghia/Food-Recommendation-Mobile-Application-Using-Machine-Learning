@@ -156,7 +156,9 @@ class ReplaceSheet extends StatelessWidget {
                     return _AlternativeTile(
                       food: food,
                       score: scoreOf(food),
-                      deltaKcal: food.kcal - item.food.kcal,
+                      // The brief's energy is a `double` off a DECIMAL
+                      // column; the difference is shown as whole kcal.
+                      deltaKcal: (food.kcal - item.food.kcal).round(),
                       blocking: chan,
                       budget: budgetAfterRemoval,
                       // A dish that does not fit is NOT tappable, but it

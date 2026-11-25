@@ -829,8 +829,8 @@ class AppSession extends ChangeNotifier {
       slot.items[index] = item.copyWith(status: MealItemStatus.replaced);
       slot.items.insert(
         index,
-        MealPlanItem(
-          food: replacement,
+        MealPlanItem.offline(
+          dish: replacement,
           score: preference.score(replacement),
           explorationDelta: item.explorationDelta,
         ),
@@ -891,7 +891,11 @@ class AppSession extends ChangeNotifier {
   /// both parts were fixed.
   List<Food> get plannedToday => [
     for (final item in plan?.allItems ?? const <MealPlanItem>[])
-      if (item.status == MealItemStatus.suggested) item.food,
+      // `dish` and not `food`: the day's allowance is arithmetic over whole
+      // nutrition rows, which only an offline serving carries. Online the
+      // allowance comes from §7.7.5 and this list is empty.
+      if (item.status == MealItemStatus.suggested && item.dish != null)
+        item.dish!,
   ];
 
   // ONLINE: GET /foods/{id} — §7.5.2, the only answer carrying a dish's

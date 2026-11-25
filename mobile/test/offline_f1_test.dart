@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
-import 'package:nutrition_app/data/models/food_adapters.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
 import 'package:nutrition_app/data/session.dart';
 
@@ -92,7 +91,7 @@ void main() {
       expect(session.regeneratePlan(), isTrue);
       final onThePlate = session.plan!.allItems.first.food;
 
-      await session.setNeverAgain(onThePlate.brief, true);
+      await session.setNeverAgain(onThePlate, true);
       expect(session.regeneratePlan(), isTrue);
 
       final ids = session.plan!.allItems.map((i) => i.food.id).toSet();

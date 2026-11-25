@@ -68,7 +68,7 @@ void main() {
     test('undoing a meal returns it to the plan and keeps the log', () {
       final session = _readySession();
       final slot = session.plan!.slots.first;
-      final food = slot.items.first.food;
+      final food = slot.items.first.dish!;
 
       session.logMeal(food: food, meal: slot.type);
       expect(slot.items.first.status, MealItemStatus.eaten);
@@ -114,7 +114,7 @@ void main() {
     test('a never-again dish stays out of every later plan', () {
       final session = _readySession();
       final banned = session.plan!.allItems.first.food;
-      session.setNeverAgain(banned.brief, true);
+      session.setNeverAgain(banned, true);
 
       for (var i = 0; i < 20; i++) {
         session.regeneratePlan();
@@ -158,7 +158,7 @@ void main() {
       final item = session.plan!.allItems.first;
 
       // Logged now, so it belongs to today even while tomorrow is on screen.
-      session.logMeal(food: item.food, meal: MealType.breakfast);
+      session.logMeal(food: item.dish!, meal: MealType.breakfast);
       expect(
         session.plan!.allItems.every((i) => i.status != MealItemStatus.eaten),
         isTrue,
@@ -364,11 +364,11 @@ void main() {
       // that serving instead of deciding. Nothing has happened to the plan
       // while the question is open.
       expect(find.text('Món này vẫn trong thực đơn hôm nay'), findsOneWidget);
-      expect(session.plannedTodayItem(food.brief), isNotNull);
+      expect(session.plannedTodayItem(food), isNotNull);
       await tester.tap(find.text('Giữ nguyên'));
       await tester.pumpAndSettle();
       expect(
-        session.plannedTodayItem(food.brief),
+        session.plannedTodayItem(food),
         isNotNull,
         reason: 'keeping the serving must leave the plan exactly as it was',
       );
@@ -397,7 +397,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final plan = session.plan!;
-      expect(session.plannedTodayItem(food.brief), isNull);
+      expect(session.plannedTodayItem(food), isNull);
       expect(plan.onPlateKcal, closeTo(before - food.kcal, 0.001));
       expect(
         plan.actualKcal,

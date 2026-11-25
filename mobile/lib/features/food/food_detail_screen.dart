@@ -9,6 +9,7 @@ import '../../core/dish_look.dart';
 import '../../data/mock/mock_ingredients.dart';
 import '../../data/models/food_brief.dart';
 import '../../data/models/food_detail.dart';
+import '../../data/rules/day_budget.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/session.dart';
 import '../plan/widgets/replace_sheet.dart';
@@ -220,14 +221,18 @@ class _FoodDetailScreenState extends State<FoodDetailScreen> {
       return;
     }
 
+    final offlineDish = item.dish;
     final replacement = await ReplaceSheet.show(
       context,
       item: item,
       alternatives: session.alternativesFor(item),
       scoreOf: session.preference.score,
-      // The allowance has to have the dish being replaced taken out: the
-      // room for the new dish includes what the old one takes up.
-      budgetAfterRemoval: session.dayBudget.withoutPlanned(item.food),
+      // Offline only, for the same reason as the plan screen's sheet: the
+      // allowance is arithmetic over whole nutrition rows, and a serving
+      // from §7.6 carries only its energy.
+      budgetAfterRemoval: offlineDish == null
+          ? const DayBudget()
+          : session.dayBudget.withoutPlanned(offlineDish),
     );
     if (!mounted || replacement == null) return;
     session.replaceItem(item, replacement);

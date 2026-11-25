@@ -395,8 +395,8 @@ void main() {
   });
 
   group('ReplaceSheet — two allowances side by side, misfits still shown', () {
-    final old = MealPlanItem(
-      food: _food(id: 'cu', name: 'Món cũ', sodium: 400, purine: 50),
+    final old = MealPlanItem.offline(
+      dish: _food(id: 'cu', name: 'Món cũ', sodium: 400, purine: 50),
       score: 0.6,
     );
 
