@@ -2049,8 +2049,20 @@ def main(argv: list[str] | None = None) -> int:
             equals(f"400 VALIDATION_FAILED for {label}",
                    (status, error_code(body)), (400, "VALIDATION_FAILED"))
 
-        # Regenerating deletes the old plan, which the app should warn about.
-        print("\n§7.6.2  regenerate")
+        # Regenerating an UNTOUCHED day deletes the old plan and builds
+        # another, which the app should warn about. The day has to be clean
+        # for that: once anything has been eaten the scope narrows to the
+        # meals that have not, which the next section is about. Earlier
+        # sections eat dishes, so the state is reset here rather than
+        # assumed.
+        print("\n§7.6.2  regenerate an untouched day")
+        sql("DELETE FROM food_diary WHERE user_id = %s", (uid,))
+        sql("DELETE FROM meal_plans WHERE user_id = %s", (uid,))
+        status, before_regen = call(
+            "POST", "/meal-plans", {"planDate": today}, token=token)
+        equals("a clean day to regenerate", status, 201)
+        plan_id = (before_regen or {}).get("id")
+
         status, fresh = call(
             "POST", "/meal-plans",
             {"planDate": today, "regenerate": True}, token=token)
@@ -2065,6 +2077,121 @@ def main(argv: list[str] | None = None) -> int:
         rows = sql("SELECT COUNT(*) FROM meal_plan_items WHERE meal_plan_id "
                    "= %s", (plan_id,))[0][0]
         equals("its dishes went with it (ON DELETE CASCADE)", rows, 0)
+
+        # -- Regenerating after the day has been eaten --
+        #
+        # The hole this closes, in one sentence: regenerating used to build a
+        # fresh day at the FULL energy target whatever had been eaten from
+        # the old one. The eaten dishes were excluded from the candidate set,
+        # so the new day did not repeat them, but nothing subtracted their
+        # energy and nothing added the diary to the plan. Eat your 2 542 kcal
+        # day, press the button, and the answer was a second whole day
+        # reporting itself at about -1 % of target.
+        #
+        # The scope now follows the state of the day, and the request body is
+        # unchanged - one call still replaces a whole untouched day.
+        print("\n§7.6.2  regenerate after eating part of the day")
+
+        def energy_of(p):
+            return sum(float(i["food"]["caloriesKcal"])
+                       for m in (p or {}).get("meals", [])
+                       for i in m["items"] if i["status"] != "replaced")
+
+        # From a known state: earlier sections eat dishes, and this block is
+        # about what regenerating does to a day that has been eaten from, so
+        # it has to choose how much of it has.
+        sql("DELETE FROM food_diary WHERE user_id = %s", (uid,))
+        sql("DELETE FROM meal_plans WHERE user_id = %s", (uid,))
+        status, base_plan = call(
+            "POST", "/meal-plans", {"planDate": today}, token=token)
+        equals("a fresh day to work from", status, 201)
+        target_kcal = float((base_plan["targets"] or {})["caloriesKcal"])
+        whole_day = energy_of(base_plan)
+        by_meal = {m["mealType"]: m["items"] for m in base_plan["meals"]}
+
+        # Eat the whole of breakfast, and nothing else.
+        eaten_kcal = 0.0
+        for item in by_meal["breakfast"]:
+            st, _ = call("PATCH", f"/meal-plan-items/{item['id']}/status",
+                         {"status": "eaten"}, token=token)
+            equals("a dish is marked eaten", st, 200)
+            eaten_kcal += float(item["food"]["caloriesKcal"])
+
+        status, partial = call(
+            "POST", "/meal-plans",
+            {"planDate": today, "regenerate": True}, token=token)
+        check("regenerating is still one request",
+              status in (200, 201), f"got {status}")
+        partial = partial or {}
+        kept = [i for m in partial.get("meals", [])
+                if m["mealType"] == "breakfast" for i in m["items"]]
+        check(
+            "the eaten breakfast is STILL THERE - a regenerate must not "
+            "delete a serving the diary already records",
+            all(i["status"] == "eaten" for i in kept) and kept != [],
+            f"{[i['status'] for i in kept]}",
+        )
+        equals("and it is the same plan row, not a replacement",
+               partial.get("id"), base_plan.get("id"))
+        rows = sql("SELECT COUNT(*) FROM meal_plans WHERE user_id = %s",
+                   (uid,))[0][0]
+        equals("so there is still exactly one plan for the day", rows, 1)
+
+        # The decisive figure. The day is measured around what was eaten, so
+        # the new plan is NOT another whole day.
+        new_day = energy_of(partial)
+        check(
+            "the day did not become a second whole day",
+            new_day < whole_day * 1.5,
+            f"{new_day:.0f} kcal against a {target_kcal:.0f} kcal target, "
+            f"{eaten_kcal:.0f} of it already eaten",
+        )
+        check(
+            "and it is still measured against the day's own target, within "
+            "the ±10 % the proposal commits to",
+            abs(partial.get("calorieDeviationPct") or 999) <= 10,
+            f"got {partial.get('calorieDeviationPct')} %",
+        )
+        check(
+            "the dishes already eaten are not suggested again",
+            len({i["food"]["id"] for m in partial.get("meals", [])
+                 for i in m["items"] if i["status"] != "replaced"}) ==
+            len([i for m in partial.get("meals", [])
+                 for i in m["items"] if i["status"] != "replaced"]),
+        )
+
+        # -- And when the whole day has been eaten --
+        for meal in ("lunch", "dinner", "snack"):
+            items = [i for m in partial.get("meals", [])
+                     if m["mealType"] == meal for i in m["items"]
+                     if i["status"] == "suggested"]
+            for item in items[:1]:
+                call("PATCH", f"/meal-plan-items/{item['id']}/status",
+                     {"status": "eaten"}, token=token)
+
+        status, refused = call(
+            "POST", "/meal-plans",
+            {"planDate": today, "regenerate": True}, token=token)
+        equals(
+            "with something eaten in all four meals there is nothing left to "
+            "plan, so it is refused rather than answered with another day",
+            (status, error_code(refused)), (409, "VALIDATION_FAILED"))
+        message = ((refused or {}).get("error") or {}).get("message") or ""
+        check("and the refusal says why", "đã ăn" in message, f"{message!r}")
+        details = ((refused or {}).get("error") or {}).get("details") or []
+        check("naming the field, and what to do instead",
+              any(d.get("field") == "regenerate" for d in details),
+              f"{details}")
+
+        # Put the day back for the sections that follow.
+        sql("DELETE FROM food_diary WHERE user_id = %s", (uid,))
+        sql("DELETE FROM meal_plans WHERE user_id = %s", (uid,))
+        status, restored = call(
+            "POST", "/meal-plans", {"planDate": today}, token=token)
+        equals("a clean day for the rest of the suite", status, 201)
+        plan_id = (restored or {}).get("id")
+
+
 
         # -- A blocked dish must not come back in a new plan --
         #
