@@ -1731,6 +1731,282 @@ void main() {
     });
   });
 
+  group('§7.8 the rating, and the diary line it locks', () {
+    Map<String, Object?> line({
+      String id = 'd1',
+      bool hasFeedback = false,
+      bool editable = true,
+    }) => {
+      'id': id,
+      'food': {
+        'id': 'f1',
+        'name': 'Phở bò',
+        'imageUrl': null,
+        'categoryName': 'Món nước',
+        'dishRole': 'main',
+        'caloriesKcal': 420,
+      },
+      'mealType': 'breakfast',
+      'servingSizeG': 300,
+      'actualCaloriesKcal': 420,
+      'fromMealPlan': true,
+      'hasFeedback': hasFeedback,
+      'editable': editable,
+      'createdAt': '2026-11-25T07:10:00+07:00',
+    };
+
+    Map<String, Object?> diaryBody({bool locked = false}) => {
+      'from': '2026-10-27',
+      'to': '2026-11-25',
+      'days': [
+        {
+          'date': '2026-11-25',
+          'totalCaloriesKcal': 420,
+          'entries': [line(hasFeedback: locked, editable: !locked)],
+        },
+      ],
+    };
+
+    /// The rule the whole group exists for: a rating locks the line, and the
+    /// flag that says so lives on the SERVER's side of it. So the session
+    /// reads the line back instead of flipping a local boolean — a second
+    /// implementation of the lock is a second thing that can disagree.
+    test('rating a dish reads the line back, now locked', () async {
+      final calls = <String>[];
+      Map<String, dynamic>? posted;
+      var rated = false;
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/food-diary')) return _json(diaryBody(locked: rated));
+        if (path.endsWith('/food-diary/summary')) {
+          return _envelope(404, 'NOT_FOUND', 'Chưa có dữ liệu');
+        }
+        if (path.endsWith('/feedbacks')) {
+          posted = jsonDecode(request.body) as Map<String, dynamic>;
+          rated = true;
+          return _json({
+            'id': 'fb1',
+            'foodId': 'f1',
+            'foodName': 'Phở bò',
+            'rating': 5,
+            'comment': null,
+            'createdAt': '2026-11-25T08:00:00+07:00',
+            'profileUpdated': true,
+          });
+        }
+        return _json(const {});
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      await session.loadDiary();
+
+      final before = session.diary.single;
+      expect(before.editable, isTrue);
+      expect(before.hasRating, isFalse);
+
+      await session.rate(before, 5);
+
+      expect(posted, {'foodId': 'f1', 'rating': 5});
+      final after = session.diary.single;
+      expect(
+        after.editable,
+        isFalse,
+        reason: 'the lock comes from the server, read back and not invented',
+      );
+      expect(after.hasRating, isTrue);
+      // The stars themselves are §7.5.2's `myFeedback`; §7.7.1 only says
+      // THAT it was rated, so no number is shown as if it were known.
+      expect(after.stars, isNull);
+    });
+
+    /// `profileUpdated: false` means the ML service did not answer, not that
+    /// the rating was lost: it is stored either way and §7.8.1 answers 201
+    /// either way. Treating it as a failure would tell the user their rating
+    /// did not count.
+    test('a rating the ML service did not consume is still a rating',
+        () async {
+      var rated = false;
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/food-diary')) return _json(diaryBody(locked: rated));
+        if (path.endsWith('/food-diary/summary')) {
+          return _envelope(404, 'NOT_FOUND', 'Chưa có dữ liệu');
+        }
+        if (path.endsWith('/feedbacks')) {
+          rated = true;
+          return _json({
+            'id': 'fb1',
+            'foodId': 'f1',
+            'foodName': 'Phở bò',
+            'rating': 3,
+            'comment': null,
+            'createdAt': '2026-11-25T08:00:00+07:00',
+            'profileUpdated': false,
+          });
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      await session.loadDiary();
+
+      await session.rate(session.diary.single, 3);
+
+      expect(session.diary.single.editable, isFalse);
+    });
+
+    /// §7.8.1's two-part rule. The screen should not reach it, but a stale
+    /// line can: the dish was logged, the plan it came from was regenerated
+    /// away, and the first half no longer holds.
+    test('a refused rating leaves the line editable', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/food-diary')) return _json(diaryBody());
+        if (path.endsWith('/food-diary/summary')) {
+          return _envelope(404, 'NOT_FOUND', 'Chưa có dữ liệu');
+        }
+        if (path.endsWith('/feedbacks')) {
+          return _envelope(
+            409,
+            'FEEDBACK_NOT_ALLOWED',
+            'Món này chưa từng có trong thực đơn của bạn',
+          );
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      await session.loadDiary();
+
+      await expectLater(
+        session.rate(session.diary.single, 4),
+        throwsA(isA<ApiFailure>()),
+      );
+      expect(session.diary.single.editable, isTrue);
+    });
+
+    test('offline, the stars go on the line and nothing is locked', () async {
+      final session = AppSession();
+      _filled(session.profile);
+      await session.loadPlan();
+      final item = session.plan!.allItems.first;
+      await session.markEaten(item, MealType.breakfast);
+      final entry = session.diary.single;
+
+      await session.rate(entry, 4);
+
+      expect(entry.stars, 4);
+      expect(
+        entry.editable,
+        isTrue,
+        reason: 'the lock is a server rule; offline there is no §7.7.3 to '
+            'refuse anything',
+      );
+    });
+  });
+
+  group('§7.7.5 the day as the server measured it', () {
+    test('the summary wins over what this side could add up', () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/food-diary/summary')) {
+          return _json({
+            'date': '2026-11-25',
+            'targets': {
+              'caloriesKcal': 2542,
+              'proteinG': 128,
+              'carbsG': 352,
+              'fatG': 71,
+            },
+            'consumed': {
+              'caloriesKcal': 2700,
+              'proteinG': 130,
+              'carbsG': 360,
+              'fatG': 80,
+            },
+            // Negative, and sent that way: clamping would hide exactly what
+            // the card exists to show.
+            'remaining': {
+              'caloriesKcal': -158,
+              'proteinG': -2,
+              'carbsG': -8,
+              'fatG': -9,
+            },
+            'progressPct': {
+              'calories': 106.2,
+              'protein': 101.6,
+              'carbs': 102.3,
+              'fat': 112.7,
+            },
+            'byMeal': [
+              {
+                'mealType': 'breakfast',
+                'caloriesKcal': 700,
+                'targetCaloriesKcal': 699,
+              },
+            ],
+            'micronutrients': [
+              {
+                'nutrient': 'calcium_mg',
+                'nameVi': 'Canxi',
+                'consumed': 450,
+                'rda': 1000,
+                'pct': 45,
+                'unit': 'mg',
+              },
+            ],
+            'planCompliance': {
+              'plannedDishes': 5,
+              'eatenFromPlan': 4,
+              'compliancePct': 80,
+            },
+          });
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final summary = (await session.daySummary(date: DateTime(2026, 11, 25)))!;
+
+      expect(summary.targets.caloriesKcal, 2542);
+      expect(summary.consumed.caloriesKcal, 2700);
+      expect(
+        summary.remaining.caloriesKcal,
+        -158,
+        reason: 'over the target is the case this figure is for',
+      );
+      expect(summary.byMeal.single.mealType, 'breakfast');
+      // A lower bound: dishes with no figure for the nutrient were skipped,
+      // not counted as zero.
+      expect(summary.micronutrients.single.pct, 45);
+      expect(summary.planCompliance?.compliancePct, 80);
+    });
+
+    test('offline there is no such answer, and none is invented', () async {
+      final session = AppSession();
+      _filled(session.profile);
+
+      expect(await session.daySummary(), isNull);
+    });
+  });
+
   group('PUT /foods/{id}/mark - bookmarks and blocked dishes', () {
     /// The answer is applied, not the request. The two differ exactly when
     /// the other mark had to go, which is the case a local toggle gets wrong.

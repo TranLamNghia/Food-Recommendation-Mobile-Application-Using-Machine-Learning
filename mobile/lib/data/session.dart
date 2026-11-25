@@ -7,6 +7,7 @@ import 'api/api_config.dart';
 import 'api/failure.dart';
 import 'api/auth_api.dart';
 import 'api/diary_api.dart';
+import 'api/feedback_api.dart';
 import 'api/food_api.dart';
 import 'api/meal_plan_api.dart';
 import 'api/profile_api.dart';
@@ -54,6 +55,7 @@ class AppSession extends ChangeNotifier {
       _surveys = SurveyApi(client);
       _mealPlans = MealPlanApi(client);
       _diary = DiaryApi(client);
+      _feedback = FeedbackApi(client);
     }
   }
 
@@ -68,6 +70,7 @@ class AppSession extends ChangeNotifier {
   SurveyApi? _surveys;
   MealPlanApi? _mealPlans;
   DiaryApi? _diary;
+  FeedbackApi? _feedback;
 
   /// Whether there is a server behind this session.
   ///
@@ -1402,9 +1405,38 @@ class AppSession extends ChangeNotifier {
   }
 
   /// Rates a dish after eating it — the strongest signal source.
-  void rate(DiaryEntry entry, int stars) {
-    entry.rating = stars.clamp(1, 5);
-    notifyListeners();
+  ///
+  // ONLINE: POST /feedbacks — §7.8.1.
+  //
+  // **It locks the diary line.** From here on §7.7.3 and §7.7.4 refuse the
+  // line this rating could be the evidence for, so the whole line is read
+  // back afterwards: `editable` has to turn false here, or the screen keeps
+  // offering an edit the server will refuse.
+  //
+  // Rating again is allowed and writes a NEW row rather than overwriting —
+  // taste changes, and both answers are kept.
+  //
+  // OFFLINE: the stars on the line in memory.
+  ///
+  /// Throws [ApiFailure] with `FEEDBACK_NOT_ALLOWED` when the dish was never
+  /// in one of this user's plans **and** in their diary. The screen should
+  /// not reach that: a line of the diary satisfies the second half, and the
+  /// first is what §7.8.1 checks for a dish logged from outside the plan.
+  Future<void> rate(DiaryEntry entry, int stars) async {
+    final clamped = stars.clamp(1, 5);
+    final api = _feedback;
+    if (api == null) {
+      entry.rating = clamped;
+      notifyListeners();
+      return;
+    }
+
+    await api.rate(foodId: entry.food.id, rating: clamped);
+
+    // Read the line back rather than patching it here. The rating changed
+    // `editable` on the server's side of the rule, and inventing that flag
+    // on this side would be a second implementation of the lock.
+    await ensureDiaryCovers(entry.ateAt, force: true);
   }
 
   // ONLINE: GET /food-diary?from=&to= — §7.7.1. Only the days with
@@ -1588,11 +1620,16 @@ class AppSession extends ChangeNotifier {
   /// [loadDiary] reads the last thirty days, so a day picked further back
   /// from the calendar has to widen the window first. It is widened to
   /// [day] and never narrowed: the screen may step back again a day later.
-  Future<void> ensureDiaryCovers(DateTime day) async {
+  /// [force] reloads even when the range already covers [day].
+  ///
+  /// Needed after a rating: §7.8.1 flips `editable` on the line it locked,
+  /// and that flag lives on the server's side of the rule. Without a reload
+  /// the screen would keep offering an edit the next request would refuse.
+  Future<void> ensureDiaryCovers(DateTime day, {bool force = false}) async {
     if (_diary == null) return;
     final from = _diaryFrom;
-    if (from != null && !_dateOnly(day).isBefore(from)) return;
-    await loadDiary(from: day);
+    if (!force && from != null && !_dateOnly(day).isBefore(from)) return;
+    await loadDiary(from: from != null && from.isBefore(day) ? from : day);
   }
 
   // ONLINE: GET /food-diary/summary?date= — §7.7.5, the day against the
