@@ -1831,6 +1831,96 @@ def main(argv: list[str] | None = None) -> int:
                              / compliance["suggestedItems"], 2)) <= 0.01,
               f"{compliance}")
 
+        # -- conditionLimits: the day's per-condition thresholds --
+        #
+        # Not in §7.7.5. It is here because the screen that tells someone how
+        # much sodium is left today is the same screen that tells them how
+        # much energy is left, and splitting the two across endpoints makes
+        # one day's safety picture two round trips.
+        #
+        # Read from the ML service, which is the one place `condition_rules`
+        # is interpreted: `severity_min`, the hard/soft split and the
+        # missing-measurement rule all live in `ml/daily_limits.py`.
+        limits = summary.get("conditionLimits")
+        check(
+            "conditionLimits is a list, not null - null means the ML service "
+            "could not be asked, and a screen must draw THAT as unknown "
+            "rather than as nothing to watch",
+            limits is not None,
+            f"got {limits!r}",
+        )
+        check(
+            "an account with no condition that sets a per-day threshold gets "
+            "an empty list, which is a different answer from null",
+            limits == [],
+            f"{limits}",
+        )
+
+        # Now declare one that does, and see the threshold appear.
+        conditions = sql(
+            "SELECT co.id, co.name_vi FROM condition_rules cr "
+            "JOIN conditions co ON co.id = cr.condition_id "
+            "WHERE cr.rule_type = 'nutrient_limit' AND cr.scope = 'per_day' "
+            "  AND cr.is_hard = 1 AND cr.severity_min = 'mild' LIMIT 1")
+        check("the rule set has a HARD per-day threshold to declare for",
+              conditions != [], f"{conditions}")
+        if conditions:
+            cid, cname = conditions[0]
+            status, _ = call(
+                "PUT", "/profile/conditions",
+                {"conditions": [{"conditionId": cid, "severity": "severe"}]},
+                token=token)
+            equals("declaring it returns 200", status, 200)
+
+            status, after = call(
+                "GET", f"/food-diary/summary?date={today}", token=token)
+            equals("the summary still returns 200", status, 200)
+            after_limits = (after or {}).get("conditionLimits") or []
+            check(
+                f"and now reports a threshold for {cname}",
+                any(l.get("condition") == cname for l in after_limits),
+                f"{[l.get('condition') for l in after_limits]}",
+            )
+            one = next(
+                (l for l in after_limits if l.get("condition") == cname), None)
+            if one is not None:
+                check("it names the nutrient and a direction",
+                      one.get("nutrient") and
+                      one.get("comparator") in ("lte", "gte"),
+                      f"{one.get('nutrient')} {one.get('comparator')}")
+                check("with a threshold above zero",
+                      float(one.get("threshold") or 0) > 0)
+                check(
+                    "remaining = threshold - eaten - planned, and is NOT "
+                    "clamped: a negative figure is the whole reason to show "
+                    "this on a day the limit was passed",
+                    abs(float(one["remaining"])
+                        - (float(one["threshold"]) - float(one["eaten"])
+                           - float(one["planned"]))) <= 0.02,
+                    f"{one}",
+                )
+                check("it says whether the threshold blocks or only advises",
+                      one.get("isHard") is True,
+                      f"{one.get('isHard')} for a rule seeded is_hard = 1")
+                check("and how well-founded it is, so a sourced bar is not "
+                      "quoted like an unverified one",
+                      one.get("evidenceLevel") in (
+                          "definitional", "published", "derived",
+                          "unsupported"),
+                      f"{one.get('evidenceLevel')}")
+                check(
+                    "the unmeasured-serving count travels, which is what "
+                    "turns `remaining` from a fact into an upper bound",
+                    isinstance(one.get("missingServings"), int),
+                    f"{one.get('missingServings')}",
+                )
+
+            # Put the account back, so the sections after this see the user
+            # they expect.
+            call("PUT", "/profile/conditions", {"conditions": []},
+                 token=token)
+
+
         status, body = call("GET", "/food-diary/summary", token=token)
         equals("a summary with no date is refused",
                (status, error_code(body)), (400, "VALIDATION_FAILED"))

@@ -60,6 +60,14 @@ public interface IMlClient
     /// under which rule. Cheaper than <see cref="PredictAsync"/> when only
     /// safety is wanted: nothing is scored and no model is loaded.
     /// </summary>
+    /// <summary>
+    /// §4.3's per-day thresholds for one person and one day, with how much
+    /// of each is used up. See <see cref="MlDailyLimit"/> on why this is
+    /// asked rather than computed.
+    /// </summary>
+    Task<MlResult<MlDailyLimitsResponse>> DailyLimitsAsync(
+        MlDailyLimitsRequest request, CancellationToken ct = default);
+
     Task<MlResult<MlFoodSafetyResponse>> FoodSafetyAsync(
         MlFoodSafetyRequest request, CancellationToken ct = default);
 
@@ -200,6 +208,11 @@ public sealed class MlClient : IMlClient
         => SendAsync<MlCandidateCountResponse>(
             HttpMethod.Post, "candidates/count", request,
             needsKey: true, ct);
+
+    public Task<MlResult<MlDailyLimitsResponse>> DailyLimitsAsync(
+        MlDailyLimitsRequest request, CancellationToken ct = default)
+        => SendAsync<MlDailyLimitsResponse>(
+            HttpMethod.Post, "daily-limits", request, needsKey: true, ct);
 
     public Task<MlResult<MlFoodSafetyResponse>> FoodSafetyAsync(
         MlFoodSafetyRequest request, CancellationToken ct = default)

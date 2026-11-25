@@ -111,6 +111,7 @@ class DaySummary {
     this.byMeal = const [],
     this.micronutrients = const [],
     this.planCompliance,
+    this.conditionLimits,
   });
 
   factory DaySummary.fromJson(Map<String, dynamic> json) => DaySummary(
@@ -132,6 +133,18 @@ class DaySummary {
       for (final m in (json['micronutrients'] as List? ?? const []))
         Micronutrient.fromJson(m as Map<String, dynamic>),
     ],
+    // `null` is NOT an empty list here. Empty means this user has no
+    // condition that sets a per-day threshold, which is most people, and a
+    // screen can honestly show nothing for it. `null` means the ML service
+    // could not be asked — nobody knows — and showing nothing for THAT
+    // would tell a hypertensive user there is nothing to watch.
+    conditionLimits: switch (json['conditionLimits']) {
+      final List rows => [
+        for (final row in rows)
+          ConditionLimit.fromJson(row as Map<String, dynamic>),
+      ],
+      _ => null,
+    },
     planCompliance: switch (json['planCompliance']) {
       final Map<String, dynamic> m => PlanCompliance.fromJson(m),
       _ => null,
@@ -160,6 +173,92 @@ class DaySummary {
   final List<Micronutrient> micronutrients;
 
   final PlanCompliance? planCompliance;
+
+  /// The per-day thresholds this user's conditions set, and how much of each
+  /// is left — sodium ≤ 2 000 mg for hypertension, purine ≤ 400 mg for gout.
+  ///
+  /// **`null` and empty mean different things.** Empty: no condition sets
+  /// one. `null`: it could not be obtained, so the screen must draw it as
+  /// unknown rather than as nothing to worry about.
+  final List<ConditionLimit>? conditionLimits;
+}
+
+/// One per-day threshold of §4.3, with the day's consumption against it.
+class ConditionLimit {
+  const ConditionLimit({
+    required this.condition,
+    required this.nutrient,
+    required this.comparator,
+    required this.threshold,
+    required this.eaten,
+    required this.planned,
+    required this.remaining,
+    required this.missingServings,
+    required this.isHard,
+    required this.evidenceLevel,
+    this.note = '',
+  });
+
+  factory ConditionLimit.fromJson(Map<String, dynamic> json) => ConditionLimit(
+    condition: json['condition'] as String? ?? '',
+    nutrient: json['nutrient'] as String? ?? '',
+    comparator: json['comparator'] as String? ?? 'lte',
+    threshold: _n(json['threshold']),
+    eaten: _n(json['eaten']),
+    planned: _n(json['planned']),
+    remaining: _n(json['remaining']),
+    missingServings: (json['missingServings'] as num?)?.toInt() ?? 0,
+    isHard: json['isHard'] as bool? ?? true,
+    evidenceLevel: json['evidenceLevel'] as String? ?? 'derived',
+    note: json['note'] as String? ?? '',
+  );
+
+  static double _n(Object? v) => v is num ? v.toDouble() : 0;
+
+  /// `conditions.name_vi` — already Vietnamese.
+  final String condition;
+
+  final String nutrient;
+
+  /// `lte` a ceiling, `gte` a floor. Both exist — sodium ≤ 2 000 mg/day and
+  /// fibre ≥ 25 g/day — and treating every one as a ceiling would report
+  /// the second backwards.
+  final String comparator;
+
+  final double threshold;
+
+  /// Already eaten. Not changeable.
+  final double eaten;
+
+  /// In the day's plan and not eaten yet. Still swappable.
+  final double planned;
+
+  /// Threshold minus what is used, **allowed to be negative**: a negative
+  /// figure is the whole reason to show this on a day the limit was passed.
+  final double remaining;
+
+  /// Servings counted with **no measurement** for this nutrient.
+  ///
+  /// Non-zero makes [remaining] an **upper bound** on what is left, and the
+  /// screen has to say so rather than quote a figure nobody measured.
+  final int missingServings;
+
+  /// A hard threshold blocks a dish; a soft one only costs score. One is a
+  /// limit, the other advice, and they are not shown the same way.
+  final bool isHard;
+
+  /// `definitional` · `published` · `derived` · `unsupported`, so a sourced
+  /// recommendation is not quoted in the same voice as an unverified number.
+  final String evidenceLevel;
+
+  final String note;
+
+  bool get exceeded =>
+      comparator == 'lte' ? remaining < 0 : eaten + planned < threshold;
+
+  /// Whether this figure can be stated as a fact. `false` when servings were
+  /// counted with no measurement for the nutrient.
+  bool get isCertain => missingServings == 0;
 }
 
 /// Energy and the three macros of one day.

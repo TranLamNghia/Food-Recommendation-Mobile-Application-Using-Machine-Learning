@@ -1,4 +1,5 @@
 // OFFLINE: the Dart copy of step 1, held in parity with ml/limits.py.
+import '../models/diary_day.dart';
 import '../models/food.dart';
 import 'evidence_level.dart';
 
@@ -128,6 +129,37 @@ class DayLimit {
 class DayBudget {
   const DayBudget({this.limits = const []});
 
+  /// The same allowances as §7.7.5 reports them.
+  ///
+  /// A one-to-one mapping, which is why this exists instead of a second card:
+  /// [DayLimit] and the server's `conditionLimits[]` hold the same facts
+  /// about the same rule, so the card that draws one draws the other without
+  /// knowing which it got.
+  ///
+  /// The unit is derived from the nutrient's own column name — `sodium_mg`
+  /// is milligrams — because that is where it already lives. Sending it
+  /// would be sending a fact the name carries.
+  factory DayBudget.fromServer(List<ConditionLimit> limits) => DayBudget(
+    limits: [
+      for (final limit in limits)
+        DayLimit(
+          condition: limit.condition,
+          nutrient: limit.nutrient,
+          unit: unitOfNutrient(limit.nutrient),
+          amount: limit.threshold,
+          eaten: limit.eaten,
+          planned: limit.planned,
+          isHard: limit.isHard,
+          evidence: evidenceFromCode(limit.evidenceLevel),
+          // The count, not a flag: the card states how many servings had no
+          // measurement, which is what turns "còn 250 mg" into "ít nhất 250
+          // mg, chưa đo được 3 món".
+          missingCount: limit.missingServings,
+          note: limit.note,
+        ),
+    ],
+  );
+
   final List<DayLimit> limits;
 
   bool get isEmpty => limits.isEmpty;
@@ -251,3 +283,26 @@ class DayBudget {
     return count;
   }
 }
+
+/// The unit a nutrient's column name already states.
+String unitOfNutrient(String nutrient) {
+  if (nutrient.endsWith('_mg')) return 'mg';
+  if (nutrient.endsWith('_mcg')) return 'mcg';
+  if (nutrient.endsWith('_kcal')) return 'kcal';
+  if (nutrient.endsWith('_g')) return 'g';
+  // A nutrient this app does not know keeps its own name: ugly on screen,
+  // which is how a missing case gets noticed, and never a wrong unit.
+  return '';
+}
+
+/// `condition_rules.evidence_level` as the enum this side draws from.
+EvidenceLevel evidenceFromCode(String code) => switch (code) {
+  'definitional' => EvidenceLevel.definitional,
+  'published' => EvidenceLevel.published,
+  'derived' => EvidenceLevel.derived,
+  'unsupported' => EvidenceLevel.unsupported,
+  // Unknown is treated as the WEAKEST, not the strongest: a threshold whose
+  // provenance this app cannot read must not be quoted as though WHO had
+  // published it.
+  _ => EvidenceLevel.unsupported,
+};

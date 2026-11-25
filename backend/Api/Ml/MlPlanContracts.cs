@@ -483,3 +483,108 @@ public sealed record MlSurveyDeckResponse
     public IReadOnlyList<string> Warnings { get; init; } = [];
     public int ElapsedMs { get; init; }
 }
+
+/// <summary>§8's <c>POST /daily-limits</c> body.</summary>
+public sealed record MlDailyLimitsRequest
+{
+    public required string UserId { get; init; }
+
+    /// <summary><c>yyyy-MM-dd</c>. Omitted means today in Asia/Ho_Chi_Minh.</summary>
+    public string? Date { get; init; }
+}
+
+/// <summary>
+/// One per-day threshold of §4.3, with how much of it is used up.
+///
+/// <para>Asked of the ML service rather than computed here, and the reason is
+/// the standing one: these thresholds live in <c>condition_rules</c> as data,
+/// and <c>severity_min</c>, the hard/soft split and the missing-measurement
+/// rule are already implemented in <c>ml/daily_limits.py</c>. A second
+/// implementation in C# would be the one nothing compares.</para>
+/// </summary>
+public sealed record MlDailyLimit
+{
+    /// <summary><c>conditions.name_vi</c> — already Vietnamese.</summary>
+    public string Condition { get; init; } = string.Empty;
+
+    public string Nutrient { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>lte</c> for a ceiling, <c>gte</c> for a floor. Both exist —
+    /// sodium ≤ 2 000 mg/day and fibre ≥ 25 g/day — and a client that
+    /// assumed ceilings would report the second one backwards.
+    /// </summary>
+    public string Comparator { get; init; } = string.Empty;
+
+    public double Threshold { get; init; }
+
+    /// <summary>Already eaten, from <c>food_diary</c>. Not changeable.</summary>
+    public double Eaten { get; init; }
+
+    /// <summary>In the day's plan and not eaten yet. Still swappable.</summary>
+    public double Planned { get; init; }
+
+    /// <summary>
+    /// Servings counted above that have <b>no measurement</b> for this
+    /// nutrient, which is what makes the two figures a <b>lower bound</b>.
+    /// A day whose purine is unknown for twenty of its dishes is not a day
+    /// under the limit, and "còn 250 mg" would state something nobody
+    /// measured.
+    /// </summary>
+    public int MissingEaten { get; init; }
+    public int MissingPlanned { get; init; }
+
+    /// <summary>
+    /// A hard threshold <b>blocks</b> a dish; a soft one only <b>costs
+    /// score</b>. WHO's sugar ≤ 25 g/day is advice, sodium ≤ 2 000 mg is a
+    /// limit, and merging them turns a recommendation into a prohibition.
+    /// </summary>
+    public bool IsHard { get; init; }
+
+    /// <summary>The multiplier applied when a soft threshold is exceeded.</summary>
+    public double? Penalty { get; init; }
+
+    /// <summary>
+    /// <c>definitional</c> · <c>published</c> · <c>derived</c> ·
+    /// <c>unsupported</c>. The 2 000 mg sodium bar can cite WHO; the 300 mg
+    /// cholesterol bar cannot, because that threshold was withdrawn — and an
+    /// interface quoting both in one voice would be dishonest.
+    /// </summary>
+    public string EvidenceLevel { get; init; } = string.Empty;
+
+    /// <summary>The provenance, verbatim from <c>condition_rules.note</c>.</summary>
+    public string Note { get; init; } = string.Empty;
+}
+
+public sealed record MlNutrientTotals
+{
+    /// <summary>
+    /// Sums only the cells that hold a number, so it is a <b>lower bound</b>.
+    /// </summary>
+    public IReadOnlyDictionary<string, double> Totals { get; init; }
+        = new Dictionary<string, double>();
+
+    /// <summary>How many servings have no measurement, per nutrient.</summary>
+    public IReadOnlyDictionary<string, int> Missing { get; init; }
+        = new Dictionary<string, int>();
+
+    public int NServings { get; init; }
+}
+
+public sealed record MlDailyLimitsResponse
+{
+    public string UserId { get; init; } = string.Empty;
+    public string Date { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Every per-day threshold that applies at this user's declared
+    /// severities, hard and soft. Empty for someone with no condition that
+    /// sets one, which is most people.
+    /// </summary>
+    public IReadOnlyList<MlDailyLimit> Limits { get; init; } = [];
+
+    public MlNutrientTotals Eaten { get; init; } = new();
+    public MlNutrientTotals Planned { get; init; } = new();
+
+    public int ElapsedMs { get; init; }
+}

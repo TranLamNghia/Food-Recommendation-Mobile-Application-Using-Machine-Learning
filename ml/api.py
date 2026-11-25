@@ -85,10 +85,15 @@ sys.path.insert(0, str(ROOT))
 
 from ml.db import connect  # noqa: E402
 from ml.f1_filter import (  # noqa: E402
+    conditions_for_user,
     SEVERITY_ORDER,
     Condition,
     allowed_foods,
     exclusion_reasons,
+)
+from ml.daily_limits import (  # noqa: E402
+    NutrientTotals,
+    status as limit_status,
 )
 from ml.features import FEATURE_VERSION, FeatureSpace, load_foods  # noqa: E402
 from ml.plan import PlanInputError, build_daily_plan  # noqa: E402
@@ -1409,3 +1414,223 @@ def train(request: TrainRequest) -> TrainResponse:
         target=_run_training, args=(job_id, request), name=job_id, daemon=True
     ).start()
     return TrainResponse(jobId=job_id, status="queued", startedAt=now.isoformat())
+
+
+class DailyLimitsRequest(BaseModel):
+    """The `/daily-limits` body."""
+
+    userId: str = Field(min_length=1)
+
+    #: `yyyy-MM-dd`. The day whose diary and plan are measured. Omitted means
+    #: today in Asia/Ho_Chi_Minh, which is the one clock this system keeps.
+    date: str | None = None
+
+
+class DailyLimitOut(BaseModel):
+    """One per-day threshold, with how much of it is used up.
+
+    The parts, not a sentence: the backend writes the Vietnamese, as it does
+    for every other figure that reaches a user.
+    """
+
+    #: `conditions.name_vi` — Vietnamese, because it is data and the one
+    #: field here a user sees as it stands.
+    condition: str
+
+    #: A `food_nutrition` column name, shared with
+    #: `condition_rules.nutrient`.
+    nutrient: str
+
+    #: `lte` for a ceiling, `gte` for a floor. Both exist: sodium
+    #: <= 2 000 mg/day is a ceiling, fibre >= 25 g/day is a floor, and a
+    #: client that assumed ceilings would report the second one backwards.
+    comparator: str
+
+    threshold: float
+
+    #: Already eaten, from `food_diary`. Not changeable.
+    eaten: float
+
+    #: In the day's plan and not eaten yet. Still swappable.
+    planned: float
+
+    #: Servings counted above that have **no measurement** for this
+    #: nutrient.
+    #:
+    #: Sent because the two figures are a **lower bound** without it. A day
+    #: whose purine is unknown for twenty of its dishes is not a day under
+    #: the limit, and a screen that showed "còn 250 mg" would be stating
+    #: something nobody measured. `ml/daily_limits.py` adds 0 for a missing
+    #: value and raises this count instead of excluding the dish, because
+    #: blocking on absent data would exclude 248 of 318 foods.
+    missingEaten: int
+    missingPlanned: int
+
+    #: A hard threshold **blocks** a dish; a soft one only **costs score**.
+    #: Merging them turns a recommendation into a prohibition — WHO's sugar
+    #: <= 25 g/day is advice, sodium <= 2 000 mg is a limit.
+    isHard: bool
+
+    #: The multiplier applied when a soft threshold is exceeded; `null` on a
+    #: hard one. See `ml/scoring.penalty`.
+    penalty: float | None
+
+    #: How well-founded the threshold is — `definitional` · `published` ·
+    #: `derived` · `unsupported`. The 2 000 mg sodium bar can cite WHO; the
+    #: 300 mg cholesterol bar cannot, because that threshold was withdrawn.
+    #: An interface quoting both in the same voice would be dishonest.
+    evidenceLevel: str
+
+    #: The threshold's provenance, verbatim from `condition_rules.note`.
+    note: str
+
+
+class NutrientTotalsOut(BaseModel):
+    """Per-nutrient totals for a group of servings, **with** what is unknown.
+
+    `totals` sums only the cells that hold a number, so it is a **lower
+    bound**; `missing` says how many servings have no measurement for each
+    nutrient. Sending the sum without the count would be a falsely certain
+    figure, and this is a health application — the certainty is the part
+    that would mislead.
+    """
+
+    totals: dict[str, float]
+    missing: dict[str, int]
+    nServings: int
+
+
+class DailyLimitsResponse(BaseModel):
+    userId: str
+    date: str
+
+    #: Every per-day threshold that applies to this user at their declared
+    #: severities, hard and soft. Empty for someone with no condition that
+    #: sets one, which is most people.
+    limits: list[DailyLimitOut]
+
+    #: What the day has taken in, and what is still planned, for **every**
+    #: nutrient — not only the ones with a threshold. The interface shows
+    #: energy and macronutrients from these for a user with no condition at
+    #: all.
+    eaten: NutrientTotalsOut
+    planned: NutrientTotalsOut
+
+    elapsedMs: int
+
+
+@app.post(
+    "/daily-limits",
+    response_model=DailyLimitsResponse,
+    dependencies=[Depends(check_key)],
+)
+def daily_limits_for(request: DailyLimitsRequest) -> DailyLimitsResponse:
+    """The per-day thresholds of one person for one day — §4.3's `scope =
+    'per_day'` rules, with how much of each is used up.
+
+    ## Why this is an endpoint and not arithmetic in the backend
+
+    These thresholds live in `condition_rules` as **data**, and three things
+    read them: the F1 filter does not (per-day rules filter no dish), Step 4
+    phase 5 repairs a plan against them, and this is the third — a screen
+    telling someone with hypertension how much sodium is left today. Adding a
+    fourth reader in C# would be a second implementation of `severity_min`,
+    of the hard/soft split and of the missing-measurement rule, and
+    `cross_check_f1` exists because even two SQL statements in one file can
+    drift.
+
+    ## What it does NOT do
+
+    It filters nothing and refuses nothing. A per-day threshold cannot
+    exclude a dish — a salty dish is fine if the day's total stays under the
+    bar — which is why `ml/f1_filter.daily_limit_rules` hands these to Step 4
+    rather than dropping foods, and why this answer is a report rather than a
+    verdict.
+
+    Status codes: `404 USER_NOT_FOUND`.
+    """
+    started = time.perf_counter()
+    day = _parse_day(request.date)
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE id = %s", (request.userId,))
+            if cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": "USER_NOT_FOUND",
+                        "message": f"No user {request.userId}.",
+                    },
+                )
+
+        # The conditions have to be READ and passed. `daily_limits.status`
+        # takes an empty list as "this person has no threshold" rather than
+        # looking them up — unlike `f1_filter.allowed_foods`, which does —
+        # so calling it without them answers 200 with an empty list for a
+        # user with gout. The severities travel with them, which is what
+        # makes a `severity_min` comparison possible at all: gout's purine
+        # rule applies from `moderate`, and hypertension tightens its sodium
+        # bar at `severe`.
+        state = limit_status(
+            cn,
+            request.userId,
+            conditions=conditions_for_user(cn, request.userId),
+            day=day,
+        )
+
+        return DailyLimitsResponse(
+            userId=request.userId,
+            date=day.isoformat(),
+            limits=[
+                DailyLimitOut(
+                    condition=limit.condition,
+                    nutrient=limit.nutrient,
+                    comparator=limit.comparator,
+                    threshold=limit.threshold,
+                    eaten=limit.eaten,
+                    planned=limit.planned,
+                    missingEaten=limit.missing_eaten,
+                    missingPlanned=limit.missing_planned,
+                    isHard=limit.is_hard,
+                    penalty=limit.penalty,
+                    evidenceLevel=limit.evidence_level,
+                    note=limit.note or "",
+                )
+                for limit in state.limits
+            ],
+            eaten=_totals_out(state.eaten),
+            planned=_totals_out(state.planned),
+            elapsedMs=int((time.perf_counter() - started) * 1000),
+        )
+    finally:
+        cn.close()
+
+
+def _parse_day(value: str | None) -> dt_date:
+    """`yyyy-MM-dd`, or today in the one time zone this system keeps.
+
+    Rejected rather than guessed: a date this service could not read would
+    otherwise become "today" silently, and the answer would be about the
+    wrong day with nothing saying so.
+    """
+    if value is None:
+        return now_vn().date()
+    try:
+        return dt_date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "VALIDATION_FAILED",
+                "message": f"`date` must be yyyy-MM-dd, got {value!r}.",
+            },
+        ) from None
+
+
+def _totals_out(totals: NutrientTotals) -> NutrientTotalsOut:
+    return NutrientTotalsOut(
+        totals=dict(totals.totals),
+        missing=dict(totals.missing),
+        nServings=totals.n_servings,
+    )
