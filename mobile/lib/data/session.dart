@@ -6,12 +6,14 @@ import 'api/api_client.dart';
 import 'api/api_config.dart';
 import 'api/failure.dart';
 import 'api/auth_api.dart';
+import 'api/diary_api.dart';
 import 'api/food_api.dart';
 import 'api/meal_plan_api.dart';
 import 'api/profile_api.dart';
 import 'api/survey_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
+import 'models/diary_day.dart';
 import 'models/diary_entry.dart';
 import 'models/food.dart';
 import 'models/candidate_count.dart';
@@ -51,6 +53,7 @@ class AppSession extends ChangeNotifier {
       _foods = FoodApi(client);
       _surveys = SurveyApi(client);
       _mealPlans = MealPlanApi(client);
+      _diary = DiaryApi(client);
     }
   }
 
@@ -64,6 +67,7 @@ class AppSession extends ChangeNotifier {
   FoodApi? _foods;
   SurveyApi? _surveys;
   MealPlanApi? _mealPlans;
+  DiaryApi? _diary;
 
   /// Whether there is a server behind this session.
   ///
@@ -1197,7 +1201,10 @@ class AppSession extends ChangeNotifier {
         if (e.ateAt.year == today.year &&
             e.ateAt.month == today.month &&
             e.ateAt.day == today.day)
-          e.food,
+          // `dish` and not `food`: the allowance is arithmetic over whole
+          // nutrition rows. Online these lines come from §7.7.1 with none,
+          // and the day's figures come from §7.7.5 instead.
+          ?e.dish,
     ];
   }
 
@@ -1303,22 +1310,37 @@ class AppSession extends ChangeNotifier {
     DateTime? at,
   }) {
     final ateAt = at ?? DateTime.now();
-    diary.add(
-      DiaryEntry(food: food, meal: meal, ateAt: ateAt, portion: portion),
-    );
 
     // Mark the matching serving in the plan as eaten, if there is one. Joined
     // on the natural key (meal, dish) rather than on a foreign key.
+    //
+    // Done BEFORE the line is written, because whether a serving was found
+    // is what `fromMealPlan` means — and that is what words the undo: "trả
+    // về thực đơn" for a serving that came from the plan, "bỏ khỏi nhật ký"
+    // for a dish eaten elsewhere. It used to default to false, so every
+    // offline line claimed to be the second kind.
+    var fromPlan = false;
     final slot = planOn(ateAt)?.slots.where((s) => s.type == meal).firstOrNull;
     if (slot != null) {
       for (var i = 0; i < slot.items.length; i++) {
         if (slot.items[i].food.id == food.id &&
             slot.items[i].status == MealItemStatus.suggested) {
           slot.items[i] = slot.items[i].copyWith(status: MealItemStatus.eaten);
+          fromPlan = true;
           break;
         }
       }
     }
+
+    diary.add(
+      DiaryEntry.offline(
+        dish: food,
+        meal: meal,
+        ateAt: ateAt,
+        portion: portion,
+        fromMealPlan: fromPlan,
+      ),
+    );
 
     notifyListeners();
   }
@@ -1331,7 +1353,32 @@ class AppSession extends ChangeNotifier {
   ///
   /// The entry is **kept** in [diary] and only marked — the log is a record
   /// of what the user did, and a mistaken tap is part of that record.
-  void undoMeal(DiaryEntry entry) {
+  // ONLINE: DELETE /food-diary/{id} — §7.7.4. **Two deletes in one
+  // endpoint, and the server decides which**: it looks up whether the dish
+  // was in that day's plan for that meal, and if it was, the serving goes
+  // back on the plate as `suggested`. No parameter chooses it, which is
+  // right — this side would have to work the answer out from data it does
+  // not hold, and two clients could then disagree about what a delete means.
+  //
+  // `entry.fromMealPlan` is for WORDING the confirmation, not for choosing
+  // the behaviour. And §7.7.4 refuses a line a rating has locked, which is
+  // why `entry.editable` exists: the screen hides the button rather than
+  // letting the user press it and read an error.
+  //
+  // OFFLINE: the line stays in the log and stops counting. The log is a
+  // health record, so nothing is erased from it here.
+  Future<void> undoMeal(DiaryEntry entry) async {
+    final api = _diary;
+    if (api != null && entry.id != null) {
+      await api.remove(entry.id!);
+      diary.removeWhere((e) => e.id == entry.id);
+      // The serving the server just put back, and the day's figures with it.
+      _plans.remove(_dayKey(entry.ateAt));
+      await loadPlan(date: entry.ateAt);
+      notifyListeners();
+      return;
+    }
+
     if (entry.isUndone) return;
     entry.undoneAt = DateTime.now();
 
@@ -1358,6 +1405,208 @@ class AppSession extends ChangeNotifier {
   void rate(DiaryEntry entry, int stars) {
     entry.rating = stars.clamp(1, 5);
     notifyListeners();
+  }
+
+  // ONLINE: GET /food-diary?from=&to= — §7.7.1. Only the days with
+  // something in them come back.
+  //
+  // OFFLINE: the in-memory log is already the answer.
+  Future<void> loadDiary({DateTime? from, DateTime? to}) async {
+    final api = _diary;
+    if (api == null) return;
+
+    final end = _dateOnly(to ?? DateTime.now());
+    final start = _dateOnly(from ?? end.subtract(const Duration(days: 29)));
+    final days = await api.range(from: start, to: end);
+    _diaryFrom = start;
+
+    // Replaced rather than merged: §7.7.1 is the record, and a line deleted
+    // on another device has to disappear here too. Merging would keep it.
+    diary
+      ..clear()
+      ..addAll([
+        for (final day in days)
+          for (final line in day.lines) DiaryEntry.fromLine(line, on: day.date),
+      ]);
+    notifyListeners();
+  }
+
+  // ONLINE: POST /food-diary — §7.7.2, a dish eaten OUTSIDE the plan.
+  //
+  // The plan is the menu the system proposes and the diary is what the person
+  // actually ate, so a dish bought elsewhere belongs here and not in the
+  // plan — a diner does not write on the restaurant's menu.
+  //
+  // The F1 filter is deliberately not applied: a log records what happened,
+  // including a dish the user should not have eaten. Refusing it would leave
+  // their doctor's figures missing the one meal that mattered.
+  //
+  // OFFLINE: [logMeal], which is the same act against the in-memory log.
+  Future<void> addEaten({
+    required FoodBrief food,
+    required MealType meal,
+    DateTime? ateOn,
+    int? servingSizeG,
+  }) async {
+    final api = _diary;
+    final day = _dateOnly(ateOn ?? DateTime.now());
+    if (api == null) {
+      final dish = MockFoods.surveyDeck
+          .where((f) => f.id == food.id)
+          .firstOrNull;
+      if (dish == null) return;
+      // Today keeps the real time; a past day has none to give, and
+      // midnight would read as a meal eaten at 00:00.
+      final now = DateTime.now();
+      logMeal(
+        food: dish,
+        meal: meal,
+        at: _dayKey(day) == _dayKey(now) ? now : day.add(_noon),
+        portion: servingSizeG == null || dish.servingSizeG <= 0
+            ? 1.0
+            : servingSizeG / dish.servingSizeG,
+      );
+      return;
+    }
+
+    final line = await api.add(
+      foodId: food.id,
+      ateOn: day,
+      mealType: meal.code,
+      servingSizeG: servingSizeG,
+    );
+    diary.add(DiaryEntry.fromLine(line, on: day));
+    notifyListeners();
+  }
+
+  static const _noon = Duration(hours: 12);
+
+  // ONLINE: PUT /food-diary/{id} — §7.7.3. Only the meal and the portion can
+  // change: a different dish or a different day is a different eating, and
+  // changing those in place would move an existing rating onto a dish the
+  // user never said anything about.
+  Future<void> editEaten(
+    DiaryEntry entry, {
+    MealType? meal,
+    int? servingSizeG,
+  }) async {
+    final api = _diary;
+    if (api == null || entry.id == null) {
+      _editEatenOffline(entry, meal: meal, servingSizeG: servingSizeG);
+      return;
+    }
+
+    final line = await api.update(
+      entry.id!,
+      mealType: meal?.code,
+      servingSizeG: servingSizeG,
+    );
+    final index = diary.indexWhere((e) => e.id == entry.id);
+    if (index >= 0) diary[index] = DiaryEntry.fromLine(line, on: entry.ateAt);
+    // Moving a line to another meal moves which serving of the plan it
+    // matches, so the day's plan is read again rather than patched here.
+    if (meal != null && meal != entry.meal) {
+      _plans.remove(_dayKey(entry.ateAt));
+      await loadPlan(date: entry.ateAt);
+    }
+    notifyListeners();
+  }
+
+  /// The offline [editEaten]. The line is replaced, keeping its time and
+  /// its rating, and a move to another meal re-runs the plan join of
+  /// [logMeal]: the serving it was matched to goes back to waiting, and one
+  /// in the new meal is ticked if there is one.
+  void _editEatenOffline(
+    DiaryEntry entry, {
+    MealType? meal,
+    int? servingSizeG,
+  }) {
+    final dish = entry.dish;
+    final index = diary.indexOf(entry);
+    if (dish == null || index < 0) return;
+
+    final to = meal ?? entry.meal;
+    var fromPlan = entry.fromMealPlan;
+    if (to != entry.meal) {
+      if (entry.fromMealPlan) {
+        _moveServing(
+          entry.ateAt,
+          entry.meal,
+          dish.id,
+          from: MealItemStatus.eaten,
+          to: MealItemStatus.suggested,
+        );
+      }
+      fromPlan = _moveServing(
+        entry.ateAt,
+        to,
+        dish.id,
+        from: MealItemStatus.suggested,
+        to: MealItemStatus.eaten,
+      );
+    }
+
+    diary[index] = DiaryEntry.offline(
+      dish: dish,
+      meal: to,
+      ateAt: entry.ateAt,
+      portion: servingSizeG == null || dish.servingSizeG <= 0
+          ? entry.portion
+          : servingSizeG / dish.servingSizeG,
+      rating: entry.rating,
+      fromMealPlan: fromPlan,
+    );
+    notifyListeners();
+  }
+
+  /// Moves the first serving of [foodId] in [meal] on [day] from one status
+  /// to another. Whether one was found.
+  bool _moveServing(
+    DateTime day,
+    MealType meal,
+    String foodId, {
+    required MealItemStatus from,
+    required MealItemStatus to,
+  }) {
+    final slot = planOn(day)?.slots.where((s) => s.type == meal).firstOrNull;
+    if (slot == null) return false;
+    for (var i = 0; i < slot.items.length; i++) {
+      if (slot.items[i].food.id == foodId && slot.items[i].status == from) {
+        slot.items[i] = slot.items[i].copyWith(status: to);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The first day the diary has been read from, online. `null` before the
+  /// first read.
+  DateTime? _diaryFrom;
+
+  /// Reads the diary back as far as [day] if it does not reach that far yet.
+  ///
+  /// [loadDiary] reads the last thirty days, so a day picked further back
+  /// from the calendar has to widen the window first. It is widened to
+  /// [day] and never narrowed: the screen may step back again a day later.
+  Future<void> ensureDiaryCovers(DateTime day) async {
+    if (_diary == null) return;
+    final from = _diaryFrom;
+    if (from != null && !_dateOnly(day).isBefore(from)) return;
+    await loadDiary(from: day);
+  }
+
+  // ONLINE: GET /food-diary/summary?date= — §7.7.5, the day against the
+  // limits that applied ON THAT DAY: the snapshot stored with the plan when
+  // there was one, and the profile's columns otherwise. Read, never
+  // recomputed — recomputing would invent a new answer for a past day, the
+  // day the user weighed three kilograms more.
+  //
+  // `null` offline, where [dayBudget] is the equivalent and is computed from
+  // the dishes in hand.
+  Future<DaySummary?> daySummary({DateTime? date}) async {
+    final api = _diary;
+    if (api == null) return null;
+    return api.summary(_dateOnly(date ?? _selectedDay));
   }
 
   // ── Aggregate figures ────────────────────────────────────────────
