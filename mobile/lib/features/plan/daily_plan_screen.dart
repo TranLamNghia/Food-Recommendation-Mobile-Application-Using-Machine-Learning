@@ -212,13 +212,23 @@ Future<void> _regenerate(BuildContext context) async {
   final session = SessionScope.of(context);
   final messenger = ScaffoldMessenger.of(context);
 
+  // The day ON SCREEN, which the week strip can have moved away from today.
+  // The question has to name it: a user looking at Thursday who is asked
+  // about "hôm nay" would answer the wrong question. One day only — there is
+  // no regenerate-the-week, and §7.6.2 takes a single `planDate`.
+  final day = session.selectedDay;
+  final label = session.viewingToday
+      ? 'hôm nay'
+      : 'ngày ${day.day}/${day.month}';
+
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Sinh lại thực đơn hôm nay?'),
-      content: const Text(
-        'Thực đơn hiện tại sẽ bị thay bằng một thực đơn mới. Những món '
-        'đã ăn vẫn ở trong nhật ký.',
+      title: Text('Sinh lại thực đơn $label?'),
+      content: Text(
+        'Thực đơn $label sẽ bị thay bằng một thực đơn mới. '
+        '${session.viewingToday ? "Những món đã ăn vẫn ở trong nhật ký. " : ""}'
+        'Các ngày khác không đổi.',
       ),
       actions: [
         TextButton(
@@ -235,12 +245,14 @@ Future<void> _regenerate(BuildContext context) async {
   if (confirmed != true) return;
 
   try {
-    final built = await session.regeneratePlan();
+    // Explicitly the day that was named in the question, not whatever
+    // `_selectedDay` happens to be by the time the dialog closes.
+    final built = await session.regeneratePlan(date: day);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
           built
-              ? 'Đã sinh lại thực đơn'
+              ? 'Đã sinh lại thực đơn $label'
               : 'Chưa đủ thông tin hồ sơ để dựng thực đơn',
         ),
         duration: const Duration(seconds: 2),
