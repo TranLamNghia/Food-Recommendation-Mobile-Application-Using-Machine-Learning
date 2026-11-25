@@ -7,6 +7,7 @@ import 'api/api_config.dart';
 import 'api/failure.dart';
 import 'api/auth_api.dart';
 import 'api/food_api.dart';
+import 'api/meal_plan_api.dart';
 import 'api/profile_api.dart';
 import 'api/survey_api.dart';
 import 'mock/mock_foods.dart';
@@ -48,6 +49,7 @@ class AppSession extends ChangeNotifier {
       _profiles = ProfileApi(client);
       _foods = FoodApi(client);
       _surveys = SurveyApi(client);
+      _mealPlans = MealPlanApi(client);
     }
   }
 
@@ -60,6 +62,7 @@ class AppSession extends ChangeNotifier {
   ProfileApi? _profiles;
   FoodApi? _foods;
   SurveyApi? _surveys;
+  MealPlanApi? _mealPlans;
 
   /// Whether there is a server behind this session.
   ///
@@ -107,12 +110,43 @@ class AppSession extends ChangeNotifier {
 
   DailyPlan? planOn(DateTime day) => _plans[_dayKey(day)];
 
-  /// Switches the plan screen to [day], building that day's plan on first
+  /// Switches the plan screen to [day], and loads that day's plan on first
   /// visit.
-  void selectDay(DateTime day) {
+  ///
+  /// The switch itself is immediate — the week strip must not wait on a
+  /// network call to move — and the plan arrives after. A screen draws
+  /// [plan] as `null` in between, which is the state it already had to
+  /// handle for a day with no targets yet.
+  Future<void> selectDay(DateTime day) async {
     _selectedDay = _dateOnly(day);
-    if (plan == null) _build(_selectedDay);
     notifyListeners();
+    if (plan == null) await loadPlan();
+  }
+
+  // ONLINE: GET /meal-plans?date=… — §7.6.1, with `autoGenerate` left on, so
+  // a day that has no plan gets one built server-side.
+  //
+  // OFFLINE: the Dart builder, which needs no round trip.
+  //
+  // The cache is checked first in both modes. §7.6.1 is idempotent and would
+  // answer with the stored plan anyway, but asking again on every rebuild of
+  // the screen would be a request per frame of the week strip.
+  Future<DailyPlan?> loadPlan({DateTime? date}) async {
+    final day = _dateOnly(date ?? _selectedDay);
+    final cached = _plans[_dayKey(day)];
+    if (cached != null) return cached;
+
+    final api = _mealPlans;
+    if (api == null) {
+      final built = _build(day);
+      notifyListeners();
+      return built;
+    }
+
+    final loaded = await api.forDate(day);
+    if (loaded != null) _plans[_dayKey(day)] = loaded;
+    notifyListeners();
+    return loaded;
   }
 
   /// Plans for [days] consecutive days starting today, building the missing
@@ -729,6 +763,8 @@ class AppSession extends ChangeNotifier {
         if (byId[s.food.id] case final dish?) (food: dish, action: s.action),
     ];
     _preference = PreferenceProfile.fromSwipes(space: _space, swipes: known);
+    // Offline only — this whole method is — so the builder runs here and
+    // now, and the Future it returns is already complete.
     regeneratePlan();
   }
 
@@ -739,8 +775,27 @@ class AppSession extends ChangeNotifier {
   /// Returns `false` when the health profile does not hold enough data to
   /// compute the targets — a missing sex, date of birth, height, weight or
   /// activity level.
-  bool regeneratePlan({DateTime? date}) {
-    if (_build(_dateOnly(date ?? _selectedDay)) == null) return false;
+  // ONLINE: POST /meal-plans with `regenerate: true` — §7.6.2. It DELETES
+  // the stored plan for that day and builds a new one, which is why the
+  // screen confirms first: a day the user has eaten from would go with it.
+  //
+  // OFFLINE: the Dart builder, over the same day.
+  //
+  /// Returns `false` when the health profile does not hold enough data to
+  /// compute the targets — a missing sex, date of birth, height, weight or
+  /// activity level. Throws [ApiFailure] for anything the server refuses,
+  /// including `422 NO_FEASIBLE_PLAN` and `422 RULE_TOO_RESTRICTIVE`: the
+  /// two are different answers, and only the second is the user's to change.
+  Future<bool> regeneratePlan({DateTime? date}) async {
+    final day = _dateOnly(date ?? _selectedDay);
+    final api = _mealPlans;
+    if (api == null) {
+      if (_build(day) == null) return false;
+      notifyListeners();
+      return true;
+    }
+
+    _plans[_dayKey(day)] = await api.generate(day, regenerate: true);
     notifyListeners();
     return true;
   }

@@ -11,6 +11,7 @@ import 'package:nutrition_app/data/api/api_client.dart';
 import 'package:nutrition_app/data/api/failure.dart';
 import 'package:nutrition_app/data/models/food_brief.dart';
 import 'package:nutrition_app/data/api/food_api.dart';
+import 'package:nutrition_app/data/models/meal_plan.dart';
 import 'package:nutrition_app/data/models/food_adapters.dart';
 import 'package:nutrition_app/data/mock/mock_foods.dart';
 import 'package:nutrition_app/data/models/health_profile.dart';
@@ -1197,6 +1198,263 @@ void main() {
             'fill breakfast, lunch or dinner',
       );
       expect(vegan.emptyRequiredRoles, isEmpty);
+    });
+  });
+
+  group('§7.6 the meal plan, as the server builds it', () {
+    Map<String, Object?> item(String id, String foodId, String name, {
+      int kcal = 420,
+      int grams = 300,
+      String role = 'main',
+      String status = 'suggested',
+      double? delta,
+    }) => {
+      'id': id,
+      'food': {
+        'id': foodId,
+        'name': name,
+        'imageUrl': null,
+        'categoryName': 'Món nước',
+        'dishRole': role,
+        'caloriesKcal': kcal,
+      },
+      'servingSizeG': grams,
+      'predictedScore': 0.72,
+      'status': status,
+      'replacedByFood': null,
+      'explorationDelta': delta,
+      'position': 1,
+    };
+
+    Map<String, Object?> planBody({Map<String, Object?>? actuals}) => {
+      'id': 'p1',
+      'planDate': '2026-11-25',
+      'status': 'active',
+      'generationSource': 'hybrid',
+      'modelVersion': 'gb-v1-1',
+      'targets': {
+        'caloriesKcal': 2542,
+        'proteinG': 128,
+        'carbsG': 352,
+        'fatG': 71,
+      },
+      'actuals': actuals,
+      'calorieDeviationPct': -1.2,
+      'withinTolerance': true,
+      'totalPreferenceScore': 2.9,
+      'explorationRatio': 0.3,
+      'meals': [
+        {
+          'mealType': 'breakfast',
+          'targetCaloriesKcal': 699,
+          'actualCaloriesKcal': 420,
+          'items': [item('i1', 'f1', 'Phở bò')],
+        },
+        {
+          'mealType': 'lunch',
+          'targetCaloriesKcal': 953,
+          'actualCaloriesKcal': 930,
+          'items': [
+            item('i2', 'f2', 'Cơm tấm', kcal: 560),
+            item('i3', 'f3', 'Canh chua', kcal: 370, role: 'soup',
+                delta: 0.35),
+          ],
+        },
+        {
+          'mealType': 'dinner',
+          'targetCaloriesKcal': 699,
+          'actualCaloriesKcal': 690,
+          'items': [item('i4', 'f4', 'Cá kho', kcal: 690, role: 'side_protein')],
+        },
+        {
+          'mealType': 'snack',
+          'targetCaloriesKcal': 191,
+          'actualCaloriesKcal': 190,
+          'items': [item('i5', 'f5', 'Chè đậu xanh', kcal: 190, role: 'snack')],
+        },
+      ],
+      'nutrientViolations': <dynamic>[],
+      'generatedAt': '2026-11-25T06:30:00+07:00',
+    };
+
+    AppSession signedIn(
+      List<String>? calls, {
+      Future<http.Response> Function(http.Request)? plan,
+    }) => _online((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/login')) return _json(_tokens);
+      if (path.endsWith('/auth/me')) {
+        return _json({..._user, 'hasHealthProfile': false});
+      }
+      if (path.endsWith('/foods')) return _foodsPage();
+      if (path.endsWith('/meal-plans')) {
+        return plan == null ? _json(planBody()) : plan(request);
+      }
+      return _json(const {});
+    }, calls: calls);
+
+    test('the day comes back whole, with each serving addressable', () async {
+      final calls = <String>[];
+      final session = signedIn(calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      final loaded = await session.loadPlan(date: DateTime(2026, 11, 25));
+
+      expect(loaded, isNotNull);
+      expect(loaded!.id, 'p1');
+      expect(loaded.slots.map((s) => s.type), MealType.values);
+      expect(loaded.allItems, hasLength(5));
+      // The serving's id, which §7.6.4 to §7.6.6 all act on. Without it the
+      // screen could show a plan and change nothing in it.
+      expect(loaded.allItems.map((i) => i.id), [
+        'i1', 'i2', 'i3', 'i4', 'i5',
+      ]);
+      expect(loaded.targetKcal, 2542);
+      expect(loaded.allItems.first.food.name, 'Phở bò');
+      // The grams on the plate belong to the SERVING, not to the food:
+      // `portion_multiplier` can make them differ from one standard serving.
+      expect(loaded.allItems.first.food.servingSizeG, 300);
+      // `exploration_delta IS NOT NULL` is the question, by design — there is
+      // no separate flag.
+      expect(loaded.allItems[2].isExploration, isTrue);
+      expect(loaded.allItems.first.isExploration, isFalse);
+    });
+
+    /// Every serving arrives without its whole dish, and the things that
+    /// need one have to say so rather than answer 0.
+    test('a server plan carries no nutrition, and does not pretend to',
+        () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      expect(plan.allItems.every((i) => i.dish == null), isTrue);
+      expect(plan.totalOf('sodium_mg'), isNull);
+      expect(plan.slots.first.protein, isNull);
+      // Empty, and that is NOT "the plan is clear": this side has nothing to
+      // judge by, so it says nothing. §7.6's own verdict travels with the
+      // plan instead.
+      expect(plan.nutrientViolations, isEmpty);
+      // And the energy, which every serving DOES carry, still adds up.
+      expect(plan.actualKcal, 420 + 560 + 370 + 690 + 190);
+    });
+
+    test("the day's macros come from the server when it sent them", () async {
+      final session = signedIn(null, plan: (_) async => _json(planBody(
+        actuals: {
+          'caloriesKcal': 2230,
+          'proteinG': 119.5,
+          'carbsG': 300.0,
+          'fatG': 66.0,
+        },
+      )));
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      expect(plan.actualProtein, 119.5);
+      expect(plan.actualCarb, 300.0);
+      expect(plan.actualFat, 66.0);
+    });
+
+    /// `null` actuals is a real state: §7.6's schema has no `DEFAULT 0` for
+    /// them, because a stored 0 would make the deviation read −100 % the
+    /// moment the row appeared.
+    test('and are unknown, not zero, when it did not', () async {
+      final session = signedIn(null);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      expect(plan.serverActuals, isNull);
+      expect(plan.actualProtein, isNull);
+      expect(plan.actualFat, isNull);
+    });
+
+    test('the plan is asked for once, not once per rebuild', () async {
+      final calls = <String>[];
+      final session = signedIn(calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      await session.loadPlan(date: DateTime(2026, 11, 25));
+      await session.loadPlan(date: DateTime(2026, 11, 25));
+      await session.loadPlan(date: DateTime(2026, 11, 25));
+
+      expect(
+        calls.where((c) => c.endsWith('/meal-plans')),
+        hasLength(1),
+        reason: 'the week strip rebuilds often; §7.6.1 is not a per-frame call',
+      );
+    });
+
+    test('regenerating posts regenerate: true', () async {
+      Map<String, dynamic>? posted;
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/meal-plans')) {
+          if (request.method == 'POST') {
+            posted = jsonDecode(request.body) as Map<String, dynamic>;
+          }
+          return _json(planBody());
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+
+      expect(await session.regeneratePlan(date: DateTime(2026, 11, 25)), isTrue);
+
+      expect(posted!['regenerate'], isTrue);
+      // A plain date in the LOCAL calendar. An ISO timestamp converted to UTC
+      // would move the date for anyone east of Greenwich, and Vietnam is
+      // +07:00 — a late-evening request would ask for tomorrow.
+      expect(posted!['planDate'], '2026-11-25');
+    });
+
+    /// A day with no plan and `autoGenerate: false` is a 404 that means
+    /// "nothing here yet", not a failure. The week strip asks that way about
+    /// days ahead: looking at next Friday must not commit a plan for it.
+    test('looking ahead without generating gives null, not an error',
+        () async {
+      final session = _online((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/auth/login')) return _json(_tokens);
+        if (path.endsWith('/auth/me')) {
+          return _json({..._user, 'hasHealthProfile': false});
+        }
+        if (path.endsWith('/foods')) return _foodsPage();
+        if (path.endsWith('/meal-plans')) {
+          return _envelope(404, 'NOT_FOUND', 'Chưa có thực đơn cho ngày này');
+        }
+        return _json(const {});
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      // Through the session's own loader, which asks with autoGenerate ON,
+      // the same 404 IS a failure: the server did not do what it says it
+      // does, and swallowing it would leave an empty screen with no reason.
+      await expectLater(
+        session.loadPlan(date: DateTime(2026, 11, 27)),
+        throwsA(isA<ApiFailure>()
+            .having((f) => f.code, 'code', ApiFailure.notFound)),
+      );
+    });
+
+    test('offline, the plan is still built on the spot', () async {
+      final session = AppSession();
+      _filled(session.profile);
+
+      final built = await session.loadPlan();
+
+      expect(built, isNotNull);
+      expect(built!.id, isNull, reason: 'an offline plan is stored nowhere');
+      expect(built.allItems.every((i) => i.dish != null), isTrue);
+      expect(built.allItems.every((i) => i.id == null), isTrue);
+      // And the figures this side computes are all there, which is the whole
+      // point of keeping the offline mode.
+      expect(built.actualProtein, isNotNull);
+      expect(built.totalOf('sodium_mg'), isNotNull);
     });
   });
 

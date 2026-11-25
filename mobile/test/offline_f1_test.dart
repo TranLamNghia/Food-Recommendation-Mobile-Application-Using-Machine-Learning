@@ -29,10 +29,10 @@ void main() {
     /// `session.screening`, which the excluded-dishes card reads, and never
     /// the builder. So one session showed a plan containing seafood and, in
     /// the card underneath it, those same dishes listed as excluded.
-    test('a seafood allergy keeps seafood out of the plan', () {
+    test('a seafood allergy keeps seafood out of the plan', () async {
       final allergic = _ready(conditions: ['allergy_seafood']);
 
-      expect(allergic.regeneratePlan(), isTrue);
+      expect(await allergic.regeneratePlan(), isTrue);
       final plan = allergic.plan!;
 
       expect(plan.allItems, isNotEmpty);
@@ -54,10 +54,10 @@ void main() {
     /// The `require_tag` direction, which the offline copy had no mechanism
     /// for: a vegan diet keeps only the dishes that carry the tag instead of
     /// dropping the ones that do.
-    test('a vegan diet leaves only vegan dishes, and still builds a day', () {
+    test('a vegan diet leaves only vegan dishes, and still builds a day', () async {
       final vegan = _ready(conditions: ['vegan']);
 
-      expect(vegan.regeneratePlan(), isTrue);
+      expect(await vegan.regeneratePlan(), isTrue);
       final plan = vegan.plan!;
 
       expect(plan.allItems, isNotEmpty);
@@ -75,10 +75,10 @@ void main() {
       );
     });
 
-    test('with nothing declared the whole deck is still available', () {
+    test('with nothing declared the whole deck is still available', () async {
       final plain = _ready();
 
-      expect(plain.regeneratePlan(), isTrue);
+      expect(await plain.regeneratePlan(), isTrue);
       expect(plain.screening.excluded, isEmpty);
       expect(plain.plan!.allItems, isNotEmpty);
     });
@@ -88,11 +88,11 @@ void main() {
     /// from what it leaves.
     test('a block and an allergy both apply', () async {
       final session = _ready(conditions: ['allergy_seafood']);
-      expect(session.regeneratePlan(), isTrue);
+      expect(await session.regeneratePlan(), isTrue);
       final onThePlate = session.plan!.allItems.first.food;
 
       await session.setNeverAgain(onThePlate, true);
-      expect(session.regeneratePlan(), isTrue);
+      expect(await session.regeneratePlan(), isTrue);
 
       final ids = session.plan!.allItems.map((i) => i.food.id).toSet();
       expect(ids, isNot(contains(onThePlate.id)));
@@ -107,13 +107,13 @@ void main() {
     /// `nutrientTargets` used to be a plain field that nothing assigned
     /// outside one test. The 2 000 mg sodium ceiling existed in the rule
     /// set, was drawn on the day-budget card, and never reached phase 5.
-    test('declaring hypertension gives the plan a sodium ceiling', () {
+    test('declaring hypertension gives the plan a sodium ceiling', () async {
       final plain = _ready();
-      expect(plain.regeneratePlan(), isTrue);
+      expect(await plain.regeneratePlan(), isTrue);
       expect(plain.plan!.nutrientTargets, isEmpty);
 
       final hypertensive = _ready(conditions: ['hypertension']);
-      expect(hypertensive.regeneratePlan(), isTrue);
+      expect(await hypertensive.regeneratePlan(), isTrue);
 
       final targets = hypertensive.plan!.nutrientTargets;
       expect(targets, hasLength(1));
@@ -124,10 +124,10 @@ void main() {
 
     /// Only the hard ones. Sugar ≤ 25 g/day is advice and costs score;
     /// handing it to phase 5 would turn a recommendation into a prohibition.
-    test('a soft threshold is not handed to phase 5', () {
+    test('a soft threshold is not handed to phase 5', () async {
       final diabetic = _ready(conditions: ['diabetes']);
 
-      expect(diabetic.regeneratePlan(), isTrue);
+      expect(await diabetic.regeneratePlan(), isTrue);
       expect(
         diabetic.plan!.nutrientTargets,
         isEmpty,

@@ -267,7 +267,7 @@ void main() {
       expect(plan.meetsNutrientTargets, isFalse);
     });
 
-    test('AppSession passes the constraints down to the plan', () {
+    test('AppSession passes the constraints down to the plan', () async {
       // If this wiring breaks, phase 5 is dead code: every check above
       // would still be green, because they call MenuBuilder directly.
       final session = AppSession(rng: math.Random(5))
@@ -279,7 +279,7 @@ void main() {
         ..profile.activity = ActivityLevel.moderate
         ..explorationRatio = 0;
 
-      expect(session.regeneratePlan(), isTrue);
+      expect(await session.regeneratePlan(), isTrue);
       expect(session.plan!.nutrientTargets, isEmpty);
       final sodiumWithout = session.plan!.totalOf('sodium_mg');
 
@@ -290,7 +290,7 @@ void main() {
       // card showed it, and the builder never saw it. Declaring the
       // condition is the path a user actually takes.
       session.profile.conditions.add('hypertension');
-      expect(session.regeneratePlan(), isTrue);
+      expect(await session.regeneratePlan(), isTrue);
 
       expect(session.plan!.nutrientTargets, hasLength(1));
       expect(

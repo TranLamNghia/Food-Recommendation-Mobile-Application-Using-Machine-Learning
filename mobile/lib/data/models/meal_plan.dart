@@ -1,3 +1,4 @@
+import '../api/failure.dart';
 import 'food.dart';
 import 'food_adapters.dart';
 import 'food_brief.dart';
@@ -189,6 +190,7 @@ class MealSlot {
 class DailyPlan {
   DailyPlan({
     required this.date,
+    this.id,
     required this.targetKcal,
     required this.targetProtein,
     required this.targetCarb,
@@ -197,6 +199,10 @@ class DailyPlan {
     required this.explorationRatio,
     this.nutrientTargets = const [],
   });
+
+  /// `meal_plans.id`, for §7.6.3 and for rebuilding one meal. `null` on an
+  /// offline plan, which is stored nowhere and has nothing to address.
+  final String? id;
 
   final DateTime date;
 
@@ -395,4 +401,88 @@ class MacroTotals {
   final double proteinG;
   final double carbsG;
   final double fatG;
+}
+
+// ── Reading a plan the server built — §7.6 ───────────────────────────
+//
+// Kept beside the models rather than in `data/api/`, because this is where
+// the shape being built is declared: a parser that drifts from its model is
+// a parser nobody notices has drifted.
+
+/// §7.6.1's body as a [DailyPlan].
+///
+/// Every serving comes back with `dish` **null**: the answer carries each
+/// one's energy and no macros, so there is no whole dish to put there. What
+/// the day adds up to arrives separately, in `actuals`, computed where the
+/// nutrition rows are.
+DailyPlan planFromJson(Map<String, dynamic> json) {
+  final targets = json['targets'] as Map<String, dynamic>? ?? const {};
+  final targetKcal = MacroTotals.fromJson(targets);
+  final actuals = json['actuals'];
+
+  return DailyPlan(
+    id: json['id'] as String?,
+    date: DateTime.parse(json['planDate'] as String),
+    targetKcal: targetKcal.caloriesKcal,
+    targetProtein: targetKcal.proteinG,
+    targetCarb: targetKcal.carbsG,
+    targetFat: targetKcal.fatG,
+    slots: [
+      for (final meal in (json['meals'] as List? ?? const []))
+        _slotFromJson(meal as Map<String, dynamic>),
+    ],
+    explorationRatio: (json['explorationRatio'] as num?)?.toDouble() ?? 0,
+  )..serverActuals = switch (actuals) {
+    final Map<String, dynamic> m => MacroTotals.fromJson(m),
+    // `null` on a plan whose step 4 has not finished. The schema has no
+    // `DEFAULT 0` for exactly this reason: a stored 0 would make
+    // `calorie_deviation_pct` read −100 % the moment the row appeared.
+    _ => null,
+  };
+}
+
+MealSlot _slotFromJson(Map<String, dynamic> json) {
+  final code = json['mealType'] as String?;
+  return MealSlot(
+    type: MealType.values.firstWhere(
+      (t) => t.code == code,
+      // A meal type this app does not know cannot be shown, and guessing
+      // which of the four it is would put dishes in the wrong meal.
+      orElse: () => throw ApiFailure(
+        code: ApiFailure.unexpectedShape,
+        message: 'Máy chủ gửi bữa ăn lạ: $code',
+      ),
+    ),
+    targetKcal: (json['targetCaloriesKcal'] as num?)?.toDouble() ?? 0,
+    items: [
+      for (final item in (json['items'] as List? ?? const []))
+        _itemFromJson(item as Map<String, dynamic>),
+    ],
+  );
+}
+
+MealPlanItem _itemFromJson(Map<String, dynamic> json) => MealPlanItem(
+  id: json['id'] as String?,
+  food: FoodBrief.fromJson({
+    ...?(json['food'] as Map<String, dynamic>?),
+    // §7.6.1's `items[].food` has no serving weight of its own — the grams
+    // on the plate belong to the SERVING, because `portion_multiplier` can
+    // make them differ from one standard serving.
+    'servingSizeG': json['servingSizeG'],
+  }),
+  score: (json['predictedScore'] as num?)?.toDouble() ?? 0,
+  explorationDelta: (json['explorationDelta'] as num?)?.toDouble(),
+  status: _statusFromCode(json['status'] as String?),
+);
+
+/// A status the app does not know becomes [MealItemStatus.suggested].
+///
+/// The safe direction of the two: an unknown status read as `eaten` would
+/// put a dish in the day's consumed figures that nobody ate, while read as
+/// `suggested` it merely shows as still on the plate.
+MealItemStatus _statusFromCode(String? code) {
+  for (final status in MealItemStatus.values) {
+    if (status.code == code) return status;
+  }
+  return MealItemStatus.suggested;
 }
