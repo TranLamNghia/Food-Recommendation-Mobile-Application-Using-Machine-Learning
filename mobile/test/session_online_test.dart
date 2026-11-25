@@ -1458,6 +1458,279 @@ void main() {
     });
   });
 
+  group('§7.6.4–7.6.6 acting on one serving', () {
+    Map<String, Object?> onePlanBody({String status = 'suggested'}) => {
+      'id': 'p1',
+      'planDate': '2026-11-25',
+      'status': 'active',
+      'generationSource': 'hybrid',
+      'targets': {
+        'caloriesKcal': 2542,
+        'proteinG': 128,
+        'carbsG': 352,
+        'fatG': 71,
+      },
+      'actuals': null,
+      'explorationRatio': 0.3,
+      'meals': [
+        for (final meal in ['breakfast', 'lunch', 'dinner', 'snack'])
+          {
+            'mealType': meal,
+            'targetCaloriesKcal': 699,
+            'actualCaloriesKcal': 420,
+            'items': meal == 'breakfast'
+                ? [
+                    {
+                      'id': 'i1',
+                      'food': {
+                        'id': 'f1',
+                        'name': 'Phở bò',
+                        'imageUrl': null,
+                        'categoryName': 'Món nước',
+                        'dishRole': 'main',
+                        'caloriesKcal': 420,
+                      },
+                      'servingSizeG': 300,
+                      'predictedScore': 0.72,
+                      'status': status,
+                      'replacedByFood': null,
+                      'explorationDelta': null,
+                      'position': 1,
+                    },
+                  ]
+                : <dynamic>[],
+          },
+      ],
+      'nutrientViolations': <dynamic>[],
+      'generatedAt': '2026-11-25T06:30:00+07:00',
+    };
+
+    AppSession signedIn(
+      Future<http.Response> Function(http.Request) items, {
+      List<String>? calls,
+    }) => _online((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/login')) return _json(_tokens);
+      if (path.endsWith('/auth/me')) {
+        return _json({..._user, 'hasHealthProfile': false});
+      }
+      if (path.endsWith('/foods')) return _foodsPage();
+      if (path.endsWith('/meal-plans')) return _json(onePlanBody());
+      if (path.contains('/meal-plan-items/')) return items(request);
+      return _json(const {});
+    }, calls: calls);
+
+    /// §7.6.6 writes the diary entry in the SAME request, which is why
+    /// `markEaten` must not also write one of its own: two would count the
+    /// meal twice in every compliance figure the report quotes.
+    test('marking a serving eaten sends one request and returns the entry',
+        () async {
+      final calls = <String>[];
+      Map<String, dynamic>? patched;
+      final session = signedIn((request) async {
+        patched = jsonDecode(request.body) as Map<String, dynamic>;
+        return _json({
+          'id': 'i1',
+          'status': 'eaten',
+          'diaryEntryCreated': true,
+          'diaryEntryId': 'd9',
+        });
+      }, calls: calls);
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+      final item = plan.allItems.single;
+
+      final entryId = await session.markEaten(item, MealType.breakfast);
+
+      expect(patched, {'status': 'eaten'});
+      expect(entryId, 'd9');
+      expect(
+        session.plan!.allItems.single.status,
+        MealItemStatus.eaten,
+        reason: 'the cached serving follows what the server stored',
+      );
+      // No second write of its own.
+      expect(session.diary, isEmpty);
+      expect(
+        calls.where((c) => c.contains('/meal-plan-items/')),
+        hasLength(1),
+      );
+    });
+
+    /// A repeat answers `diaryEntryCreated: false`, and that is not a
+    /// failure: the entry already exists. A screen that read it as one would
+    /// tell the user their meal was not recorded.
+    test('a repeat is not a failure, and creates no second entry', () async {
+      final session = signedIn((_) async => _json({
+        'id': 'i1',
+        'status': 'eaten',
+        'diaryEntryCreated': false,
+        'diaryEntryId': 'd9',
+      }));
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      final entryId = await session.markEaten(
+        plan.allItems.single,
+        MealType.breakfast,
+      );
+
+      expect(entryId, isNull);
+      expect(session.plan!.allItems.single.status, MealItemStatus.eaten);
+    });
+
+    /// Putting a skipped serving back sends `kept`, not `suggested`: §7.6.6
+    /// accepts only the three a client may set, and §4.6 reads `kept` as the
+    /// user having looked at a suggestion and left it.
+    test('skipping sends skipped, and putting it back sends kept', () async {
+      final sent = <String>[];
+      final session = signedIn((request) async {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        sent.add(body['status'] as String);
+        return _json({
+          'id': 'i1',
+          'status': body['status'],
+          'diaryEntryCreated': false,
+          'diaryEntryId': null,
+        });
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      await session.setSkipped(plan.allItems.single, true);
+      expect(session.plan!.allItems.single.status, MealItemStatus.skipped);
+      await session.setSkipped(session.plan!.allItems.single, false);
+      expect(session.plan!.allItems.single.status, MealItemStatus.kept);
+
+      expect(sent, ['skipped', 'kept']);
+    });
+
+    /// A refusal must leave the cached serving alone. A status applied
+    /// locally and refused by the server would have the screen showing a
+    /// serving as eaten while the diary has no record of it.
+    test('a refused status change does not move the serving', () async {
+      final session = signedIn((_) async => _envelope(
+        409, 'VALIDATION_FAILED', 'Dòng nhật ký đã bị khóa',
+      ));
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      await expectLater(
+        session.markEaten(plan.allItems.single, MealType.breakfast),
+        throwsA(isA<ApiFailure>()),
+      );
+      expect(session.plan!.allItems.single.status, MealItemStatus.suggested);
+    });
+
+    /// §7.6.4 answers with figures this side cannot compute — the energy the
+    /// swap would move, at the portions that would be served, and whether
+    /// the day stays inside ±10 %.
+    test('the alternatives carry the day-level figures', () async {
+      final session = signedIn((request) async {
+        if (!request.url.path.endsWith('/alternatives')) {
+          return _json(const {});
+        }
+        return _json({
+          'originalItem': {
+            'id': 'i1',
+            'foodName': 'Phở bò',
+            'caloriesKcal': 420,
+            'dishRole': 'main',
+          },
+          'alternatives': [
+            {
+              'food': {
+                'id': 'f9',
+                'name': 'Bún chả',
+                'imageUrl': null,
+                'categoryName': 'Món nước',
+                'dishRole': 'main',
+                'caloriesKcal': 520,
+              },
+              'servingSizeG': 320,
+              'predictedScore': 0.81,
+              'calorieDeltaKcal': 100,
+              'keepsWithinTolerance': false,
+            },
+          ],
+        });
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      final options = await session.replaceOptions(plan.allItems.single);
+
+      expect(options, hasLength(1));
+      expect(options.single.food.name, 'Bún chả');
+      expect(options.single.score, 0.81);
+      expect(options.single.deltaKcal, 100);
+      // Shown and not acted on: the dish stays selectable, because a user
+      // may prefer one that costs them some accuracy.
+      expect(options.single.keepsWithinTolerance, isFalse);
+      // No whole dish, so the local allowance check cannot run and must not
+      // pretend to.
+      expect(options.single.dish, isNull);
+    });
+
+    /// §7.6.5 answers with the WHOLE day, because the swap moves the day's
+    /// totals and its ±10 % verdict.
+    test('replacing a serving replaces the cached day', () async {
+      Map<String, dynamic>? put;
+      final session = signedIn((request) async {
+        if (request.method != 'PUT') return _json(const {});
+        put = jsonDecode(request.body) as Map<String, dynamic>;
+        return _json(onePlanBody(status: 'kept'));
+      });
+      await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
+      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+
+      await session.replaceItem(
+        plan.allItems.single,
+        const FoodBrief(
+          id: 'f9',
+          name: 'Bún chả',
+          category: 'Món nước',
+          dishRole: 'main',
+          spiceLevel: 0,
+          kcal: 520,
+          servingSizeG: 320,
+        ),
+      );
+
+      expect(put!['newFoodId'], 'f9');
+      // The day that came back, not a locally patched one.
+      expect(session.plan!.allItems.single.status, MealItemStatus.kept);
+    });
+
+    test('offline, all four still work on the plan in memory', () async {
+      final session = AppSession();
+      _filled(session.profile);
+      await session.loadPlan();
+      final item = session.plan!.allItems.first;
+
+      await session.markEaten(item, item.food.dishRole == 'Món phụ'
+          ? MealType.snack
+          : MealType.breakfast);
+      expect(session.diary, hasLength(1),
+          reason: 'offline the local diary IS the store');
+
+      final other = session.plan!.allItems.last;
+      await session.setSkipped(other, true);
+      expect(
+        session.plan!.allItems.last.status,
+        MealItemStatus.skipped,
+      );
+
+      final options = await session.replaceOptions(session.plan!.allItems[1]);
+      expect(options, isNotEmpty);
+      // The whole dish, which is what the local allowance check needs.
+      expect(options.first.dish, isNotNull);
+      // And no day-level figures, because nothing on this side computed any.
+      expect(options.first.deltaKcal, isNull);
+      expect(options.first.keepsWithinTolerance, isNull);
+    });
+  });
+
   group('PUT /foods/{id}/mark - bookmarks and blocked dishes', () {
     /// The answer is applied, not the request. The two differ exactly when
     /// the other mark had to go, which is the case a local toggle gets wrong.

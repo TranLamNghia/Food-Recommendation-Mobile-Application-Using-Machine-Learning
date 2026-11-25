@@ -222,11 +222,12 @@ class _FoodDetailScreenState extends State<FoodDetailScreen> {
     }
 
     final offlineDish = item.dish;
+    final options = await session.replaceOptions(item);
+    if (!mounted) return;
     final replacement = await ReplaceSheet.show(
       context,
       item: item,
-      alternatives: session.alternativesFor(item),
-      scoreOf: session.preference.score,
+      alternatives: options,
       // Offline only, for the same reason as the plan screen's sheet: the
       // allowance is arithmetic over whole nutrition rows, and a serving
       // from §7.6 carries only its energy.
@@ -235,7 +236,8 @@ class _FoodDetailScreenState extends State<FoodDetailScreen> {
           : session.dayBudget.withoutPlanned(offlineDish),
     );
     if (!mounted || replacement == null) return;
-    session.replaceItem(item, replacement);
+    await session.replaceItem(item, replacement);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 2),

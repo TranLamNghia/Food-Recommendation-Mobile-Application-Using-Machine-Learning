@@ -858,13 +858,58 @@ class AppSession extends ChangeNotifier {
   );
 
   /// The replacement dishes for one serving, in descending score order.
-  List<Food> alternativesFor(MealPlanItem item) {
+  // ONLINE: GET /meal-plan-items/{id}/alternatives — §7.6.4. The service
+  // scores the candidates and says, for each one, how the day's energy would
+  // move and whether it would stay inside ±10 % — figures this side cannot
+  // compute, because a serving from §7.6 carries no nutrition.
+  //
+  // OFFLINE: the Dart builder's own candidate list.
+  Future<List<FoodBrief>> alternativesFor(MealPlanItem item) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      return [for (final a in await api.alternatives(item.id!)) a.food];
+    }
+
     final plan = this.plan;
     final exclude = plan == null
         ? <String>{}
         : plan.allItems.map((i) => i.food.id).toSet();
+    return [
+      for (final food in _builder().alternativesFor(item, excludeIds: exclude))
+        food.brief,
+    ];
+  }
 
-    return _builder().alternativesFor(item, excludeIds: exclude);
+  /// What this serving could be swapped for, from whichever side can say.
+  ///
+  /// One list for one sheet. See [ReplaceOption] for why each source fills a
+  /// different half of it and neither half is invented for the other.
+  Future<List<ReplaceOption>> replaceOptions(MealPlanItem item) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      return [
+        for (final a in await api.alternatives(item.id!))
+          ReplaceOption(
+            food: a.food,
+            score: a.predictedScore,
+            deltaKcal: a.calorieDeltaKcal,
+            keepsWithinTolerance: a.keepsWithinTolerance,
+          ),
+      ];
+    }
+
+    final plan = this.plan;
+    final exclude = plan == null
+        ? <String>{}
+        : plan.allItems.map((i) => i.food.id).toSet();
+    return [
+      for (final dish in _builder().alternativesFor(item, excludeIds: exclude))
+        ReplaceOption(
+          food: dish.brief,
+          dish: dish,
+          score: preference.score(dish),
+        ),
+    ];
   }
 
   /// Swaps one serving for another dish.
@@ -873,9 +918,33 @@ class AppSession extends ChangeNotifier {
   /// takes the `plan_replaced` label (0.15), the chosen dish takes
   /// `plan_kept` (0.70). It is the main source of data once the swipe session
   /// is over.
-  void replaceItem(MealPlanItem item, Food replacement) {
+  // ONLINE: PUT /meal-plan-items/{id}/replace — §7.6.5, which answers with
+  // the whole day: the swap moves the day's totals and its ±10 % verdict, so
+  // a response about one serving would leave this side to recompute figures
+  // it cannot.
+  //
+  // OFFLINE: the swap in memory, keeping the old serving as a `replaced` row
+  // for the same reason the server does.
+  Future<void> replaceItem(MealPlanItem item, FoodBrief replacement) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      final day = _dateOnly(_selectedDay);
+      _plans[_dayKey(day)] = await api.replace(item.id!, replacement.id);
+      notifyListeners();
+      return;
+    }
+    _replaceItemOffline(item, replacement);
+  }
+
+  // OFFLINE: the Dart copy. Looks the dish up again because a brief carries
+  // no nutrition, and the local scoring needs it.
+  void _replaceItemOffline(MealPlanItem item, FoodBrief replacement) {
     final plan = this.plan;
     if (plan == null) return;
+    final dish = MockFoods.surveyDeck
+        .where((f) => f.id == replacement.id)
+        .firstOrNull;
+    if (dish == null) return;
 
     for (final slot in plan.slots) {
       final index = slot.items.indexOf(item);
@@ -885,8 +954,8 @@ class AppSession extends ChangeNotifier {
       slot.items.insert(
         index,
         MealPlanItem.offline(
-          dish: replacement,
-          score: preference.score(replacement),
+          dish: dish,
+          score: preference.score(dish),
           explorationDelta: item.explorationDelta,
         ),
       );
@@ -901,11 +970,62 @@ class AppSession extends ChangeNotifier {
   /// Marks a planned item as skipped (eating out, not hungry…), or puts a
   /// skipped one back. A weak training signal: the reason may have nothing to
   /// do with taste.
-  void setSkipped(MealPlanItem item, bool skipped) {
-    final from = skipped ? MealItemStatus.suggested : MealItemStatus.skipped;
-    final to = skipped ? MealItemStatus.skipped : MealItemStatus.suggested;
-    if (item.status != from) return;
+  // ONLINE: PATCH /meal-plan-items/{id}/status — §7.6.6.
+  //
+  // OFFLINE: the status on the serving in memory.
+  //
+  // Putting a skipped serving back sends `kept`, not `suggested`: §7.6.6
+  // accepts only the three a CLIENT may set, and `suggested` is what the
+  // system writes when it generates a plan. §4.6 reads the difference —
+  // `kept` is the user having looked at a suggestion and left it, which is a
+  // weak positive, while `suggested` is nobody having said anything yet.
+  Future<void> setSkipped(MealPlanItem item, bool skipped) async {
+    final to = skipped ? MealItemStatus.skipped : MealItemStatus.kept;
+    if (skipped && item.status == MealItemStatus.skipped) return;
+    if (!skipped && item.status != MealItemStatus.skipped) return;
 
+    await _setItemStatus(item, to);
+  }
+
+  /// Marks a serving as eaten.
+  ///
+  // ONLINE: PATCH /meal-plan-items/{id}/status with `eaten` — §7.6.6, which
+  // writes the `food_diary` entry **in the same request**. Two calls would
+  // leave a window where the plan says eaten and the diary does not, and
+  // every compliance figure in the report reads both.
+  //
+  // OFFLINE: [logMeal], which writes the local diary and the status together
+  // for the same reason.
+  ///
+  /// Returns the diary entry's id when the server created one, so a screen
+  /// can send the user on to rate the dish. `null` offline, and `null` on a
+  /// repeat — the entry already exists, and a second one would count the
+  /// meal twice.
+  Future<String?> markEaten(MealPlanItem item, MealType meal) async {
+    final api = _mealPlans;
+    if (api == null || item.id == null) {
+      final dish = item.dish;
+      if (dish == null) return null;
+      logMeal(food: dish, meal: meal);
+      return null;
+    }
+
+    final result = await api.setStatus(item.id!, MealItemStatus.eaten.code);
+    _applyItemStatus(item, MealItemStatus.eaten);
+    return result.diaryEntryCreated ? result.diaryEntryId : null;
+  }
+
+  Future<void> _setItemStatus(MealPlanItem item, MealItemStatus to) async {
+    final api = _mealPlans;
+    if (api != null && item.id != null) {
+      await api.setStatus(item.id!, to.code);
+    }
+    _applyItemStatus(item, to);
+  }
+
+  /// Writes the status onto the cached serving, after the server agreed to
+  /// it — or at once, offline, where this side is the store.
+  void _applyItemStatus(MealPlanItem item, MealItemStatus to) {
     for (final slot in plan?.slots ?? const <MealSlot>[]) {
       final index = slot.items.indexOf(item);
       if (index < 0) continue;

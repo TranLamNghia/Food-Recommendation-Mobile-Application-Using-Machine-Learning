@@ -329,11 +329,12 @@ class _MealSection extends StatelessWidget {
 
   Future<void> _replace(BuildContext context, MealPlanItem item) async {
     final offlineDish = item.dish;
+    final options = await session.replaceOptions(item);
+    if (!context.mounted) return;
     final choice = await ReplaceSheet.show(
       context,
       item: item,
-      alternatives: session.alternativesFor(item),
-      scoreOf: session.preference.score,
+      alternatives: options,
       // The allowance has to have the dish being replaced subtracted:
       // the room for the new dish includes what the old one takes up.
       // Offline only: the allowance is arithmetic over whole nutrition
@@ -346,7 +347,7 @@ class _MealSection extends StatelessWidget {
     );
     if (choice == null) return;
 
-    session.replaceItem(item, choice);
+    await session.replaceItem(item, choice);
     if (!context.mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -357,14 +358,53 @@ class _MealSection extends StatelessWidget {
     );
   }
 
-  void _eat(BuildContext context, MealPlanItem item) {
-    session.logMeal(food: item.dish!, meal: slot.type);
-    ScaffoldMessenger.of(context).showSnackBar(
+  // Online this is PATCH /meal-plan-items/{id}/status with `eaten`, which
+  // writes the diary entry in the SAME request — two calls would leave a
+  // window where the plan says eaten and the diary does not, and every
+  // compliance figure reads both.
+  Future<void> _eat(BuildContext context, MealPlanItem item) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await session.markEaten(item, slot.type);
+    } on ApiFailure catch (failure) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(failure.message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    messenger.showSnackBar(
       SnackBar(
         content: Text('Đã ghi ${item.food.name.toLowerCase()} vào nhật ký'),
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Taking a serving off the day, or putting it back.
+  ///
+  /// Online both are §7.6.6. Putting one back sends `kept`, not `suggested`:
+  /// a client may set only the three statuses that describe what the USER
+  /// did, and §4.6 reads `kept` as a weak positive rather than as nobody
+  /// having said anything.
+  Future<void> _skip(
+    BuildContext context,
+    MealPlanItem item,
+    bool skipped,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await session.setSkipped(item, skipped);
+    } on ApiFailure catch (failure) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(failure.message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
@@ -423,8 +463,8 @@ class _MealSection extends StatelessWidget {
               // current time, so "eating" tomorrow's dinner would land in
               // today's diary.
               onEat: session.viewingToday ? () => _eat(context, item) : null,
-              onSkip: () => session.setSkipped(item, true),
-              onRestore: () => session.setSkipped(item, false),
+              onSkip: () => _skip(context, item, true),
+              onRestore: () => _skip(context, item, false),
             ),
             _WhyRow(item: item, session: session),
           ],

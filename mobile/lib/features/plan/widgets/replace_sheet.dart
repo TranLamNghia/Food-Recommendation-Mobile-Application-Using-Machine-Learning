@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/dish_look.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/food.dart';
 import '../../../core/format.dart';
+import '../../../data/models/food_brief.dart';
 import '../../../data/models/meal_plan.dart';
 import '../../../data/rules/day_budget.dart';
 import 'day_budget_card.dart' show nutrientLabel;
@@ -18,13 +21,16 @@ class ReplaceSheet extends StatelessWidget {
     super.key,
     required this.item,
     required this.alternatives,
-    required this.scoreOf,
     this.budgetAfterRemoval = const DayBudget(),
   });
 
   final MealPlanItem item;
-  final List<Food> alternatives;
-  final double Function(Food) scoreOf;
+
+  /// The candidates, each carrying whatever its source could say — see
+  /// [ReplaceOption]. Online that is a score, the energy the swap would
+  /// move and whether the day stays inside ±10 %; offline it is the whole
+  /// dish, which is what the allowance check below needs.
+  final List<ReplaceOption> alternatives;
 
   /// The allowance left **after the dish being replaced is taken out**.
   ///
@@ -36,21 +42,19 @@ class ReplaceSheet extends StatelessWidget {
 
   /// Opens the sheet and returns the dish the user chose, or `null` if
   /// they dismissed it.
-  static Future<Food?> show(
+  static Future<FoodBrief?> show(
     BuildContext context, {
     required MealPlanItem item,
-    required List<Food> alternatives,
-    required double Function(Food) scoreOf,
+    required List<ReplaceOption> alternatives,
     DayBudget budgetAfterRemoval = const DayBudget(),
   }) {
-    return showModalBottomSheet<Food>(
+    return showModalBottomSheet<FoodBrief>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => ReplaceSheet(
         item: item,
         alternatives: alternatives,
-        scoreOf: scoreOf,
         budgetAfterRemoval: budgetAfterRemoval,
       ),
     );
@@ -64,9 +68,16 @@ class ReplaceSheet extends StatelessWidget {
   /// a dish because the catalogue is incomplete penalises the wrong party;
   /// letting it through in silence loosens the allowance. So: let it through,
   /// and say so.
-  DayLimit? _blockingLimit(Food food) {
+  /// `null` for a candidate with no whole dish behind it, which is every
+  /// candidate online. The check is arithmetic over a nutrition row, and
+  /// §7.6.4 sends none — what it sends instead is
+  /// [ReplaceOption.keepsWithinTolerance], which the tile shows in its
+  /// place. Guessing one from the other would be inventing a verdict.
+  DayLimit? _blockingLimit(ReplaceOption option) {
+    final dish = option.dish;
+    if (dish == null) return null;
     for (final l in budgetAfterRemoval.hard) {
-      final value = DayBudget.valueOf(food, l.nutrient);
+      final value = DayBudget.valueOf(dish, l.nutrient);
       if (value == null) continue;
       if (!l.fits(value)) return l;
     }
@@ -75,11 +86,11 @@ class ReplaceSheet extends StatelessWidget {
 
   /// Candidates that fit come first; within each group the existing
   /// score order is kept.
-  List<Food> get _ordered {
-    final vua = <Food>[];
-    final khong = <Food>[];
-    for (final f in alternatives) {
-      (_blockingLimit(f) == null ? vua : khong).add(f);
+  List<ReplaceOption> get _ordered {
+    final vua = <ReplaceOption>[];
+    final khong = <ReplaceOption>[];
+    for (final option in alternatives) {
+      (_blockingLimit(option) == null ? vua : khong).add(option);
     }
     return [...vua, ...khong];
   }
@@ -151,14 +162,20 @@ class ReplaceSheet extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                   itemCount: _ordered.length,
                   itemBuilder: (context, i) {
-                    final food = _ordered[i];
-                    final chan = _blockingLimit(food);
+                    final option = _ordered[i];
+                    final chan = _blockingLimit(option);
                     return _AlternativeTile(
-                      food: food,
-                      score: scoreOf(food),
-                      // The brief's energy is a `double` off a DECIMAL
-                      // column; the difference is shown as whole kcal.
-                      deltaKcal: (food.kcal - item.food.kcal).round(),
+                      food: option.food,
+                      score: option.score,
+                      // §7.6.4's own figure when there is one: it is computed
+                      // at the portions that would actually be served, which
+                      // the difference of two standard servings is not.
+                      // Offline, that difference is the best this side has.
+                      deltaKcal: (option.deltaKcal ??
+                              option.food.kcal - item.food.kcal)
+                          .round(),
+                      keepsWithinTolerance: option.keepsWithinTolerance,
+                      dish: option.dish,
                       blocking: chan,
                       budget: budgetAfterRemoval,
                       // A dish that does not fit is NOT tappable, but it
@@ -166,7 +183,7 @@ class ReplaceSheet extends StatelessWidget {
                       // would never learn that the dish they wanted is
                       // selectable on another day.
                       onTap: chan == null
-                          ? () => Navigator.of(context).pop(food)
+                          ? () => Navigator.of(context).pop(option.food)
                           : null,
                     );
                   },
@@ -187,11 +204,20 @@ class _AlternativeTile extends StatelessWidget {
     required this.blocking,
     required this.budget,
     required this.onTap,
+    this.dish,
+    this.keepsWithinTolerance,
   });
 
-  final Food food;
+  final FoodBrief food;
   final double score;
   final int deltaKcal;
+
+  /// The whole dish, offline only — what [_missing] reads.
+  final Food? dish;
+
+  /// §7.6.4's verdict on the day after the swap. `null` offline, where
+  /// nobody computed it, and the tile then says nothing about the day.
+  final bool? keepsWithinTolerance;
 
   /// The allowance that makes this dish unselectable today, or `null`
   /// if it is selectable.
@@ -203,10 +229,17 @@ class _AlternativeTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// The restricted nutrients this dish has no measurement for.
-  List<String> get _missing => [
-    for (final l in budget.hard)
-      if (DayBudget.valueOf(food, l.nutrient) == null) l.nutrient,
-  ];
+  /// Empty when there is no whole dish to look at, which is every candidate
+  /// online: §7.6.4 sends no nutrition, so this side cannot know what is
+  /// unmeasured and says nothing rather than implying everything is known.
+  List<String> get _missing {
+    final whole = dish;
+    if (whole == null) return const [];
+    return [
+      for (final l in budget.hard)
+        if (DayBudget.valueOf(whole, l.nutrient) == null) l.nutrient,
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +293,7 @@ class _AlternativeTile extends StatelessWidget {
                       // The energy difference against the dish being
                       // replaced is what decides whether the plan still
                       // meets its target after the swap.
-                      '${food.kcal} kcal · '
+                      '${formatNumber(food.kcal)} kcal · '
                       '${deltaKcal >= 0 ? '+' : '−'}${deltaKcal.abs()} so với món cũ',
                       style: const TextStyle(
                         fontSize: 12.5,
@@ -268,13 +301,35 @@ class _AlternativeTile extends StatelessWidget {
                       ),
                     ),
                     if (chan != null)
+                    // §7.6.4 says whether the DAY would still be inside
+                    // ±10 % after the swap. Shown, and deliberately not
+                    // acted on: the dish stays selectable, because a user
+                    // may well prefer one that costs them some accuracy —
+                    // and that is their call to make with the cost in front
+                    // of them. `null` means nobody computed it (offline),
+                    // and then nothing is said.
+                    if (keepsWithinTolerance == false)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          'Đổi món này thì cả ngày lệch quá 10 % so với hạn '
+                          'mức',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.4,
+                            color: AppColors.unknown,
+                            fontVariations: const [FontVariation('wght', 600)],
+                          ),
+                        ),
+                      ),
+                    if (chan != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 3),
                         child: Text(
                           '${nutrientLabel(chan.nutrient)} '
-                          '${formatNumber(DayBudget.valueOf(food, chan.nutrient) ?? 0)} '
+                          '${formatNumber(DayBudget.valueOf(dish!, chan.nutrient) ?? 0)} '
                           '${chan.unit}, vượt phần còn lại '
-                          '${formatNumber((DayBudget.valueOf(food, chan.nutrient) ?? 0) - chan.remaining)} '
+                          '${formatNumber((DayBudget.valueOf(dish!, chan.nutrient) ?? 0) - chan.remaining)} '
                           '${chan.unit} — hôm khác chọn được',
                           style: const TextStyle(
                             fontSize: 11.5,

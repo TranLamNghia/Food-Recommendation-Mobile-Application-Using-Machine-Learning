@@ -486,3 +486,46 @@ MealItemStatus _statusFromCode(String? code) {
   }
   return MealItemStatus.suggested;
 }
+
+/// One dish a serving could be swapped for, from whichever side produced it.
+///
+/// The two sources answer different halves, and the sheet shows whichever it
+/// is given rather than computing what it lacks:
+///
+/// - **§7.6.4** scores the candidate and says how the day's energy would
+///   move and whether the day would still be inside ±10 %. It cannot send
+///   nutrition, so [dish] is `null` and the local allowance check cannot run.
+/// - **the Dart builder** hands over the whole dish, so the allowance check
+///   runs, but nothing has computed what the swap would do to the day.
+///
+/// Neither half is invented for the other. A sheet that filled in a missing
+/// `keepsWithinTolerance` with `true` would be promising something nobody
+/// checked.
+class ReplaceOption {
+  const ReplaceOption({
+    required this.food,
+    required this.score,
+    this.dish,
+    this.deltaKcal,
+    this.keepsWithinTolerance,
+  });
+
+  final FoodBrief food;
+
+  /// The suitability score, in [0, 1].
+  final double score;
+
+  /// The whole dish — **offline only**, and what the day's allowance check
+  /// needs.
+  final Food? dish;
+
+  /// How the day's energy would move, at the portions that would be served.
+  /// `null` offline, where nobody computed it.
+  final double? deltaKcal;
+
+  /// Whether the day would still be inside ±10 % after the swap. `null`
+  /// offline. The sheet **dims or warns** on `false` rather than hiding the
+  /// option: a user may well prefer a dish that costs them some accuracy,
+  /// and that is their call to make with the cost in front of them.
+  final bool? keepsWithinTolerance;
+}
