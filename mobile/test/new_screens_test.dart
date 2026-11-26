@@ -258,7 +258,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextFormField), 'a@b.vn');
-      await tester.tap(find.text('Gửi liên kết'));
+      await tester.tap(find.text('Gửi mã'));
       await tester.pumpAndSettle();
       expect(find.text('Kiểm tra hộp thư'), findsOneWidget);
       expect(find.textContaining('Nếu a@b.vn đã đăng ký'), findsOneWidget);

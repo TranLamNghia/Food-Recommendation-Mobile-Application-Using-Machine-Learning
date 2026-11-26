@@ -122,6 +122,50 @@ class AuthApi {
     return parsed(() => Account.fromJson(json));
   }
 
+  /// §7.1.5 — mail a reset code to [email].
+  ///
+  /// Always `202` when the address is well formed, registered or not: the
+  /// answer must not tell anyone which addresses have accounts. So there is
+  /// nothing to return, and the screen words its confirmation as an "if".
+  /// `429 RATE_LIMITED` comes from too many requests from one network.
+  Future<void> forgotPassword(String email) => _client.post(
+    '/auth/forgot-password',
+    authenticated: false,
+    body: {'email': email.trim()},
+  );
+
+  /// §7.1.6 — set a new password with the code from the mail.
+  ///
+  /// `400 RESET_TOKEN_INVALID` for a code that is wrong, expired or already
+  /// used. Success ends every session of the account, so nothing is stored
+  /// here: the user logs in with the new password next.
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) => _client.post(
+    '/auth/reset-password',
+    authenticated: false,
+    body: {'token': token.trim(), 'newPassword': newPassword},
+  );
+
+  /// §7.1.7 — change the password while signed in.
+  ///
+  /// `401 INVALID_CREDENTIALS` for a wrong current password — which the
+  /// client must not mistake for a dead session: only `TOKEN_EXPIRED` makes
+  /// it refresh. On success the server has revoked every refresh token,
+  /// this one included, so the tokens are dropped here and the user signs in
+  /// again, as §7.1.7 asks.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _client.put(
+      '/auth/password',
+      body: {'currentPassword': currentPassword, 'newPassword': newPassword},
+    );
+    _client.clearTokens();
+  }
+
   void logOut() => _client.clearTokens();
 
   AuthSession _store(AuthSession session) {

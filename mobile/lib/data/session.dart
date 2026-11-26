@@ -524,6 +524,47 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Passwords ────────────────────────────────────────────────────
+  //
+  // OFFLINE: the mock keeps no password at all — `signIn` takes whatever the
+  // form validated — so there is nothing to check a code or a current
+  // password against. All three succeed, which lets the screens be walked
+  // through without a server.
+
+  // ONLINE: POST /auth/forgot-password — §7.1.5. Answers the same for every
+  // address, so this returns nothing: there is nothing true to report beyond
+  // "if that address is registered, a mail is on its way".
+  Future<void> requestPasswordReset(String email) async {
+    await _auth?.forgotPassword(email);
+  }
+
+  // ONLINE: POST /auth/reset-password — §7.1.6. Ends every session of the
+  // account, so the user logs in afterwards; nothing changes in this one.
+  Future<void> resetPassword({
+    required String code,
+    required String newPassword,
+  }) async {
+    await _auth?.resetPassword(token: code, newPassword: newPassword);
+  }
+
+  /// Changes the password of the account signed in. Returns `true` when that
+  /// also ended this session, as it does online: §7.1.7 revokes every
+  /// refresh token, this device's included, and the app is expected to send
+  /// the user back to log in with the new password.
+  // ONLINE: PUT /auth/password — §7.1.7.
+  Future<bool> changePassword({
+    required String current,
+    required String next,
+  }) async {
+    final auth = _auth;
+    if (auth == null) return false;
+    await auth.changePassword(currentPassword: current, newPassword: next);
+    // Signed out locally too, keeping the data — it belongs to the account,
+    // and logging back in finds it, exactly as after [signOut].
+    signOut();
+    return true;
+  }
+
   /// Removes the account and everything stored under it.
   void deleteAccount() {
     _accountEmail = null;
