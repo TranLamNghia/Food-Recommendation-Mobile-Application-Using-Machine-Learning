@@ -82,10 +82,24 @@ def main(argv: list[str] | None = None) -> int:
         # these two is indistinguishable from the ML service being down.
         "ML_INTERNAL_KEY",
         "ML_SERVICE_URL",
+        # Password reset mail, specification 7.1.5. With no SMTP_HOST the
+        # mails are written into MAIL_OUTBOX_DIR instead of being sent.
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+        "SMTP_SSL",
+        "MAIL_FROM",
+        "MAIL_OUTBOX_DIR",
     ):
         value = _env.get(name, "")
         if value:
             environ[name] = value
+
+    # One outbox for the backend and tools/smoke_backend.py, which reads the
+    # reset code back out of it. At the repository root rather than under
+    # backend/Api, where `dotnet run` would otherwise put it.
+    environ.setdefault("MAIL_OUTBOX_DIR", str(ROOT / ".mail-outbox"))
 
     missing = [n for n in ("MYSQL_USER", "MYSQL_PASSWORD") if not environ.get(n)]
     if missing:
