@@ -1537,7 +1537,10 @@ void main() {
         });
       }, calls: calls);
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
-      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+      // The plan's own day, not today: `session.plan` reads the day on
+      // screen, so the test has to be looking at the 25th.
+      await session.selectDay(DateTime(2026, 11, 25));
+      final plan = session.plan!;
       final item = plan.allItems.single;
 
       final entryId = await session.markEaten(item, MealType.breakfast);
@@ -1568,7 +1571,10 @@ void main() {
         'diaryEntryId': 'd9',
       }));
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
-      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+      // The plan's own day, not today: `session.plan` reads the day on
+      // screen, so the test has to be looking at the 25th.
+      await session.selectDay(DateTime(2026, 11, 25));
+      final plan = session.plan!;
 
       final entryId = await session.markEaten(
         plan.allItems.single,
@@ -1595,7 +1601,10 @@ void main() {
         });
       });
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
-      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+      // The plan's own day, not today: `session.plan` reads the day on
+      // screen, so the test has to be looking at the 25th.
+      await session.selectDay(DateTime(2026, 11, 25));
+      final plan = session.plan!;
 
       await session.setSkipped(plan.allItems.single, true);
       expect(session.plan!.allItems.single.status, MealItemStatus.skipped);
@@ -1613,7 +1622,10 @@ void main() {
         409, 'VALIDATION_FAILED', 'Dòng nhật ký đã bị khóa',
       ));
       await session.logIn(email: 'a@b.vn', password: 'MatKhau123');
-      final plan = (await session.loadPlan(date: DateTime(2026, 11, 25)))!;
+      // The plan's own day, not today: `session.plan` reads the day on
+      // screen, so the test has to be looking at the 25th.
+      await session.selectDay(DateTime(2026, 11, 25));
+      final plan = session.plan!;
 
       await expectLater(
         session.markEaten(plan.allItems.single, MealType.breakfast),
