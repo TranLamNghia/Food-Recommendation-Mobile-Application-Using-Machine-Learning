@@ -169,6 +169,86 @@ public sealed class DiarySummaryResponse
     public List<MicronutrientDto> Micronutrients { get; init; } = [];
 
     public PlanComplianceDto PlanCompliance { get; init; } = new();
+
+    /// <summary>
+    /// The per-day thresholds this user's declared conditions set, and how
+    /// much of each is left — sodium ≤ 2 000 mg for hypertension, purine
+    /// ≤ 400 mg for gout.
+    ///
+    /// <para><b>Not in §7.7.5.</b> It is here because the screen that tells
+    /// someone how much sodium is left today is the same screen that tells
+    /// them how much energy is left, and splitting the two across endpoints
+    /// would make one day's safety picture two round trips.</para>
+    ///
+    /// <para><b><c>null</c> is not an empty list.</b> Empty means this user
+    /// has no condition that sets a per-day threshold, which is most people.
+    /// <c>null</c> means the ML service could not be asked, so nobody knows
+    /// — and a screen must draw that as unknown rather than as "nothing to
+    /// worry about". The rest of this response is the backend's own
+    /// arithmetic and arrives either way, which is why one unavailable
+    /// service does not fail the whole day's summary.</para>
+    /// </summary>
+    public List<ConditionLimitDto>? ConditionLimits { get; init; }
+}
+
+/// <summary>
+/// One per-day threshold of §4.3, with the day's consumption against it.
+///
+/// <para>Read from the ML service, which is the one place
+/// <c>condition_rules</c> is interpreted — <c>severity_min</c>, the
+/// hard/soft split and the missing-measurement rule all live in
+/// <c>ml/daily_limits.py</c>. Computing it here would be a second
+/// implementation of all three.</para>
+/// </summary>
+public sealed class ConditionLimitDto
+{
+    /// <summary><c>conditions.name_vi</c> — already Vietnamese.</summary>
+    public string Condition { get; init; } = string.Empty;
+
+    public string Nutrient { get; init; } = string.Empty;
+
+    /// <summary><c>lte</c> a ceiling, <c>gte</c> a floor. Both exist.</summary>
+    public string Comparator { get; init; } = string.Empty;
+
+    public decimal Threshold { get; init; }
+
+    /// <summary>Already eaten. Not changeable.</summary>
+    public decimal Eaten { get; init; }
+
+    /// <summary>In the day's plan and not eaten yet. Still swappable.</summary>
+    public decimal Planned { get; init; }
+
+    /// <summary>
+    /// Threshold minus what is used, and <b>allowed to be negative</b>:
+    /// clamping it would hide that the limit is already passed, and by how
+    /// much.
+    /// </summary>
+    public decimal Remaining { get; init; }
+
+    /// <summary>
+    /// Servings counted above with <b>no measurement</b> for this nutrient.
+    /// Non-zero makes <see cref="Remaining"/> an upper bound on what is
+    /// left: a day whose purine is unknown for twenty dishes is not a day
+    /// under the limit, and the screen has to say so rather than quote a
+    /// figure nobody measured.
+    /// </summary>
+    public int MissingServings { get; init; }
+
+    /// <summary>
+    /// A hard threshold <b>blocks</b> a dish; a soft one only <b>costs
+    /// score</b>. The screen shows them differently — one is a limit, the
+    /// other advice.
+    /// </summary>
+    public bool IsHard { get; init; }
+
+    /// <summary>
+    /// <c>definitional</c> · <c>published</c> · <c>derived</c> ·
+    /// <c>unsupported</c>, so the interface can quote a sourced
+    /// recommendation differently from an unverified number.
+    /// </summary>
+    public string EvidenceLevel { get; init; } = string.Empty;
+
+    public string Note { get; init; } = string.Empty;
 }
 
 public sealed class ProgressPctDto

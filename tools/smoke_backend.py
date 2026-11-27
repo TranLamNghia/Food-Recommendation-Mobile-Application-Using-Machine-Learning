@@ -22,9 +22,11 @@ Run (the backend must be running):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -121,6 +123,44 @@ def delete_accounts(*emails: str) -> None:
         cn.commit()
     finally:
         cn.close()
+
+
+def outbox_dir() -> pathlib.Path:
+    """Where the backend writes reset mails when no SMTP host is set --
+    the same default `tools/run_backend.py` hands it."""
+    configured = _env.get("MAIL_OUTBOX_DIR", "")
+    return pathlib.Path(configured) if configured else ROOT / ".mail-outbox"
+
+
+def mails_to(address: str) -> list[pathlib.Path]:
+    """The outbox files addressed to `address`, oldest first."""
+    folder = outbox_dir()
+    if not folder.is_dir():
+        return []
+    return [f for f in sorted(folder.glob("*.txt"))
+            if f.read_text(encoding="utf-8-sig").startswith(f"To: {address}\n")]
+
+
+def codes_for(address: str, at_least: int, wait_s: float = 5.0) -> list[str]:
+    """The reset codes mailed to `address`, oldest first.
+
+    Polls, because the backend sends from a background queue: the 202 comes
+    back before the mail is written, which is the point of the queue.
+    """
+    deadline = time.monotonic() + wait_s
+    while True:
+        codes = []
+        for f in mails_to(address):
+            for line in f.read_text(encoding="utf-8-sig").splitlines():
+                if line.startswith("Mã đặt lại: "):
+                    codes.append(line.removeprefix("Mã đặt lại: ").strip())
+        if len(codes) >= at_least or time.monotonic() > deadline:
+            return codes
+        time.sleep(0.1)
+
+
+def sha256_hex(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1831,6 +1871,96 @@ def main(argv: list[str] | None = None) -> int:
                              / compliance["suggestedItems"], 2)) <= 0.01,
               f"{compliance}")
 
+        # -- conditionLimits: the day's per-condition thresholds --
+        #
+        # Not in §7.7.5. It is here because the screen that tells someone how
+        # much sodium is left today is the same screen that tells them how
+        # much energy is left, and splitting the two across endpoints makes
+        # one day's safety picture two round trips.
+        #
+        # Read from the ML service, which is the one place `condition_rules`
+        # is interpreted: `severity_min`, the hard/soft split and the
+        # missing-measurement rule all live in `ml/daily_limits.py`.
+        limits = summary.get("conditionLimits")
+        check(
+            "conditionLimits is a list, not null - null means the ML service "
+            "could not be asked, and a screen must draw THAT as unknown "
+            "rather than as nothing to watch",
+            limits is not None,
+            f"got {limits!r}",
+        )
+        check(
+            "an account with no condition that sets a per-day threshold gets "
+            "an empty list, which is a different answer from null",
+            limits == [],
+            f"{limits}",
+        )
+
+        # Now declare one that does, and see the threshold appear.
+        conditions = sql(
+            "SELECT co.id, co.name_vi FROM condition_rules cr "
+            "JOIN conditions co ON co.id = cr.condition_id "
+            "WHERE cr.rule_type = 'nutrient_limit' AND cr.scope = 'per_day' "
+            "  AND cr.is_hard = 1 AND cr.severity_min = 'mild' LIMIT 1")
+        check("the rule set has a HARD per-day threshold to declare for",
+              conditions != [], f"{conditions}")
+        if conditions:
+            cid, cname = conditions[0]
+            status, _ = call(
+                "PUT", "/profile/conditions",
+                {"conditions": [{"conditionId": cid, "severity": "severe"}]},
+                token=token)
+            equals("declaring it returns 200", status, 200)
+
+            status, after = call(
+                "GET", f"/food-diary/summary?date={today}", token=token)
+            equals("the summary still returns 200", status, 200)
+            after_limits = (after or {}).get("conditionLimits") or []
+            check(
+                f"and now reports a threshold for {cname}",
+                any(l.get("condition") == cname for l in after_limits),
+                f"{[l.get('condition') for l in after_limits]}",
+            )
+            one = next(
+                (l for l in after_limits if l.get("condition") == cname), None)
+            if one is not None:
+                check("it names the nutrient and a direction",
+                      one.get("nutrient") and
+                      one.get("comparator") in ("lte", "gte"),
+                      f"{one.get('nutrient')} {one.get('comparator')}")
+                check("with a threshold above zero",
+                      float(one.get("threshold") or 0) > 0)
+                check(
+                    "remaining = threshold - eaten - planned, and is NOT "
+                    "clamped: a negative figure is the whole reason to show "
+                    "this on a day the limit was passed",
+                    abs(float(one["remaining"])
+                        - (float(one["threshold"]) - float(one["eaten"])
+                           - float(one["planned"]))) <= 0.02,
+                    f"{one}",
+                )
+                check("it says whether the threshold blocks or only advises",
+                      one.get("isHard") is True,
+                      f"{one.get('isHard')} for a rule seeded is_hard = 1")
+                check("and how well-founded it is, so a sourced bar is not "
+                      "quoted like an unverified one",
+                      one.get("evidenceLevel") in (
+                          "definitional", "published", "derived",
+                          "unsupported"),
+                      f"{one.get('evidenceLevel')}")
+                check(
+                    "the unmeasured-serving count travels, which is what "
+                    "turns `remaining` from a fact into an upper bound",
+                    isinstance(one.get("missingServings"), int),
+                    f"{one.get('missingServings')}",
+                )
+
+            # Put the account back, so the sections after this see the user
+            # they expect.
+            call("PUT", "/profile/conditions", {"conditions": []},
+                 token=token)
+
+
         status, body = call("GET", "/food-diary/summary", token=token)
         equals("a summary with no date is refused",
                (status, error_code(body)), (400, "VALIDATION_FAILED"))
@@ -2332,6 +2462,151 @@ def main(argv: list[str] | None = None) -> int:
 
     sql("UPDATE users SET is_active = 1 WHERE email = %s", (email,))
 
+    # -- 7.1.5 - 7.1.7 Passwords ------------------------------------------
+    #
+    # Last, because both flows end every session the account has: anything
+    # after this would have to log in again.
+    print("\n7.1.5  POST /auth/forgot-password")
+    stranger = f"nobody-{email}"
+    status, unknown = call("POST", "/auth/forgot-password", {"email": stranger})
+    equals("202 for an address with no account", status, 202)
+    status, known = call("POST", "/auth/forgot-password",
+                         {"email": email.upper()})
+    equals("202 for a registered one, typed in capitals", status, 202)
+    equals("the very same sentence for both",
+           known and known.get("message"), unknown and unknown.get("message"))
+    status, body = call("POST", "/auth/forgot-password", {"email": "khong-phai"})
+    equals("400 VALIDATION_FAILED for something that is not an email",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    def codes_stored() -> int:
+        return sql("SELECT COUNT(*) FROM password_resets r JOIN users u "
+                   "ON u.id = r.user_id WHERE u.email = %s", (email,))[0][0]
+
+    equals("one code stored for the registered address", codes_stored(), 1)
+    life, stored_hash = sql(
+        "SELECT TIMESTAMPDIFF(MINUTE, r.created_at, r.expires_at), "
+        "r.token_hash FROM password_resets r JOIN users u ON u.id = r.user_id "
+        "WHERE u.email = %s", (email,))[0]
+    equals("it lives 15 minutes", life, 15)
+    check("the stranger's address left no mail behind", not mails_to(stranger))
+
+    codes = codes_for(email, 1)
+    check("the mail reached the outbox carrying a code", len(codes) == 1,
+          f"outbox: {outbox_dir()}")
+    first_code = codes[0] if codes else ""
+    equals("only the SHA-256 of the code is stored",
+           stored_hash, sha256_hex(first_code))
+    check("and the code is not the hash", first_code != stored_hash)
+
+    # Three per account per 15 minutes -- and over it still 202, never 429,
+    # because a 429 that only registered addresses can get would tell
+    # anyone which addresses are registered.
+    for _ in range(4):
+        status, _ = call("POST", "/auth/forgot-password", {"email": email})
+        equals("202 even over the per-account limit", status, 202)
+    equals("but no more than 3 codes are stored", codes_stored(), 3)
+    codes = codes_for(email, 3)
+    equals("and no more than 3 mails go out", len(codes), 3)
+
+    print("\n7.1.6  POST /auth/reset-password")
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    before_reset = body and body.get("refreshToken")
+
+    status, body = call("POST", "/auth/reset-password",
+                        {"token": "ma-bia", "newPassword": "MatKhauMoi456"})
+    equals("400 RESET_TOKEN_INVALID for a made-up code",
+           (status, error_code(body)), (400, "RESET_TOKEN_INVALID"))
+
+    latest = codes[-1] if codes else ""
+    status, body = call("POST", "/auth/reset-password",
+                        {"token": latest, "newPassword": "chiCoChu"})
+    equals("400 VALIDATION_FAILED for a weak new password",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    reset_to = "MatKhauMoi456"
+    status, body = call("POST", "/auth/reset-password",
+                        {"token": latest, "newPassword": reset_to})
+    equals("200 with a live code -- the weak attempt did not use it up",
+           status, 200)
+    status, body = call("POST", "/auth/reset-password",
+                        {"token": latest, "newPassword": reset_to})
+    equals("the same code a second time: 400 RESET_TOKEN_INVALID",
+           (status, error_code(body)), (400, "RESET_TOKEN_INVALID"))
+    status, body = call("POST", "/auth/reset-password",
+                        {"token": first_code, "newPassword": "MatKhauKhac789"})
+    equals("an older code from the same morning died with the reset",
+           (status, error_code(body)), (400, "RESET_TOKEN_INVALID"))
+
+    status, _ = call("POST", "/auth/login",
+                     {"email": email, "password": password})
+    equals("the old password no longer logs in", status, 401)
+    status, _ = call("POST", "/auth/login",
+                     {"email": email, "password": reset_to})
+    equals("the new one does", status, 200)
+    status, _ = call("POST", "/auth/refresh", {"refreshToken": before_reset})
+    equals("a refresh token from before the reset is revoked", status, 401)
+    password = reset_to
+
+    # An expired code, written straight into the table: waiting 15 minutes
+    # is not a test. The raw code is known because it is made here.
+    expired = uuid.uuid4().hex + uuid.uuid4().hex
+    sql("INSERT INTO password_resets (id, user_id, token_hash, expires_at, "
+        "created_at) SELECT UUID(), id, %s, NOW() - INTERVAL 5 MINUTE, "
+        "NOW() - INTERVAL 20 MINUTE FROM users WHERE email = %s",
+        (sha256_hex(expired), email))
+    status, body = call("POST", "/auth/reset-password",
+                        {"token": expired, "newPassword": "MatKhauKhac789"})
+    equals("an expired code: 400 RESET_TOKEN_INVALID",
+           (status, error_code(body)), (400, "RESET_TOKEN_INVALID"))
+
+    print("\n7.1.7  PUT /auth/password")
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    access = body and body.get("accessToken")
+    before_change = body and body.get("refreshToken")
+
+    status, _ = call("PUT", "/auth/password",
+                     {"currentPassword": password, "newPassword": "MatKhau789"})
+    equals("401 without a token", status, 401)
+    status, body = call("PUT", "/auth/password",
+                        {"currentPassword": "SaiMatKhau1",
+                         "newPassword": "MatKhau789"}, token=access)
+    equals("401 INVALID_CREDENTIALS for a wrong current password",
+           (status, error_code(body)), (401, "INVALID_CREDENTIALS"))
+    status, body = call("PUT", "/auth/password",
+                        {"currentPassword": password, "newPassword": password},
+                        token=access)
+    equals("400 VALIDATION_FAILED when the new one is the old one",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+    equals("and the field is named",
+           [d.get("field") for d in (body or {}).get("error", {})
+            .get("details") or []], ["newPassword"])
+    status, body = call("PUT", "/auth/password",
+                        {"currentPassword": password, "newPassword": "12345678"},
+                        token=access)
+    equals("400 VALIDATION_FAILED for a password with no letter",
+           (status, error_code(body)), (400, "VALIDATION_FAILED"))
+
+    changed_to = "MatKhau789"
+    status, body = call("PUT", "/auth/password",
+                        {"currentPassword": password, "newPassword": changed_to},
+                        token=access)
+    equals("200 when it is right", status, 200)
+    status, _ = call("POST", "/auth/refresh", {"refreshToken": before_change})
+    equals("every refresh token is revoked by the change", status, 401)
+    status, _ = call("POST", "/auth/login",
+                     {"email": email, "password": password})
+    equals("the previous password no longer logs in", status, 401)
+    status, _ = call("POST", "/auth/login",
+                     {"email": email, "password": changed_to})
+    equals("the new one does", status, 200)
+    password = changed_to
+
+    for f in mails_to(email):
+        f.unlink()
+
     # -- Clean up ---------------------------------------------------------
     print()
     if args.keep:
@@ -2349,7 +2624,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 33 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 36 endpoints behave per the "
           f"specification against the real database.")
     return 0
 

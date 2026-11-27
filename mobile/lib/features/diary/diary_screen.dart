@@ -6,6 +6,7 @@ import '../../core/dish_look.dart';
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/api/failure.dart';
+import '../../data/models/diary_day.dart';
 import '../../data/models/diary_entry.dart';
 import '../../data/models/food.dart';
 import '../../data/models/food_brief.dart';
@@ -66,7 +67,9 @@ class _DiaryScreenState extends State<DiaryScreen> {
       await session.loadDiary();
     } on ApiFailure catch (failure) {
       _fail(failure, retry: _load);
+      return;
     }
+    await _loadSummary(_day);
   }
 
   void _fail(ApiFailure failure, {VoidCallback? retry}) {
@@ -84,16 +87,45 @@ class _DiaryScreenState extends State<DiaryScreen> {
       );
   }
 
+  /// §7.7.5 for the day on screen. `null` offline, and `null` while it is in
+  /// flight — the card falls back to what this side can compute, which is
+  /// the whole of the offline mode's answer.
+  DaySummary? _summary;
+
   Future<void> _goTo(DateTime day) async {
     final target = DateTime(day.year, day.month, day.day);
     if (target.isAfter(_today())) return;
-    setState(() => _day = target);
+    setState(() {
+      _day = target;
+      // Dropped at once: keeping the previous day's figures while the new
+      // ones arrive would show yesterday's intake under today's heading.
+      _summary = null;
+    });
     try {
       await SessionScope.of(context).ensureDiaryCovers(target);
+      await _loadSummary(target);
     } on ApiFailure catch (failure) {
       _fail(failure, retry: () => _goTo(target));
     }
   }
+
+  /// A failure here is deliberately quiet. The card has a fallback it can
+  /// draw, and a day whose summary did not arrive is not a day whose diary
+  /// did not — the lines are already on screen, and shouting about a figure
+  /// would suggest otherwise.
+  Future<void> _loadSummary(DateTime day) async {
+    final session = SessionScope.of(context);
+    try {
+      final loaded = await session.daySummary(date: day);
+      if (!mounted || !_isSameDay(day, _day)) return;
+      setState(() => _summary = loaded);
+    } on ApiFailure {
+      if (mounted) setState(() => _summary = null);
+    }
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   Future<void> _pickFromCalendar(AppSession session) async {
     final picked = await _MonthSheet.show(
@@ -145,6 +177,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       session.profile.energyTarget ??
                       0,
                   entries: entries,
+                  summary: _summary,
                 ),
               ),
             ),
@@ -523,17 +556,37 @@ class _MonthSheetState extends State<_MonthSheet> {
 /// differing is entirely normal, and it is precisely what shows whether the
 /// plan is being followed.
 class _ConsumedCard extends StatelessWidget {
-  const _ConsumedCard({required this.target, required this.entries});
+  const _ConsumedCard({
+    required this.target,
+    required this.entries,
+    this.summary,
+  });
 
   /// That day's target: the plan's when the day had one, the profile's
-  /// otherwise.
+  /// otherwise. Used only when [summary] is absent.
   final double target;
   final List<DiaryEntry> entries;
 
+  /// §7.7.5's answer for this day, when there is a server to ask.
+  ///
+  /// It wins over the two above, and for a reason worth stating: its target
+  /// is the one that applied **on that day** — the snapshot stored with the
+  /// plan, or the profile's columns as they stood. Computing it here from
+  /// today's profile would invent a new answer for a past day, the day the
+  /// user weighed three kilograms more. And its `consumed` is summed from
+  /// whole nutrition rows, which the lines on this side do not carry.
+  final DaySummary? summary;
+
   @override
   Widget build(BuildContext context) {
-    final consumed = entries.fold<double>(0, (sum, e) => sum + e.kcal);
-    final remaining = target - consumed;
+    final day = summary;
+    final target = day?.targets.caloriesKcal ?? this.target;
+    final consumed =
+        day?.consumed.caloriesKcal ??
+        entries.fold<double>(0, (sum, e) => sum + e.kcal);
+    // Allowed to be negative. Clamping it would hide exactly what this card
+    // exists to show, and §7.7.5 sends it unclamped for the same reason.
+    final remaining = day?.remaining.caloriesKcal ?? (target - consumed);
     final ratio = target <= 0 ? 0.0 : (consumed / target).clamp(0.0, 1.0);
 
     return Container(
@@ -676,13 +729,65 @@ class _MealGroup extends StatelessWidget {
           for (final entry in entries)
             _DiaryTile(
               entry: entry,
-              onRate: (stars) => session.rate(entry, stars),
+              onRate: (stars) => _rate(context, session, entry, stars),
               onUndo: () => _undo(context, session, entry),
               onEdit: () => _edit(context, session, entry),
             ),
         ],
       ),
     );
+  }
+}
+
+/// Sends a rating, after making sure the user means to.
+///
+/// **It asks first, and that is a decided behaviour rather than politeness.**
+/// §7.8.1 locks the diary line this rating could be the evidence for: from
+/// then on §7.7.3 and §7.7.4 both refuse it, and the edit and undo buttons
+/// disappear. So the user is giving up the ability to correct what they
+/// logged, and they should be told that before the stars are sent, not after
+/// the buttons have gone.
+Future<void> _rate(
+  BuildContext context,
+  AppSession session,
+  DiaryEntry entry,
+  int stars,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Đánh giá ${stars.clamp(1, 5)} sao?'),
+      content: Text(
+        'Sau khi đánh giá, dòng "${entry.food.name}" trong nhật ký sẽ '
+        'không sửa hay hoàn tác được nữa — đánh giá dựa trên bữa đã ăn, '
+        'nên bữa đó được giữ nguyên làm bằng chứng.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Để sau'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Đánh giá'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+
+  try {
+    await session.rate(entry, stars);
+  } on ApiFailure catch (failure) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(failure.message),
+          duration: const Duration(seconds: 4),
+        ),
+      );
   }
 }
 

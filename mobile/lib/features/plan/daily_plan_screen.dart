@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/api/failure.dart';
+import '../../data/models/diary_day.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/mock/mock_rules.dart';
 import '../../data/recommender/match_reason.dart';
@@ -49,19 +50,43 @@ class _DailyPlanScreenState extends State<DailyPlanScreen> {
     _load();
   }
 
+  /// §7.7.5's `conditionLimits`, which is where the day's per-condition
+  /// thresholds come from online. `null` offline and while in flight, and
+  /// the card then falls back to [AppSession.dayBudget] — the Dart copy,
+  /// which has the per-dish nutrition it needs only in that mode.
+  DaySummary? _summary;
+
   Future<void> _load() async {
     final session = SessionScope.of(context);
-    if (session.plan != null) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (session.plan == null) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+      try {
+        await session.loadPlan();
+      } on ApiFailure catch (failure) {
+        if (mounted) setState(() => _error = failure);
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    }
+    await _loadSummary();
+  }
+
+  /// Quiet on failure, and the card has a fallback: a day whose thresholds
+  /// did not arrive is not a day whose plan did not.
+  ///
+  /// `conditionLimits == null` in the answer is a different matter — it
+  /// means the thresholds could not be computed at all, and the card draws
+  /// that as unknown rather than as nothing to watch.
+  Future<void> _loadSummary() async {
+    final session = SessionScope.of(context);
     try {
-      await session.loadPlan();
-    } on ApiFailure catch (failure) {
-      if (mounted) setState(() => _error = failure);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      final loaded = await session.daySummary();
+      if (mounted) setState(() => _summary = loaded);
+    } on ApiFailure {
+      if (mounted) setState(() => _summary = null);
     }
   }
 
@@ -75,7 +100,11 @@ class _DailyPlanScreenState extends State<DailyPlanScreen> {
       body: SafeArea(
         bottom: false,
         child: switch ((plan, _loading, _error)) {
-          (final DailyPlan p, _, _) => _PlanBody(session: session, plan: p),
+          (final DailyPlan p, _, _) => _PlanBody(
+            session: session,
+            plan: p,
+            summary: _summary,
+          ),
           (_, true, _) => const Center(child: CircularProgressIndicator()),
           // A refusal is shown as itself. `_NoPlan` says "there is no plan
           // yet", which for a user whose conditions leave no feasible day
@@ -139,10 +168,29 @@ class _PlanFailed extends StatelessWidget {
 }
 
 class _PlanBody extends StatelessWidget {
-  const _PlanBody({required this.session, required this.plan});
+  const _PlanBody({
+    required this.session,
+    required this.plan,
+    this.summary,
+  });
 
   final AppSession session;
   final DailyPlan plan;
+
+  /// §7.7.5 for the day on screen, when there is a server to ask.
+  final DaySummary? summary;
+
+  /// The allowances the budget card draws.
+  ///
+  /// The server's figures when they came. They are the only ones that can be
+  /// right online: the allowance is arithmetic over whole nutrition rows, and
+  /// a serving from §7.6 carries just its energy, so the local sum adds up to
+  /// nothing there.
+  DayBudget _budgetFor(AppSession session) {
+    final limits = summary?.conditionLimits;
+    if (limits != null) return DayBudget.fromServer(limits);
+    return session.dayBudget;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +222,11 @@ class _PlanBody extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
             child: DayBudgetCard(
-              budget: session.dayBudget,
+              // The server's figures when they came. They are the only ones
+              // that can be right online: the allowance is arithmetic over
+              // whole nutrition rows, and a serving from §7.6 carries just
+              // its energy, so `session.dayBudget` adds up to nothing there.
+              budget: _budgetFor(session),
               isToday: session.viewingToday,
             ),
           ),

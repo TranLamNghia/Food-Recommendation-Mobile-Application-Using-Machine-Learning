@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Api.Auth;
 using Api.Data;
 using Api.Http;
@@ -54,6 +55,73 @@ builder.Services.AddSingleton(jwt);
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseMySql(connection, ServerVersion.AutoDetect(connection)));
 builder.Services.AddScoped<TokenService>();
+
+// ── Password reset mail — specification §7.1.5 ──────────────────────────
+//
+// Queued and sent by a background worker, never inside the request: see
+// `ResetMailQueue` for why the response time must not depend on whether the
+// address is registered.
+var mail = MailOptions.FromConfiguration(
+    builder.Configuration, builder.Environment.ContentRootPath);
+builder.Services.AddSingleton(mail);
+builder.Services.AddSingleton<ResetMailQueue>();
+builder.Services.AddSingleton<IResetMailSender>(
+    mail.SendsForReal
+        ? new SmtpResetMailSender(mail)
+        : new OutboxResetMailSender(mail));
+builder.Services.AddHostedService<ResetMailWorker>();
+
+// ── Per-IP limits on the two public password endpoints ──────────────────
+//
+// §7.1.5 limits codes per ACCOUNT, which `PasswordController` enforces —
+// but an address with no account creates no row to count, so asking about
+// strangers' addresses is limited by nothing there. This is the layer the
+// specification says must catch that: the same limit for every address,
+// so its 429 says nothing about any of them.
+//
+// Generous on purpose: one household or one office shares an address, and
+// `tools/smoke_backend.py` asks several times per run. Both numbers can be
+// raised or lowered through configuration.
+var forgotPerIp = builder.Configuration.GetValue("Auth:ForgotPerIpPerWindow", 30);
+var resetPerIp = builder.Configuration.GetValue("Auth:ResetPerIpPerWindow", 30);
+builder.Services.AddRateLimiter(o =>
+{
+    RateLimitPartition<string> PerIp(HttpContext ctx, int limit)
+        => RateLimitPartition.GetFixedWindowLimiter(
+            ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit,
+                Window = PasswordController.CodeLifetime,
+                QueueLimit = 0,
+            });
+
+    o.AddPolicy(PasswordController.ForgotPolicy, ctx => PerIp(ctx, forgotPerIp));
+    o.AddPolicy(PasswordController.ResetPolicy, ctx => PerIp(ctx, resetPerIp));
+
+    // The §2.5 envelope, like every other refusal this API makes.
+    o.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        ctx.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+        await ctx.HttpContext.Response.WriteAsync(JsonSerializer.Serialize(
+            new ApiError
+            {
+                Error = new ApiError.ErrorBody
+                {
+                    Code = ErrorCode.RateLimited,
+                    Message = "Bạn đã thử quá nhiều lần, hãy đợi 15 phút rồi "
+                        + "thử lại",
+                    TraceId = ctx.HttpContext.TraceIdentifier,
+                },
+            },
+            new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            }), ct);
+    };
+});
 
 // ── The ML service client — specification §8 ────────────────────────────
 //
@@ -207,6 +275,17 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+if (!mail.SendsForReal)
+{
+    // Information in Development, where the outbox is the point; an error
+    // anywhere else, where it means nobody can recover a password.
+    app.Logger.Log(
+        app.Environment.IsDevelopment() ? LogLevel.Information : LogLevel.Error,
+        "SMTP_HOST is not set: password reset mails are written to {Dir} "
+        + "instead of being sent.",
+        mail.OutboxDir);
+}
+
 // Said at startup, not only on the first call that needs it. A deployment
 // that forgot ML_INTERNAL_KEY otherwise looks healthy until somebody asks
 // for a meal plan — and then still looks healthy, because a rule-based plan
@@ -265,6 +344,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();

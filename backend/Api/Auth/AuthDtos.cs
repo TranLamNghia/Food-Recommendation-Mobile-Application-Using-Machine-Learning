@@ -40,19 +40,19 @@ public sealed class RegisterRequest
     public string Email { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Thiếu mật khẩu")]
-    [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
+    [MinLength(PasswordRules.MinLength, ErrorMessage = PasswordRules.TooShort)]
     // An upper bound of 72 BYTES, exactly the limit BCrypt uses.
     // Specification §7.1.1 only says "at least 8 characters, with letters and
     // digits", so it does not ask for an upper bound — but without one, a
     // longer password gets silently truncated and the user would never know
     // the tail of it was not counted.
-    [MaxUtf8Bytes(72)]
+    [MaxUtf8Bytes(PasswordRules.MaxBytes)]
     // Specification §7.1.1 requires "letters and digits". A
     // `RegularExpression` rather than a check in the controller, so the error
     // travels the same path as every other validation error and comes out in
     // the §2.5 `details` envelope.
-    [RegularExpression(@"^(?=.*[A-Za-z])(?=.*\d).+$",
-        ErrorMessage = "Mật khẩu phải có cả chữ và số")]
+    [RegularExpression(PasswordRules.Pattern,
+        ErrorMessage = PasswordRules.NeedsLettersAndDigits)]
     public string Password { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Thiếu tên hiển thị")]

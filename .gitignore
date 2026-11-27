@@ -496,3 +496,6 @@ Thumbs.db
 # Ghi chú làm việc và bản rà soát ERD — tài liệu nội bộ, không phải sản phẩm.
 /docs/ERD_REVIEW.md
 /problem.md
+
+# Password reset mails written in development instead of being sent
+.mail-outbox/

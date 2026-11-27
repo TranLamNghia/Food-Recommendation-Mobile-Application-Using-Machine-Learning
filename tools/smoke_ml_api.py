@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the ML Service's 8 internal endpoints, against the real
+"""End-to-end test of the ML Service's 9 internal endpoints, against the real
 database.
 
 The counterpart of `tools/smoke_backend.py` for the ML layer, and needed for
@@ -1052,6 +1052,130 @@ def main(argv: list[str] | None = None) -> int:
     status, _ = call("POST", f"/profiles/{uid}/rebuild", {})
     equals("rebuild requires the key", status, 401)
 
+    # -- POST /daily-limits - the day's per-condition thresholds --
+    #
+    # The third reader of `condition_rules`' per-day rules, after Step 4's
+    # phase 5 and the plan's `nutrientViolations`. It exists so the backend
+    # does not become a fourth: `severity_min`, the hard/soft split and the
+    # missing-measurement rule are implemented here, and a copy in C# would
+    # be the one nothing compares.
+    print("§8.9  POST /daily-limits")
+    status, body = call("POST", "/daily-limits", {"userId": uid}, key=key)
+    equals("daily limits return 200", status, 200)
+    body = body or {}
+    limits = body.get("limits") or []
+    equals("the answer is about the user asked for", body.get("userId"), uid)
+    check("and names the day it measured", bool(body.get("date")),
+          f"{body.get('date')}")
+
+    # How many thresholds this user's declarations actually reach, worked out
+    # in SQL so the count is not taken from the same code being checked.
+    REACHED = (
+        "SELECT COUNT(*) n FROM condition_rules cr "
+        "JOIN user_conditions uc ON uc.condition_id = cr.condition_id "
+        "WHERE uc.user_id = %s AND cr.rule_type = 'nutrient_limit' "
+        "  AND cr.scope = 'per_day' "
+        "  AND FIELD(uc.severity, 'mild', 'moderate', 'severe') >= "
+        "      FIELD(cr.severity_min, 'mild', 'moderate', 'severe')"
+    )
+    cn = connect(None)
+    try:
+        with cn.cursor() as cur:
+            cur.execute(REACHED, (uid,))
+            expected = int(cur.fetchone()["n"])
+            # And somebody who DOES have thresholds, for the checks below.
+            # Without this they would be skipped in silence whenever the
+            # user with the most signals happens to have no condition that
+            # sets one — which is most users.
+            cur.execute(
+                "SELECT uc.user_id, COUNT(*) n FROM condition_rules cr "
+                "JOIN user_conditions uc ON uc.condition_id = cr.condition_id "
+                "WHERE cr.rule_type = 'nutrient_limit' "
+                "  AND cr.scope = 'per_day' "
+                "  AND FIELD(uc.severity, 'mild', 'moderate', 'severe') >= "
+                "      FIELD(cr.severity_min, 'mild', 'moderate', 'severe') "
+                "GROUP BY uc.user_id ORDER BY n DESC, uc.user_id LIMIT 1"
+            )
+            row = cur.fetchone()
+            limited_uid = row["user_id"] if row else None
+            limited_n = int(row["n"]) if row else 0
+    finally:
+        cn.close()
+
+    # The bug this check exists for: `daily_limits.status` treats an empty
+    # `conditions` as "this person has no threshold" rather than looking them
+    # up, unlike `allowed_foods`. Calling it without them answers 200 with an
+    # empty list for a user with gout, and nothing says so.
+    equals(
+        "every per-day threshold this user's declarations reach is reported",
+        len(limits), expected)
+
+    check(
+        "the database has a user with per-day thresholds to check against",
+        limited_uid is not None,
+        "nobody's declarations reach a per_day rule, so the checks below "
+        "would prove nothing",
+    )
+    if limited_uid is not None:
+        status, detail = call(
+            "POST", "/daily-limits", {"userId": limited_uid}, key=key)
+        equals("that user's limits return 200", status, 200)
+        limits = (detail or {}).get("limits") or []
+        equals("and every threshold their declarations reach is there",
+               len(limits), limited_n)
+
+    if limits:
+        check("each one names its condition, in Vietnamese",
+              all(l.get("condition") for l in limits))
+        check("and a nutrient column the schema has",
+              all(l.get("nutrient") for l in limits))
+        check("with a comparator, because both directions exist - sodium "
+              "<= 2000 mg/day is a ceiling and fibre >= 25 g/day a floor",
+              all(l.get("comparator") in ("lte", "gte") for l in limits),
+              f"{sorted({l.get('comparator') for l in limits})}")
+        check("a threshold above zero",
+              all(float(l["threshold"]) > 0 for l in limits))
+        check("the hard/soft split is reported rather than merged - one is a "
+              "limit, the other advice",
+              all(isinstance(l.get("isHard"), bool) for l in limits))
+        check("a soft threshold carries its penalty and a hard one does not",
+              all((l["penalty"] is None) == l["isHard"] for l in limits),
+              f"{[(l['nutrient'], l['isHard'], l['penalty']) for l in limits]}")
+        check("and an evidence level, so a sourced bar is not quoted like an "
+              "unverified one",
+              all(l.get("evidenceLevel") in (
+                  "definitional", "published", "derived", "unsupported")
+                  for l in limits),
+              f"{sorted({l.get('evidenceLevel') for l in limits})}")
+        check("the missing-measurement counts travel, which is what makes "
+              "the eaten figure a lower bound rather than a fact",
+              all(isinstance(l.get("missingEaten"), int)
+                  and isinstance(l.get("missingPlanned"), int)
+                  for l in limits))
+
+    for group in ("eaten", "planned"):
+        totals = body.get(group) or {}
+        check(f"`{group}` reports every nutrient, not only the limited ones",
+              len(totals.get("missing") or {}) == 14,
+              f"{len(totals.get('missing') or {})} nutrients")
+        check(f"and how many of its servings were counted",
+              isinstance(totals.get("nServings"), int))
+
+    status, body = call(
+        "POST", "/daily-limits",
+        {"userId": "00000000-0000-4000-8000-000000000000"}, key=key)
+    equals("a userId that does not exist gives 404", status, 404)
+    equals("the error code is USER_NOT_FOUND", error_code(body),
+           "USER_NOT_FOUND")
+    status, body = call(
+        "POST", "/daily-limits", {"userId": uid, "date": "25-11-2026"},
+        key=key)
+    equals("a date this service cannot read is refused rather than read as "
+           "today", status, 400)
+    status, _ = call("POST", "/daily-limits", {"userId": uid})
+    equals("daily limits require the key", status, 401)
+
+
     # -- POST /train --
     print("\n§8.3  POST /train")
     status, body = call(
@@ -1153,7 +1277,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — the 8 internal endpoints "
+    print(f"{_checks}/{_checks} checks passed — the 9 internal endpoints "
           f"behave per the specification.")
     return 0
 

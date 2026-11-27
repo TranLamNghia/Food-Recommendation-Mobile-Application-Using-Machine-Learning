@@ -112,6 +112,11 @@ class ApiFailure implements Exception {
   static const String accountDisabled = 'ACCOUNT_DISABLED';
   static const String mlUnavailable = 'ML_UNAVAILABLE';
 
+  /// `400` from §7.1.6: the reset code is wrong, expired or already used.
+  /// Recognised so the reset screen can show it under the code field, where
+  /// the mistake is, rather than in a snackbar.
+  static const String resetTokenInvalid = 'RESET_TOKEN_INVALID';
+
   /// `409` from `PUT /foods/{id}/mark`: the dish is the last one left in a
   /// role some meal cannot be assembled without, so blocking it would leave
   /// a day that cannot be built at all.

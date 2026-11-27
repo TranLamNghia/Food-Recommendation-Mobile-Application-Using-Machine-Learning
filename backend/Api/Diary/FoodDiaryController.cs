@@ -2,6 +2,7 @@ using Api.Catalogue;
 using Api.Data;
 using Api.Entities;
 using Api.Http;
+using Api.Ml;
 using Api.Nutrition;
 using Api.Planning;
 using Api.Profile;
@@ -41,6 +42,7 @@ namespace Api.Diary;
 [Authorize]
 public sealed class FoodDiaryController(
     AppDbContext db,
+    IMlClient ml,
     ILogger<FoodDiaryController> log) : ControllerBase
 {
     /// <summary>§7.7.1's ceiling on the range.</summary>
@@ -536,7 +538,71 @@ public sealed class FoodDiaryController(
             Micronutrients = await MicronutrientsAsync(
                 profile, day, rows, nutrition, ct),
             PlanCompliance = await ComplianceAsync(uid, day, plan, ct),
+            ConditionLimits = await ConditionLimitsAsync(uid, day, ct),
         });
+    }
+
+    /// <summary>
+    /// The day's per-day thresholds, or <c>null</c> when the ML service
+    /// could not be asked.
+    ///
+    /// <para><b>A failure here does not fail the summary.</b> Everything
+    /// else in the answer is this backend's own arithmetic over
+    /// <c>food_diary</c>, and it is correct whether or not the thresholds
+    /// arrived. Returning <c>503</c> for the whole day because one figure is
+    /// missing would take away the figures that are not.</para>
+    ///
+    /// <para>But it returns <c>null</c>, never an empty list. Empty means
+    /// "no condition sets a threshold", and a screen can honestly show
+    /// nothing for it. <c>null</c> means nobody knows, and a screen showing
+    /// nothing for THAT would be telling a hypertensive user there is
+    /// nothing to watch.</para>
+    /// </summary>
+    private async Task<List<ConditionLimitDto>?> ConditionLimitsAsync(
+        string uid, DateOnly day, CancellationToken ct)
+    {
+        var answer = await ml.DailyLimitsAsync(
+            new MlDailyLimitsRequest
+            {
+                UserId = uid,
+                Date = day.ToString("yyyy-MM-dd"),
+            },
+            ct);
+
+        if (!answer.Ok)
+        {
+            log.LogWarning(
+                "The day summary of {Day} for {User} has no condition "
+                + "thresholds: {Detail}. The rest of the figures stand.",
+                day, uid, answer.Failure!.Detail);
+            return null;
+        }
+
+        return answer.Required.Limits
+            .Select(limit =>
+            {
+                var threshold = (decimal)limit.Threshold;
+                var eaten = (decimal)limit.Eaten;
+                var planned = (decimal)limit.Planned;
+                return new ConditionLimitDto
+                {
+                    Condition = limit.Condition,
+                    Nutrient = limit.Nutrient,
+                    Comparator = limit.Comparator,
+                    Threshold = Round2(threshold),
+                    Eaten = Round2(eaten),
+                    Planned = Round2(planned),
+                    // Not clamped. A negative figure is the screen's whole
+                    // reason to exist on a day the limit was passed.
+                    Remaining = Round2(threshold - eaten - planned),
+                    MissingServings =
+                        limit.MissingEaten + limit.MissingPlanned,
+                    IsHard = limit.IsHard,
+                    EvidenceLevel = limit.EvidenceLevel,
+                    Note = limit.Note,
+                };
+            })
+            .ToList();
     }
 
     /// <summary>
