@@ -1,9 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/format.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/api/failure.dart';
 import '../../data/models/health_profile.dart';
+import '../../data/models/progress.dart';
 import '../../data/session.dart';
+
+part 'progress_cards.dart';
 
 /// Health progress, and how well the system has come to understand the
 /// user.
@@ -13,8 +19,64 @@ import '../../data/session.dart';
 /// much has the model learned about me*. The second is rarely displayed in
 /// nutrition apps, but here it is the core of the thing — it shows the user
 /// where the data they contribute is going.
-class ProgressScreen extends StatelessWidget {
+class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
+
+  @override
+  State<ProgressScreen> createState() => _ProgressScreenState();
+}
+
+class _ProgressScreenState extends State<ProgressScreen> {
+  int _days = 7;
+  ProgressReport? _report;
+  String? _failure;
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      _load();
+    }
+  }
+
+  // ONLINE: §7.9.1, read on open, on a period change, after a weighing and
+  // on a pull. Not on every session notification: those fire on each tap in
+  // the diary, and the figures here are a summary, not a live counter.
+  Future<void> _load() async {
+    final session = SessionScope.of(context);
+    setState(() => _failure = null);
+    try {
+      final report = await session.progress(days: _days);
+      if (mounted) setState(() => _report = report);
+    } on ApiFailure catch (failure) {
+      if (mounted) setState(() => _failure = failure.message);
+    }
+  }
+
+  Future<void> _logWeight() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final current = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      builder: (_) =>
+          _WeighInSheet(initial: SessionScope.of(context).profile.weightKg),
+    );
+    if (current == null || !mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          current
+              ? 'Đã ghi. Hạn mức từ ngày mai tính theo cân nặng mới.'
+              : 'Đã ghi bù vào đường xu hướng.',
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    await _load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,20 +87,43 @@ class ProgressScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          children: [
-            Text(
-              'Tiến trình',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 18),
-            _BodyCard(profile: profile),
-            const SizedBox(height: 14),
-            _LearningCard(session: session),
-            const SizedBox(height: 14),
-            _TasteCard(session: session),
-          ],
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            children: [
+              Text(
+                'Tiến trình',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 18),
+              _BodyCard(profile: profile),
+              const SizedBox(height: 14),
+              _WeightCard(
+                profile: profile,
+                trend: _report?.weightTrend,
+                onLog: _logWeight,
+              ),
+              const SizedBox(height: 14),
+              _EnergyCard(
+                report: _report,
+                days: _days,
+                failure: _failure,
+                onRetry: _load,
+                onDays: (days) {
+                  setState(() {
+                    _days = days;
+                    _report = null;
+                  });
+                  _load();
+                },
+              ),
+              const SizedBox(height: 14),
+              _LearningCard(session: session),
+              const SizedBox(height: 14),
+              _TasteCard(session: session),
+            ],
+          ),
         ),
       ),
     );
@@ -95,13 +180,20 @@ class _BodyCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                formatNumber(bmi, 1),
-                style: const TextStyle(
-                  fontSize: 36,
-                  height: 1,
-                  color: AppColors.textPrimary,
-                  fontVariations: [FontVariation('wght', 700)],
+              // Flexible, so a large system font scale on a narrow phone
+              // shrinks the figure instead of pushing the chip off the card.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    formatNumber(bmi, 1),
+                    style: const TextStyle(
+                      fontSize: 36,
+                      height: 1,
+                      color: AppColors.textPrimary,
+                      fontVariations: [FontVariation('wght', 700)],
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
