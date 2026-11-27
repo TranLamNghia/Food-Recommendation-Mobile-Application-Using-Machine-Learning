@@ -3,6 +3,7 @@
 
 import '../models/food_brief.dart';
 import '../models/food_detail.dart';
+import '../models/own_dish.dart';
 import 'api_client.dart';
 import 'failure.dart';
 
@@ -135,6 +136,15 @@ class FoodApi {
   /// endpoint refuses rather than showing a dish with no warnings.
   Future<FoodDetail> detail(String foodId) async {
     final json = await _client.get('/foods/$foodId');
+    return parsed(() => FoodDetail.fromJson(json));
+  }
+
+  /// §7.5.3 — a dish of the user's own, seen by nobody else.
+  ///
+  /// Answers like [detail], with the new dish's id. `409
+  /// FOOD_ALREADY_EXISTS` when they already have one by that name.
+  Future<FoodDetail> create(OwnDishDraft draft) async {
+    final json = await _client.post('/foods', body: draft.toJson());
     return parsed(() => FoodDetail.fromJson(json));
   }
 

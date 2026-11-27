@@ -13,6 +13,7 @@ import '../../data/models/food_brief.dart';
 import '../../data/models/food_query.dart';
 import '../../data/models/meal_plan.dart';
 import '../../data/session.dart';
+import '../food/own_dish_screen.dart';
 import '../plan/widgets/week_strip.dart';
 
 /// The food diary — the `food_diary` table.
@@ -1464,6 +1465,7 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
   bool _loading = true;
   ApiFailure? _error;
   int _generation = 0;
+  String _text = '';
 
   @override
   void initState() {
@@ -1478,6 +1480,7 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
   }
 
   void _onTyped(String text) {
+    _text = text;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () => _search(text));
   }
@@ -1504,6 +1507,16 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
     }
   }
 
+  /// §7.5.3 — the dish is not in the catalogue, so the user adds it, and
+  /// the new dish is logged at once to the meal picked above.
+  Future<void> _addOwn() async {
+    final navigator = Navigator.of(context);
+    final dish = await navigator.push<FoodBrief>(
+      MaterialPageRoute(builder: (_) => OwnDishScreen(initialName: _text)),
+    );
+    if (dish != null && mounted) navigator.pop((food: dish, meal: _meal));
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -1511,6 +1524,19 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
         widget.day.year == now.year &&
         widget.day.month == now.month &&
         widget.day.day == now.day;
+    final addOwn = ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.add_circle_outline_rounded),
+      title: const Text(
+        'Không thấy món? Thêm món của bạn',
+        style: TextStyle(
+          fontSize: 15,
+          fontVariations: [FontVariation('wght', 600)],
+        ),
+      ),
+      subtitle: const Text('Chỉ mình bạn thấy món này'),
+      onTap: _addOwn,
+    );
 
     // Material, not a coloured Container: the list tiles inside paint their
     // highlight and ripple on the nearest Material, which a coloured box
@@ -1602,18 +1628,26 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
                 else if (_error != null)
                   Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(
-                      _error!.message,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                    child: Column(
+                      children: [
+                        Text(
+                          _error!.message,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        addOwn,
+                      ],
                     ),
                   )
                 else
                   Flexible(
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      itemCount: _matches.length,
+                      // The last row is always the way out when nothing fits.
+                      itemCount: _matches.length + 1,
                       itemBuilder: (context, i) {
+                        if (i == _matches.length) return addOwn;
                         final food = _matches[i];
                         return ListTile(
                           contentPadding: EdgeInsets.zero,

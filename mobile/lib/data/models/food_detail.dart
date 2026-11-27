@@ -22,22 +22,25 @@ class FoodDetail {
 
   factory FoodDetail.fromJson(Map<String, dynamic> json) {
     final category = json['category'] as Map<String, dynamic>? ?? const {};
+    final nutrition = json['nutrition'] as Map<String, dynamic>? ?? const {};
     return FoodDetail(
       // The list fields are read through the same parser the browse rows use,
       // so one dish cannot arrive shaped two ways. §7.5.2 nests the category
-      // as an object while §7.5.1 flattens it to a name, which is the one
-      // difference, handled below.
+      // as an object and the energy and serving inside `nutrition`, where
+      // §7.5.1 flattens them — the differences, handled below. Without the
+      // last two the brief carried 0 kcal, and a dish logged from it (the
+      // one §7.5.3 hands back) would add nothing to the day.
       brief: FoodBrief.fromJson({
         ...json,
+        'caloriesKcal': json['caloriesKcal'] ?? nutrition['caloriesKcal'],
+        'servingSizeG': json['servingSizeG'] ?? nutrition['servingSizeG'],
         'categoryName': category['name'],
         'tags': [
           for (final t in (json['tags'] as List? ?? const []))
             (t as Map)['nameVi'],
         ],
       }),
-      nutrition: DishNutrition.fromJson(
-        json['nutrition'] as Map<String, dynamic>? ?? const {},
-      ),
+      nutrition: DishNutrition.fromJson(nutrition),
       description: json['description'] as String?,
       categoryId: category['id'] as String?,
       warnings: [
