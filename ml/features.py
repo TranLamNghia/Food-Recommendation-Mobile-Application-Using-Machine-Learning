@@ -82,6 +82,13 @@ class Food:
     #: nutrient figure above is **per serving**, not per 100 g.
     serving_size_g: float = 100.0
     imputed: tuple[str, ...] = ()
+    #: `foods.owner_id`: `None` for the shared catalogue, a user id for a
+    #: dish one user added for themselves (§7.5.3).
+    owner_id: str | None = None
+
+    @property
+    def is_catalogue(self) -> bool:
+        return self.owner_id is None
 
     # Share of energy from each macronutrient — see trap 2 at the top.
     @property
@@ -197,6 +204,7 @@ class DataQualityReport:
 
 SQL_FOODS = """
 SELECT f.id, f.name, c.name AS category, f.dish_role, f.spice_level,
+       f.owner_id,
        n.serving_size_g, n.calories_kcal, n.protein_g, n.carbs_g, n.fat_g,
        n.sugar_g, n.sodium_mg, n.fiber_g
 FROM foods f
@@ -249,10 +257,16 @@ def load_foods(
     food missing `sodium_mg` that is given 0 becomes the blandest item in the
     catalogue, which is to say an invented extreme. `sugar_g` is imputed as a
     ratio instead — see `IMPUTE_AS_RATIO`.
+
+    **The medians come from the shared catalogue only.** Every user's own
+    dishes are loaded too (each one is scored for its owner), but a figure
+    typed by one user must not become the estimate filled into another
+    user's dish — nor into a catalogue dish.
     """
     with cn.cursor() as cur:
         cur.execute(SQL_FOODS, {"active_only": 1 if active_only else 0})
         rows = cur.fetchall()
+    reference = [r for r in rows if r.get("owner_id") is None] or rows
 
     # Per-category median, then overall median, for each imputable column.
     # For a ratio-imputed column, take the median of the ratio itself.
@@ -262,7 +276,7 @@ def load_foods(
         denominator = IMPUTE_AS_RATIO.get(column)
         by_category: dict[str, list[float]] = {}
         all_values: list[float] = []
-        for row in rows:
+        for row in reference:
             value = row[column]
             if value is None:
                 continue
@@ -319,6 +333,7 @@ def load_foods(
             fiber=values["fiber_g"],
             serving_size_g=float(row["serving_size_g"]),
             imputed=tuple(was_imputed),
+            owner_id=row.get("owner_id"),
         )
         foods.append(food)
 
@@ -409,7 +424,24 @@ class FeatureSpace:
     # ── build ──
     @classmethod
     def from_foods(cls, foods: Iterable[Food]) -> "FeatureSpace":
-        items = list(foods)
+        """The space of the **shared catalogue**.
+
+        A user's own dish (§7.5.3) is encoded in this space but never shapes
+        it. Two failures that would otherwise follow from a single entry:
+
+        - **its numbers move everyone's scale.** One dish typed as 4000 kcal
+          becomes `max_kcal`, and the energy dimension of every other food,
+          for every user, shrinks towards 0;
+        - **its category adds a dimension.** A category that only a private
+          dish uses lengthens the vector, the active model's feature names no
+          longer match (`serve.load_active_model`), and every user silently
+          falls back from the model to content scoring.
+
+        Encoded here, an out-of-range private dish is clamped to [0, 1], and
+        a category the catalogue lacks leaves its one-hot block empty.
+        """
+        everything = list(foods)
+        items = [f for f in everything if f.is_catalogue] or everything
         if not items:
             raise ValueError("Cannot build a feature space from an empty food set.")
         return cls(
