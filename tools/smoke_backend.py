@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 32 public endpoints built so far, against the real
+"""End-to-end test of the 38 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -2391,6 +2391,187 @@ def main(argv: list[str] | None = None) -> int:
           drift is not None and abs(drift) < 5,
           f"off by {drift} minutes — 420 means it is still writing UTC")
 
+    # -- 7.10.1 / 7.9.1 weighing and progress ---------------------------
+    #
+    # The progress figures are checked against SQL written here, from the
+    # tables, rather than against numbers copied from a run: the point is
+    # that the endpoint agrees with the database, whatever the earlier
+    # sections left in it.
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    token = (body or {}).get("accessToken")
+    today_d = date.today()
+    today = today_d.isoformat()
+    week_ago = (today_d - timedelta(days=6)).isoformat()
+
+    print("\n§7.10.1  POST /body-logs")
+    status, body = call("GET", "/profile", token=token)
+    height = float((body or {}).get("heightCm") or 172)
+    rows = sql("SELECT logged_on, weight_kg FROM body_logs WHERE user_id = %s",
+               (uid,))
+    check("the profile form already wrote today's weighing",
+          any(r[0] == today_d for r in rows), f"rows: {rows}")
+
+    status, body = call("POST", "/body-logs", {"weightKg": 67.4}, token=token)
+    equals("200, not 201: today already has a row", status, 200)
+    body = body or {}
+    equals("loggedOn defaults to today", body.get("loggedOn"), today)
+    equals("bmi is this weight at the profile's height", body.get("bmi"),
+           round(67.4 / (height / 100) ** 2, 2))
+    equals("and the profile moved with it", body.get("profileUpdated"), True)
+    status, prof = call("GET", "/profile", token=token)
+    equals("GET /profile shows 67.4", (prof or {}).get("weightKg"), 67.4)
+    stored = sql("SELECT weight_kg, daily_calories_target FROM health_profiles "
+                 "WHERE user_id = %s", (uid,))[0]
+    status, targets = call("GET", "/profile/nutrition-targets", token=token)
+    equals("the stored target was recomputed from the new weight",
+           stored[1], (targets or {}).get("dailyCaloriesTarget"))
+
+    count = sql("SELECT COUNT(*) FROM body_logs WHERE user_id = %s "
+                "AND logged_on = %s", (uid, today))[0][0]
+    equals("still one row for today", count, 1)
+
+    three_ago = (today_d - timedelta(days=3)).isoformat()
+    status, body = call("POST", "/body-logs",
+                        {"loggedOn": three_ago, "weightKg": 69.0,
+                         "note": "  quên ghi  "}, token=token)
+    equals("201 for a new day", status, 201)
+    equals("the note is trimmed", (body or {}).get("note"), "quên ghi")
+    equals("a back-dated weighing does NOT move the profile",
+           (body or {}).get("profileUpdated"), False)
+    status, prof = call("GET", "/profile", token=token)
+    equals("the profile still says 67.4", (prof or {}).get("weightKg"), 67.4)
+
+    tomorrow = (today_d + timedelta(days=1)).isoformat()
+    for label, payload, field in (
+        ("a future day", {"loggedOn": tomorrow, "weightKg": 67}, "loggedOn"),
+        ("19.99 kg", {"weightKg": 19.99}, "weightKg"),
+        ("300.5 kg", {"weightKg": 300.5}, "weightKg"),
+        ("no weight", {}, "weightKg"),
+    ):
+        status, body = call("POST", "/body-logs", payload, token=token)
+        fields = [d.get("field", "").lower()
+                  for d in ((body or {}).get("error") or {}).get("details") or []]
+        check(f"400 for {label}, naming {field}",
+              status == 400 and error_code(body) == "VALIDATION_FAILED"
+              and field.lower() in fields, f"{status} {body}")
+
+    status, body = call("POST", "/body-logs", {"weightKg": 67})
+    equals("401 without a token", status, 401)
+
+    print("\n§7.9.1  GET /stats/progress")
+    # Without the ML service the diary sections above were skipped, and a
+    # comparison against an empty diary compares nothing. One line straight
+    # into the table gives the SQL something to sum either way.
+    if not sql("SELECT 1 FROM food_diary WHERE user_id = %s AND ate_on = %s",
+               (uid, today)):
+        sql("INSERT INTO food_diary (id, user_id, food_id, ate_on, meal_type, "
+            "portion_multiplier) SELECT UUID(), %s, food_id, %s, 'lunch', 1.5 "
+            "FROM food_nutrition ORDER BY food_id LIMIT 1", (uid, today))
+    status, report = call(
+        "GET", f"/stats/progress?from={week_ago}&to={today}", token=token)
+    equals("200", status, 200)
+    report = report or {}
+    summary = report.get("summary") or {}
+    equals("groupBy defaults to day", report.get("groupBy"), "day")
+    equals("daysInRange is 7", summary.get("daysInRange"), 7)
+
+    eaten_sql = sql(
+        "SELECT fd.ate_on, ROUND(SUM(fn.calories_kcal * fd.portion_multiplier), 1), "
+        "       COUNT(DISTINCT fd.meal_type) "
+        "FROM food_diary fd JOIN food_nutrition fn ON fn.food_id = fd.food_id "
+        "WHERE fd.user_id = %s AND fd.ate_on BETWEEN %s AND %s "
+        "GROUP BY fd.ate_on", (uid, week_ago, today))
+    logged_sql = sql(
+        "SELECT COUNT(DISTINCT ate_on) FROM food_diary "
+        "WHERE user_id = %s AND ate_on BETWEEN %s AND %s",
+        (uid, week_ago, today))[0][0]
+    equals("daysLogged matches food_diary", summary.get("daysLogged"),
+           logged_sql)
+    check("there is a logged day to compare against", logged_sql > 0)
+    series = {p["date"]: p for p in report.get("series") or []}
+    for day, kcal, meals in eaten_sql:
+        point = series.get(day.isoformat()) or {}
+        equals(f"{day} consumed matches the SQL sum",
+               point.get("caloriesConsumed"), float(kcal))
+        equals(f"{day} loggedMeals matches", point.get("loggedMeals"), meals)
+
+    # §8.4's compliance query, narrowed to this user and range.
+    hit, suggested = sql(
+        "SELECT SUM(fd.id IS NOT NULL), COUNT(*) "
+        "FROM meal_plan_items mpi JOIN meal_plans mp ON mp.id = mpi.meal_plan_id "
+        "LEFT JOIN food_diary fd ON fd.user_id = mp.user_id "
+        "  AND fd.ate_on = mp.plan_date AND fd.meal_type = mpi.meal_type "
+        "  AND fd.food_id = mpi.food_id "
+        "WHERE mp.user_id = %s AND mp.plan_date BETWEEN %s AND %s",
+        (uid, week_ago, today))[0]
+    want = None if not suggested else round(100 * float(hit) / suggested, 1)
+    equals("avgCompliancePct is §8.4's query", summary.get("avgCompliancePct"),
+           want)
+
+    feedbacks = sql(
+        "SELECT COUNT(*) FROM feedbacks WHERE user_id = %s "
+        "AND DATE(created_at) BETWEEN %s AND %s", (uid, week_ago, today))[0][0]
+    equals("totalFeedbacks matches", summary.get("totalFeedbacks"), feedbacks)
+    equals("weightTrend is the two weighings, oldest first",
+           [(w["date"], w["weightKg"]) for w in report.get("weightTrend") or []],
+           [(three_ago, 69.0), (today, 67.4)])
+
+    plan_target = sql(
+        "SELECT target_calories_kcal FROM meal_plans "
+        "WHERE user_id = %s AND plan_date = %s", (uid, today))
+    if plan_target and today in series:
+        equals("a day with a plan uses the plan's snapshot as its target",
+               series[today].get("caloriesTarget"), float(plan_target[0][0]))
+
+    # A plan for tomorrow must not count: nothing could be eaten from it yet.
+    status, body = call("POST", "/meal-plans", {"planDate": tomorrow},
+                        token=token)
+    if status == 503 and error_code(body) == "ML_UNAVAILABLE":
+        print("  [skip] no ML service, so no plan for tomorrow to leave out")
+    else:
+        check("a plan for tomorrow was built", status in (200, 201),
+              f"{status}")
+        status, later = call(
+            "GET", f"/stats/progress?from={week_ago}&to={tomorrow}",
+            token=token)
+        equals("a day after today is never in the series",
+               [p["date"] for p in (later or {}).get("series") or []
+                if p["date"] > today], [])
+        equals("and does not change the compliance",
+               ((later or {}).get("summary") or {}).get("avgCompliancePct"),
+               want)
+        sql("DELETE FROM meal_plans WHERE user_id = %s AND plan_date = %s",
+            (uid, tomorrow))
+
+    status, weekly = call(
+        "GET", f"/stats/progress?from={week_ago}&to={today}&groupBy=week",
+        token=token)
+    equals("groupBy=week is 200", status, 200)
+    weeks = (weekly or {}).get("series") or []
+    check("one or two weeks in seven days", 1 <= len(weeks) <= 2, f"{weeks}")
+    check("each week is dated inside the range",
+          all(week_ago <= w["date"] <= today for w in weeks), f"{weeks}")
+    equals("the weekly summary is the daily one",
+           (weekly or {}).get("summary"), summary)
+
+    year_on = (today_d + timedelta(days=366)).isoformat()
+    for label, query, field in (
+        ("no from", f"to={today}", "from"),
+        ("no to", f"from={today}", "to"),
+        ("to before from", f"from={today}&to={week_ago}", "to"),
+        ("366 days", f"from={today}&to={year_on}", "to"),
+        ("groupBy=month", f"from={week_ago}&to={today}&groupBy=month",
+         "groupBy"),
+    ):
+        status, body = call("GET", f"/stats/progress?{query}", token=token)
+        fields = [d.get("field", "").lower()
+                  for d in ((body or {}).get("error") or {}).get("details") or []]
+        check(f"400 for {label}, naming {field}",
+              status == 400 and field.lower() in fields, f"{status} {body}")
+    status, body = call("GET", f"/stats/progress?from={week_ago}&to={today}")
+    equals("401 without a token", status, 401)
+
     # -- A disabled account: the global filter must block EVERY endpoint --
     #
     # `/auth/me` had always checked `is_active`, but `/profile` had not: a
@@ -2416,7 +2597,9 @@ def main(argv: list[str] | None = None) -> int:
                  "/foods", "/feedbacks",
                  f"/food-diary?from={date.today().isoformat()}"
                  f"&to={date.today().isoformat()}",
-                 f"/food-diary/summary?date={date.today().isoformat()}"):
+                 f"/food-diary/summary?date={date.today().isoformat()}",
+                 f"/stats/progress?from={date.today().isoformat()}"
+                 f"&to={date.today().isoformat()}"):
         status, body = call("GET", path, token=access)
         equals(f"403 ACCOUNT_DISABLED at GET {path}",
                (status, error_code(body)), (403, "ACCOUNT_DISABLED"))
@@ -2444,6 +2627,7 @@ def main(argv: list[str] | None = None) -> int:
         ("POST", "/feedbacks", {"foodId": missing_plan, "rating": 5}),
         ("PUT", "/auth/me", {"displayName": "Blocked"}),
         ("PUT", f"/foods/{missing_plan}/mark", {"kind": "loved"}),
+        ("POST", "/body-logs", {"weightKg": 67}),
     ):
         status, body = call(method, path, payload, token=access)
         equals(f"403 ACCOUNT_DISABLED at {method} {path}",
@@ -2624,7 +2808,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 36 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 38 endpoints behave per the "
           f"specification against the real database.")
     return 0
 
