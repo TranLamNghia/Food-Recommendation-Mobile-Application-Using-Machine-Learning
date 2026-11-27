@@ -269,6 +269,25 @@ public sealed class FoodController(
             return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
         }
 
+        var (body, problem) = await DetailAsync(id, uid, safetyRequired: true, ct);
+        return problem ?? Ok(body);
+    }
+
+    /// <summary>
+    /// §7.5.2's body for one food this user can see.
+    /// </summary>
+    /// <param name="safetyRequired">
+    /// <c>false</c> only for §7.5.3, which has already written the dish when
+    /// it gets here: answering <c>503</c> then would send the app to retry a
+    /// create that succeeded, and the retry would be a
+    /// <c>409 FOOD_ALREADY_EXISTS</c>. So the dish comes back with
+    /// <c>isSafeForUser: false</c> and no warnings — the cautious reading —
+    /// and the detail screen asks again when it opens.
+    /// </param>
+    private async Task<(FoodDetailResponse? Body, ObjectResult? Problem)>
+        DetailAsync(string id, string uid, bool safetyRequired,
+                    CancellationToken ct)
+    {
         var row = await db.Foods
             .Where(f => f.Id == id
                         && f.IsActive
@@ -278,7 +297,7 @@ public sealed class FoodController(
             .FirstOrDefaultAsync(ct);
         if (row is null)
         {
-            return Fail(404, ErrorCode.NotFound, "Không tìm thấy món ăn");
+            return (null, Fail(404, ErrorCode.NotFound, "Không tìm thấy món ăn"));
         }
 
         var nutrition = await db.FoodNutrition
@@ -292,20 +311,27 @@ public sealed class FoodController(
             log.LogError(
                 "Food {Food} has no food_nutrition row, so its detail cannot "
                 + "be built.", id);
-            return Fail(500, ErrorCode.InternalError,
-                        "Lỗi máy chủ, vui lòng thử lại");
+            return (null, Fail(500, ErrorCode.InternalError,
+                               "Lỗi máy chủ, vui lòng thử lại"));
         }
 
         var safety = await ml.FoodSafetyAsync(
             new MlFoodSafetyRequest { UserId = uid, FoodIds = [id] }, ct);
+        MlFoodSafetyItem? unsafeEntry = null;
+        var isSafe = false;
         if (safety.Failure is { } failure)
         {
-            return Report(failure);
+            if (safetyRequired) return (null, Report(failure));
+            log.LogWarning(
+                "Food {Food} was created, but its safety is unknown: {Detail}",
+                id, failure.Detail);
         }
-
-        var answer = safety.Required;
-        var unsafeEntry = answer.Unsafe.FirstOrDefault(u => u.FoodId == id);
-        var isSafe = EdibleIds(answer).Contains(id);
+        else
+        {
+            var answer = safety.Required;
+            unsafeEntry = answer.Unsafe.FirstOrDefault(u => u.FoodId == id);
+            isSafe = EdibleIds(answer).Contains(id);
+        }
 
         var mark = await db.UserFoodMarks
             .Where(m => m.UserId == uid && m.FoodId == id)
@@ -371,9 +397,10 @@ public sealed class FoodController(
             })
             .FirstOrDefaultAsync(ct);
 
-        return Ok(new FoodDetailResponse
+        return (new FoodDetailResponse
         {
             Id = row.Food.Id,
+            OwnerId = row.Food.OwnerId,
             Name = row.Food.Name,
             Description = row.Food.Description,
             ImageUrl = row.Food.ImageUrl,
@@ -407,8 +434,152 @@ public sealed class FoodController(
             Mark = mark,
             Warnings = warnings,
             MyFeedback = mine,
-        });
+        }, null);
     }
+
+    // ── 7.5.3 A dish of one's own ────────────────────────────────────────
+
+    /// <summary>
+    /// Adds a dish only its creator sees — what makes a diary line possible
+    /// for something the catalogue does not have.
+    ///
+    /// <para><b><c>owner_id</c> is always the caller.</b> <c>NULL</c> is the
+    /// shared catalogue, which only an administrator fills; letting a user
+    /// write it would let them publish to everyone.</para>
+    ///
+    /// <para><b>A nutrient not given stays <c>NULL</c>.</b> The F1 filter
+    /// then excludes the dish wherever one of this user's conditions needs
+    /// that figure, and flags it <c>missingData</c> — it can still be logged
+    /// as eaten, it just is never suggested on a guess.</para>
+    ///
+    /// <para>It is not part of the feature space's scale: the ML service
+    /// builds the min–max bounds and the imputation medians from the shared
+    /// catalogue only (<c>ml/features.py</c>), so one user's 4000-kcal entry
+    /// cannot move everyone else's vectors.</para>
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> Create(
+        CreateFoodRequest req, CancellationToken ct = default)
+    {
+        if (UserId is not { } uid)
+        {
+            return Fail(401, ErrorCode.TokenInvalid, "Token thiếu `sub`");
+        }
+
+        var name = req.Name!.Trim();
+        if (name.Length < 2)
+        {
+            return Invalid("name", "Tên món dài từ 2 đến 200 ký tự");
+        }
+
+        var categoryId = req.CategoryId!.Trim();
+        if (!await db.FoodCategories.AnyAsync(c => c.Id == categoryId, ct))
+        {
+            return Invalid("categoryId", "Nhóm món không tồn tại");
+        }
+
+        var tagIds = (req.TagIds ?? []).Distinct().ToList();
+        if (tagIds.Count > 0)
+        {
+            var usable = await db.Tags
+                .Where(t => tagIds.Contains(t.Id)
+                            && (t.TagType == "allergen" || t.TagType == "diet"))
+                .Select(t => t.Id)
+                .ToListAsync(ct);
+            var refused = tagIds.Except(usable).ToList();
+            if (refused.Count > 0)
+            {
+                return Invalid(
+                    "tagIds",
+                    "Nhãn không tồn tại hoặc không phải nhãn dị ứng / chế độ "
+                    + "ăn: " + string.Join(", ", refused));
+            }
+        }
+
+        // The name is unique per owner on `uq_owner_name`, which compares
+        // under the column's collation — so the check here uses the database
+        // too, rather than a C# comparison that would disagree on case and
+        // accents.
+        if (await db.Foods.AnyAsync(
+                f => f.OwnerId == uid && f.Name == name, ct))
+        {
+            return Fail(409, ErrorCode.FoodAlreadyExists,
+                        "Bạn đã có một món riêng trùng tên");
+        }
+
+        var n = req.Nutrition!;
+        var now = Clock.Now;
+        var food = new Foods
+        {
+            Id = Guid.NewGuid().ToString(),
+            CategoryId = categoryId,
+            Name = name,
+            SpiceLevel = (byte)(req.SpiceLevel ?? 0),
+            DishRole = req.DishRole!,
+            PopularityScore = 0m,
+            IsActive = true,
+            OwnerId = uid,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        // Two saves in one transaction, the dish first. The entities carry
+        // no navigation between them, so EF does not know `food_nutrition`
+        // depends on `foods` and may insert it first — which the foreign key
+        // refuses.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        db.Foods.Add(food);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Two requests with the same name, both past the check above;
+            // `uq_owner_name` let one in. Anything else is rethrown.
+            await tx.RollbackAsync(ct);
+            db.ChangeTracker.Clear();
+            if (await db.Foods.AnyAsync(
+                    f => f.OwnerId == uid && f.Name == name, ct))
+            {
+                return Fail(409, ErrorCode.FoodAlreadyExists,
+                            "Bạn đã có một món riêng trùng tên");
+            }
+            throw;
+        }
+
+        db.FoodNutrition.Add(new FoodNutrition
+        {
+            Id = Guid.NewGuid().ToString(),
+            FoodId = food.Id,
+            ServingSizeG = (ushort)req.ServingSizeG!.Value,
+            CaloriesKcal = Round2(n.Calories!.Value),
+            ProteinG = Round2(n.ProteinG ?? 0m),
+            CarbsG = Round2(n.CarbsG ?? 0m),
+            FatG = Round2(n.FatG ?? 0m),
+            FiberG = Round2(n.FiberG),
+            SugarG = Round2(n.SugarG),
+            SodiumMg = Round2(n.SodiumMg),
+            PurineMg = Round2(n.PurineMg),
+            UpdatedAt = now,
+        });
+        foreach (var tag in tagIds)
+        {
+            db.FoodTags.Add(new FoodTags { FoodId = food.Id, TagId = tag });
+        }
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        var (body, problem) = await DetailAsync(
+            food.Id, uid, safetyRequired: false, ct);
+        return problem ?? StatusCode(StatusCodes.Status201Created, body);
+    }
+
+    private static decimal Round2(decimal v)
+        => Math.Round(v, 2, MidpointRounding.AwayFromZero);
+
+    private static decimal? Round2(decimal? v)
+        => v is { } x ? Round2(x) : null;
 
     // ── Bookmark a dish, or ask for it not to be suggested ───────────────
 
