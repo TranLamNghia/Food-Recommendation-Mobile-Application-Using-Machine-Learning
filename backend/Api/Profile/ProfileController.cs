@@ -133,6 +133,13 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
         profile.TdeeKcal = Round(step1.TdeeKcal);
         profile.DailyCaloriesTarget = Round(step1.DailyCaloriesTarget);
 
+        // The weight typed here is a weighing too, so it goes into today's
+        // row of `body_logs`. Without it the §7.9.1 trend of a new user
+        // starts empty and the weight they registered with is on no chart.
+        await Api.Progress.WeightHistory.WriteAsync(
+            db, uid, today, profile.WeightKg, note: null, keepNote: true,
+            HttpContext.RequestAborted);
+
         await db.SaveChangesAsync();
 
         // `bmi` is a GENERATED VIRTUAL column — the database computes it on
@@ -281,7 +288,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
 
     // ── shared ───────────────────────────────────────────────────────────
 
-    private static Step1Result ComputeStep1(HealthProfiles h, DateOnly today)
+    internal static Step1Result ComputeStep1(HealthProfiles h, DateOnly today)
         => NutritionTargets.Compute(
             h.Gender, h.DateOfBirth, h.HeightCm, h.WeightKg,
             h.ActivityLevel, h.Goal,
@@ -297,7 +304,7 @@ public sealed class ProfileController(AppDbContext db) : ControllerBase
     /// shows up on exactly the .5 cases — rare, so it would slip past every
     /// manual trial and only the parity suite would catch it.</para>
     /// </summary>
-    private static ushort Round(decimal v)
+    internal static ushort Round(decimal v)
         => (ushort)Math.Clamp(
             Math.Round(v, MidpointRounding.AwayFromZero), 0, ushort.MaxValue);
 
