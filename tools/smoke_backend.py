@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""End-to-end test of the 38 public endpoints built so far, against the real
+"""End-to-end test of the 39 public endpoints built so far, against the real
 database.
 
 This is an INTEGRATION test, not a unit test: it makes real HTTP calls, writes
@@ -28,6 +28,7 @@ import pathlib
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from datetime import date, timedelta
@@ -2391,6 +2392,134 @@ def main(argv: list[str] | None = None) -> int:
           drift is not None and abs(drift) < 5,
           f"off by {drift} minutes — 420 means it is still writing UTC")
 
+    # -- 7.5.3 a dish of one's own ---------------------------------------
+    #
+    # Placed before the progress section: its diary line is part of what
+    # the progress sums are then checked against.
+    status, body = call("POST", "/auth/login",
+                        {"email": email, "password": password})
+    token = (body or {}).get("accessToken")
+
+    print("\n§7.5.3  POST /foods")
+    status, categories = call("GET", "/food-categories")
+    category_id = (categories or [{}])[0].get("id")
+    status, tags = call("GET", "/tags")
+    tags = tags or []
+    allergen = next((t for t in tags if t["tagType"] == "allergen"), None)
+    nutrition_tag = next((t for t in tags if t["tagType"] == "nutrition"), None)
+    dish_name = f"Bánh canh cua nhà nấu {uuid.uuid4().hex[:6]}"
+    dish = {
+        "name": f"  {dish_name}  ",
+        "categoryId": category_id,
+        "dishRole": "main",
+        "servingSizeG": 450,
+        "spiceLevel": 1,
+        "nutrition": {"calories": 480, "proteinG": 24.0, "carbsG": 58.0,
+                      "fatG": 16.0, "fiberG": None, "sugarG": None,
+                      "sodiumMg": None, "purineMg": None},
+        "tagIds": [allergen["id"]] if allergen else [],
+    }
+
+    status, body = call("POST", "/foods", dish)
+    equals("401 without a token", status, 401)
+
+    status, created = call("POST", "/foods", dish, token=token)
+    equals("201 Created", status, 201)
+    created = created or {}
+    dish_id = created.get("id")
+    equals("ownerId is the caller, never null", created.get("ownerId"), uid)
+    equals("the name is trimmed", created.get("name"), dish_name)
+    nutrition = created.get("nutrition") or {}
+    equals("calories as sent", nutrition.get("caloriesKcal"), 480.0)
+    equals("an unknown figure stays null, not 0",
+           [nutrition.get(k) for k in ("sodiumMg", "purineMg", "fiberG",
+                                       "sugarG")], [None] * 4)
+    check("isSafeForUser is answered", isinstance(
+        created.get("isSafeForUser"), bool), f"{created}")
+    if allergen:
+        equals("the allergen tag is on the dish",
+               [t["id"] for t in created.get("tags") or []], [allergen["id"]])
+
+    row = sql("SELECT f.owner_id, n.sodium_mg, n.purine_mg, n.serving_size_g "
+              "FROM foods f JOIN food_nutrition n ON n.food_id = f.id "
+              "WHERE f.id = %s", (dish_id,))
+    equals("stored with the owner and NULLs", row and tuple(row[0]),
+           (uid, None, None, 450))
+
+    status, body = call("GET", f"/foods/{dish_id}", token=token)
+    if status == 503 and error_code(body) == "ML_UNAVAILABLE":
+        print("  [skip] no ML service, so §7.5.2 of the new dish cannot run")
+    else:
+        equals("its owner can open it", status, 200)
+        equals("and §7.5.2 carries ownerId too",
+               (body or {}).get("ownerId"), uid)
+
+    status, body = call("POST", "/foods", dish, token=token)
+    equals("the same name again: 409 FOOD_ALREADY_EXISTS",
+           (status, error_code(body)), (409, "FOOD_ALREADY_EXISTS"))
+    status, body = call("POST", "/foods",
+                        {**dish, "name": dish_name.upper()}, token=token)
+    equals("and in other letter case, as the column's collation compares",
+           (status, error_code(body)), (409, "FOOD_ALREADY_EXISTS"))
+
+    for label, change, field in (
+        ("a category that does not exist",
+         {"categoryId": "00000000-0000-4000-8000-000000000000"},
+         "categoryid"),
+        ("0 kcal", {"nutrition": {"calories": 0}}, "calories"),
+        ("no calories", {"nutrition": {"proteinG": 10}}, "calories"),
+        ("spice 4", {"spiceLevel": 4}, "spicelevel"),
+        ("a role that is a meal", {"dishRole": "breakfast"}, "dishrole"),
+        ("a nutrition tag", {"tagIds": [nutrition_tag["id"]]
+                             if nutrition_tag else [999999]}, "tagids"),
+        ("a one-letter name", {"name": " A "}, "name"),
+    ):
+        status, body = call("POST", "/foods",
+                            {**dish, "name": f"{dish_name} {field}", **change},
+                            token=token)
+        fields = [d.get("field", "").lower()
+                  for d in ((body or {}).get("error") or {}).get("details") or []]
+        check(f"400 for {label}, naming {field}",
+              status == 400 and any(field in f for f in fields),
+              f"{status} {body}")
+
+    # Somebody else: cannot see it, and may use the same name.
+    other = f"other-{email}"
+    status, body = call("POST", "/auth/register", {
+        "email": other, "password": password, "displayName": "Người khác"})
+    other_token = (body or {}).get("accessToken")
+    status, body = call("GET", f"/foods/{dish_id}", token=other_token)
+    if status != 503:
+        equals("another user gets 404 for it, as if it did not exist",
+               (status, error_code(body)), (404, "NOT_FOUND"))
+    status, body = call("POST", "/foods", {**dish, "tagIds": []},
+                        token=other_token)
+    equals("and may create a dish of the same name", status, 201)
+    equals("which is theirs", (body or {}).get("ownerId"),
+           (sql("SELECT id FROM users WHERE email = %s", (other,)) or
+            [[None]])[0][0])
+
+    # The point of the endpoint: a line in the diary for it.
+    status, line = call("POST", "/food-diary",
+                        {"foodId": dish_id, "ateOn": date.today().isoformat(),
+                         "mealType": "dinner"}, token=token)
+    equals("the dish can be logged as eaten", status, 201)
+    equals("at its own serving's energy",
+           (line or {}).get("actualCaloriesKcal"), 480.0)
+
+    status, page = call(
+        "GET", f"/foods?q={urllib.parse.quote(dish_name)}&excludeUnsafe=false",
+        token=token)
+    if status != 503:
+        equals("search finds it for its owner",
+               [f["id"] for f in (page or {}).get("items") or []], [dish_id])
+        status, page = call(
+            "GET",
+            f"/foods?q={urllib.parse.quote(dish_name)}&excludeUnsafe=false",
+            token=other_token)
+        check("and the other user's search finds only their own",
+              all(f["id"] != dish_id for f in (page or {}).get("items") or []))
+
     # -- 7.10.1 / 7.9.1 weighing and progress ---------------------------
     #
     # The progress figures are checked against SQL written here, from the
@@ -2628,6 +2757,7 @@ def main(argv: list[str] | None = None) -> int:
         ("PUT", "/auth/me", {"displayName": "Blocked"}),
         ("PUT", f"/foods/{missing_plan}/mark", {"kind": "loved"}),
         ("POST", "/body-logs", {"weightKg": 67}),
+        ("POST", "/foods", {"name": "Bị chặn"}),
     ):
         status, body = call(method, path, payload, token=access)
         equals(f"403 ACCOUNT_DISABLED at {method} {path}",
@@ -2799,8 +2929,10 @@ def main(argv: list[str] | None = None) -> int:
         # `fits-` is the account from the exactly-72-byte password check;
         # `long-` never creates a row at all but is deleted anyway, so that a
         # later change to the upper bound leaves no litter behind.
-        delete_accounts(email, f"fits-{email}", f"long-{email}")
-        print("Deleted 2 test accounts; CASCADE cleared the profile and tokens")
+        delete_accounts(email, f"fits-{email}", f"long-{email}",
+                        f"other-{email}")
+        print("Deleted 3 test accounts; CASCADE cleared the profile, tokens "
+              "and their own dishes")
 
     print("=" * 72)
     if _failures:
@@ -2808,7 +2940,7 @@ def main(argv: list[str] | None = None) -> int:
         for x in _failures:
             print("  -", x)
         return 1
-    print(f"{_checks}/{_checks} checks passed — 38 endpoints behave per the "
+    print(f"{_checks}/{_checks} checks passed — 39 endpoints behave per the "
           f"specification against the real database.")
     return 0
 
