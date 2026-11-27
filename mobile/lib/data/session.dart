@@ -11,6 +11,7 @@ import 'api/feedback_api.dart';
 import 'api/food_api.dart';
 import 'api/meal_plan_api.dart';
 import 'api/profile_api.dart';
+import 'api/progress_api.dart';
 import 'api/survey_api.dart';
 import 'mock/mock_foods.dart';
 import 'mock/mock_rules.dart';
@@ -24,6 +25,7 @@ import 'models/food_detail.dart';
 import 'models/food_query.dart';
 import 'models/health_profile.dart';
 import 'models/meal_plan.dart';
+import 'models/progress.dart';
 import 'models/swipe_action.dart';
 import 'recommender/food_vector.dart';
 import 'recommender/menu_builder.dart';
@@ -56,6 +58,7 @@ class AppSession extends ChangeNotifier {
       _mealPlans = MealPlanApi(client);
       _diary = DiaryApi(client);
       _feedback = FeedbackApi(client);
+      _progress = ProgressApi(client);
     }
   }
 
@@ -71,6 +74,7 @@ class AppSession extends ChangeNotifier {
   MealPlanApi? _mealPlans;
   DiaryApi? _diary;
   FeedbackApi? _feedback;
+  ProgressApi? _progress;
 
   /// Whether there is a server behind this session.
   ///
@@ -721,6 +725,7 @@ class AppSession extends ChangeNotifier {
     _plans.clear();
     _selectedDay = _dateOnly(DateTime.now());
     diary.clear();
+    _weighIns.clear();
     lovedIds.clear();
     neverAgainIds.clear();
     _markedDishes.clear();
@@ -1685,6 +1690,141 @@ class AppSession extends ChangeNotifier {
     final api = _diary;
     if (api == null) return null;
     return api.summary(_dateOnly(date ?? _selectedDay));
+  }
+
+  // ── Weight and progress ──────────────────────────────────────────
+
+  /// OFFLINE: the weighings, one per day, keyed like [_plans].
+  final Map<int, WeightPoint> _weighIns = {};
+
+  // ONLINE: POST /body-logs — §7.10.1. Then the profile and its targets are
+  // read back, because the server recomputes step 1 from the new weight and
+  // the app's copy would otherwise go on showing the old limit.
+  //
+  // OFFLINE: kept in memory. The profile takes the weight only when no later
+  // weighing exists, the same rule as the server's: filling in a forgotten
+  // day must not set the current weight to last week's.
+  //
+  // Either way the plans already built keep their targets. Today's plan has
+  // been partly eaten from, and §7.10.1 says it does not change.
+  /// Records a weighing; [on] defaults to today. Returns whether it became
+  /// the current weight.
+  Future<bool> logWeight(double kg, {DateTime? on, String? note}) async {
+    final day = _dateOnly(on ?? DateTime.now());
+    final api = _progress;
+    if (api != null) {
+      final result = await api.logWeight(kg, on: day, note: note);
+      if (result.profileUpdated) {
+        final profiles = _profiles!;
+        (await profiles.read()).applyTo(profile);
+        (await profiles.targets()).applyTo(profile);
+      }
+      notifyListeners();
+      return result.profileUpdated;
+    }
+
+    _weighIns[_dayKey(day)] = WeightPoint(date: day, weightKg: kg);
+    final latest = _weighIns.values
+        .map((w) => w.date)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final current = !latest.isAfter(day);
+    if (current) profile.weightKg = kg;
+    notifyListeners();
+    return current;
+  }
+
+  // ONLINE: GET /stats/progress — §7.9.1.
+  //
+  // OFFLINE: the same arithmetic over the diary and plans in memory, so the
+  // screen can be walked through without a server. Like the server's, the
+  // means are over the days something was logged, and compliance is pooled
+  // over the servings rather than averaged over the days.
+  /// The last [days] days, today included.
+  Future<ProgressReport> progress({int days = 7, bool byWeek = false}) async {
+    final to = _dateOnly(DateTime.now());
+    final from = to.subtract(Duration(days: days - 1));
+    final api = _progress;
+    if (api != null) {
+      return api.progress(from: from, to: to, byWeek: byWeek);
+    }
+    return _progressOffline(from, to);
+  }
+
+  ProgressReport _progressOffline(DateTime from, DateTime to) {
+    final series = <ProgressPoint>[];
+    var hit = 0;
+    var suggested = 0;
+    for (var d = from; !d.isAfter(to); d = d.add(const Duration(days: 1))) {
+      final day = _dateOnly(d);
+      final lines = entriesOn(day);
+      final plan = planOn(day);
+      if (lines.isEmpty && plan == null) continue;
+
+      final eaten = {for (final e in lines) (e.meal, e.food.id)};
+      int? daySuggested;
+      var dayHit = 0;
+      if (plan != null) {
+        daySuggested = 0;
+        for (final slot in plan.slots) {
+          for (final item in slot.items) {
+            daySuggested = daySuggested! + 1;
+            if (eaten.contains((slot.type, item.food.id))) dayHit++;
+          }
+        }
+        hit += dayHit;
+        suggested += daySuggested!;
+      }
+
+      series.add(
+        ProgressPoint(
+          date: day,
+          consumedKcal: lines.fold(0.0, (s, e) => s + e.kcal),
+          targetKcal: plan?.targetKcal ?? profile.energyTarget,
+          compliancePct: daySuggested == null || daySuggested == 0
+              ? null
+              : 100 * dayHit / daySuggested,
+          loggedMeals: {for (final e in lines) e.meal}.length,
+        ),
+      );
+    }
+
+    final logged = series.where((p) => p.logged).toList();
+    final targeted = logged.where((p) => p.targetKcal != null).toList();
+    double? mean(Iterable<double> xs) =>
+        xs.isEmpty ? null : xs.reduce((a, b) => a + b) / xs.length;
+    final eatenMean = mean(targeted.map((p) => p.consumedKcal));
+    final targetMean = mean(targeted.map((p) => p.targetKcal!));
+
+    return ProgressReport(
+      from: from,
+      to: to,
+      series: series,
+      summary: ProgressSummary(
+        daysLogged: logged.length,
+        daysInRange: to.difference(from).inDays + 1,
+        avgConsumedKcal: mean(logged.map((p) => p.consumedKcal)),
+        avgTargetKcal: targetMean,
+        avgCompliancePct: suggested == 0 ? null : 100 * hit / suggested,
+        avgDeviationPct:
+            eatenMean == null || targetMean == null || targetMean <= 0
+            ? null
+            : 100 * (eatenMean - targetMean) / targetMean,
+        // Offline keeps no rating time, so the meal's day stands in for it.
+        totalFeedbacks: activeDiary
+            .where(
+              (e) =>
+                  e.rating != null &&
+                  !e.ateAt.isBefore(from) &&
+                  e.ateAt.isBefore(to.add(const Duration(days: 1))),
+            )
+            .length,
+      ),
+      weightTrend:
+          _weighIns.values
+              .where((w) => !w.date.isBefore(from) && !w.date.isAfter(to))
+              .toList()
+            ..sort((a, b) => a.date.compareTo(b.date)),
+    );
   }
 
   // ── Aggregate figures ────────────────────────────────────────────
