@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Api.Profile;
 
 namespace Api.Catalogue;
@@ -66,6 +67,14 @@ public sealed class FoodListItemDto
 public sealed class FoodDetailResponse
 {
     public string Id { get; init; } = string.Empty;
+
+    /// <summary>
+    /// <c>null</c> for the shared catalogue; the caller's own id for a dish
+    /// they added with §7.5.3. Nobody else's id ever appears here, because
+    /// nobody else's dish is visible.
+    /// </summary>
+    public string? OwnerId { get; init; }
+
     public string Name { get; init; } = string.Empty;
     public string? Description { get; init; }
     public string? ImageUrl { get; init; }
@@ -253,4 +262,95 @@ public sealed class FoodMarkResponse
 
     /// <summary>When the mark was made, or <c>null</c> once cleared.</summary>
     public DateTime? MarkedAt { get; init; }
+}
+
+/// <summary>
+/// §7.5.3 — a dish of the caller's own.
+///
+/// <para>The upper bounds are the columns': <c>serving_size_g</c> is a
+/// <c>SMALLINT UNSIGNED</c> and every nutrient a <c>DECIMAL</c> whose width
+/// is checked here so an out-of-range number is a <c>400</c> naming the
+/// field, not a <c>500</c> from MySQL.</para>
+/// </summary>
+public sealed class CreateFoodRequest
+{
+    [Required(ErrorMessage = "Thiếu tên món")]
+    [StringLength(200, MinimumLength = 2,
+                  ErrorMessage = "Tên món dài từ 2 đến 200 ký tự")]
+    public string? Name { get; init; }
+
+    [Required(ErrorMessage = "Thiếu nhóm món")]
+    public string? CategoryId { get; init; }
+
+    [Required(ErrorMessage = "Thiếu vai trò của món")]
+    [InEnum(nameof(Enums.DishRole))]
+    public string? DishRole { get; init; }
+
+    [Required(ErrorMessage = "Thiếu khối lượng một suất")]
+    [Range(1, 5000, ErrorMessage = "Khối lượng một suất từ 1 đến 5000 g")]
+    public int? ServingSizeG { get; init; }
+
+    [Range(0, 3, ErrorMessage = "Mức cay từ 0 đến 3")]
+    public int? SpiceLevel { get; init; }
+
+    [Required(ErrorMessage = "Thiếu thành phần dinh dưỡng")]
+    public CreateFoodNutrition? Nutrition { get; init; }
+
+    /// <summary>
+    /// <b>Not in §7.5.3.</b> Allergen and diet tags, so the F1 filter can
+    /// treat this dish like any other: without them, a shrimp soup typed by
+    /// someone allergic to seafood carries no seafood tag, and Step 2 puts it
+    /// in their plan. Optional, and only <c>allergen</c> / <c>diet</c> tags.
+    /// </summary>
+    [MaxLength(20, ErrorMessage = "Tối đa 20 nhãn")]
+    public List<uint>? TagIds { get; init; }
+}
+
+/// <summary>
+/// One serving. Every figure except <c>calories</c> may be left out, and a
+/// figure left out is stored as <c>NULL</c> — see the second note of §7.5.3:
+/// a 0 typed for "I don't know" would be believed by the safety filter.
+///
+/// <para>The three macros are the exception the schema makes:
+/// <c>protein_g</c>, <c>carbs_g</c> and <c>fat_g</c> are <c>NOT NULL DEFAULT
+/// 0</c>, so one left out is stored as 0. No hard rule reads them.</para>
+/// </summary>
+public sealed class CreateFoodNutrition
+{
+    private const string Range0 = "Phải từ 0 trở lên và trong giới hạn cho phép";
+
+    [Required(ErrorMessage = "Thiếu năng lượng")]
+    [Range(typeof(decimal), "0.01", "5000",
+           ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true,
+           ErrorMessage = "Năng lượng phải lớn hơn 0 và tối đa 5000 kcal")]
+    public decimal? Calories { get; init; }
+
+    [Range(typeof(decimal), "0", "1000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? ProteinG { get; init; }
+
+    [Range(typeof(decimal), "0", "1000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? CarbsG { get; init; }
+
+    [Range(typeof(decimal), "0", "1000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? FatG { get; init; }
+
+    [Range(typeof(decimal), "0", "1000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? FiberG { get; init; }
+
+    [Range(typeof(decimal), "0", "1000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? SugarG { get; init; }
+
+    [Range(typeof(decimal), "0", "50000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? SodiumMg { get; init; }
+
+    [Range(typeof(decimal), "0", "10000", ParseLimitsInInvariantCulture = true,
+           ConvertValueInInvariantCulture = true, ErrorMessage = Range0)]
+    public decimal? PurineMg { get; init; }
 }

@@ -116,6 +116,7 @@ class ApiFailure implements Exception {
   /// Recognised so the reset screen can show it under the code field, where
   /// the mistake is, rather than in a snackbar.
   static const String resetTokenInvalid = 'RESET_TOKEN_INVALID';
+  static const String foodAlreadyExists = 'FOOD_ALREADY_EXISTS';
 
   /// `409` from `PUT /foods/{id}/mark`: the dish is the last one left in a
   /// role some meal cannot be assembled without, so blocking it would leave

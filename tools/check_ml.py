@@ -1699,6 +1699,42 @@ def check_evidence_levels() -> None:
     )
 
 
+# -- 16. A user's own dish does not shape the space --------------------
+
+
+def check_private_dish_scale() -> None:
+    print("16. A user's own dish (§7.5.3) is encoded in the space, never shapes it")
+    from ml.features import FeatureSpace
+
+    catalogue = [
+        _food(id="a", kcal=200, sodium=100.0),
+        _food(id="b", kcal=600, sodium=900.0, category="Bún"),
+    ]
+    private = _food(
+        id="p", kcal=4000, sodium=20000.0, category="Chỉ mình tôi có",
+        owner_id="user-1",
+    )
+
+    alone = FeatureSpace.from_foods(catalogue)
+    mixed = FeatureSpace.from_foods([*catalogue, private])
+
+    check(mixed.params() == alone.params(),
+          "the bounds and categories are the catalogue's, private dish or not")
+    check(mixed.length == alone.length,
+          "a category only a private dish uses adds no dimension "
+          "(the active model's feature names stay valid)")
+    check(mixed.encode(catalogue[0]) == alone.encode(catalogue[0]),
+          "a catalogue dish encodes the same with or without the private one")
+
+    v = mixed.encode(private)
+    check(v[3] == 1.0 and v[5] == 1.0,
+          "the private dish's out-of-range kcal and sodium clamp to 1")
+    check(sum(v[8:]) == 0.0,
+          "its unknown category leaves the one-hot block empty")
+    check(FeatureSpace.from_foods([private]).length == 9,
+          "a space of private dishes only is still buildable (no catalogue)")
+
+
 def main() -> int:
     use_utf8()
     print("Machine-learning checks — pure functions, no database needed")
@@ -1718,6 +1754,7 @@ def main() -> int:
         check_soft_penalty,
         check_explanations,
         check_evidence_levels,
+        check_private_dish_scale,
     ):
         section()
     print("=" * 62)

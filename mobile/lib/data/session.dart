@@ -25,6 +25,7 @@ import 'models/food_detail.dart';
 import 'models/food_query.dart';
 import 'models/health_profile.dart';
 import 'models/meal_plan.dart';
+import 'models/own_dish.dart';
 import 'models/progress.dart';
 import 'models/swipe_action.dart';
 import 'recommender/food_vector.dart';
@@ -726,6 +727,7 @@ class AppSession extends ChangeNotifier {
     _selectedDay = _dateOnly(DateTime.now());
     diary.clear();
     _weighIns.clear();
+    _ownDishes.clear();
     lovedIds.clear();
     neverAgainIds.clear();
     _markedDishes.clear();
@@ -1199,7 +1201,7 @@ class AppSession extends ChangeNotifier {
         f.id,
     };
     final items = <FoodBrief>[];
-    for (final f in candidates) {
+    for (final f in [...candidates, ..._ownDishes]) {
       final mark = lovedIds.contains(f.id)
           ? FoodMark.loved
           : neverAgainIds.contains(f.id)
@@ -1229,6 +1231,78 @@ class AppSession extends ChangeNotifier {
       totalItems: items.length,
       totalPages: items.isEmpty ? 0 : 1,
     );
+  }
+
+  // ── Dishes of one's own ──────────────────────────────────────────
+
+  /// OFFLINE: the dishes added in this session. Searchable and loggable,
+  /// never suggested — the offline menu builder draws from [candidates]
+  /// only, the way the server's own scale is drawn from the shared catalogue.
+  final List<Food> _ownDishes = [];
+
+  List<FoodTag>? _ownDishTags;
+
+  // ONLINE: GET /tags, narrowed to what §7.5.3 accepts.
+  //
+  // OFFLINE: none — the mock has no tag ids to send.
+  /// The allergen and diet tags a dish of one's own may carry.
+  Future<List<FoodTag>> ownDishTags() async {
+    final cached = _ownDishTags;
+    if (cached != null) return cached;
+    final api = _foods;
+    if (api == null) return _ownDishTags = const [];
+    final all = await api.tags();
+    return _ownDishTags = [
+      for (final t in all)
+        if (t.tagType == 'allergen' || t.tagType == 'diet') t,
+    ];
+  }
+
+  // ONLINE: POST /foods — §7.5.3.
+  //
+  // OFFLINE: kept in memory. A nutrient left blank is stored as 0 here only
+  // because the offline [Food] has no nullable slot for it; it is never
+  // screened or suggested, so the 0 is never read as a claim.
+  /// Adds a dish only this user sees, and returns it ready to log.
+  Future<FoodBrief> addOwnDish(OwnDishDraft draft) async {
+    final api = _foods;
+    if (api != null) {
+      final created = await api.create(draft);
+      return created.brief;
+    }
+
+    final name = draft.name.trim();
+    final taken = _ownDishes.any(
+      (f) => foldVietnamese(f.name) == foldVietnamese(name),
+    );
+    if (taken) {
+      throw const ApiFailure(
+        status: 409,
+        code: ApiFailure.foodAlreadyExists,
+        message: 'Bạn đã có một món riêng trùng tên',
+      );
+    }
+    final dish = Food(
+      id: 'own-${_ownDishes.length + 1}',
+      name: name,
+      category: draft.categoryId,
+      dishRole: draft.dishRole,
+      spiceLevel: draft.spiceLevel,
+      kcal: draft.kcal.round(),
+      protein: draft.proteinG ?? 0,
+      carb: draft.carbsG ?? 0,
+      fat: draft.fatG ?? 0,
+      sugar: draft.sugarG ?? 0,
+      sodium: draft.sodiumMg ?? 0,
+      fiber: draft.fiberG ?? 0,
+      purine: draft.purineMg,
+      servingSizeG: draft.servingSizeG.toDouble(),
+      emoji: '🍲',
+      gradient: const [Color(0xFFE2F8FD), Color(0xFFB8EEF8)],
+    );
+    _ownDishes.add(dish);
+    notifyListeners();
+    return dish.brief.copyWith(isSafeForUser: false);
   }
 
   // ── The day's allowance, and dish screening ──────────────────────
@@ -1529,9 +1603,10 @@ class AppSession extends ChangeNotifier {
     final api = _diary;
     final day = _dateOnly(ateOn ?? DateTime.now());
     if (api == null) {
-      final dish = MockFoods.surveyDeck
-          .where((f) => f.id == food.id)
-          .firstOrNull;
+      final dish = [
+        ...MockFoods.surveyDeck,
+        ..._ownDishes,
+      ].where((f) => f.id == food.id).firstOrNull;
       if (dish == null) return;
       // Today keeps the real time; a past day has none to give, and
       // midnight would read as a meal eaten at 00:00.
